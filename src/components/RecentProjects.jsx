@@ -4,9 +4,18 @@ import useStore from '../store'
 export default function RecentProjects() {
   const recentProjects = useStore(s => s.recentProjects)
   const openProject = useStore(s => s.openProject)
-  const newProject = useStore(s => s.newProject)
+  const openProjectFromPath = useStore(s => s.openProjectFromPath)
 
   if (recentProjects.length === 0) return null
+
+  const handleClick = (project) => {
+    // In Electron with a real file path, open directly; otherwise open file picker
+    if (window.electronAPI && project.path && project.path !== project.name) {
+      openProjectFromPath(project.path)
+    } else {
+      openProject()
+    }
+  }
 
   return (
     <div className="bg-white border-b border-gray-200 px-4 py-2">
@@ -17,7 +26,7 @@ export default function RecentProjects() {
         {recentProjects.slice(0, 5).map((project, i) => (
           <button
             key={i}
-            onClick={openProject}
+            onClick={() => handleClick(project)}
             className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap flex items-center gap-1 flex-shrink-0"
             title={`${project.shots} shots — ${new Date(project.date).toLocaleDateString()}`}
           >

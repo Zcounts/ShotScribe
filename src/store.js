@@ -220,23 +220,34 @@ const useStore = create((set, get) => ({
     }
   },
 
-  saveProject: () => {
+  saveProject: async () => {
     const data = get().getProjectData()
     const totalSize = JSON.stringify(data).length
     if (totalSize > 50 * 1024 * 1024) {
       alert('Warning: Project file exceeds 50MB due to embedded images. Consider removing some images.')
     }
     const json = JSON.stringify(data, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${data.projectName.replace(/[^a-z0-9]/gi, '_')}.shotlist`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    set({ lastSaved: new Date().toISOString() })
+    const defaultName = `${data.projectName.replace(/[^a-z0-9]/gi, '_')}.shotlist`
+
+    if (window.electronAPI) {
+      // Native desktop: use system Save dialog
+      const result = await window.electronAPI.saveProject(defaultName, json)
+      if (result.success) {
+        set({ lastSaved: new Date().toISOString(), projectPath: result.filePath })
+      }
+    } else {
+      // Browser fallback: trigger download
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = defaultName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      set({ lastSaved: new Date().toISOString() })
+    }
   },
 
   loadProject: (data) => {
@@ -272,35 +283,78 @@ const useStore = create((set, get) => ({
     })
   },
 
-  openProject: () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.shotlist,.json'
-    input.onchange = (e) => {
-      const file = e.target.files[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        try {
-          const data = JSON.parse(ev.target.result)
-          get().loadProject(data)
-          // Add to recent projects
-          const recent = get().recentProjects.filter(r => r.name !== file.name)
-          const newRecent = [
-            { name: file.name, path: file.name, date: new Date().toISOString(), shots: data.shots?.length || 0 },
-            ...recent,
-          ].slice(0, 10)
-          set({ recentProjects: newRecent })
-          localStorage.setItem('recentProjects', JSON.stringify(newRecent))
-        } catch (err) {
-          alert('Failed to load project: Invalid file format')
-        }
+  openProject: async () => {
+    if (window.electronAPI) {
+      // Native desktop: use system Open dialog
+      const result = await window.electronAPI.openProject()
+      if (!result.success) return
+      try {
+        const data = JSON.parse(result.data)
+        get().loadProject(data)
+        const fileName = result.filePath.split(/[\\/]/).pop()
+        const recent = get().recentProjects.filter(r => r.path !== result.filePath)
+        const newRecent = [
+          { name: fileName, path: result.filePath, date: new Date().toISOString(), shots: data.shots?.length || 0 },
+          ...recent,
+        ].slice(0, 10)
+        set({ recentProjects: newRecent, projectPath: result.filePath })
+        localStorage.setItem('recentProjects', JSON.stringify(newRecent))
+      } catch {
+        alert('Failed to load project: Invalid file format')
       }
-      reader.readAsText(file)
+    } else {
+      // Browser fallback: file input
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.shotlist,.json'
+      input.onchange = (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result)
+            get().loadProject(data)
+            const recent = get().recentProjects.filter(r => r.name !== file.name)
+            const newRecent = [
+              { name: file.name, path: file.name, date: new Date().toISOString(), shots: data.shots?.length || 0 },
+              ...recent,
+            ].slice(0, 10)
+            set({ recentProjects: newRecent })
+            localStorage.setItem('recentProjects', JSON.stringify(newRecent))
+          } catch {
+            alert('Failed to load project: Invalid file format')
+          }
+        }
+        reader.readAsText(file)
+      }
+      document.body.appendChild(input)
+      input.click()
+      document.body.removeChild(input)
     }
-    document.body.appendChild(input)
-    input.click()
-    document.body.removeChild(input)
+  },
+
+  openProjectFromPath: async (filePath) => {
+    if (!window.electronAPI) return
+    const result = await window.electronAPI.openProjectFromPath(filePath)
+    if (!result.success) {
+      alert(`Could not open file: ${result.error || 'File not found'}`)
+      return
+    }
+    try {
+      const data = JSON.parse(result.data)
+      get().loadProject(data)
+      const fileName = filePath.split(/[\\/]/).pop()
+      const recent = get().recentProjects.filter(r => r.path !== filePath)
+      const newRecent = [
+        { name: fileName, path: filePath, date: new Date().toISOString(), shots: data.shots?.length || 0 },
+        ...recent,
+      ].slice(0, 10)
+      set({ recentProjects: newRecent, projectPath: filePath })
+      localStorage.setItem('recentProjects', JSON.stringify(newRecent))
+    } catch {
+      alert('Failed to load project: Invalid file format')
+    }
   },
 
   newProject: () => {

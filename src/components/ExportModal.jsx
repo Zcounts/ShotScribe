@@ -23,7 +23,14 @@ export async function exportToPDF(pageRef) {
       format: [canvas.width / 2, canvas.height / 2],
     })
     pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width / 2, canvas.height / 2)
-    pdf.save('shotlist.pdf')
+
+    if (window.electronAPI) {
+      // Native desktop: use system Save dialog
+      const arrayBuffer = pdf.output('arraybuffer')
+      await window.electronAPI.savePDF('shotlist.pdf', arrayBuffer)
+    } else {
+      pdf.save('shotlist.pdf')
+    }
   } catch (err) {
     console.error('PDF export failed:', err)
     alert('PDF export failed. Try reducing image sizes.')
@@ -34,12 +41,20 @@ export async function exportToPNG(pageRef) {
   if (!pageRef) return
   try {
     const canvas = await captureElement(pageRef, 3)
-    const link = document.createElement('a')
-    link.download = 'shotlist.png'
-    link.href = canvas.toDataURL('image/png')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+
+    if (window.electronAPI) {
+      // Native desktop: use system Save dialog
+      const dataURL = canvas.toDataURL('image/png')
+      const base64 = dataURL.replace(/^data:image\/png;base64,/, '')
+      await window.electronAPI.savePNG('shotlist.png', base64)
+    } else {
+      const link = document.createElement('a')
+      link.download = 'shotlist.png'
+      link.href = canvas.toDataURL('image/png')
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
   } catch (err) {
     console.error('PNG export failed:', err)
     alert('PNG export failed. Try reducing image sizes.')
@@ -97,10 +112,6 @@ export default function ExportModal({ isOpen, onClose, onExportPDF, onExportPNG 
             <div className="text-xs font-normal opacity-75">High resolution image</div>
           </button>
         </div>
-
-        <p className="text-xs text-gray-400 mt-4">
-          Tip: Use browser Print (Ctrl+P) for more print options
-        </p>
       </div>
     </div>
   )
