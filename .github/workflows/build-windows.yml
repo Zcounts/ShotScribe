@@ -1,0 +1,63 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run electron:build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from package.json
+        id: pkg
+        shell: bash
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
+      - name: Find installer file
+        id: installer
+        shell: bash
+        run: |
+          INSTALLER=$(find dist-electron -name "*.exe" | head -n 1)
+          echo "path=$INSTALLER" >> $GITHUB_OUTPUT
+          echo "name=$(basename $INSTALLER)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}-${{ github.run_number }}
+          name: Storyboard v${{ steps.pkg.outputs.version }}
+          body: |
+            ## Storyboard — Film Shotlist Desktop App
+
+            ### Installation
+            1. Download **${{ steps.installer.outputs.name }}** below
+            2. Run the installer — it will install automatically with one click
+            3. Launch **Storyboard** from your Desktop or Start Menu
+
+            ### What's included
+            - One-click Windows installer (no technical knowledge needed)
+            - Creates Desktop and Start Menu shortcuts automatically
+          files: ${{ steps.installer.outputs.path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
