@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: #f8f5ee;
+    font-family: 'Inter', Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+@layer components {
+  /* Shot card specs table */
+  .specs-table {
+    @apply w-full border-collapse text-xs;
+  }
+
+  .specs-table th {
+    @apply font-bold text-center py-1 px-1 bg-gray-100 border border-gray-300 text-gray-700 uppercase tracking-wide;
+    font-size: 9px;
+  }
+
+  .specs-table td {
+    @apply text-center py-1 px-1 border border-gray-200 text-gray-600;
+    font-size: 9px;
+  }
+
+  /* Notes area labeled prefixes */
+  .notes-label {
+    @apply font-bold;
+  }
+
+  /* Page */
+  .shotlist-page {
+    background-color: #f8f5ee;
+    width: 100%;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* Page header */
+  .page-header {
+    background-color: #f8f5ee;
+    border-bottom: 2px solid #1a1a2e;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 16px 24px;
+    gap: 16px;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #ede9df;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 3px;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .shotlist-page {
+    break-after: page;
+  }
+}
