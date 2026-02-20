@@ -27,8 +27,10 @@
   }
 
   /* Page document — looks like a discrete A4 sheet in print-preview */
+  /* Always white/dark regardless of app theme — dark mode only affects the surrounding UI */
   .page-document {
     background: #ffffff;
+    color: #1a1a1a;
     width: 100%;
     max-width: 1400px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12);
@@ -154,6 +156,7 @@
     text-transform: uppercase;
     padding: 3px 4px;
     text-align: center;
+    vertical-align: middle;
     border: 1px solid #d1ccc3;
     background: #f7f5f0;
     font-size: 10px;

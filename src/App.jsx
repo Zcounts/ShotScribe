@@ -37,7 +37,6 @@ function SceneSection({
   useDropdowns,
   pageIndexOffset,
   pageRefs,
-  isDark,
 }) {
   const getShotsForScene = useStore(s => s.getShotsForScene)
   const addShot = useStore(s => s.addShot)
@@ -85,10 +84,6 @@ function SceneSection({
               key={`${scene.id}_page_${pageIdx}`}
               ref={el => { if (el) pageRefs.current[globalPageNum - 1] = el }}
               className="page-document"
-              style={{
-                backgroundColor: isDark ? '#2a2a2a' : '#ffffff',
-                color: isDark ? '#e0e0e0' : '#1a1a1a',
-              }}
             >
               <PageHeader
                 scene={scene}
@@ -229,7 +224,6 @@ export default function App() {
                 useDropdowns={useDropdowns}
                 pageIndexOffset={scenePageOffsets[sceneIdx]}
                 pageRefs={pageRefs}
-                isDark={isDark}
               />
             </React.Fragment>
           ))}

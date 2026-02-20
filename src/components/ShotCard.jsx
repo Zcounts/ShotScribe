@@ -73,7 +73,7 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
         {...attributes}
         {...listeners}
         className="flex items-center gap-1 px-2 py-1 cursor-grab active:cursor-grabbing select-none"
-        style={{ paddingLeft: 8 }}
+        style={{ paddingLeft: 8, display: 'flex', alignItems: 'center' }}
         title="Drag to reorder"
       >
         {/* Color indicator */}
