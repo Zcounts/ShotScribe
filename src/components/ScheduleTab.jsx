@@ -1,38 +1,73 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 
-// ── Small icon buttons ────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function IconButton({ onClick, title, children, danger }) {
+function findBlockDay(blockId, localBlocksByDay) {
+  for (const [dayId, ids] of Object.entries(localBlocksByDay)) {
+    if (ids.includes(blockId)) return dayId
+  }
+  return null
+}
+
+function formatDate(isoDate) {
+  if (!isoDate) return null
+  try {
+    // Add noon time to avoid UTC-midnight timezone edge cases
+    const d = new Date(isoDate + 'T12:00:00')
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  } catch {
+    return null
+  }
+}
+
+// ── Small shared UI ───────────────────────────────────────────────────────────
+
+function IconButton({ onClick, title, children, danger, small, onPointerDown }) {
   return (
     <button
       onClick={onClick}
+      onPointerDown={onPointerDown}
       title={title}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '3px 6px',
+        padding: small ? '2px 6px' : '3px 8px',
         border: '1px solid',
-        borderColor: danger ? '#f87171' : 'currentColor',
-        borderRadius: 4,
+        borderColor: danger ? '#f87171' : 'rgba(128,128,128,0.3)',
+        borderRadius: 3,
         background: 'none',
         color: danger ? '#f87171' : 'inherit',
         cursor: 'pointer',
-        opacity: 0.75,
-        fontSize: 11,
+        opacity: 0.7,
+        fontSize: small ? 10 : 11,
         fontFamily: 'monospace',
         lineHeight: 1,
+        flexShrink: 0,
       }}
       onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-      onMouseLeave={e => (e.currentTarget.style.opacity = '0.75')}
+      onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
     >
       {children}
     </button>
   )
 }
-
-// ── Badge for I/E and D/N ─────────────────────────────────────────────────────
 
 function Badge({ label }) {
   if (!label) return null
@@ -46,288 +81,718 @@ function Badge({ label }) {
       fontWeight: 700,
       letterSpacing: '0.06em',
       background: 'rgba(128,128,128,0.15)',
+      flexShrink: 0,
     }}>
       {label}
     </span>
   )
 }
 
-// ── Add-shot-to-day panel ─────────────────────────────────────────────────────
-
-function AddShotPanel({ dayId, isDark }) {
-  const scenes = useStore(s => s.scenes)
-  const addShotBlock = useStore(s => s.addShotBlock)
-  const getShotsForScene = useStore(s => s.getShotsForScene)
-
-  // Build a flat list of all shots with their displayId for the dropdown
-  const allShots = scenes.flatMap((scene, sceneIdx) =>
-    getShotsForScene(scene.id).map(shot => ({
-      value: shot.id,
-      label: `${shot.displayId}${shot.subject ? ' — ' + shot.subject : ''} (${scene.sceneLabel})`,
-    }))
+function DragHandleIcon({ size = 14, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill={color} style={{ display: 'block' }}>
+      <circle cx="5" cy="4" r="1.5" />
+      <circle cx="11" cy="4" r="1.5" />
+      <circle cx="5" cy="8" r="1.5" />
+      <circle cx="11" cy="8" r="1.5" />
+      <circle cx="5" cy="12" r="1.5" />
+      <circle cx="11" cy="12" r="1.5" />
+    </svg>
   )
+}
 
-  const [selectedShotId, setSelectedShotId] = useState('')
+// ── InlineField ───────────────────────────────────────────────────────────────
+// Click-to-edit text input styled as plain text at rest.
 
-  const borderColor = isDark ? '#444' : '#ccc'
-  const bg = isDark ? '#1e1e1e' : '#fff'
-  const fg = isDark ? '#ccc' : '#333'
+function InlineField({ value, onChange, placeholder, isDark, label }) {
+  const [localVal, setLocalVal] = useState(value || '')
+  const [editing, setEditing] = useState(false)
+
+  useEffect(() => {
+    if (!editing) setLocalVal(value || '')
+  }, [value, editing])
+
+  const commit = useCallback((val) => {
+    setEditing(false)
+    if (val !== (value || '')) onChange(val)
+  }, [value, onChange])
+
+  const mutedFg = isDark ? '#555' : '#bbb'
+  const fg = isDark ? '#ccc' : '#444'
+  const borderColor = isDark ? '#3a3a3a' : '#ddd9d0'
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
-      <select
-        value={selectedShotId}
-        onChange={e => setSelectedShotId(e.target.value)}
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 5, minWidth: 0 }}>
+      {label && (
+        <span style={{
+          fontSize: 10,
+          fontFamily: 'monospace',
+          color: mutedFg,
+          flexShrink: 0,
+          letterSpacing: '0.04em',
+        }}>
+          {label}:
+        </span>
+      )}
+      <input
+        value={localVal}
+        onChange={e => setLocalVal(e.target.value)}
+        onFocus={() => setEditing(true)}
+        onBlur={e => commit(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') e.target.blur()
+          if (e.key === 'Escape') { setLocalVal(value || ''); setEditing(false) }
+        }}
+        onPointerDown={e => e.stopPropagation()} // prevent block drag when clicking field
+        placeholder={placeholder}
         style={{
           flex: 1,
-          padding: '5px 8px',
+          minWidth: 0,
+          background: editing ? (isDark ? '#252525' : '#fff') : 'transparent',
+          border: editing ? `1px solid ${borderColor}` : '1px solid transparent',
+          borderRadius: 3,
+          padding: editing ? '2px 6px' : '2px 0',
+          fontSize: 11,
           fontFamily: 'monospace',
-          fontSize: 12,
-          border: `1px solid ${borderColor}`,
-          borderRadius: 4,
-          background: bg,
-          color: fg,
+          color: localVal ? fg : mutedFg,
+          outline: 'none',
+          cursor: editing ? 'text' : 'pointer',
+          transition: 'border-color 0.1s, background 0.1s',
         }}
-      >
-        <option value="">— Select a shot to add —</option>
-        {allShots.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-      <button
-        disabled={!selectedShotId}
-        onClick={() => {
-          if (!selectedShotId) return
-          addShotBlock(dayId, selectedShotId)
-          setSelectedShotId('')
-        }}
-        style={{
-          padding: '5px 12px',
-          fontFamily: 'monospace',
-          fontSize: 12,
-          fontWeight: 600,
-          border: `1px solid ${borderColor}`,
-          borderRadius: 4,
-          background: selectedShotId ? (isDark ? '#333' : '#f0ede4') : 'none',
-          color: selectedShotId ? fg : '#999',
-          cursor: selectedShotId ? 'pointer' : 'default',
-        }}
-      >
-        Add Shot
-      </button>
+      />
     </div>
   )
 }
 
-// ── Single shot block row ─────────────────────────────────────────────────────
+// ── ShotBlockContent ──────────────────────────────────────────────────────────
+// Renders the visual content of a single shot block.
+// Used both in the sortable list and in the DragOverlay.
 
-function ShotBlockRow({ block, dayId, isDark }) {
+function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
-  const borderColor = isDark ? '#333' : '#e5e0d8'
-  const mutedFg = isDark ? '#888' : '#999'
-  const fg = isDark ? '#ddd' : '#1a1a1a'
+  const updateShotBlock = useStore(s => s.updateShotBlock)
 
-  const { shotData } = block
+  const fg = isDark ? '#ddd' : '#1a1a1a'
+  const mutedFg = isDark ? '#666' : '#999'
+  const borderColor = isDark ? '#2a2a2a' : '#ede9df'
+  const bg = isDark ? '#1c1c1c' : '#fff'
+
+  const handleLocationChange = useCallback((val) => {
+    if (dayId) updateShotBlock(dayId, block.id, { shootingLocation: val })
+  }, [dayId, block.id, updateShotBlock])
+
+  const handleCastChange = useCallback((val) => {
+    if (dayId) {
+      const arr = val.split(',').map(s => s.trim()).filter(Boolean)
+      updateShotBlock(dayId, block.id, { castMembers: arr })
+    }
+  }, [dayId, block.id, updateShotBlock])
 
   return (
     <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr auto',
-      gap: '8px 12px',
+      background: bg,
+      borderRadius: isOverlay ? 6 : 0,
+      boxShadow: isOverlay ? '0 8px 28px rgba(0,0,0,0.22)' : 'none',
+      borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
       padding: '10px 14px',
-      borderBottom: `1px solid ${borderColor}`,
+      display: 'grid',
+      gridTemplateColumns: 'auto 1fr auto',
+      gap: '0 10px',
       alignItems: 'start',
     }}>
-      {/* Left: shot info pulled live from the storyboard/shotlist */}
-      <div>
+
+      {/* Drag handle */}
+      <div
+        {...(dragHandleProps || {})}
+        style={{
+          paddingTop: 2,
+          color: mutedFg,
+          cursor: dragHandleProps ? 'grab' : 'default',
+          userSelect: 'none',
+          opacity: isOverlay ? 0 : 1,
+        }}
+      >
+        <DragHandleIcon color={mutedFg} />
+      </div>
+
+      {/* Main content */}
+      <div style={{ minWidth: 0 }}>
         {shotData ? (
           <>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+            {/* Shot identifier row */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 7,
+              flexWrap: 'wrap',
+              marginBottom: 3,
+            }}>
               <span style={{
                 fontFamily: 'monospace',
                 fontSize: 13,
                 fontWeight: 700,
                 color: fg,
+                flexShrink: 0,
               }}>
                 {shotData.displayId}
               </span>
               {shotData.subject && (
-                <span style={{ fontSize: 13, color: fg }}>{shotData.subject}</span>
+                <span style={{ fontSize: 12, color: fg }}>{shotData.subject}</span>
               )}
               <Badge label={shotData.intOrExt} />
               <Badge label={shotData.dayNight} />
             </div>
-            <div style={{ fontSize: 12, color: mutedFg, marginBottom: 3 }}>
+
+            {/* Scene label + location (live from store) */}
+            <div style={{
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: mutedFg,
+              marginBottom: shotData.notes ? 3 : 0,
+            }}>
               {shotData.sceneLabel}
               {shotData.location ? ` · ${shotData.location}` : ''}
             </div>
+
+            {/* Notes (truncated to 2 lines) */}
             {shotData.notes && (
               <div style={{
                 fontSize: 11,
                 color: mutedFg,
                 fontStyle: 'italic',
-                maxWidth: 560,
-                whiteSpace: 'pre-wrap',
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                marginBottom: 2,
               }}>
-                {shotData.notes.length > 120
-                  ? shotData.notes.slice(0, 120) + '…'
-                  : shotData.notes}
+                {shotData.notes}
               </div>
             )}
 
-            {/* Schedule-specific fields */}
-            <div style={{
-              display: 'flex',
-              gap: 16,
-              flexWrap: 'wrap',
-              marginTop: 6,
-              fontSize: 11,
-              color: mutedFg,
-              fontFamily: 'monospace',
-            }}>
-              {block.estimatedShootTime && (
-                <span>Shoot: {block.estimatedShootTime}</span>
-              )}
-              {block.estimatedSetupTime && (
-                <span>Setup: {block.estimatedSetupTime}</span>
-              )}
-              {block.shootingLocation && (
-                <span>Location: {block.shootingLocation}</span>
-              )}
-              {block.castMembers && block.castMembers.length > 0 && (
-                <span>Cast: {block.castMembers.join(', ')}</span>
-              )}
-            </div>
+            {/* Inline-editable schedule fields (not shown in overlay) */}
+            {!isOverlay && (
+              <div style={{ marginTop: 2 }}>
+                <InlineField
+                  value={block.shootingLocation}
+                  onChange={handleLocationChange}
+                  placeholder="Shooting location…"
+                  isDark={isDark}
+                  label="Location"
+                />
+                <InlineField
+                  value={(block.castMembers || []).join(', ')}
+                  onChange={handleCastChange}
+                  placeholder="Cast (comma-separated)…"
+                  isDark={isDark}
+                  label="Cast"
+                />
+              </div>
+            )}
           </>
         ) : (
           <span style={{ fontSize: 12, color: '#f87171', fontFamily: 'monospace' }}>
-            Shot deleted — remove this block
+            Shot deleted — remove this entry
           </span>
         )}
       </div>
 
-      {/* Right: remove button */}
-      <div style={{ paddingTop: 2 }}>
-        <IconButton
-          onClick={() => removeShotBlock(dayId, block.id)}
-          title="Remove shot from this day"
-          danger
-        >
-          ✕
-        </IconButton>
-      </div>
+      {/* Remove button */}
+      {!isOverlay && (
+        <div style={{ paddingTop: 1 }}>
+          <IconButton
+            onClick={() => removeShotBlock(dayId, block.id)}
+            onPointerDown={e => e.stopPropagation()}
+            title="Remove from schedule"
+            danger
+            small
+          >
+            ✕
+          </IconButton>
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Single shooting day card ──────────────────────────────────────────────────
+// ── SortableShotBlock ─────────────────────────────────────────────────────────
 
-function ShootingDayCard({ day, dayIndex, enrichedDay, isDark }) {
-  const removeShootingDay = useStore(s => s.removeShootingDay)
-  const updateShootingDay = useStore(s => s.updateShootingDay)
-
-  const bg = isDark ? '#1a1a1a' : '#fff'
-  const headerBg = isDark ? '#222' : '#f7f5f0'
-  const borderColor = isDark ? '#333' : '#d4cfc6'
-  const fg = isDark ? '#ddd' : '#1a1a1a'
-  const mutedFg = isDark ? '#888' : '#888'
+function SortableShotBlock({ block, shotData, dayId, isDark }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id,
+    data: { type: 'block', dayId },
+  })
 
   return (
-    <div style={{
-      border: `1px solid ${borderColor}`,
-      borderRadius: 6,
-      overflow: 'hidden',
-      background: bg,
-      marginBottom: 20,
-    }}>
-      {/* Day header */}
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1,
+        position: 'relative',
+        zIndex: isDragging ? 1 : 'auto',
+      }}
+    >
+      <ShotBlockContent
+        block={block}
+        shotData={shotData}
+        dayId={dayId}
+        isDark={isDark}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  )
+}
+
+// ── DayDropZone ───────────────────────────────────────────────────────────────
+// Droppable zone shown when a day has no blocks.
+
+function DayDropZone({ dayId, isDark }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `zone_${dayId}`,
+    data: { type: 'day-body', dayId },
+  })
+
+  const mutedFg = isDark ? '#444' : '#ccc'
+  const borderColor = isOver ? (isDark ? '#666' : '#aaa') : (isDark ? '#333' : '#e0dcd5')
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        margin: '10px 14px',
+        padding: '16px 12px',
+        border: `1.5px dashed ${borderColor}`,
+        borderRadius: 4,
+        textAlign: 'center',
+        transition: 'border-color 0.15s',
+      }}
+    >
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: mutedFg }}>
+        {isOver ? 'Drop here' : 'No shots — drag in or use Add Shot below'}
+      </span>
+    </div>
+  )
+}
+
+// ── DayEndDropZone ────────────────────────────────────────────────────────────
+// Invisible droppable zone at the bottom of a non-empty day list,
+// so users can drop blocks after the last item.
+
+function DayEndDropZone({ dayId }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `end_${dayId}`,
+    data: { type: 'day-body', dayId },
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        height: isOver ? 32 : 6,
+        transition: 'height 0.15s',
+        margin: '0 14px',
+      }}
+    />
+  )
+}
+
+// ── ShotPickerPanel ───────────────────────────────────────────────────────────
+// Grouped shot picker popup anchored below the "Add Shot" button.
+
+function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
+  const scenes = useStore(s => s.scenes)
+  const getShotsForScene = useStore(s => s.getShotsForScene)
+  const addShotBlock = useStore(s => s.addShotBlock)
+  const panelRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) onClose()
+    }
+    // Use mousedown so we catch clicks before focus changes
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const bg = isDark ? '#1e1e1e' : '#fff'
+  const borderColor = isDark ? '#333' : '#d4cfc6'
+  const fg = isDark ? '#ddd' : '#1a1a1a'
+  const mutedFg = isDark ? '#666' : '#999'
+  const groupHeaderBg = isDark ? '#161616' : '#f3f1ec'
+  const hoverBg = isDark ? '#252525' : '#f7f5f0'
+
+  const totalShots = scenes.reduce((n, sc) => n + sc.shots.length, 0)
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        position: 'absolute',
+        bottom: 'calc(100% + 4px)',
+        left: 0,
+        zIndex: 200,
+        width: 380,
+        maxWidth: 'calc(100vw - 48px)',
+        background: bg,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 6,
+        boxShadow: isDark
+          ? '0 8px 32px rgba(0,0,0,0.55)'
+          : '0 8px 32px rgba(0,0,0,0.16)',
+        maxHeight: 340,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+      }}
+    >
+      {/* Header */}
       <div style={{
+        padding: '8px 12px',
+        borderBottom: `1px solid ${borderColor}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '10px 14px',
-        background: headerBg,
-        borderBottom: `1px solid ${borderColor}`,
-        gap: 12,
+        position: 'sticky',
+        top: 0,
+        background: bg,
+        zIndex: 1,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-          <span style={{
-            fontFamily: 'monospace',
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
+        <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: fg, letterSpacing: '0.06em' }}>
+          ADD SHOT
+        </span>
+        <button
+          onClick={onClose}
+          style={{
+            border: 'none',
+            background: 'none',
             color: mutedFg,
-          }}>
-            Day {dayIndex + 1}
-          </span>
-          <input
-            type="date"
-            value={day.date}
-            onChange={e => updateShootingDay(day.id, { date: e.target.value })}
-            style={{
-              fontFamily: 'monospace',
-              fontSize: 12,
-              border: 'none',
-              background: 'none',
-              color: fg,
-              cursor: 'pointer',
-              outline: 'none',
-              padding: 0,
-            }}
-          />
-          {!day.date && (
-            <span style={{ fontSize: 11, color: mutedFg, fontStyle: 'italic' }}>
-              No date set
-            </span>
-          )}
-          <span style={{ fontSize: 11, color: mutedFg, fontFamily: 'monospace' }}>
-            {enrichedDay.shotBlocks.length} shot{enrichedDay.shotBlocks.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <IconButton
-          onClick={() => removeShootingDay(day.id)}
-          title="Remove shooting day"
-          danger
+            cursor: 'pointer',
+            fontSize: 16,
+            lineHeight: 1,
+            padding: 0,
+          }}
         >
-          Remove Day
-        </IconButton>
+          ×
+        </button>
       </div>
 
-      {/* Shot blocks */}
-      {enrichedDay.shotBlocks.length === 0 ? (
-        <div style={{
-          padding: '14px',
-          fontSize: 12,
-          color: mutedFg,
-          fontStyle: 'italic',
-          fontFamily: 'monospace',
-        }}>
-          No shots scheduled yet.
+      {totalShots === 0 ? (
+        <div style={{ padding: '16px 12px', fontSize: 12, fontFamily: 'monospace', color: mutedFg, textAlign: 'center' }}>
+          No shots in project yet.
         </div>
       ) : (
-        enrichedDay.shotBlocks.map(block => (
-          <ShotBlockRow
-            key={block.id}
-            block={block}
-            dayId={day.id}
-            isDark={isDark}
-          />
-        ))
-      )}
+        scenes.map((scene, sceneIdx) => {
+          const shots = getShotsForScene(scene.id)
+          if (shots.length === 0) return null
+          return (
+            <div key={scene.id}>
+              {/* Scene group header */}
+              <div style={{
+                padding: '5px 12px',
+                fontSize: 10,
+                fontFamily: 'monospace',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: mutedFg,
+                background: groupHeaderBg,
+                borderTop: sceneIdx > 0 ? `1px solid ${borderColor}` : 'none',
+                borderBottom: `1px solid ${borderColor}`,
+                position: 'sticky',
+                top: 33,
+                zIndex: 1,
+              }}>
+                {scene.sceneLabel}
+                {scene.location ? ` — ${scene.location}` : ''}
+                <span style={{ fontWeight: 400, marginLeft: 6, opacity: 0.6 }}>
+                  {scene.intOrExt} · {scene.dayNight}
+                </span>
+              </div>
 
-      {/* Add shot to this day */}
-      <div style={{ padding: '10px 14px', borderTop: `1px solid ${borderColor}` }}>
-        <AddShotPanel dayId={day.id} isDark={isDark} />
-      </div>
+              {/* Shot rows */}
+              {shots.map(shot => {
+                const alreadyAdded = existingShotIds.includes(shot.id)
+                const intExt = shot.intOrExt || scene.intOrExt
+                const dn = shot.dayNight || scene.dayNight
+                return (
+                  <button
+                    key={shot.id}
+                    onClick={() => addShotBlock(dayId, shot.id)}
+                    title={alreadyAdded ? 'Already scheduled — click to add again' : 'Add to this day'}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      padding: '7px 12px',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: `1px solid ${borderColor}`,
+                      cursor: 'pointer',
+                      color: fg,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = hoverBg)}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    {/* Shot number */}
+                    <span style={{
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: alreadyAdded ? mutedFg : fg,
+                      minWidth: 26,
+                      flexShrink: 0,
+                    }}>
+                      {shot.displayId}
+                    </span>
+
+                    {/* Subject */}
+                    <span style={{
+                      fontSize: 11,
+                      color: alreadyAdded ? mutedFg : fg,
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {shot.subject || <span style={{ fontStyle: 'italic', opacity: 0.5 }}>No subject</span>}
+                    </span>
+
+                    {/* Badges */}
+                    <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {intExt && <Badge label={intExt} />}
+                      {dn && <Badge label={dn} />}
+                    </span>
+
+                    {/* Already-added indicator */}
+                    {alreadyAdded && (
+                      <span style={{ fontSize: 10, fontFamily: 'monospace', color: mutedFg, flexShrink: 0 }}>
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// ── AddShotFooter ─────────────────────────────────────────────────────────────
+
+function AddShotFooter({ dayId, existingShotIds, isDark }) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const borderColor = isDark ? '#2a2a2a' : '#e5e0d8'
+  const fg = isDark ? '#ccc' : '#444'
+
+  return (
+    <div style={{
+      padding: '8px 14px',
+      borderTop: `1px solid ${borderColor}`,
+      position: 'relative',
+    }}>
+      {pickerOpen && (
+        <ShotPickerPanel
+          dayId={dayId}
+          existingShotIds={existingShotIds}
+          isDark={isDark}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+      <button
+        onClick={() => setPickerOpen(p => !p)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '5px 10px',
+          fontFamily: 'monospace',
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.04em',
+          border: `1px solid ${borderColor}`,
+          borderRadius: 4,
+          background: pickerOpen ? (isDark ? '#252525' : '#ede9e0') : 'none',
+          color: fg,
+          cursor: 'pointer',
+          transition: 'background 0.1s',
+        }}
+      >
+        <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span>
+        Add Shot
+        <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{pickerOpen ? '▲' : '▼'}</span>
+      </button>
+    </div>
+  )
+}
+
+// ── SortableShootingDay ───────────────────────────────────────────────────────
+
+function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }) {
+  const removeShootingDay = useStore(s => s.removeShootingDay)
+  const updateShootingDay = useStore(s => s.updateShootingDay)
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: day.id,
+    data: { type: 'day' },
+  })
+
+  const bg = isDark ? '#1a1a1a' : '#fff'
+  const headerBg = isDark ? '#1e1e1e' : '#f5f3ee'
+  const borderColor = isDark ? '#2a2a2a' : '#d9d4cb'
+  const fg = isDark ? '#ddd' : '#1a1a1a'
+  const mutedFg = isDark ? '#555' : '#999'
+
+  const blockIds = blocks.map(b => b.id)
+  const existingShotIds = blocks.map(b => b.shotId)
+  const formattedDate = formatDate(day.date)
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 6,
+        overflow: 'visible',
+        background: bg,
+        marginBottom: 16,
+        position: 'relative',
+      }}
+    >
+      {/* Day header — acts as drag handle for day reordering */}
+      <div
+        {...attributes}
+        {...listeners}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '8px 14px',
+          background: headerBg,
+          borderBottom: `1px solid ${borderColor}`,
+          borderRadius: '6px 6px 0 0',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          userSelect: 'none',
+        }}
+      >
+        {/* Handle icon */}
+        <span style={{ color: mutedFg, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <DragHandleIcon color={mutedFg} size={12} />
+        </span>
+
+        {/* Day number */}
+        <span style={{
+          fontFamily: 'monospace',
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: mutedFg,
+          flexShrink: 0,
+        }}>
+          Day {dayIndex + 1}
+        </span>
+
+        {/* Date picker */}
+        <input
+          type="date"
+          value={day.date || ''}
+          onChange={e => updateShootingDay(day.id, { date: e.target.value })}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 12,
+            border: 'none',
+            background: 'none',
+            color: fg,
+            cursor: 'pointer',
+            outline: 'none',
+            padding: 0,
+          }}
+        />
+
+        {/* Formatted date label */}
+        {formattedDate && (
+          <span style={{ fontSize: 12, color: fg, fontFamily: 'monospace' }}>
+            {formattedDate}
+          </span>
+        )}
+        {!day.date && (
+          <span style={{ fontSize: 11, color: mutedFg, fontStyle: 'italic', fontFamily: 'monospace' }}>
+            No date set
+          </span>
+        )}
+
+        {/* Shot count */}
+        <span style={{ fontSize: 11, color: mutedFg, fontFamily: 'monospace', marginLeft: 4 }}>
+          {blocks.length} shot{blocks.length !== 1 ? 's' : ''}
+        </span>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Remove day */}
+        <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+          <IconButton
+            onClick={() => removeShootingDay(day.id)}
+            title="Remove this shooting day"
+            danger
+            small
+          >
+            Remove Day
+          </IconButton>
+        </div>
+      </div>
+
+      {/* Shot block list */}
+      <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+        {blocks.length === 0 ? (
+          <DayDropZone dayId={day.id} isDark={isDark} />
+        ) : (
+          <>
+            {blocks.map(block => (
+              <SortableShotBlock
+                key={block.id}
+                block={block}
+                shotData={enrichedBlockMap[block.id]}
+                dayId={day.id}
+                isDark={isDark}
+              />
+            ))}
+            <DayEndDropZone dayId={day.id} />
+          </>
+        )}
+      </SortableContext>
+
+      {/* Add shot footer */}
+      <AddShotFooter
+        dayId={day.id}
+        existingShotIds={existingShotIds}
+        isDark={isDark}
+      />
+    </div>
+  )
+}
+
+// ── EmptyState ────────────────────────────────────────────────────────────────
 
 function EmptyState({ isDark, onAddDay }) {
-  const mutedFg = isDark ? '#666' : '#aaa'
+  const mutedFg = isDark ? '#555' : '#aaa'
   const fg = isDark ? '#ddd' : '#333'
 
   return (
@@ -373,35 +838,169 @@ function EmptyState({ isDark, onAddDay }) {
   )
 }
 
-// ── Main ScheduleTab ──────────────────────────────────────────────────────────
+// ── ScheduleTab (main) ────────────────────────────────────────────────────────
 
 export default function ScheduleTab() {
-  const theme = useStore(s => s.theme)
   const schedule = useStore(s => s.schedule)
+  const theme = useStore(s => s.theme)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const addShootingDay = useStore(s => s.addShootingDay)
+  const reorderDays = useStore(s => s.reorderDays)
+  const applyScheduleDrag = useStore(s => s.applyScheduleDrag)
 
   const isDark = theme === 'dark'
   const fg = isDark ? '#ddd' : '#1a1a1a'
-  const mutedFg = isDark ? '#888' : '#888'
+  const mutedFg = isDark ? '#666' : '#888'
 
-  const enrichedSchedule = getScheduleWithShots()
+  // ── DnD state ───────────────────────────────────────────────────────────────
+
+  // localBlocksByDay: { [dayId]: blockId[] }
+  // Set during a block drag, null at rest. Drives rendering during drag so
+  // cross-day moves are reflected instantly without touching the store.
+  const [localBlocksByDay, setLocalBlocksByDay] = useState(null)
+  const [activeDrag, setActiveDrag] = useState(null) // { id, type: 'day'|'block' }
+
+  // Flat map: blockId → block object (from store, always current)
+  const blockMap = useMemo(() => {
+    const map = {}
+    schedule.forEach(d => d.shotBlocks.forEach(b => { map[b.id] = b }))
+    return map
+  }, [schedule])
+
+  // Flat map: blockId → shotData (live shot info from store)
+  const enrichedBlockMap = useMemo(() => {
+    const map = {}
+    getScheduleWithShots().forEach(d => {
+      d.shotBlocks.forEach(b => { map[b.id] = b.shotData })
+    })
+    return map
+  }, [schedule]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resolves the ordered block list for a given day.
+  // During drag uses localBlocksByDay; at rest uses the store.
+  const getBlocksForDay = useCallback((dayId) => {
+    const ids = localBlocksByDay
+      ? (localBlocksByDay[dayId] || [])
+      : (schedule.find(d => d.id === dayId)?.shotBlocks.map(b => b.id) || [])
+    return ids.map(id => blockMap[id]).filter(Boolean)
+  }, [localBlocksByDay, schedule, blockMap])
+
+  const dayIds = schedule.map(d => d.id)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  )
+
+  // ── DnD handlers ────────────────────────────────────────────────────────────
+
+  const handleDragStart = useCallback(({ active }) => {
+    const type = active.data.current?.type || 'day'
+    setActiveDrag({ id: active.id, type })
+
+    if (type === 'block') {
+      // Snapshot current order for local manipulation during drag
+      const order = {}
+      schedule.forEach(d => { order[d.id] = d.shotBlocks.map(b => b.id) })
+      setLocalBlocksByDay(order)
+    }
+  }, [schedule])
+
+  const handleDragOver = useCallback(({ active, over }) => {
+    // Only process when a block is being dragged
+    if (!over || !activeDrag || activeDrag.type !== 'block') return
+
+    const overType = over.data.current?.type
+    // Ignore hover over day headers — blocks only target other blocks or day-body zones
+    if (!overType || overType === 'day') return
+
+    const targetDayId = over.data.current?.dayId
+    if (!targetDayId) return
+
+    const activeBlockId = active.id
+
+    setLocalBlocksByDay(prev => {
+      if (!prev) return prev
+
+      const activeDayId = findBlockDay(activeBlockId, prev)
+      if (!activeDayId) return prev
+
+      // Clone all arrays to avoid mutation
+      const next = {}
+      Object.keys(prev).forEach(k => { next[k] = [...prev[k]] })
+
+      // Remove from current position
+      next[activeDayId] = next[activeDayId].filter(id => id !== activeBlockId)
+
+      // Insert into target position
+      const targetBlocks = next[targetDayId] || []
+      if (overType === 'block' && over.id !== activeBlockId) {
+        const insertIdx = targetBlocks.indexOf(over.id)
+        if (insertIdx !== -1) {
+          targetBlocks.splice(insertIdx, 0, activeBlockId)
+        } else {
+          targetBlocks.push(activeBlockId)
+        }
+      } else {
+        // Hovering over a day-body zone — append to end
+        targetBlocks.push(activeBlockId)
+      }
+      next[targetDayId] = targetBlocks
+
+      return next
+    })
+  }, [activeDrag])
+
+  const handleDragEnd = useCallback(({ active, over }) => {
+    if (activeDrag?.type === 'day' && over && active.id !== over.id) {
+      // Resolve target day even if dropped on a block or zone inside it
+      const overType = over.data.current?.type
+      let targetDayId = null
+      if (overType === 'day') targetDayId = over.id
+      else if (overType === 'block') targetDayId = over.data.current?.dayId
+      else if (overType === 'day-body') targetDayId = over.data.current?.dayId
+
+      if (targetDayId && targetDayId !== active.id) {
+        reorderDays(active.id, targetDayId)
+      }
+    } else if (activeDrag?.type === 'block' && localBlocksByDay) {
+      // Commit the local block order to the store in one atomic update
+      applyScheduleDrag(
+        schedule.map(d => ({
+          id: d.id,
+          shotBlocks: (localBlocksByDay[d.id] || []).map(id => blockMap[id]).filter(Boolean),
+        }))
+      )
+    }
+
+    setLocalBlocksByDay(null)
+    setActiveDrag(null)
+  }, [activeDrag, localBlocksByDay, schedule, blockMap, reorderDays, applyScheduleDrag])
+
+  const handleDragCancel = useCallback(() => {
+    setLocalBlocksByDay(null)
+    setActiveDrag(null)
+  }, [])
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const totalShots = schedule.reduce((n, d) => n + d.shotBlocks.length, 0)
 
   return (
     <div style={{
       flex: 1,
       overflowY: 'auto',
       padding: '24px',
-      maxWidth: 900,
+      maxWidth: 920,
       margin: '0 auto',
       width: '100%',
     }}>
-      {/* Header row */}
+      {/* Header */}
       <div style={{
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'space-between',
-        marginBottom: 20,
+        marginBottom: 24,
+        gap: 12,
       }}>
         <div>
           <h2 style={{
@@ -417,10 +1016,8 @@ export default function ScheduleTab() {
           </h2>
           {schedule.length > 0 && (
             <p style={{ margin: '4px 0 0', fontSize: 12, color: mutedFg, fontFamily: 'monospace' }}>
-              {schedule.length} shooting day{schedule.length !== 1 ? 's' : ''} &middot;{' '}
-              {schedule.reduce((n, d) => n + d.shotBlocks.length, 0)} shot{
-                schedule.reduce((n, d) => n + d.shotBlocks.length, 0) !== 1 ? 's' : ''
-              } scheduled
+              {schedule.length} shooting day{schedule.length !== 1 ? 's' : ''}&nbsp;&middot;&nbsp;
+              {totalShots} shot{totalShots !== 1 ? 's' : ''} scheduled
             </p>
           )}
         </div>
@@ -440,6 +1037,7 @@ export default function ScheduleTab() {
               background: 'none',
               color: fg,
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             + Add Day
@@ -447,22 +1045,44 @@ export default function ScheduleTab() {
         )}
       </div>
 
-      {/* Day cards or empty state */}
+      {/* Content */}
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={addShootingDay} />
       ) : (
-        enrichedSchedule.map((enrichedDay, dayIndex) => {
-          const day = schedule[dayIndex]
-          return (
-            <ShootingDayCard
-              key={day.id}
-              day={day}
-              dayIndex={dayIndex}
-              enrichedDay={enrichedDay}
-              isDark={isDark}
-            />
-          )
-        })
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <SortableContext items={dayIds} strategy={verticalListSortingStrategy}>
+            {schedule.map((day, dayIndex) => (
+              <SortableShootingDay
+                key={day.id}
+                day={day}
+                dayIndex={dayIndex}
+                blocks={getBlocksForDay(day.id)}
+                enrichedBlockMap={enrichedBlockMap}
+                isDark={isDark}
+              />
+            ))}
+          </SortableContext>
+
+          {/* DragOverlay only for shot blocks — shows a floating card at the cursor */}
+          <DragOverlay>
+            {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (
+              <ShotBlockContent
+                block={blockMap[activeDrag.id]}
+                shotData={enrichedBlockMap[activeDrag.id]}
+                dayId={null}
+                isDark={isDark}
+                isOverlay
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
     </div>
   )
