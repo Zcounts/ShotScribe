@@ -25,8 +25,8 @@ function escapeHtml(str) {
 const PRINT_BUILTIN_COLUMNS = [
   { key: 'checked',        label: 'X',                 width: 36  },
   { key: 'displayId',      label: 'SHOT#',             width: 54  },
-  { key: '__int__',        label: 'I/E',               width: 52  },
-  { key: '__dn__',         label: 'D/N',               width: 52  },
+  { key: '__int__',        label: 'I/E',               width: 68  },
+  { key: '__dn__',         label: 'D/N',               width: 62  },
   { key: 'subject',        label: 'SUBJECT',           width: 130 },
   { key: 'specs.type',     label: 'ANGLE',             width: 96  },
   { key: 'focalLength',    label: 'LENS',              width: 64  },
@@ -385,15 +385,39 @@ function buildSchedulePrintHtml() {
     let cumulativeMins = 0
     let totalShootMins = 0
     let totalSetupMins = 0
+    let totalBreakMins = 0
 
     const blockRows = day.shotBlocks.map(block => {
+      const projectedTime = hasTimeline ? startMins + cumulativeMins : null
+
+      // ── Break block ──────────────────────────────────────────────────
+      if (block.type === 'break') {
+        const breakMins = parseScheduleMinutes(block.breakDuration)
+        totalBreakMins += breakMins
+        cumulativeMins += breakMins
+
+        const timelineCell = hasTimeline
+          ? (projectedTime !== null
+              ? `<td class="tl-cell"><span class="est-badge">~ ${escapeHtml(scheduleFormatTimeOfDay(projectedTime))}</span><br><span class="est-label">EST.</span></td>`
+              : `<td class="tl-cell">—</td>`)
+          : ''
+
+        return `<tr class="break-row">
+          ${timelineCell}
+          <td colspan="6" class="break-name-cell">
+            <span class="break-icon">⏸</span>
+            <strong>${escapeHtml(block.breakName || 'Break')}</strong>
+            ${breakMins > 0 ? `<span class="break-dur">${breakMins}m</span>` : ''}
+          </td>
+        </tr>`
+      }
+
+      // ── Shot block ───────────────────────────────────────────────────
       const found = shotMap.get(block.shotId)
       const shootMins = parseScheduleMinutes(block.estimatedShootTime)
       const setupMins = parseScheduleMinutes(block.estimatedSetupTime)
       totalShootMins += shootMins
       totalSetupMins += setupMins
-
-      const projectedTime = hasTimeline ? startMins + cumulativeMins : null
       cumulativeMins += shootMins + setupMins
 
       let timelineCell = ''
@@ -406,7 +430,7 @@ function buildSchedulePrintHtml() {
       if (!found) {
         return `<tr class="block-row deleted-row">
           ${hasTimeline ? '<td class="tl-cell"></td>' : ''}
-          <td colspan="6"><em style="color:#ccc">Shot deleted — remove this entry</em></td>
+          <td colspan="6"><em style="color:#888">Shot deleted — remove this entry</em></td>
         </tr>`
       }
 
@@ -414,7 +438,6 @@ function buildSchedulePrintHtml() {
       const intOrExt = shot.intOrExt || scene.intOrExt || ''
       const dayNight = shot.dayNight || scene.dayNight || ''
       const castList = (block.castMembers || []).join(', ') || '—'
-      const location = block.shootingLocation || scene.location || '—'
 
       return `<tr class="block-row">
         ${timelineCell}
@@ -431,11 +454,11 @@ function buildSchedulePrintHtml() {
       </tr>`
     })
 
-    const totalMins = totalShootMins + totalSetupMins
+    const totalMins = totalShootMins + totalSetupMins + totalBreakMins
     const hasTotals = totalMins > 0
 
     const headerCols = hasTimeline
-      ? `<th class="tl-th">PROJECTED TIME<br><span style="font-weight:400;font-size:7pt;color:#aaa">ESTIMATE ONLY</span></th><th>SHOT</th><th>SUBJECT / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
+      ? `<th class="tl-th">PROJECTED TIME<br><span style="font-weight:400;font-size:7pt;color:#666">ESTIMATE ONLY</span></th><th>SHOT</th><th>SUBJECT / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
       : `<th>SHOT</th><th>SUBJECT / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
 
     // Columns (no timeline): shot | subject | badge | shoot | setup | cast  = 6
@@ -449,12 +472,20 @@ function buildSchedulePrintHtml() {
         </td>
         <td class="time-cell total-val">${totalShootMins > 0 ? scheduleFormatMins(totalShootMins) : '—'}</td>
         <td class="time-cell total-val">${totalSetupMins > 0 ? scheduleFormatMins(totalSetupMins) : '—'}</td>
-        <td><strong>${scheduleFormatMins(totalMins)}</strong> combined</td>
+        <td><strong>${scheduleFormatMins(totalMins)}</strong> combined${totalBreakMins > 0 ? ` <span style="font-weight:400;color:#666;font-size:7.5pt">(incl. ${scheduleFormatMins(totalBreakMins)} breaks)</span>` : ''}</td>
       </tr>` : ''
 
     const callTimeStr = day.startTime
       ? `<span class="call-time">Call: ${escapeHtml(day.startTime)}</span>`
       : ''
+
+    const basecampStr = day.basecamp
+      ? `<span class="day-basecamp">⚑ ${escapeHtml(day.basecamp)}</span>`
+      : ''
+
+    const shotCount = day.shotBlocks.filter(b => b.type !== 'break').length
+    const breakCount = day.shotBlocks.filter(b => b.type === 'break').length
+    const countStr = `${shotCount} SHOT${shotCount !== 1 ? 'S' : ''}${breakCount > 0 ? ` · ${breakCount} BREAK${breakCount !== 1 ? 'S' : ''}` : ''}`
 
     dayDivs.push(`
 <div class="day-section">
@@ -463,8 +494,9 @@ function buildSchedulePrintHtml() {
       <span class="day-num">Day ${dayIdx + 1}</span>
       ${formattedDate ? `<span class="day-date">${escapeHtml(formattedDate)}</span>` : '<span class="day-date no-date">No date set</span>'}
       ${callTimeStr}
+      ${basecampStr}
     </div>
-    <span class="shot-count">${day.shotBlocks.length} SHOT${day.shotBlocks.length !== 1 ? 'S' : ''}</span>
+    <span class="shot-count">${countStr}</span>
   </div>
   ${day.shotBlocks.length === 0
     ? '<p class="no-shots">No shots scheduled for this day.</p>'
@@ -473,10 +505,10 @@ function buildSchedulePrintHtml() {
       ${hasTimeline ? '<col style="width:90px">' : ''}
       <col style="width:42px">
       <col style="width:auto">
-      <col style="width:60px">
-      <col style="width:48px">
-      <col style="width:48px">
-      <col style="width:140px">
+      <col style="width:80px">
+      <col style="width:52px">
+      <col style="width:52px">
+      <col style="width:130px">
     </colgroup>
     <thead><tr>${headerCols}</tr></thead>
     <tbody>
@@ -519,7 +551,7 @@ html, body {
 }
 .doc-title-sub {
   font-size: 8pt;
-  color: #777;
+  color: #444;
 }
 .day-section {
   margin-bottom: 18px;
@@ -568,7 +600,7 @@ html, body {
 .no-shots {
   padding: 10px;
   font-style: italic;
-  color: #aaa;
+  color: #666;
   border: 1px solid #e5e5e5;
   border-top: none;
 }
@@ -619,7 +651,7 @@ tr.deleted-row td { background: #fff5f5; color: #ddd; }
 }
 .est-label {
   font-size: 6pt;
-  color: #9ca3af;
+  color: #777;
   letter-spacing: 0.1em;
   font-weight: 400;
 }
@@ -630,8 +662,8 @@ tr.deleted-row td { background: #fff5f5; color: #ddd; }
   white-space: nowrap;
 }
 .subject-cell { font-size: 8.5pt; }
-.notes-txt { color: #777; font-style: italic; font-size: 7.5pt; }
-.scene-loc { color: #999; font-size: 7.5pt; }
+.notes-txt { color: #555; font-style: italic; font-size: 7.5pt; }
+.scene-loc { color: #555; font-size: 7.5pt; }
 .badge-cell { white-space: nowrap; vertical-align: middle; }
 .bdg {
   display: inline-block;
@@ -666,6 +698,36 @@ tr.deleted-row td { background: #fff5f5; color: #ddd; }
   color: #1e40af;
   break-inside: avoid;
 }
+.day-basecamp {
+  font-size: 8pt;
+  font-weight: 600;
+  background: rgba(255,255,255,0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+tr.break-row td {
+  background: #fef9c3 !important;
+  border-bottom: 1px solid #fde68a;
+  border-right: 1px solid #fde68a;
+}
+.break-name-cell {
+  padding: 5px 8px;
+  font-size: 8.5pt;
+}
+.break-icon {
+  margin-right: 5px;
+}
+.break-dur {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 8pt;
+  color: #555;
+  background: #fde68a;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
 .footer {
   margin-top: 16px;
   border-top: 1px solid #ddd;
@@ -683,7 +745,7 @@ tr.deleted-row td { background: #fff5f5; color: #ddd; }
     <div class="doc-title-main">SHOOTING SCHEDULE</div>
     <div class="doc-title-sub">${escapeHtml(projectName || 'Untitled Project')}</div>
   </div>
-  <div class="doc-title-sub">${schedule.length} day${schedule.length !== 1 ? 's' : ''} · ${schedule.reduce((n, d) => n + d.shotBlocks.length, 0)} shots scheduled</div>
+  <div class="doc-title-sub">${schedule.length} day${schedule.length !== 1 ? 's' : ''} · ${schedule.reduce((n, d) => n + d.shotBlocks.filter(b => b.type !== 'break').length, 0)} shots scheduled</div>
 </div>
 
 ${schedule.some(d => d.startTime) ? `<div class="estimate-notice">

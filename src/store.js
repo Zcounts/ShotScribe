@@ -185,12 +185,30 @@ const useStore = create((set, get) => ({
       id: `day_${Date.now()}_${dayIdCounter}`,
       date: '',
       startTime: '',
+      basecamp: '',
       shotBlocks: [],
       ...overrides,
     }
     set(state => ({ schedule: [...state.schedule, day] }))
     get()._scheduleAutoSave()
     return day.id
+  },
+
+  addBreakBlock: (dayId, name = 'Break', durationMins = 0) => {
+    blockIdCounter++
+    const block = {
+      id: `block_${Date.now()}_${blockIdCounter}`,
+      type: 'break',
+      breakName: name,
+      breakDuration: durationMins,
+    }
+    set(state => ({
+      schedule: state.schedule.map(d =>
+        d.id === dayId ? { ...d, shotBlocks: [...d.shotBlocks, block] } : d
+      ),
+    }))
+    get()._scheduleAutoSave()
+    return block.id
   },
 
   removeShootingDay: (dayId) => {
@@ -614,14 +632,25 @@ const useStore = create((set, get) => ({
           id: day.id || `day_${Date.now()}_${++dayIdCounter}`,
           date: day.date || '',
           startTime: day.startTime || '',
-          shotBlocks: (day.shotBlocks || []).map(b => ({
-            id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
-            shotId: b.shotId || '',
-            estimatedShootTime: b.estimatedShootTime || '',
-            estimatedSetupTime: b.estimatedSetupTime || '',
-            shootingLocation: b.shootingLocation || '',
-            castMembers: b.castMembers || [],
-          })),
+          basecamp: day.basecamp || '',
+          shotBlocks: (day.shotBlocks || []).map(b => {
+            if (b.type === 'break') {
+              return {
+                id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
+                type: 'break',
+                breakName: b.breakName || 'Break',
+                breakDuration: b.breakDuration || 0,
+              }
+            }
+            return {
+              id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
+              shotId: b.shotId || '',
+              estimatedShootTime: b.estimatedShootTime || '',
+              estimatedSetupTime: b.estimatedSetupTime || '',
+              shootingLocation: b.shootingLocation || '',
+              castMembers: b.castMembers || [],
+            }
+          }),
         }))
       : []
 
