@@ -184,6 +184,7 @@ const useStore = create((set, get) => ({
     const day = {
       id: `day_${Date.now()}_${dayIdCounter}`,
       date: '',
+      startTime: '',
       shotBlocks: [],
       ...overrides,
     }
@@ -612,6 +613,7 @@ const useStore = create((set, get) => ({
       ? data.schedule.map(day => ({
           id: day.id || `day_${Date.now()}_${++dayIdCounter}`,
           date: day.date || '',
+          startTime: day.startTime || '',
           shotBlocks: (day.shotBlocks || []).map(b => ({
             id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
             shotId: b.shotId || '',
