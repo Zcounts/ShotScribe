@@ -18,6 +18,7 @@ import ContextMenu from './components/ContextMenu'
 import ExportModal from './components/ExportModal'
 import RecentProjects from './components/RecentProjects'
 import ShotlistTab from './components/ShotlistTab'
+import ScheduleTab from './components/ScheduleTab'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -234,10 +235,14 @@ export default function App() {
         backgroundColor: isDark ? '#111' : '#d4cfc6',
         paddingLeft: '16px',
       }}>
-        {['storyboard', 'shotlist'].map(tab => (
+        {[
+          { id: 'storyboard', label: 'Storyboard' },
+          { id: 'shotlist',   label: 'Shotlist' },
+          { id: 'schedule',   label: 'Schedule' },
+        ].map(({ id, label }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={id}
+            onClick={() => setActiveTab(id)}
             style={{
               padding: '8px 20px',
               fontFamily: 'monospace',
@@ -246,11 +251,11 @@ export default function App() {
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               border: 'none',
-              borderBottom: activeTab === tab
+              borderBottom: activeTab === id
                 ? (isDark ? '2px solid #fff' : '2px solid #222')
                 : '2px solid transparent',
               background: 'none',
-              color: activeTab === tab
+              color: activeTab === id
                 ? (isDark ? '#fff' : '#222')
                 : (isDark ? '#666' : '#888'),
               cursor: 'pointer',
@@ -258,7 +263,7 @@ export default function App() {
               marginBottom: '-1px',
             }}
           >
-            {tab === 'storyboard' ? 'Storyboard' : 'Shotlist'}
+            {label}
           </button>
         ))}
       </div>
@@ -303,9 +308,13 @@ export default function App() {
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'shotlist' ? (
         <div className="flex-1 flex flex-col overflow-auto">
           <ShotlistTab containerRef={shotlistRef} />
+        </div>
+      ) : (
+        <div className="flex-1 flex flex-col overflow-auto" style={{ backgroundColor: isDark ? '#1a1a1a' : '#e8e4db' }}>
+          <ScheduleTab />
         </div>
       )}
 

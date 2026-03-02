@@ -35,6 +35,8 @@ const DEFAULT_COLOR = '#4ade80'
 
 let shotCounter = 0
 let sceneIdCounter = 0
+let dayIdCounter = 0
+let blockIdCounter = 0
 
 function createShot(overrides = {}) {
   shotCounter++
@@ -117,15 +119,120 @@ const useStore = create((set, get) => ({
   // Recent projects
   recentProjects: JSON.parse(localStorage.getItem('recentProjects') || '[]'),
 
+  // Schedule — array of shooting days, each with a list of shot blocks that
+  // reference shots by ID so they stay linked to the storyboard/shotlist.
+  // Shape: [{ id, date, shotBlocks: [{ id, shotId, estimatedShootTime,
+  //           estimatedSetupTime, shootingLocation, castMembers }] }]
+  schedule: [],
+
   // UI state
   settingsOpen: false,
   contextMenu: null, // { shotId, sceneId, x, y }
-  activeTab: 'storyboard', // 'storyboard' | 'shotlist'
+  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'schedule'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
 
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
   customDropdownOptions: {}, // { fieldKey: ['option1', 'option2', ...] }
+
+  // ── Schedule helpers ─────────────────────────────────────────────────
+
+  // Returns the full schedule with each shot block enriched by live data
+  // pulled from the linked shot and its parent scene.  This means any edits
+  // on the Storyboard or Shotlist are immediately reflected in the Schedule
+  // without duplicating data in the store.
+  getScheduleWithShots: () => {
+    const { schedule, scenes } = get()
+
+    // Build a map: shotId → { shot, scene, displayId }
+    const shotMap = new Map()
+    scenes.forEach((scene, sceneIdx) => {
+      scene.shots.forEach((shot, shotIdx) => {
+        shotMap.set(shot.id, {
+          shot,
+          scene,
+          displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        })
+      })
+    })
+
+    return schedule.map(day => ({
+      ...day,
+      shotBlocks: day.shotBlocks.map(block => {
+        const found = shotMap.get(block.shotId)
+        return {
+          ...block,
+          // Null when the referenced shot has been deleted
+          shotData: found ? {
+            displayId: found.displayId,
+            subject: found.shot.subject,
+            notes: found.shot.notes,
+            intOrExt: found.shot.intOrExt || found.scene.intOrExt,
+            dayNight: found.shot.dayNight || found.scene.dayNight,
+            sceneLabel: found.scene.sceneLabel,
+            location: found.scene.location,
+          } : null,
+        }
+      }),
+    }))
+  },
+
+  // ── Schedule actions ─────────────────────────────────────────────────
+
+  addShootingDay: (overrides = {}) => {
+    dayIdCounter++
+    const day = {
+      id: `day_${Date.now()}_${dayIdCounter}`,
+      date: '',
+      shotBlocks: [],
+      ...overrides,
+    }
+    set(state => ({ schedule: [...state.schedule, day] }))
+    get()._scheduleAutoSave()
+    return day.id
+  },
+
+  removeShootingDay: (dayId) => {
+    set(state => ({ schedule: state.schedule.filter(d => d.id !== dayId) }))
+    get()._scheduleAutoSave()
+  },
+
+  updateShootingDay: (dayId, updates) => {
+    set(state => ({
+      schedule: state.schedule.map(d => d.id === dayId ? { ...d, ...updates } : d),
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  addShotBlock: (dayId, shotId) => {
+    blockIdCounter++
+    const block = {
+      id: `block_${Date.now()}_${blockIdCounter}`,
+      shotId,
+      estimatedShootTime: '',
+      estimatedSetupTime: '',
+      shootingLocation: '',
+      castMembers: [],
+    }
+    set(state => ({
+      schedule: state.schedule.map(d =>
+        d.id === dayId ? { ...d, shotBlocks: [...d.shotBlocks, block] } : d
+      ),
+    }))
+    get()._scheduleAutoSave()
+    return block.id
+  },
+
+  removeShotBlock: (dayId, blockId) => {
+    set(state => ({
+      schedule: state.schedule.map(d =>
+        d.id === dayId
+          ? { ...d, shotBlocks: d.shotBlocks.filter(b => b.id !== blockId) }
+          : d
+      ),
+    }))
+    get()._scheduleAutoSave()
+  },
 
   // ── Scene helpers ────────────────────────────────────────────────────
 
@@ -358,7 +465,7 @@ const useStore = create((set, get) => ({
     const {
       projectName, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
-      customColumns, customDropdownOptions,
+      customColumns, customDropdownOptions, schedule,
     } = get()
     return {
       version: 2,
@@ -375,6 +482,7 @@ const useStore = create((set, get) => ({
         ...scene,
         shots: scene.shots.map(s => ({ ...s })),
       })),
+      schedule,
       exportedAt: new Date().toISOString(),
     }
   },
@@ -467,6 +575,21 @@ const useStore = create((set, get) => ({
       })]
     }
 
+    const loadedSchedule = Array.isArray(data.schedule)
+      ? data.schedule.map(day => ({
+          id: day.id || `day_${Date.now()}_${++dayIdCounter}`,
+          date: day.date || '',
+          shotBlocks: (day.shotBlocks || []).map(b => ({
+            id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
+            shotId: b.shotId || '',
+            estimatedShootTime: b.estimatedShootTime || '',
+            estimatedSetupTime: b.estimatedSetupTime || '',
+            shootingLocation: b.shootingLocation || '',
+            castMembers: b.castMembers || [],
+          })),
+        }))
+      : []
+
     set({
       projectName: projectName || 'Untitled Shotlist',
       columnCount: columnCount || 4,
@@ -503,6 +626,7 @@ const useStore = create((set, get) => ({
       customColumns: loadedCustomColumns,
       customDropdownOptions: loadedCustomDropdownOptions,
       scenes,
+      schedule: loadedSchedule,
       lastSaved: new Date().toISOString(),
     })
   },
@@ -592,6 +716,7 @@ const useStore = create((set, get) => ({
     set({
       projectName: name,
       scenes: [scene],
+      schedule: [],
       projectPath: null,
       lastSaved: null,
     })
