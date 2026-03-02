@@ -16,6 +16,46 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 
+// ── Time Utilities ────────────────────────────────────────────────────────────
+
+/** Parse a plain-number string (minutes) into a float. Returns 0 for empty/invalid. */
+function parseMinutes(str) {
+  const s = String(str || '').trim()
+  if (!s) return 0
+  return Math.max(0, parseFloat(s) || 0)
+}
+
+/** Format a total-minutes count into "Xh Ym" or "Ym" display string. */
+function formatMins(totalMins) {
+  if (!totalMins || totalMins <= 0) return '0m'
+  const h = Math.floor(totalMins / 60)
+  const m = Math.round(totalMins % 60)
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
+/**
+ * Parse a "HH:MM" 24-hour time string (from <input type="time">) into
+ * total minutes from midnight. Returns null for empty/invalid input.
+ */
+function parseStartTime(timeStr) {
+  if (!timeStr || !timeStr.includes(':')) return null
+  const [h, m] = timeStr.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return null
+  return h * 60 + m
+}
+
+/** Format a total-minutes-from-midnight value as "H:MM AM/PM". */
+function formatTimeOfDay(totalMins) {
+  const safeTotal = ((Math.round(totalMins) % (24 * 60)) + 24 * 60) % (24 * 60)
+  const h24 = Math.floor(safeTotal / 60)
+  const m = safeTotal % 60
+  const h12 = h24 % 12 || 12
+  const ampm = h24 < 12 ? 'AM' : 'PM'
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function findBlockDay(blockId, localBlocksByDay) {
@@ -28,7 +68,6 @@ function findBlockDay(blockId, localBlocksByDay) {
 function formatDate(isoDate) {
   if (!isoDate) return null
   try {
-    // Add noon time to avoid UTC-midnight timezone edge cases
     const d = new Date(isoDate + 'T12:00:00')
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   } catch {
@@ -104,7 +143,7 @@ function DragHandleIcon({ size = 14, color = 'currentColor' }) {
 // ── InlineField ───────────────────────────────────────────────────────────────
 // Click-to-edit text input styled as plain text at rest.
 
-function InlineField({ value, onChange, placeholder, isDark, label }) {
+function InlineField({ value, onChange, placeholder, isDark, label, inputWidth }) {
   const [localVal, setLocalVal] = useState(value || '')
   const [editing, setEditing] = useState(false)
 
@@ -143,10 +182,11 @@ function InlineField({ value, onChange, placeholder, isDark, label }) {
           if (e.key === 'Enter') e.target.blur()
           if (e.key === 'Escape') { setLocalVal(value || ''); setEditing(false) }
         }}
-        onPointerDown={e => e.stopPropagation()} // prevent block drag when clicking field
+        onPointerDown={e => e.stopPropagation()}
         placeholder={placeholder}
         style={{
-          flex: 1,
+          flex: inputWidth ? 'none' : 1,
+          width: inputWidth || undefined,
           minWidth: 0,
           background: editing ? (isDark ? '#252525' : '#fff') : 'transparent',
           border: editing ? `1px solid ${borderColor}` : '1px solid transparent',
@@ -164,11 +204,45 @@ function InlineField({ value, onChange, placeholder, isDark, label }) {
   )
 }
 
+// ── ProjectedTimeBadge ────────────────────────────────────────────────────────
+
+function ProjectedTimeBadge({ totalMins, isDark }) {
+  return (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      padding: '2px 7px',
+      borderRadius: 3,
+      background: isDark ? 'rgba(96,165,250,0.12)' : 'rgba(59,130,246,0.08)',
+      border: `1px solid ${isDark ? 'rgba(96,165,250,0.25)' : 'rgba(59,130,246,0.2)'}`,
+      fontSize: 10,
+      fontFamily: 'monospace',
+      fontWeight: 600,
+      color: isDark ? '#93c5fd' : '#2563eb',
+      letterSpacing: '0.04em',
+      flexShrink: 0,
+    }}>
+      <span style={{ opacity: 0.7, fontSize: 9 }}>~</span>
+      {formatTimeOfDay(totalMins)}
+      <span style={{
+        fontSize: 8,
+        fontWeight: 400,
+        opacity: 0.65,
+        letterSpacing: '0.06em',
+        marginLeft: 1,
+      }}>
+        EST.
+      </span>
+    </div>
+  )
+}
+
 // ── ShotBlockContent ──────────────────────────────────────────────────────────
 // Renders the visual content of a single shot block.
 // Used both in the sortable list and in the DragOverlay.
 
-function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps }) {
+function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
 
@@ -186,6 +260,14 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       const arr = val.split(',').map(s => s.trim()).filter(Boolean)
       updateShotBlock(dayId, block.id, { castMembers: arr })
     }
+  }, [dayId, block.id, updateShotBlock])
+
+  const handleShootTimeChange = useCallback((val) => {
+    if (dayId) updateShotBlock(dayId, block.id, { estimatedShootTime: val })
+  }, [dayId, block.id, updateShotBlock])
+
+  const handleSetupTimeChange = useCallback((val) => {
+    if (dayId) updateShotBlock(dayId, block.id, { estimatedSetupTime: val })
   }, [dayId, block.id, updateShotBlock])
 
   return (
@@ -219,7 +301,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       <div style={{ minWidth: 0 }}>
         {shotData ? (
           <>
-            {/* Shot identifier row */}
+            {/* Shot identifier row + projected time */}
             <div style={{
               display: 'flex',
               alignItems: 'baseline',
@@ -227,6 +309,10 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
               flexWrap: 'wrap',
               marginBottom: 3,
             }}>
+              {/* Projected time badge (before shot ID if start time is set) */}
+              {projectedTime !== null && projectedTime !== undefined && !isOverlay && (
+                <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
+              )}
               <span style={{
                 fontFamily: 'monospace',
                 fontSize: 13,
@@ -272,7 +358,26 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
 
             {/* Inline-editable schedule fields (not shown in overlay) */}
             {!isOverlay && (
-              <div style={{ marginTop: 2 }}>
+              <div style={{ marginTop: 4 }}>
+                {/* Time fields row */}
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 0 }}>
+                  <InlineField
+                    value={block.estimatedShootTime}
+                    onChange={handleShootTimeChange}
+                    placeholder="—"
+                    isDark={isDark}
+                    label="Shoot (min)"
+                    inputWidth={40}
+                  />
+                  <InlineField
+                    value={block.estimatedSetupTime}
+                    onChange={handleSetupTimeChange}
+                    placeholder="—"
+                    isDark={isDark}
+                    label="Setup (min)"
+                    inputWidth={40}
+                  />
+                </div>
                 <InlineField
                   value={block.shootingLocation}
                   onChange={handleLocationChange}
@@ -317,7 +422,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
 
 // ── SortableShotBlock ─────────────────────────────────────────────────────────
 
-function SortableShotBlock({ block, shotData, dayId, isDark }) {
+function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
     data: { type: 'block', dayId },
@@ -339,6 +444,7 @@ function SortableShotBlock({ block, shotData, dayId, isDark }) {
         shotData={shotData}
         dayId={dayId}
         isDark={isDark}
+        projectedTime={projectedTime}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -346,7 +452,6 @@ function SortableShotBlock({ block, shotData, dayId, isDark }) {
 }
 
 // ── DayDropZone ───────────────────────────────────────────────────────────────
-// Droppable zone shown when a day has no blocks.
 
 function DayDropZone({ dayId, isDark }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -377,8 +482,6 @@ function DayDropZone({ dayId, isDark }) {
 }
 
 // ── DayEndDropZone ────────────────────────────────────────────────────────────
-// Invisible droppable zone at the bottom of a non-empty day list,
-// so users can drop blocks after the last item.
 
 function DayEndDropZone({ dayId }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -398,8 +501,75 @@ function DayEndDropZone({ dayId }) {
   )
 }
 
+// ── DayTotals ─────────────────────────────────────────────────────────────────
+
+function DayTotals({ blocks, isDark }) {
+  if (blocks.length === 0) return null
+
+  const totalShootMins = blocks.reduce((sum, b) => sum + parseMinutes(b.estimatedShootTime), 0)
+  const totalSetupMins = blocks.reduce((sum, b) => sum + parseMinutes(b.estimatedSetupTime), 0)
+  const totalMins = totalShootMins + totalSetupMins
+
+  // Only show if any times have been entered
+  if (totalMins === 0) return null
+
+  const borderColor = isDark ? '#2a2a2a' : '#e5e0d8'
+  const fg = isDark ? '#ccc' : '#333'
+  const mutedFg = isDark ? '#555' : '#999'
+  const accentBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
+
+  return (
+    <div style={{
+      margin: '0 14px 0 14px',
+      padding: '8px 10px',
+      borderTop: `1px solid ${borderColor}`,
+      borderRadius: '0 0 4px 4px',
+      background: accentBg,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 18,
+      flexWrap: 'wrap',
+    }}>
+      <span style={{
+        fontSize: 10,
+        fontFamily: 'monospace',
+        fontWeight: 700,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color: mutedFg,
+        flexShrink: 0,
+      }}>
+        Day Totals
+      </span>
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', flex: 1 }}>
+        {totalShootMins > 0 && (
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: fg }}>
+            <span style={{ color: mutedFg }}>Shoot: </span>
+            {formatMins(totalShootMins)}
+          </span>
+        )}
+        {totalSetupMins > 0 && (
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: fg }}>
+            <span style={{ color: mutedFg }}>Setup: </span>
+            {formatMins(totalSetupMins)}
+          </span>
+        )}
+        <span style={{
+          fontSize: 11,
+          fontFamily: 'monospace',
+          fontWeight: 700,
+          color: fg,
+        }}>
+          <span style={{ color: mutedFg, fontWeight: 400 }}>Combined: </span>
+          {formatMins(totalMins)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ── ShotPickerPanel ───────────────────────────────────────────────────────────
-// Grouped shot picker popup anchored below the "Add Shot" button.
 
 function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
   const scenes = useStore(s => s.scenes)
@@ -411,7 +581,6 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
     const handler = (e) => {
       if (panelRef.current && !panelRef.current.contains(e.target)) onClose()
     }
-    // Use mousedown so we catch clicks before focus changes
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [onClose])
@@ -493,7 +662,6 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
           if (shots.length === 0) return null
           return (
             <div key={scene.id}>
-              {/* Scene group header */}
               <div style={{
                 padding: '5px 12px',
                 fontSize: 10,
@@ -516,7 +684,6 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
                 </span>
               </div>
 
-              {/* Shot rows */}
               {shots.map(shot => {
                 const alreadyAdded = existingShotIds.includes(shot.id)
                 const intExt = shot.intOrExt || scene.intOrExt
@@ -542,7 +709,6 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
                     onMouseEnter={e => (e.currentTarget.style.background = hoverBg)}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   >
-                    {/* Shot number */}
                     <span style={{
                       fontFamily: 'monospace',
                       fontSize: 12,
@@ -553,8 +719,6 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
                     }}>
                       {shot.displayId}
                     </span>
-
-                    {/* Subject */}
                     <span style={{
                       fontSize: 11,
                       color: alreadyAdded ? mutedFg : fg,
@@ -565,14 +729,10 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
                     }}>
                       {shot.subject || <span style={{ fontStyle: 'italic', opacity: 0.5 }}>No subject</span>}
                     </span>
-
-                    {/* Badges */}
                     <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                       {intExt && <Badge label={intExt} />}
                       {dn && <Badge label={dn} />}
                     </span>
-
-                    {/* Already-added indicator */}
                     {alreadyAdded && (
                       <span style={{ fontSize: 10, fontFamily: 'monospace', color: mutedFg, flexShrink: 0 }}>
                         ✓
@@ -659,6 +819,17 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
   const existingShotIds = blocks.map(b => b.shotId)
   const formattedDate = formatDate(day.date)
 
+  // Calculate cumulative projected times for each block (if start time is set)
+  const startMins = parseStartTime(day.startTime)
+  let cumulativeMins = 0
+  const blockProjections = blocks.map(block => {
+    const projectedTime = startMins !== null ? startMins + cumulativeMins : null
+    const shootMins = parseMinutes(block.estimatedShootTime)
+    const setupMins = parseMinutes(block.estimatedSetupTime)
+    cumulativeMins += shootMins + setupMins
+    return { block, projectedTime }
+  })
+
   return (
     <div
       ref={setNodeRef}
@@ -688,6 +859,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
           borderRadius: '6px 6px 0 0',
           cursor: isDragging ? 'grabbing' : 'grab',
           userSelect: 'none',
+          flexWrap: 'wrap',
         }}
       >
         {/* Handle icon */}
@@ -739,6 +911,44 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
           </span>
         )}
 
+        {/* Call time / start time input */}
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+        >
+          <span style={{
+            fontSize: 10,
+            fontFamily: 'monospace',
+            color: mutedFg,
+            letterSpacing: '0.04em',
+            flexShrink: 0,
+          }}>
+            Call:
+          </span>
+          <input
+            type="time"
+            value={day.startTime || ''}
+            onChange={e => updateShootingDay(day.id, { startTime: e.target.value })}
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+            title="Set call time / start time to generate projected timeline"
+            style={{
+              fontFamily: 'monospace',
+              fontSize: 11,
+              border: `1px solid ${day.startTime ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
+              background: day.startTime ? (isDark ? '#252525' : '#fff') : 'transparent',
+              color: day.startTime ? fg : mutedFg,
+              cursor: 'pointer',
+              outline: 'none',
+              borderRadius: 3,
+              padding: day.startTime ? '1px 5px' : '1px 0',
+              width: 80,
+              transition: 'border-color 0.1s, background 0.1s',
+            }}
+          />
+        </div>
+
         {/* Shot count */}
         <span style={{ fontSize: 11, color: mutedFg, fontFamily: 'monospace', marginLeft: 4 }}>
           {blocks.length} shot{blocks.length !== 1 ? 's' : ''}
@@ -765,19 +975,23 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
           <DayDropZone dayId={day.id} isDark={isDark} />
         ) : (
           <>
-            {blocks.map(block => (
+            {blockProjections.map(({ block, projectedTime }) => (
               <SortableShotBlock
                 key={block.id}
                 block={block}
                 shotData={enrichedBlockMap[block.id]}
                 dayId={day.id}
                 isDark={isDark}
+                projectedTime={projectedTime}
               />
             ))}
             <DayEndDropZone dayId={day.id} />
           </>
         )}
       </SortableContext>
+
+      {/* Day totals */}
+      <DayTotals blocks={blocks} isDark={isDark} />
 
       {/* Add shot footer */}
       <AddShotFooter
@@ -854,20 +1068,15 @@ export default function ScheduleTab() {
 
   // ── DnD state ───────────────────────────────────────────────────────────────
 
-  // localBlocksByDay: { [dayId]: blockId[] }
-  // Set during a block drag, null at rest. Drives rendering during drag so
-  // cross-day moves are reflected instantly without touching the store.
   const [localBlocksByDay, setLocalBlocksByDay] = useState(null)
-  const [activeDrag, setActiveDrag] = useState(null) // { id, type: 'day'|'block' }
+  const [activeDrag, setActiveDrag] = useState(null)
 
-  // Flat map: blockId → block object (from store, always current)
   const blockMap = useMemo(() => {
     const map = {}
     schedule.forEach(d => d.shotBlocks.forEach(b => { map[b.id] = b }))
     return map
   }, [schedule])
 
-  // Flat map: blockId → shotData (live shot info from store)
   const enrichedBlockMap = useMemo(() => {
     const map = {}
     getScheduleWithShots().forEach(d => {
@@ -876,8 +1085,6 @@ export default function ScheduleTab() {
     return map
   }, [schedule]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Resolves the ordered block list for a given day.
-  // During drag uses localBlocksByDay; at rest uses the store.
   const getBlocksForDay = useCallback((dayId) => {
     const ids = localBlocksByDay
       ? (localBlocksByDay[dayId] || [])
@@ -898,7 +1105,6 @@ export default function ScheduleTab() {
     setActiveDrag({ id: active.id, type })
 
     if (type === 'block') {
-      // Snapshot current order for local manipulation during drag
       const order = {}
       schedule.forEach(d => { order[d.id] = d.shotBlocks.map(b => b.id) })
       setLocalBlocksByDay(order)
@@ -906,11 +1112,9 @@ export default function ScheduleTab() {
   }, [schedule])
 
   const handleDragOver = useCallback(({ active, over }) => {
-    // Only process when a block is being dragged
     if (!over || !activeDrag || activeDrag.type !== 'block') return
 
     const overType = over.data.current?.type
-    // Ignore hover over day headers — blocks only target other blocks or day-body zones
     if (!overType || overType === 'day') return
 
     const targetDayId = over.data.current?.dayId
@@ -924,14 +1128,11 @@ export default function ScheduleTab() {
       const activeDayId = findBlockDay(activeBlockId, prev)
       if (!activeDayId) return prev
 
-      // Clone all arrays to avoid mutation
       const next = {}
       Object.keys(prev).forEach(k => { next[k] = [...prev[k]] })
 
-      // Remove from current position
       next[activeDayId] = next[activeDayId].filter(id => id !== activeBlockId)
 
-      // Insert into target position
       const targetBlocks = next[targetDayId] || []
       if (overType === 'block' && over.id !== activeBlockId) {
         const insertIdx = targetBlocks.indexOf(over.id)
@@ -941,7 +1142,6 @@ export default function ScheduleTab() {
           targetBlocks.push(activeBlockId)
         }
       } else {
-        // Hovering over a day-body zone — append to end
         targetBlocks.push(activeBlockId)
       }
       next[targetDayId] = targetBlocks
@@ -952,7 +1152,6 @@ export default function ScheduleTab() {
 
   const handleDragEnd = useCallback(({ active, over }) => {
     if (activeDrag?.type === 'day' && over && active.id !== over.id) {
-      // Resolve target day even if dropped on a block or zone inside it
       const overType = over.data.current?.type
       let targetDayId = null
       if (overType === 'day') targetDayId = over.id
@@ -963,7 +1162,6 @@ export default function ScheduleTab() {
         reorderDays(active.id, targetDayId)
       }
     } else if (activeDrag?.type === 'block' && localBlocksByDay) {
-      // Commit the local block order to the store in one atomic update
       applyScheduleDrag(
         schedule.map(d => ({
           id: d.id,
@@ -1018,6 +1216,9 @@ export default function ScheduleTab() {
             <p style={{ margin: '4px 0 0', fontSize: 12, color: mutedFg, fontFamily: 'monospace' }}>
               {schedule.length} shooting day{schedule.length !== 1 ? 's' : ''}&nbsp;&middot;&nbsp;
               {totalShots} shot{totalShots !== 1 ? 's' : ''} scheduled
+              <span style={{ marginLeft: 8, opacity: 0.65 }}>
+                · Set a call time on each day to see the projected timeline
+              </span>
             </p>
           )}
         </div>
@@ -1070,7 +1271,7 @@ export default function ScheduleTab() {
             ))}
           </SortableContext>
 
-          {/* DragOverlay only for shot blocks — shows a floating card at the cursor */}
+          {/* DragOverlay only for shot blocks */}
           <DragOverlay>
             {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (
               <ShotBlockContent

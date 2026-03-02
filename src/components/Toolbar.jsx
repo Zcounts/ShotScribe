@@ -37,7 +37,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   }, [pdfMenuOpen])
 
   // The main PDF button always exports based on the current active tab.
-  // The chevron opens a menu for explicit storyboard/shotlist choice.
+  // The chevron opens a menu for explicit storyboard/shotlist/schedule choice.
   const handlePdfMain = () => {
     setPdfMenuOpen(false)
     onExportPDF(activeTab)
@@ -47,6 +47,12 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     setPdfMenuOpen(false)
     onExportPDF(tab)
   }
+
+  const tabPdfLabel = activeTab === 'shotlist'
+    ? 'Shotlist'
+    : activeTab === 'schedule'
+      ? 'Schedule'
+      : 'Storyboard'
 
   return (
     <div className="toolbar">
@@ -114,7 +120,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
           <button
             className="toolbar-btn"
             onClick={handlePdfMain}
-            title={`Export ${activeTab === 'shotlist' ? 'Shotlist' : 'Storyboard'} PDF`}
+            title={`Export ${tabPdfLabel} PDF`}
             style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
           >
             PDF
@@ -184,6 +190,26 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
                 Export Shotlist PDF
+              </button>
+              <button
+                onClick={() => handlePdfExplicit('schedule')}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  borderTop: '1px solid rgba(255,255,255,0.08)',
+                  color: '#e0e0e0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Export Schedule PDF
               </button>
             </div>
           )}

@@ -312,6 +312,394 @@ ${pageDivs.join('\n')}
 </html>`
 }
 
+// ── Schedule print HTML: built from store data ────────────────────────────────
+//
+// Generates a self-contained HTML document for the shooting schedule.
+// Each shooting day is a section with shot blocks, projected timeline (if start
+// time is set), and totals at the bottom. Uses A4 portrait orientation.
+// Clearly labels all projected times as estimates.
+
+function parseScheduleMinutes(str) {
+  const s = String(str || '').trim()
+  if (!s) return 0
+  return Math.max(0, parseFloat(s) || 0)
+}
+
+function scheduleFormatMins(totalMins) {
+  if (!totalMins || totalMins <= 0) return '—'
+  const h = Math.floor(totalMins / 60)
+  const m = Math.round(totalMins % 60)
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
+function scheduleParseStartTime(timeStr) {
+  if (!timeStr || !timeStr.includes(':')) return null
+  const [h, m] = timeStr.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return null
+  return h * 60 + m
+}
+
+function scheduleFormatTimeOfDay(totalMins) {
+  const safeTotal = ((Math.round(totalMins) % (24 * 60)) + 24 * 60) % (24 * 60)
+  const h24 = Math.floor(safeTotal / 60)
+  const m = safeTotal % 60
+  const h12 = h24 % 12 || 12
+  const ampm = h24 < 12 ? 'AM' : 'PM'
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
+}
+
+function scheduleFormatDate(isoDate) {
+  if (!isoDate) return ''
+  try {
+    const d = new Date(isoDate + 'T12:00:00')
+    return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  } catch {
+    return isoDate
+  }
+}
+
+function buildSchedulePrintHtml() {
+  const { schedule, scenes, projectName } = useStore.getState()
+
+  // Build a fast shot lookup: shotId → { shot, scene, displayId }
+  const shotMap = new Map()
+  scenes.forEach((scene, sceneIdx) => {
+    scene.shots.forEach((shot, shotIdx) => {
+      shotMap.set(shot.id, {
+        shot,
+        scene,
+        displayId: `${sceneIdx + 1}${getShotLetterForPrint(shotIdx)}`,
+      })
+    })
+  })
+
+  const dayDivs = []
+
+  schedule.forEach((day, dayIdx) => {
+    const formattedDate = scheduleFormatDate(day.date)
+    const startMins = scheduleParseStartTime(day.startTime)
+    const hasTimeline = startMins !== null
+
+    let cumulativeMins = 0
+    let totalShootMins = 0
+    let totalSetupMins = 0
+
+    const blockRows = day.shotBlocks.map(block => {
+      const found = shotMap.get(block.shotId)
+      const shootMins = parseScheduleMinutes(block.estimatedShootTime)
+      const setupMins = parseScheduleMinutes(block.estimatedSetupTime)
+      totalShootMins += shootMins
+      totalSetupMins += setupMins
+
+      const projectedTime = hasTimeline ? startMins + cumulativeMins : null
+      cumulativeMins += shootMins + setupMins
+
+      let timelineCell = ''
+      if (hasTimeline) {
+        timelineCell = projectedTime !== null
+          ? `<td class="tl-cell"><span class="est-badge">~ ${escapeHtml(scheduleFormatTimeOfDay(projectedTime))}</span><br><span class="est-label">EST.</span></td>`
+          : `<td class="tl-cell">—</td>`
+      }
+
+      if (!found) {
+        return `<tr class="block-row deleted-row">
+          ${hasTimeline ? '<td class="tl-cell"></td>' : ''}
+          <td colspan="6"><em style="color:#ccc">Shot deleted — remove this entry</em></td>
+        </tr>`
+      }
+
+      const { shot, scene, displayId } = found
+      const intOrExt = shot.intOrExt || scene.intOrExt || ''
+      const dayNight = shot.dayNight || scene.dayNight || ''
+      const castList = (block.castMembers || []).join(', ') || '—'
+      const location = block.shootingLocation || scene.location || '—'
+
+      return `<tr class="block-row">
+        ${timelineCell}
+        <td class="shot-id">${escapeHtml(displayId)}</td>
+        <td class="subject-cell">
+          <strong>${escapeHtml(shot.subject || '—')}</strong>
+          ${shot.notes ? `<br><span class="notes-txt">${escapeHtml(shot.notes.substring(0, 80))}${shot.notes.length > 80 ? '…' : ''}</span>` : ''}
+          <br><span class="scene-loc">${escapeHtml(scene.sceneLabel)}${scene.location ? ` · ${escapeHtml(scene.location)}` : ''}</span>
+        </td>
+        <td class="badge-cell">${intOrExt ? `<span class="bdg">${escapeHtml(intOrExt)}</span>` : ''}${dayNight ? ` <span class="bdg">${escapeHtml(dayNight)}</span>` : ''}</td>
+        <td class="time-cell">${shootMins > 0 ? escapeHtml(String(shootMins)) + 'm' : '—'}</td>
+        <td class="time-cell">${setupMins > 0 ? escapeHtml(String(setupMins)) + 'm' : '—'}</td>
+        <td class="cast-cell">${escapeHtml(castList)}</td>
+      </tr>`
+    })
+
+    const totalMins = totalShootMins + totalSetupMins
+    const hasTotals = totalMins > 0
+
+    const headerCols = hasTimeline
+      ? `<th class="tl-th">PROJECTED TIME<br><span style="font-weight:400;font-size:7pt;color:#aaa">ESTIMATE ONLY</span></th><th>SHOT</th><th>SUBJECT / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
+      : `<th>SHOT</th><th>SUBJECT / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
+
+    // Columns (no timeline): shot | subject | badge | shoot | setup | cast  = 6
+    // Columns (timeline):    tl  | shot | subject | badge | shoot | setup | cast = 7
+    // Totals row spans: [tl?] + [shot+subject+badge=3 cols] + shoot + setup + cast
+    const totalsRow = hasTotals ? `
+      <tr class="totals-row">
+        ${hasTimeline ? '<td></td>' : ''}
+        <td colspan="3" style="text-align:right;padding-right:6px">
+          <strong>DAY TOTALS</strong>
+        </td>
+        <td class="time-cell total-val">${totalShootMins > 0 ? scheduleFormatMins(totalShootMins) : '—'}</td>
+        <td class="time-cell total-val">${totalSetupMins > 0 ? scheduleFormatMins(totalSetupMins) : '—'}</td>
+        <td><strong>${scheduleFormatMins(totalMins)}</strong> combined</td>
+      </tr>` : ''
+
+    const callTimeStr = day.startTime
+      ? `<span class="call-time">Call: ${escapeHtml(day.startTime)}</span>`
+      : ''
+
+    dayDivs.push(`
+<div class="day-section">
+  <div class="day-header">
+    <div class="day-title">
+      <span class="day-num">Day ${dayIdx + 1}</span>
+      ${formattedDate ? `<span class="day-date">${escapeHtml(formattedDate)}</span>` : '<span class="day-date no-date">No date set</span>'}
+      ${callTimeStr}
+    </div>
+    <span class="shot-count">${day.shotBlocks.length} SHOT${day.shotBlocks.length !== 1 ? 'S' : ''}</span>
+  </div>
+  ${day.shotBlocks.length === 0
+    ? '<p class="no-shots">No shots scheduled for this day.</p>'
+    : `<table>
+    <colgroup>
+      ${hasTimeline ? '<col style="width:90px">' : ''}
+      <col style="width:42px">
+      <col style="width:auto">
+      <col style="width:60px">
+      <col style="width:48px">
+      <col style="width:48px">
+      <col style="width:140px">
+    </colgroup>
+    <thead><tr>${headerCols}</tr></thead>
+    <tbody>
+      ${blockRows.join('\n      ')}
+      ${totalsRow}
+    </tbody>
+  </table>`}
+</div>`)
+  })
+
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Shooting Schedule — ${escapeHtml(projectName || 'Untitled')}</title>
+<style>
+@page { size: A4; margin: 12mm 12mm 14mm; }
+@media print { html, body { margin: 0; } }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: #fff;
+  color: #111;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9pt;
+}
+.doc-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #111;
+  margin-bottom: 14px;
+}
+.doc-title-main {
+  font-size: 14pt;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.doc-title-sub {
+  font-size: 8pt;
+  color: #777;
+}
+.day-section {
+  margin-bottom: 18px;
+  break-inside: avoid;
+}
+.day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1a1a1a;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 2px 2px 0 0;
+  margin-bottom: 0;
+}
+.day-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.day-num {
+  font-size: 11pt;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+.day-date {
+  font-size: 9pt;
+  font-weight: 400;
+  opacity: 0.85;
+}
+.no-date { opacity: 0.4; font-style: italic; }
+.call-time {
+  font-size: 9pt;
+  font-weight: 700;
+  background: rgba(255,255,255,0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+.shot-count {
+  font-size: 8pt;
+  opacity: 0.6;
+  letter-spacing: 0.06em;
+}
+.no-shots {
+  padding: 10px;
+  font-style: italic;
+  color: #aaa;
+  border: 1px solid #e5e5e5;
+  border-top: none;
+}
+table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid #ddd;
+  border-top: none;
+}
+thead th {
+  background: #f5f3ee;
+  color: #555;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1.5px solid #bbb;
+  border-right: 1px solid #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+}
+thead th:last-child { border-right: none; }
+.tl-th { text-align: center; }
+tbody td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #e8e5e0;
+  border-right: 1px solid #e8e5e0;
+  vertical-align: top;
+}
+tbody td:last-child { border-right: none; }
+tr.block-row:nth-child(even) td { background: #faf8f5; }
+tr.block-row:nth-child(odd) td { background: #fff; }
+tr.deleted-row td { background: #fff5f5; color: #ddd; }
+.tl-cell {
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.est-badge {
+  display: inline-block;
+  font-size: 9pt;
+  font-weight: 700;
+  color: #1d4ed8;
+  letter-spacing: 0.02em;
+}
+.est-label {
+  font-size: 6pt;
+  color: #9ca3af;
+  letter-spacing: 0.1em;
+  font-weight: 400;
+}
+.shot-id {
+  font-size: 10pt;
+  font-weight: 900;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.subject-cell { font-size: 8.5pt; }
+.notes-txt { color: #777; font-style: italic; font-size: 7.5pt; }
+.scene-loc { color: #999; font-size: 7.5pt; }
+.badge-cell { white-space: nowrap; vertical-align: middle; }
+.bdg {
+  display: inline-block;
+  padding: 1px 4px;
+  font-size: 7pt;
+  font-weight: 700;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  background: #f5f5f5;
+}
+.time-cell {
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.cast-cell { font-size: 8pt; }
+.totals-row td {
+  background: #f0ede4 !important;
+  border-top: 1.5px solid #bbb;
+  padding: 5px 6px;
+  font-size: 8.5pt;
+}
+.total-val { font-weight: 700; color: #1a1a1a; }
+.estimate-notice {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 3px;
+  font-size: 7.5pt;
+  color: #1e40af;
+  break-inside: avoid;
+}
+.footer {
+  margin-top: 16px;
+  border-top: 1px solid #ddd;
+  padding-top: 6px;
+  font-size: 7pt;
+  color: #aaa;
+  display: flex;
+  justify-content: space-between;
+}
+</style>
+</head>
+<body>
+<div class="doc-title">
+  <div>
+    <div class="doc-title-main">SHOOTING SCHEDULE</div>
+    <div class="doc-title-sub">${escapeHtml(projectName || 'Untitled Project')}</div>
+  </div>
+  <div class="doc-title-sub">${schedule.length} day${schedule.length !== 1 ? 's' : ''} · ${schedule.reduce((n, d) => n + d.shotBlocks.length, 0)} shots scheduled</div>
+</div>
+
+${schedule.some(d => d.startTime) ? `<div class="estimate-notice">
+  ⚠ Projected times marked "EST." are rough estimates calculated from cumulative shoot and setup durations. Actual times will vary.
+</div><br>` : ''}
+
+${dayDivs.join('\n')}
+
+<div class="footer">
+  <span>Generated by ShotScribe</span>
+  <span>${escapeHtml(today)}</span>
+</div>
+</body>
+</html>`
+}
+
 // ── Shotlist print HTML: built from store data ────────────────────────────────
 //
 // Generates a self-contained HTML table using the user's current column config.
@@ -702,6 +1090,45 @@ export async function exportShotlistPDF(shotlistRef, projectName) {
   }
 }
 
+/**
+ * Export the shooting schedule as a PDF.
+ * Electron path: builds fresh HTML from store data, passes to printToPDF.
+ * Browser fallback: opens a print dialog with generated HTML in a new window.
+ */
+export async function exportSchedulePDF(projectName) {
+  try {
+    const html = buildSchedulePrintHtml()
+    if (window.electronAPI?.printToPDF) {
+      await exportViaPrint(html, projectName, 'schedule')
+    } else {
+      // Browser fallback: open in a new window and trigger print
+      const win = window.open('', '_blank', 'width=900,height=700')
+      if (!win) {
+        // Popup blocked — fall back to download
+        const blob = new Blob([html], { type: 'text/html' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${(projectName || 'schedule').replace(/[^a-z0-9]/gi, '_')}_schedule.html`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        return
+      }
+      win.document.write(html)
+      win.document.close()
+      setTimeout(() => {
+        win.focus()
+        win.print()
+      }, 500)
+    }
+  } catch (err) {
+    console.error('[PDF Export] Schedule export failed:', err)
+    _handleExportError(err)
+  }
+}
+
 /** @deprecated Use exportStoryboardPDF or exportShotlistPDF directly */
 export async function exportToPDF(pageRefs, projectName) {
   return exportStoryboardPDF(pageRefs, projectName)
@@ -763,16 +1190,21 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
 
   if (!isOpen) return null
 
-  const isStoryboard = activeTab !== 'shotlist'
-  const tabLabel = isStoryboard ? 'Storyboard' : 'Shotlist'
+  const isSchedule = activeTab === 'schedule'
+  const isShotlist = activeTab === 'shotlist'
+  const isStoryboard = !isSchedule && !isShotlist
+
+  const tabLabel = isSchedule ? 'Schedule' : isShotlist ? 'Shotlist' : 'Storyboard'
 
   const handleExportPDF = async (forceTab) => {
     const tab = forceTab ?? activeTab
     setExporting(true)
-    setExportType('pdf')
+    setExportType('pdf-' + tab)
     try {
       if (tab === 'shotlist') {
         await exportShotlistPDF(shotlistRef, projectName)
+      } else if (tab === 'schedule') {
+        await exportSchedulePDF(projectName)
       } else {
         await exportStoryboardPDF(pageRefs, projectName)
       }
@@ -811,7 +1243,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
         </div>
 
         <p className="text-sm text-gray-600 mb-4">
-          Export your {tabLabel.toLowerCase()} as a high-resolution document.
+          Export your {tabLabel.toLowerCase()} as a print-ready document.
         </p>
 
         <div className="flex gap-3 mb-3">
@@ -820,9 +1252,13 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
             disabled={exporting}
             className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            {exporting && exportType === 'pdf' ? 'Exporting…' : `Export ${tabLabel} PDF`}
+            {exporting && exportType === 'pdf-' + activeTab ? 'Exporting…' : `Export ${tabLabel} PDF`}
             <div className="text-xs font-normal opacity-75">
-              {isStoryboard ? 'Card grid layout, one page per scene' : 'Full table layout'}
+              {isSchedule
+                ? 'Day-by-day layout with timeline & totals'
+                : isStoryboard
+                  ? 'Card grid layout, one page per scene'
+                  : 'Full table layout'}
             </div>
           </button>
 
@@ -838,15 +1274,28 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
           )}
         </div>
 
+        {/* Cross-export links */}
         <div style={{
           borderTop: '1px solid #e5e7eb',
           paddingTop: 12,
           marginTop: 4,
           display: 'flex',
+          alignItems: 'center',
           gap: 8,
+          flexWrap: 'wrap',
         }}>
-          <span className="text-xs text-gray-400" style={{ alignSelf: 'center' }}>Also export:</span>
-          {isStoryboard ? (
+          <span className="text-xs text-gray-400">Also export:</span>
+
+          {activeTab !== 'storyboard' && (
+            <button
+              onClick={() => handleExportPDF('storyboard')}
+              disabled={exporting}
+              className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
+            >
+              Storyboard PDF →
+            </button>
+          )}
+          {activeTab !== 'shotlist' && (
             <button
               onClick={() => handleExportPDF('shotlist')}
               disabled={exporting}
@@ -854,13 +1303,14 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
             >
               Shotlist PDF →
             </button>
-          ) : (
+          )}
+          {activeTab !== 'schedule' && (
             <button
-              onClick={() => handleExportPDF('storyboard')}
+              onClick={() => handleExportPDF('schedule')}
               disabled={exporting}
               className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
             >
-              Storyboard PDF →
+              Schedule PDF →
             </button>
           )}
           {!isStoryboard && (
@@ -877,6 +1327,11 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
         {isStoryboard && (
           <p className="text-xs text-gray-400 mt-3">
             {pageCount} page{pageCount !== 1 ? 's' : ''} will be exported.
+          </p>
+        )}
+        {isSchedule && (
+          <p className="text-xs text-gray-400 mt-3">
+            Schedule PDF includes projected timeline (where call times are set) and day totals.
           </p>
         )}
       </div>
