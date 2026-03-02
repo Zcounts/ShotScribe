@@ -234,6 +234,39 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
+  updateShotBlock: (dayId, blockId, updates) => {
+    set(state => ({
+      schedule: state.schedule.map(d =>
+        d.id === dayId
+          ? { ...d, shotBlocks: d.shotBlocks.map(b => b.id === blockId ? { ...b, ...updates } : b) }
+          : d
+      ),
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  reorderDays: (activeDayId, overDayId) => {
+    set(state => {
+      const oldIdx = state.schedule.findIndex(d => d.id === activeDayId)
+      const newIdx = state.schedule.findIndex(d => d.id === overDayId)
+      if (oldIdx === -1 || newIdx === -1) return state
+      return { schedule: arrayMove(state.schedule, oldIdx, newIdx) }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  // Commits a multi-container DnD drag result in one atomic update.
+  // dayUpdates: [{ id: dayId, shotBlocks: block[] }]
+  applyScheduleDrag: (dayUpdates) => {
+    set(state => ({
+      schedule: state.schedule.map(d => {
+        const update = dayUpdates.find(u => u.id === d.id)
+        return update ? { ...d, shotBlocks: update.shotBlocks } : d
+      }),
+    }))
+    get()._scheduleAutoSave()
+  },
+
   // ── Scene helpers ────────────────────────────────────────────────────
 
   getScene: (sceneId) => get().scenes.find(s => s.id === sceneId),
