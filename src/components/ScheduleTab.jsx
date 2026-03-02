@@ -156,8 +156,8 @@ function InlineField({ value, onChange, placeholder, isDark, label, inputWidth }
     if (val !== (value || '')) onChange(val)
   }, [value, onChange])
 
-  const mutedFg = isDark ? '#555' : '#bbb'
-  const fg = isDark ? '#ccc' : '#444'
+  const mutedFg = isDark ? '#555' : '#999'
+  const fg = isDark ? '#ccc' : '#222'
   const borderColor = isDark ? '#3a3a3a' : '#ddd9d0'
 
   return (
@@ -246,8 +246,8 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
 
-  const fg = isDark ? '#ddd' : '#1a1a1a'
-  const mutedFg = isDark ? '#666' : '#999'
+  const fg = isDark ? '#ddd' : '#111'
+  const mutedFg = isDark ? '#666' : '#555'
   const borderColor = isDark ? '#2a2a2a' : '#ede9df'
   const bg = isDark ? '#1c1c1c' : '#fff'
 
@@ -439,14 +439,24 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime }) {
         zIndex: isDragging ? 1 : 'auto',
       }}
     >
-      <ShotBlockContent
-        block={block}
-        shotData={shotData}
-        dayId={dayId}
-        isDark={isDark}
-        projectedTime={projectedTime}
-        dragHandleProps={{ ...attributes, ...listeners }}
-      />
+      {block.type === 'break' ? (
+        <BreakBlockContent
+          block={block}
+          dayId={dayId}
+          isDark={isDark}
+          projectedTime={projectedTime}
+          dragHandleProps={{ ...attributes, ...listeners }}
+        />
+      ) : (
+        <ShotBlockContent
+          block={block}
+          shotData={shotData}
+          dayId={dayId}
+          isDark={isDark}
+          projectedTime={projectedTime}
+          dragHandleProps={{ ...attributes, ...listeners }}
+        />
+      )}
     </div>
   )
 }
@@ -506,16 +516,19 @@ function DayEndDropZone({ dayId }) {
 function DayTotals({ blocks, isDark }) {
   if (blocks.length === 0) return null
 
-  const totalShootMins = blocks.reduce((sum, b) => sum + parseMinutes(b.estimatedShootTime), 0)
-  const totalSetupMins = blocks.reduce((sum, b) => sum + parseMinutes(b.estimatedSetupTime), 0)
-  const totalMins = totalShootMins + totalSetupMins
+  const shotBlocks = blocks.filter(b => b.type !== 'break')
+  const breakBlocks = blocks.filter(b => b.type === 'break')
+  const totalShootMins = shotBlocks.reduce((sum, b) => sum + parseMinutes(b.estimatedShootTime), 0)
+  const totalSetupMins = shotBlocks.reduce((sum, b) => sum + parseMinutes(b.estimatedSetupTime), 0)
+  const totalBreakMins = breakBlocks.reduce((sum, b) => sum + parseMinutes(b.breakDuration), 0)
+  const totalMins = totalShootMins + totalSetupMins + totalBreakMins
 
   // Only show if any times have been entered
   if (totalMins === 0) return null
 
   const borderColor = isDark ? '#2a2a2a' : '#e5e0d8'
-  const fg = isDark ? '#ccc' : '#333'
-  const mutedFg = isDark ? '#555' : '#999'
+  const fg = isDark ? '#ccc' : '#222'
+  const mutedFg = isDark ? '#555' : '#666'
   const accentBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
 
   return (
@@ -553,6 +566,12 @@ function DayTotals({ blocks, isDark }) {
           <span style={{ fontSize: 11, fontFamily: 'monospace', color: fg }}>
             <span style={{ color: mutedFg }}>Setup: </span>
             {formatMins(totalSetupMins)}
+          </span>
+        )}
+        {totalBreakMins > 0 && (
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: fg }}>
+            <span style={{ color: mutedFg }}>Breaks: </span>
+            {formatMins(totalBreakMins)}
           </span>
         )}
         <span style={{
@@ -749,13 +768,316 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
   )
 }
 
+// ── BreakBlockContent ─────────────────────────────────────────────────────────
+
+function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, projectedTime }) {
+  const removeShotBlock = useStore(s => s.removeShotBlock)
+  const updateShotBlock = useStore(s => s.updateShotBlock)
+
+  const fg = isDark ? '#ddd' : '#111'
+  const mutedFg = isDark ? '#666' : '#555'
+  const borderColor = isDark ? '#2a2a2a' : '#ede9df'
+  const bg = isDark ? '#2a2310' : '#fffbef'
+
+  const [editingName, setEditingName] = useState(false)
+  const [localName, setLocalName] = useState(block.breakName || 'Break')
+
+  useEffect(() => {
+    if (!editingName) setLocalName(block.breakName || 'Break')
+  }, [block.breakName, editingName])
+
+  const commitName = useCallback((val) => {
+    setEditingName(false)
+    const newName = val.trim() || 'Break'
+    if (newName !== block.breakName && dayId) updateShotBlock(dayId, block.id, { breakName: newName })
+  }, [block.breakName, block.id, dayId, updateShotBlock])
+
+  const handleDurationChange = useCallback((val) => {
+    if (dayId) updateShotBlock(dayId, block.id, { breakDuration: val })
+  }, [block.id, dayId, updateShotBlock])
+
+  return (
+    <div style={{
+      background: bg,
+      borderRadius: isOverlay ? 6 : 0,
+      boxShadow: isOverlay ? '0 8px 28px rgba(0,0,0,0.22)' : 'none',
+      borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
+      padding: '9px 14px',
+      display: 'grid',
+      gridTemplateColumns: 'auto 1fr auto',
+      gap: '0 10px',
+      alignItems: 'center',
+    }}>
+      {/* Drag handle */}
+      <div
+        {...(dragHandleProps || {})}
+        style={{
+          color: mutedFg,
+          cursor: dragHandleProps ? 'grab' : 'default',
+          userSelect: 'none',
+          opacity: isOverlay ? 0 : 1,
+        }}
+      >
+        <DragHandleIcon color={mutedFg} />
+      </div>
+
+      {/* Content */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
+        {/* Projected time */}
+        {projectedTime !== null && projectedTime !== undefined && !isOverlay && (
+          <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
+        )}
+
+        {/* Break icon + editable name */}
+        <span style={{ fontSize: 13, flexShrink: 0 }}>⏸</span>
+        <input
+          value={localName}
+          onChange={e => setLocalName(e.target.value)}
+          onFocus={() => setEditingName(true)}
+          onBlur={e => commitName(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') e.target.blur()
+            if (e.key === 'Escape') { setLocalName(block.breakName || 'Break'); setEditingName(false) }
+          }}
+          onPointerDown={e => e.stopPropagation()}
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 13,
+            fontWeight: 700,
+            color: fg,
+            background: editingName ? (isDark ? '#2a2a2a' : '#fff') : 'transparent',
+            border: editingName ? `1px solid ${borderColor}` : '1px solid transparent',
+            borderRadius: 3,
+            padding: editingName ? '2px 6px' : '2px 0',
+            outline: 'none',
+            cursor: 'text',
+            minWidth: 60,
+            maxWidth: 200,
+          }}
+        />
+
+        {/* Duration field */}
+        {!isOverlay && (
+          <InlineField
+            value={block.breakDuration !== undefined && block.breakDuration !== 0 ? String(block.breakDuration) : ''}
+            onChange={handleDurationChange}
+            placeholder="—"
+            isDark={isDark}
+            label="Duration (min)"
+            inputWidth={40}
+          />
+        )}
+      </div>
+
+      {/* Remove button */}
+      {!isOverlay && dayId && (
+        <IconButton
+          onClick={() => removeShotBlock(dayId, block.id)}
+          onPointerDown={e => e.stopPropagation()}
+          title="Remove break"
+          danger
+          small
+        >
+          ✕
+        </IconButton>
+      )}
+    </div>
+  )
+}
+
+// ── BreakPickerPanel ──────────────────────────────────────────────────────────
+
+const BREAK_PRESETS = ['Lunch', 'Company Move', '10-1', 'Meal Penalty', 'Camera Reload', 'Lighting Reset']
+
+function BreakPickerPanel({ dayId, isDark, onClose }) {
+  const addBreakBlock = useStore(s => s.addBreakBlock)
+  const [name, setName] = useState('Lunch')
+  const [duration, setDuration] = useState('30')
+  const panelRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (panelRef.current && !panelRef.current.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const handleAdd = useCallback(() => {
+    addBreakBlock(dayId, name.trim() || 'Break', parseFloat(duration) || 0)
+    onClose()
+  }, [addBreakBlock, dayId, name, duration, onClose])
+
+  const bg = isDark ? '#1e1e1e' : '#fff'
+  const borderColor = isDark ? '#333' : '#d4cfc6'
+  const fg = isDark ? '#ddd' : '#1a1a1a'
+  const mutedFg = isDark ? '#888' : '#555'
+  const inputBg = isDark ? '#252525' : '#fff'
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        position: 'absolute',
+        bottom: 'calc(100% + 4px)',
+        left: 0,
+        zIndex: 200,
+        width: 300,
+        maxWidth: 'calc(100vw - 48px)',
+        background: bg,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 6,
+        boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.55)' : '0 8px 32px rgba(0,0,0,0.16)',
+        padding: 14,
+      }}
+    >
+      <p style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: fg, marginBottom: 10, letterSpacing: '0.06em' }}>
+        ADD BREAK
+      </p>
+
+      {/* Presets */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
+        {BREAK_PRESETS.map(preset => (
+          <button
+            key={preset}
+            onClick={() => setName(preset)}
+            onPointerDown={e => e.stopPropagation()}
+            style={{
+              padding: '3px 8px',
+              fontFamily: 'monospace',
+              fontSize: 10,
+              border: `1px solid ${name === preset ? (isDark ? '#aaa' : '#555') : borderColor}`,
+              borderRadius: 3,
+              background: name === preset ? (isDark ? '#333' : '#ede9e0') : 'none',
+              color: fg,
+              cursor: 'pointer',
+            }}
+          >
+            {preset}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 8 }}>
+        <label style={{ display: 'block', fontFamily: 'monospace', fontSize: 10, color: mutedFg, marginBottom: 3 }}>
+          Name
+        </label>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onPointerDown={e => e.stopPropagation()}
+          onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 11,
+            padding: '4px 7px',
+            border: `1px solid ${borderColor}`,
+            borderRadius: 3,
+            background: inputBg,
+            color: fg,
+            outline: 'none',
+          }}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', fontFamily: 'monospace', fontSize: 10, color: mutedFg, marginBottom: 3 }}>
+          Duration (minutes)
+        </label>
+        <input
+          type="number"
+          value={duration}
+          onChange={e => setDuration(e.target.value)}
+          min={0}
+          step={5}
+          onPointerDown={e => e.stopPropagation()}
+          onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+          placeholder="0"
+          style={{
+            width: 90,
+            fontFamily: 'monospace',
+            fontSize: 11,
+            padding: '4px 7px',
+            border: `1px solid ${borderColor}`,
+            borderRadius: 3,
+            background: inputBg,
+            color: fg,
+            outline: 'none',
+          }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={handleAdd}
+          onPointerDown={e => e.stopPropagation()}
+          style={{
+            flex: 1,
+            padding: '6px 10px',
+            fontFamily: 'monospace',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            background: isDark ? '#333' : '#1a1a1a',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 4,
+            cursor: 'pointer',
+          }}
+        >
+          Add Break
+        </button>
+        <button
+          onClick={onClose}
+          onPointerDown={e => e.stopPropagation()}
+          style={{
+            padding: '6px 12px',
+            fontFamily: 'monospace',
+            fontSize: 11,
+            background: 'none',
+            color: mutedFg,
+            border: `1px solid ${borderColor}`,
+            borderRadius: 4,
+            cursor: 'pointer',
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── AddShotFooter ─────────────────────────────────────────────────────────────
 
 function AddShotFooter({ dayId, existingShotIds, isDark }) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [breakPickerOpen, setBreakPickerOpen] = useState(false)
 
   const borderColor = isDark ? '#2a2a2a' : '#e5e0d8'
-  const fg = isDark ? '#ccc' : '#444'
+  const fg = isDark ? '#ccc' : '#333'
+
+  const btnStyle = (active) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '5px 10px',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    border: `1px solid ${borderColor}`,
+    borderRadius: 4,
+    background: active ? (isDark ? '#252525' : '#ede9e0') : 'none',
+    color: fg,
+    cursor: 'pointer',
+    transition: 'background 0.1s',
+  })
 
   return (
     <div style={{
@@ -771,29 +1093,30 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
           onClose={() => setPickerOpen(false)}
         />
       )}
-      <button
-        onClick={() => setPickerOpen(p => !p)}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          padding: '5px 10px',
-          fontFamily: 'monospace',
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: '0.04em',
-          border: `1px solid ${borderColor}`,
-          borderRadius: 4,
-          background: pickerOpen ? (isDark ? '#252525' : '#ede9e0') : 'none',
-          color: fg,
-          cursor: 'pointer',
-          transition: 'background 0.1s',
-        }}
-      >
-        <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span>
-        Add Shot
-        <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{pickerOpen ? '▲' : '▼'}</span>
-      </button>
+      {breakPickerOpen && (
+        <BreakPickerPanel
+          dayId={dayId}
+          isDark={isDark}
+          onClose={() => setBreakPickerOpen(false)}
+        />
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button
+          onClick={() => { setPickerOpen(p => !p); setBreakPickerOpen(false) }}
+          style={btnStyle(pickerOpen)}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span>
+          Add Shot
+          <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{pickerOpen ? '▲' : '▼'}</span>
+        </button>
+        <button
+          onClick={() => { setBreakPickerOpen(p => !p); setPickerOpen(false) }}
+          style={btnStyle(breakPickerOpen)}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span>
+          Add Break
+        </button>
+      </div>
     </div>
   )
 }
@@ -812,21 +1135,25 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
   const bg = isDark ? '#1a1a1a' : '#fff'
   const headerBg = isDark ? '#1e1e1e' : '#f5f3ee'
   const borderColor = isDark ? '#2a2a2a' : '#d9d4cb'
-  const fg = isDark ? '#ddd' : '#1a1a1a'
-  const mutedFg = isDark ? '#555' : '#999'
+  const fg = isDark ? '#ddd' : '#111'
+  const mutedFg = isDark ? '#555' : '#666'
 
   const blockIds = blocks.map(b => b.id)
-  const existingShotIds = blocks.map(b => b.shotId)
+  const existingShotIds = blocks.filter(b => b.type !== 'break').map(b => b.shotId)
   const formattedDate = formatDate(day.date)
+  const shotCount = blocks.filter(b => b.type !== 'break').length
+  const breakCount = blocks.filter(b => b.type === 'break').length
 
   // Calculate cumulative projected times for each block (if start time is set)
   const startMins = parseStartTime(day.startTime)
   let cumulativeMins = 0
   const blockProjections = blocks.map(block => {
     const projectedTime = startMins !== null ? startMins + cumulativeMins : null
-    const shootMins = parseMinutes(block.estimatedShootTime)
-    const setupMins = parseMinutes(block.estimatedSetupTime)
-    cumulativeMins += shootMins + setupMins
+    if (block.type === 'break') {
+      cumulativeMins += parseMinutes(block.breakDuration)
+    } else {
+      cumulativeMins += parseMinutes(block.estimatedShootTime) + parseMinutes(block.estimatedSetupTime)
+    }
     return { block, projectedTime }
   })
 
@@ -949,9 +1276,49 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
           />
         </div>
 
+        {/* Basecamp input */}
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+        >
+          <span style={{
+            fontSize: 10,
+            fontFamily: 'monospace',
+            color: mutedFg,
+            letterSpacing: '0.04em',
+            flexShrink: 0,
+          }}>
+            Basecamp:
+          </span>
+          <input
+            type="text"
+            value={day.basecamp || ''}
+            onChange={e => updateShootingDay(day.id, { basecamp: e.target.value })}
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+            placeholder="Location…"
+            title="Basecamp / unit base location for the whole day"
+            style={{
+              fontFamily: 'monospace',
+              fontSize: 11,
+              border: `1px solid ${day.basecamp ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
+              background: day.basecamp ? (isDark ? '#252525' : '#fff') : 'transparent',
+              color: day.basecamp ? fg : mutedFg,
+              cursor: 'text',
+              outline: 'none',
+              borderRadius: 3,
+              padding: day.basecamp ? '1px 5px' : '1px 0',
+              width: 130,
+              transition: 'border-color 0.1s, background 0.1s',
+            }}
+          />
+        </div>
+
         {/* Shot count */}
         <span style={{ fontSize: 11, color: mutedFg, fontFamily: 'monospace', marginLeft: 4 }}>
-          {blocks.length} shot{blocks.length !== 1 ? 's' : ''}
+          {shotCount} shot{shotCount !== 1 ? 's' : ''}
+          {breakCount > 0 ? `, ${breakCount} break${breakCount !== 1 ? 's' : ''}` : ''}
         </span>
 
         <div style={{ flex: 1 }} />
@@ -1006,8 +1373,8 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
 // ── EmptyState ────────────────────────────────────────────────────────────────
 
 function EmptyState({ isDark, onAddDay }) {
-  const mutedFg = isDark ? '#555' : '#aaa'
-  const fg = isDark ? '#ddd' : '#333'
+  const mutedFg = isDark ? '#555' : '#888'
+  const fg = isDark ? '#ddd' : '#222'
 
   return (
     <div style={{
@@ -1063,8 +1430,8 @@ export default function ScheduleTab() {
   const applyScheduleDrag = useStore(s => s.applyScheduleDrag)
 
   const isDark = theme === 'dark'
-  const fg = isDark ? '#ddd' : '#1a1a1a'
-  const mutedFg = isDark ? '#666' : '#888'
+  const fg = isDark ? '#ddd' : '#111'
+  const mutedFg = isDark ? '#666' : '#555'
 
   // ── DnD state ───────────────────────────────────────────────────────────────
 
@@ -1271,16 +1638,25 @@ export default function ScheduleTab() {
             ))}
           </SortableContext>
 
-          {/* DragOverlay only for shot blocks */}
+          {/* DragOverlay only for shot blocks and break blocks */}
           <DragOverlay>
             {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (
-              <ShotBlockContent
-                block={blockMap[activeDrag.id]}
-                shotData={enrichedBlockMap[activeDrag.id]}
-                dayId={null}
-                isDark={isDark}
-                isOverlay
-              />
+              blockMap[activeDrag.id].type === 'break' ? (
+                <BreakBlockContent
+                  block={blockMap[activeDrag.id]}
+                  dayId={null}
+                  isDark={isDark}
+                  isOverlay
+                />
+              ) : (
+                <ShotBlockContent
+                  block={blockMap[activeDrag.id]}
+                  shotData={enrichedBlockMap[activeDrag.id]}
+                  dayId={null}
+                  isDark={isDark}
+                  isOverlay
+                />
+              )
             ) : null}
           </DragOverlay>
         </DndContext>
