@@ -3,6 +3,7 @@ import useStore from '../store'
 
 export default function Toolbar({ onExportPDF, onExportPNG }) {
   const projectName = useStore(s => s.projectName)
+  const projectPath = useStore(s => s.projectPath)
   const lastSaved = useStore(s => s.lastSaved)
   const autoSave = useStore(s => s.autoSave)
   const scenes = useStore(s => s.scenes)
@@ -11,12 +12,18 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const sceneCount = scenes.length
   const toggleSettings = useStore(s => s.toggleSettings)
   const saveProject = useStore(s => s.saveProject)
+  const saveProjectAs = useStore(s => s.saveProjectAs)
   const openProject = useStore(s => s.openProject)
   const newProject = useStore(s => s.newProject)
   const setProjectName = useStore(s => s.setProjectName)
   const [editingName, setEditingName] = useState(false)
   const [pdfMenuOpen, setPdfMenuOpen] = useState(false)
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const pdfMenuRef = useRef(null)
+  const saveMenuRef = useRef(null)
+
+  // Extract just the filename from the full path for display
+  const fileName = projectPath ? projectPath.split(/[\\/]/).pop() : null
 
   const formatTime = (iso) => {
     if (!iso) return ''
@@ -35,6 +42,18 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [pdfMenuOpen])
+
+  // Close Save menu when clicking outside it
+  useEffect(() => {
+    if (!saveMenuOpen) return
+    const handler = (e) => {
+      if (saveMenuRef.current && !saveMenuRef.current.contains(e.target)) {
+        setSaveMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [saveMenuOpen])
 
   // The main PDF button always exports based on the current active tab.
   // The chevron opens a menu for explicit storyboard/shotlist/schedule choice.
@@ -91,8 +110,15 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
           {shotCount} shot{shotCount !== 1 ? 's' : ''} · {sceneCount} scene{sceneCount !== 1 ? 's' : ''}
         </span>
 
-        {/* Auto-save indicator */}
-        {autoSave && lastSaved && (
+        {/* Current file name */}
+        {fileName && (
+          <span className="text-xs text-gray-500 flex-shrink-0" title={projectPath}>
+            {fileName}
+          </span>
+        )}
+
+        {/* Save indicator */}
+        {lastSaved && (
           <span className="text-xs text-gray-500 flex-shrink-0">
             Saved {formatTime(lastSaved)}
           </span>
@@ -107,9 +133,65 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
         <button className="toolbar-btn" onClick={openProject} title="Open .shotlist file">
           Open
         </button>
-        <button className="toolbar-btn primary" onClick={saveProject} title="Save as .shotlist file">
-          Save
-        </button>
+        {/* Split Save button: left half saves (silent if path known), right half opens Save As menu */}
+        <div ref={saveMenuRef} style={{ position: 'relative', display: 'flex' }}>
+          <button
+            className="toolbar-btn primary"
+            onClick={saveProject}
+            title={projectPath ? `Save to ${fileName}` : 'Save project (choose location)'}
+            style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
+          >
+            Save
+          </button>
+          <button
+            className="toolbar-btn primary"
+            onClick={() => setSaveMenuOpen(o => !o)}
+            title="More save options"
+            style={{
+              borderRadius: '0 4px 4px 0',
+              borderLeft: '1px solid rgba(255,255,255,0.2)',
+              padding: '4px 6px',
+              fontSize: 9,
+            }}
+          >
+            ▾
+          </button>
+
+          {saveMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              right: 0,
+              zIndex: 500,
+              background: '#2a2a2a',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 4,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+              minWidth: 160,
+              overflow: 'hidden',
+            }}>
+              <button
+                onClick={() => { setSaveMenuOpen(false); saveProjectAs() }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  color: '#e0e0e0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Save As…
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Right: Export + Settings */}

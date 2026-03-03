@@ -139,6 +139,8 @@ export default function App() {
   const setActiveTab = useStore(s => s.setActiveTab)
 
   const projectName = useStore(s => s.projectName)
+  const saveProject = useStore(s => s.saveProject)
+  const saveProjectAs = useStore(s => s.saveProjectAs)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   // Autosave restore — kept as React state so we never call window.confirm()
   // (native OS dialogs steal focus from the webContents; after dismissal
@@ -158,6 +160,22 @@ export default function App() {
     return acc + Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }, 0)
   pageRefs.current = pageRefs.current.slice(0, totalPages)
+
+  // Keyboard shortcuts: Ctrl+S = Save, Ctrl+Shift+S = Save As
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          saveProjectAs()
+        } else {
+          saveProject()
+        }
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [saveProject, saveProjectAs])
 
   // Auto-save every 60 seconds
   useEffect(() => {
