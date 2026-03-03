@@ -181,9 +181,13 @@ export default function App() {
   useEffect(() => {
     if (!autoSave) return
     const interval = setInterval(() => {
-      const data = getProjectData()
-      localStorage.setItem('autosave', JSON.stringify(data))
-      localStorage.setItem('autosave_time', new Date().toISOString())
+      try {
+        const data = getProjectData()
+        localStorage.setItem('autosave', JSON.stringify(data))
+        localStorage.setItem('autosave_time', new Date().toISOString())
+      } catch {
+        // Silently skip — the user will see an error on the next manual save.
+      }
     }, 60000)
     return () => clearInterval(interval)
   }, [autoSave, getProjectData])
@@ -313,7 +317,7 @@ export default function App() {
             <div className="add-scene-row">
               <button
                 className="add-scene-btn"
-                onClick={addScene}
+                onClick={() => addScene()}
                 title="Add a new scene (new page)"
               >
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">

@@ -1637,7 +1637,7 @@ export default function ScheduleTab() {
 
         {schedule.length > 0 && (
           <button
-            onClick={addShootingDay}
+            onClick={() => addShootingDay()}
             style={{
               padding: '7px 16px',
               fontFamily: 'monospace',
@@ -1660,7 +1660,7 @@ export default function ScheduleTab() {
 
       {/* Content */}
       {schedule.length === 0 ? (
-        <EmptyState isDark={isDark} onAddDay={addShootingDay} />
+        <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
       ) : (
         <DndContext
           sensors={sensors}
