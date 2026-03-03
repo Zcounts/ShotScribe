@@ -12,6 +12,7 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
+  arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
@@ -458,7 +459,9 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime }) {
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.3 : 1,
+        // Hide fully when dragging — the DragOverlay renders the visual copy,
+        // so keeping the original visible (even semi-transparent) causes flickering.
+        opacity: isDragging ? 0 : 1,
         position: 'relative',
         zIndex: isDragging ? 1 : 'auto',
       }}
@@ -1526,7 +1529,11 @@ export default function ScheduleTab() {
   }, [schedule])
 
   const handleDragOver = useCallback(({ active, over }) => {
-    if (!over || !activeDrag || activeDrag.type !== 'block') return
+    if (!over) return
+    // Read drag type from the event itself — avoids a stale-closure on
+    // the `activeDrag` React state, which may not have been committed yet
+    // when the very first dragOver fires right after dragStart.
+    if ((active.data.current?.type || 'day') !== 'block') return
 
     const overType = over.data.current?.type
     if (!overType || overType === 'day') return
@@ -1542,30 +1549,54 @@ export default function ScheduleTab() {
       const activeDayId = findBlockDay(activeBlockId, prev)
       if (!activeDayId) return prev
 
+      // No-op: hovering over itself
+      if (activeBlockId === over.id) return prev
+
       const next = {}
       Object.keys(prev).forEach(k => { next[k] = [...prev[k]] })
 
-      next[activeDayId] = next[activeDayId].filter(id => id !== activeBlockId)
-
-      const targetBlocks = next[targetDayId] || []
-      if (overType === 'block' && over.id !== activeBlockId) {
-        const insertIdx = targetBlocks.indexOf(over.id)
-        if (insertIdx !== -1) {
-          targetBlocks.splice(insertIdx, 0, activeBlockId)
+      if (overType === 'block') {
+        if (activeDayId === targetDayId) {
+          // Same container: use arrayMove so direction (up vs down) is handled
+          // correctly and there's no off-by-one from a remove-then-splice pattern.
+          const activeIdx = next[activeDayId].indexOf(activeBlockId)
+          const overIdx = next[targetDayId].indexOf(over.id)
+          if (activeIdx !== -1 && overIdx !== -1) {
+            next[targetDayId] = arrayMove(next[targetDayId], activeIdx, overIdx)
+          }
         } else {
-          targetBlocks.push(activeBlockId)
+          // Cross-container: pull out of source day, insert before the hovered item
+          next[activeDayId] = next[activeDayId].filter(id => id !== activeBlockId)
+          const targetBlocks = next[targetDayId] || []
+          const insertIdx = targetBlocks.indexOf(over.id)
+          if (insertIdx !== -1) {
+            targetBlocks.splice(insertIdx, 0, activeBlockId)
+          } else {
+            targetBlocks.push(activeBlockId)
+          }
+          next[targetDayId] = targetBlocks
         }
-      } else {
-        targetBlocks.push(activeBlockId)
+      } else if (overType === 'day-body') {
+        // Hovering over the empty-day zone or end-of-day zone of a different day
+        if (activeDayId !== targetDayId) {
+          next[activeDayId] = next[activeDayId].filter(id => id !== activeBlockId)
+          next[targetDayId] = [...(next[targetDayId] || []), activeBlockId]
+        }
       }
-      next[targetDayId] = targetBlocks
 
       return next
     })
-  }, [activeDrag])
+  // All state access happens via the functional setState form (stable reference).
+  // No external state is closed over, so an empty dep array is safe and prevents
+  // stale-closure issues entirely.
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDragEnd = useCallback(({ active, over }) => {
-    if (activeDrag?.type === 'day' && over && active.id !== over.id) {
+    // Read type from event data for the same reason as handleDragOver — avoids
+    // any theoretical stale-closure on the activeDrag React state.
+    const dragType = active.data.current?.type || 'day'
+
+    if (dragType === 'day' && over && active.id !== over.id) {
       const overType = over.data.current?.type
       let targetDayId = null
       if (overType === 'day') targetDayId = over.id
@@ -1575,7 +1606,7 @@ export default function ScheduleTab() {
       if (targetDayId && targetDayId !== active.id) {
         reorderDays(active.id, targetDayId)
       }
-    } else if (activeDrag?.type === 'block' && localBlocksByDay) {
+    } else if (dragType === 'block' && localBlocksByDay) {
       applyScheduleDrag(
         schedule.map(d => ({
           id: d.id,
@@ -1586,7 +1617,7 @@ export default function ScheduleTab() {
 
     setLocalBlocksByDay(null)
     setActiveDrag(null)
-  }, [activeDrag, localBlocksByDay, schedule, blockMap, reorderDays, applyScheduleDrag])
+  }, [localBlocksByDay, schedule, blockMap, reorderDays, applyScheduleDrag])
 
   const handleDragCancel = useCallback(() => {
     setLocalBlocksByDay(null)
@@ -1683,8 +1714,13 @@ export default function ScheduleTab() {
             ))}
           </SortableContext>
 
-          {/* DragOverlay only for shot blocks and break blocks */}
-          <DragOverlay>
+          {/* DragOverlay only for shot blocks and break blocks.
+              dropAnimation={null}: the store is committed synchronously in
+              handleDragEnd, so the DOM is already in the right place by the
+              time the pointer is released.  Letting dnd-kit animate the overlay
+              back to the item's new DOM position causes a brief double-render
+              flash, so we skip the animation entirely. */}
+          <DragOverlay dropAnimation={null}>
             {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (
               blockMap[activeDrag.id].type === 'break' ? (
                 <BreakBlockContent
