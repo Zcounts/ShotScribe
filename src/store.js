@@ -530,11 +530,68 @@ const useStore = create((set, get) => ({
       shotlistColumnConfig,
       customColumns,
       customDropdownOptions,
-      scenes: scenes.map(scene => ({
-        ...scene,
-        shots: scene.shots.map(s => ({ ...s })),
+      // Scenes and shots are reconstructed field-by-field so that any
+      // non-serializable value that accidentally landed in state (e.g. a DOM
+      // event object spread via an overrides parameter) is stripped before
+      // reaching JSON.stringify.  Custom columns use a 'custom_' key prefix
+      // and are preserved via an explicit pass over the shot's keys.
+      scenes: scenes.map(scene => {
+        const shots = scene.shots.map(s => {
+          const shot = {
+            id: s.id,
+            cameraName: s.cameraName,
+            focalLength: s.focalLength,
+            color: s.color,
+            image: s.image,
+            specs: s.specs
+              ? { size: s.specs.size, type: s.specs.type, move: s.specs.move, equip: s.specs.equip }
+              : { size: '', type: '', move: '', equip: '' },
+            notes: s.notes,
+            subject: s.subject,
+            checked: s.checked,
+            intOrExt: s.intOrExt,
+            dayNight: s.dayNight,
+            scriptTime: s.scriptTime,
+            setupTime: s.setupTime,
+            predictedTakes: s.predictedTakes,
+            shootTime: s.shootTime,
+            takeNumber: s.takeNumber,
+          }
+          for (const key of Object.keys(s)) {
+            if (key.startsWith('custom_')) shot[key] = s[key]
+          }
+          return shot
+        })
+        return {
+          id: scene.id,
+          sceneLabel: scene.sceneLabel,
+          location: scene.location,
+          intOrExt: scene.intOrExt,
+          dayNight: scene.dayNight,
+          cameras: scene.cameras,
+          pageNotes: scene.pageNotes,
+          shots,
+        }
+      }),
+      // Schedule blocks are also reconstructed explicitly for the same reason.
+      schedule: schedule.map(day => ({
+        id: day.id,
+        date: day.date,
+        startTime: day.startTime,
+        basecamp: day.basecamp,
+        shotBlocks: (day.shotBlocks || []).map(b =>
+          b.type === 'break'
+            ? { id: b.id, type: b.type, breakName: b.breakName, breakDuration: b.breakDuration }
+            : {
+                id: b.id,
+                shotId: b.shotId,
+                estimatedShootTime: b.estimatedShootTime,
+                estimatedSetupTime: b.estimatedSetupTime,
+                shootingLocation: b.shootingLocation,
+                castMembers: Array.isArray(b.castMembers) ? [...b.castMembers] : [],
+              }
+        ),
       })),
-      schedule,
       exportedAt: new Date().toISOString(),
     }
   },
@@ -547,7 +604,16 @@ const useStore = create((set, get) => ({
       data = get().getProjectData()
       json = JSON.stringify(data, null, 2)
     } catch (err) {
-      alert(`Save failed: could not serialize project data.\n\n${err.message}`)
+      // Try each top-level field individually to surface which one contains
+      // the non-serializable value, making future debugging much easier.
+      let badField = null
+      if (data) {
+        for (const key of Object.keys(data)) {
+          try { JSON.stringify(data[key]) } catch { badField = key; break }
+        }
+      }
+      const hint = badField ? `\n\nProblematic field: "${badField}"` : ''
+      alert(`Save failed: could not serialize project data.${hint}\n\n${err.message}`)
       return
     }
 
@@ -600,7 +666,14 @@ const useStore = create((set, get) => ({
       data = get().getProjectData()
       json = JSON.stringify(data, null, 2)
     } catch (err) {
-      alert(`Save failed: could not serialize project data.\n\n${err.message}`)
+      let badField = null
+      if (data) {
+        for (const key of Object.keys(data)) {
+          try { JSON.stringify(data[key]) } catch { badField = key; break }
+        }
+      }
+      const hint = badField ? `\n\nProblematic field: "${badField}"` : ''
+      alert(`Save failed: could not serialize project data.${hint}\n\n${err.message}`)
       return
     }
 
@@ -866,9 +939,13 @@ const useStore = create((set, get) => ({
     if (!state.autoSave) return
     if (state._autoSaveTimeout) clearTimeout(state._autoSaveTimeout)
     const timeout = setTimeout(() => {
-      const data = get().getProjectData()
-      localStorage.setItem('autosave', JSON.stringify(data))
-      localStorage.setItem('autosave_time', new Date().toISOString())
+      try {
+        const data = get().getProjectData()
+        localStorage.setItem('autosave', JSON.stringify(data))
+        localStorage.setItem('autosave_time', new Date().toISOString())
+      } catch {
+        // Silently skip — the user will see an error on the next manual save.
+      }
     }, 60000)
     set({ _autoSaveTimeout: timeout })
   },
