@@ -140,6 +140,28 @@ function DragHandleIcon({ size = 14, color = 'currentColor' }) {
   )
 }
 
+function ChevronIcon({ collapsed, color = 'currentColor', size = 10 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 10 10"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{
+        display: 'block',
+        transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+        transition: 'transform 0.18s ease',
+      }}
+    >
+      <polyline points="2,3.5 5,6.5 8,3.5" />
+    </svg>
+  )
+}
+
 // ── InlineField ───────────────────────────────────────────────────────────────
 // Click-to-edit text input styled as plain text at rest.
 
@@ -164,11 +186,13 @@ function InlineField({ value, onChange, placeholder, isDark, label, inputWidth }
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 5, minWidth: 0 }}>
       {label && (
         <span style={{
-          fontSize: 10,
+          fontSize: 9,
           fontFamily: 'monospace',
           color: mutedFg,
           flexShrink: 0,
-          letterSpacing: '0.04em',
+          letterSpacing: '0.07em',
+          textTransform: 'uppercase',
+          fontWeight: 700,
         }}>
           {label}:
         </span>
@@ -315,7 +339,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
               )}
               <span style={{
                 fontFamily: 'monospace',
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: 700,
                 color: fg,
                 flexShrink: 0,
@@ -323,7 +347,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
                 {shotData.displayId}
               </span>
               {shotData.subject && (
-                <span style={{ fontSize: 12, color: fg }}>{shotData.subject}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{shotData.subject}</span>
               )}
               <Badge label={shotData.intOrExt} />
               <Badge label={shotData.dayNight} />
@@ -333,11 +357,11 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
             <div style={{
               fontSize: 11,
               fontFamily: 'monospace',
-              color: mutedFg,
+              color: fg,
               marginBottom: shotData.notes ? 3 : 0,
             }}>
               {shotData.sceneLabel}
-              {shotData.location ? ` · ${shotData.location}` : ''}
+              {shotData.location ? <span style={{ color: mutedFg }}>{` · ${shotData.location}`}</span> : ''}
             </div>
 
             {/* Notes (truncated to 2 lines) */}
@@ -802,6 +826,7 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
       borderRadius: isOverlay ? 6 : 0,
       boxShadow: isOverlay ? '0 8px 28px rgba(0,0,0,0.22)' : 'none',
       borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
+      borderLeft: isOverlay ? 'none' : `3px solid ${isDark ? '#6b5a00' : '#d4a820'}`,
       padding: '9px 14px',
       display: 'grid',
       gridTemplateColumns: 'auto 1fr auto',
@@ -1126,6 +1151,7 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
 function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }) {
   const removeShootingDay = useStore(s => s.removeShootingDay)
   const updateShootingDay = useStore(s => s.updateShootingDay)
+  const [collapsed, setCollapsed] = useState(false)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: day.id,
@@ -1172,18 +1198,19 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
         position: 'relative',
       }}
     >
-      {/* Day header — acts as drag handle for day reordering */}
+      {/* Day header — acts as drag handle for day reordering; click toggles collapse */}
       <div
         {...attributes}
         {...listeners}
+        onClick={() => setCollapsed(c => !c)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 10,
           padding: '8px 14px',
           background: headerBg,
-          borderBottom: `1px solid ${borderColor}`,
-          borderRadius: '6px 6px 0 0',
+          borderBottom: collapsed ? 'none' : `1px solid ${borderColor}`,
+          borderRadius: collapsed ? 6 : '6px 6px 0 0',
           cursor: isDragging ? 'grabbing' : 'grab',
           userSelect: 'none',
           flexWrap: 'wrap',
@@ -1197,11 +1224,11 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
         {/* Day number */}
         <span style={{
           fontFamily: 'monospace',
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 700,
-          letterSpacing: '0.1em',
+          letterSpacing: '0.08em',
           textTransform: 'uppercase',
-          color: mutedFg,
+          color: fg,
           flexShrink: 0,
         }}>
           Day {dayIndex + 1}
@@ -1245,10 +1272,12 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
           onClick={e => e.stopPropagation()}
         >
           <span style={{
-            fontSize: 10,
+            fontSize: 9,
             fontFamily: 'monospace',
             color: mutedFg,
-            letterSpacing: '0.04em',
+            letterSpacing: '0.07em',
+            textTransform: 'uppercase',
+            fontWeight: 700,
             flexShrink: 0,
           }}>
             Call:
@@ -1283,10 +1312,12 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
           onClick={e => e.stopPropagation()}
         >
           <span style={{
-            fontSize: 10,
+            fontSize: 9,
             fontFamily: 'monospace',
             color: mutedFg,
-            letterSpacing: '0.04em',
+            letterSpacing: '0.07em',
+            textTransform: 'uppercase',
+            fontWeight: 700,
             flexShrink: 0,
           }}>
             Basecamp:
@@ -1323,6 +1354,17 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
 
         <div style={{ flex: 1 }} />
 
+        {/* Collapse chevron */}
+        <span style={{
+          display: 'flex',
+          alignItems: 'center',
+          color: mutedFg,
+          flexShrink: 0,
+          marginRight: 2,
+        }}>
+          <ChevronIcon collapsed={collapsed} color={mutedFg} size={11} />
+        </span>
+
         {/* Remove day */}
         <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
           <IconButton
@@ -1336,36 +1378,41 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
         </div>
       </div>
 
-      {/* Shot block list */}
-      <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
-        {blocks.length === 0 ? (
-          <DayDropZone dayId={day.id} isDark={isDark} />
-        ) : (
-          <>
-            {blockProjections.map(({ block, projectedTime }) => (
-              <SortableShotBlock
-                key={block.id}
-                block={block}
-                shotData={enrichedBlockMap[block.id]}
-                dayId={day.id}
-                isDark={isDark}
-                projectedTime={projectedTime}
-              />
-            ))}
-            <DayEndDropZone dayId={day.id} />
-          </>
-        )}
-      </SortableContext>
+      {/* Body — hidden when collapsed */}
+      {!collapsed && (
+        <>
+          {/* Shot block list */}
+          <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+            {blocks.length === 0 ? (
+              <DayDropZone dayId={day.id} isDark={isDark} />
+            ) : (
+              <>
+                {blockProjections.map(({ block, projectedTime }) => (
+                  <SortableShotBlock
+                    key={block.id}
+                    block={block}
+                    shotData={enrichedBlockMap[block.id]}
+                    dayId={day.id}
+                    isDark={isDark}
+                    projectedTime={projectedTime}
+                  />
+                ))}
+                <DayEndDropZone dayId={day.id} />
+              </>
+            )}
+          </SortableContext>
 
-      {/* Day totals */}
-      <DayTotals blocks={blocks} isDark={isDark} />
+          {/* Day totals */}
+          <DayTotals blocks={blocks} isDark={isDark} />
 
-      {/* Add shot footer */}
-      <AddShotFooter
-        dayId={day.id}
-        existingShotIds={existingShotIds}
-        isDark={isDark}
-      />
+          {/* Add shot footer */}
+          <AddShotFooter
+            dayId={day.id}
+            existingShotIds={existingShotIds}
+            isDark={isDark}
+          />
+        </>
+      )}
     </div>
   )
 }
@@ -1552,8 +1599,6 @@ export default function ScheduleTab() {
 
   return (
     <div style={{
-      flex: 1,
-      overflowY: 'auto',
       padding: '24px',
       maxWidth: 920,
       margin: '0 auto',
