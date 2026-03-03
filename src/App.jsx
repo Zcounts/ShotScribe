@@ -313,7 +313,7 @@ export default function App() {
           <ShotlistTab containerRef={shotlistRef} />
         </div>
       ) : (
-        <div className="flex-1 flex flex-col overflow-auto" style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0ede4' }}>
+        <div className="flex-1 overflow-y-auto" style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0ede4' }}>
           <ScheduleTab />
         </div>
       )}
