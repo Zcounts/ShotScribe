@@ -77,6 +77,16 @@ ipcMain.handle('dialog:save-project', async (_event, { defaultName, data }) => {
   }
 })
 
+// ─── IPC: Save project to existing path (no dialog) ──────────────────────────
+ipcMain.handle('dialog:save-project-silent', async (_event, { filePath, data }) => {
+  try {
+    fs.writeFileSync(filePath, data, 'utf8')
+    return { success: true, filePath }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
 // ─── IPC: Open project ────────────────────────────────────────────────────────
 ipcMain.handle('dialog:open-project', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({

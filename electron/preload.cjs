@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveProject: (defaultName, data) =>
     ipcRenderer.invoke('dialog:save-project', { defaultName, data }),
 
+  /** Save project to an existing file path without opening a dialog */
+  saveProjectSilent: (filePath, data) =>
+    ipcRenderer.invoke('dialog:save-project-silent', { filePath, data }),
+
   /** Open a .shotlist file via native Open dialog */
   openProject: () =>
     ipcRenderer.invoke('dialog:open-project'),

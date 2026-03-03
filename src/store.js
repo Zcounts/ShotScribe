@@ -539,31 +539,103 @@ const useStore = create((set, get) => ({
     }
   },
 
+  // "Save" — overwrites the current file silently if a path is known;
+  // falls back to a Save As dialog when the project has never been saved.
   saveProject: async () => {
-    const data = get().getProjectData()
-    const totalSize = JSON.stringify(data).length
-    if (totalSize > 50 * 1024 * 1024) {
+    let data, json
+    try {
+      data = get().getProjectData()
+      json = JSON.stringify(data, null, 2)
+    } catch (err) {
+      alert(`Save failed: could not serialize project data.\n\n${err.message}`)
+      return
+    }
+
+    if (json.length > 50 * 1024 * 1024) {
       alert('Warning: Project file exceeds 50MB due to embedded images. Consider removing some images.')
     }
-    const json = JSON.stringify(data, null, 2)
+
+    const defaultName = `${data.projectName.replace(/[^a-z0-9]/gi, '_')}.shotlist`
+    const existingPath = get().projectPath
+
+    if (window.electronAPI) {
+      try {
+        let result
+        if (existingPath) {
+          result = await window.electronAPI.saveProjectSilent(existingPath, json)
+        } else {
+          result = await window.electronAPI.saveProject(defaultName, json)
+        }
+        if (result.success) {
+          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath })
+        } else if (result.error) {
+          alert(`Save failed: ${result.error}`)
+        }
+        // result.success === false with no error means user cancelled the dialog — no message needed
+      } catch (err) {
+        alert(`Save failed: ${err.message}`)
+      }
+    } else {
+      try {
+        const blob = new Blob([json], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = defaultName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        set({ lastSaved: new Date().toISOString() })
+      } catch (err) {
+        alert(`Save failed: ${err.message}`)
+      }
+    }
+  },
+
+  // "Save As" — always opens a file dialog and updates projectPath on success.
+  saveProjectAs: async () => {
+    let data, json
+    try {
+      data = get().getProjectData()
+      json = JSON.stringify(data, null, 2)
+    } catch (err) {
+      alert(`Save failed: could not serialize project data.\n\n${err.message}`)
+      return
+    }
+
+    if (json.length > 50 * 1024 * 1024) {
+      alert('Warning: Project file exceeds 50MB due to embedded images. Consider removing some images.')
+    }
+
     const defaultName = `${data.projectName.replace(/[^a-z0-9]/gi, '_')}.shotlist`
 
     if (window.electronAPI) {
-      const result = await window.electronAPI.saveProject(defaultName, json)
-      if (result.success) {
-        set({ lastSaved: new Date().toISOString(), projectPath: result.filePath })
+      try {
+        const result = await window.electronAPI.saveProject(defaultName, json)
+        if (result.success) {
+          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath })
+        } else if (result.error) {
+          alert(`Save failed: ${result.error}`)
+        }
+      } catch (err) {
+        alert(`Save failed: ${err.message}`)
       }
     } else {
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = defaultName
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      set({ lastSaved: new Date().toISOString() })
+      try {
+        const blob = new Blob([json], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = defaultName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        set({ lastSaved: new Date().toISOString() })
+      } catch (err) {
+        alert(`Save failed: ${err.message}`)
+      }
     }
   },
 
@@ -604,7 +676,7 @@ const useStore = create((set, get) => ({
     if (data.scenes && Array.isArray(data.scenes)) {
       // New multi-scene format (v2)
       scenes = data.scenes.map(scene => ({
-        id: scene.id || `scene_${Date.now()}_${++sceneCounter}`,
+        id: scene.id || `scene_${Date.now()}_${++sceneIdCounter}`,
         sceneLabel: scene.sceneLabel || 'SCENE 1',
         location: scene.location || 'LOCATION',
         intOrExt: scene.intOrExt || 'INT',
