@@ -27,7 +27,7 @@ const PRINT_BUILTIN_COLUMNS = [
   { key: 'displayId',      label: 'SHOT#',             width: 54  },
   { key: '__int__',        label: 'I/E',               width: 68  },
   { key: '__dn__',         label: 'D/N',               width: 62  },
-  { key: 'subject',        label: 'SUBJECT',           width: 130 },
+  { key: 'cast',           label: 'CAST',              width: 130 },
   { key: 'specs.type',     label: 'ANGLE',             width: 96  },
   { key: 'focalLength',    label: 'LENS',              width: 64  },
   { key: 'specs.equip',    label: 'EQUIPMENT',         width: 100 },
@@ -58,7 +58,7 @@ function getCellValue(colKey, shot, scene) {
 // No reference to the live app DOM.
 
 function buildStoryboardPrintHtml() {
-  const { scenes, columnCount } = useStore.getState()
+  const { scenes, columnCount, projectName } = useStore.getState()
   const cols = Math.max(2, Math.min(4, columnCount || 4))
   const cardsPerPage = cols * 2  // two rows of cards per page
 
@@ -145,9 +145,14 @@ function buildStoryboardPrintHtml() {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Storyboard</title>
+<title>Storyboard — ${escapeHtml(projectName || 'Untitled')}</title>
 <style>
-@page { size: A4 landscape; margin: 8mm 10mm; }
+@page {
+  size: A4 landscape;
+  margin: 8mm 10mm 14mm;
+  @bottom-left { content: "${escapeHtml(projectName || 'Untitled')}"; font-family: monospace; font-size: 6pt; color: #888; }
+  @bottom-right { content: counter(page); font-family: monospace; font-size: 6pt; color: #888; font-weight: 700; }
+}
 @media print { html, body { margin: 0; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -414,8 +419,10 @@ function buildSchedulePrintHtml() {
 
       // ── Shot block ───────────────────────────────────────────────────
       const found = shotMap.get(block.shotId)
-      const shootMins = parseScheduleMinutes(block.estimatedShootTime)
-      const setupMins = parseScheduleMinutes(block.estimatedSetupTime)
+
+      // Read times from shot data (single source of truth on the shot object)
+      const shootMins = found ? parseScheduleMinutes(found.shot.shootTime) : 0
+      const setupMins = found ? parseScheduleMinutes(found.shot.setupTime) : 0
       totalShootMins += shootMins
       totalSetupMins += setupMins
       cumulativeMins += shootMins + setupMins
@@ -437,20 +444,19 @@ function buildSchedulePrintHtml() {
       const { shot, scene, displayId } = found
       const intOrExt = shot.intOrExt || scene.intOrExt || ''
       const dayNight = shot.dayNight || scene.dayNight || ''
-      const castList = (block.castMembers || []).join(', ') || '—'
+      const castStr = shot.cast || '—'
 
       return `<tr class="block-row">
         ${timelineCell}
         <td class="shot-id">${escapeHtml(displayId)}</td>
         <td class="subject-cell">
-          <strong>${escapeHtml(shot.subject || '—')}</strong>
-          ${shot.notes ? `<br><span class="notes-txt">${escapeHtml(shot.notes.substring(0, 80))}${shot.notes.length > 80 ? '…' : ''}</span>` : ''}
-          <br><span class="scene-loc">${escapeHtml(scene.sceneLabel)}${scene.location ? ` · ${escapeHtml(scene.location)}` : ''}</span>
+          ${shot.notes ? `<span class="notes-txt">${escapeHtml(shot.notes)}</span><br>` : ''}
+          <span class="scene-loc">${escapeHtml(scene.sceneLabel)}${scene.location ? ` · ${escapeHtml(scene.location)}` : ''}</span>
         </td>
         <td class="badge-cell">${intOrExt ? `<span class="bdg">${escapeHtml(intOrExt)}</span>` : ''}${dayNight ? ` <span class="bdg">${escapeHtml(dayNight)}</span>` : ''}</td>
         <td class="time-cell">${shootMins > 0 ? escapeHtml(String(shootMins)) + 'm' : '—'}</td>
         <td class="time-cell">${setupMins > 0 ? escapeHtml(String(setupMins)) + 'm' : '—'}</td>
-        <td class="cast-cell">${escapeHtml(castList)}</td>
+        <td class="cast-cell">${escapeHtml(castStr)}</td>
       </tr>`
     })
 
@@ -458,8 +464,8 @@ function buildSchedulePrintHtml() {
     const hasTotals = totalMins > 0
 
     const headerCols = hasTimeline
-      ? `<th class="tl-th">PROJECTED TIME<br><span style="font-weight:400;font-size:7pt;color:#666">ESTIMATE ONLY</span></th><th>SHOT</th><th>SUBJECT / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
-      : `<th>SHOT</th><th>SUBJECT / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
+      ? `<th class="tl-th">PROJECTED TIME<br><span style="font-weight:400;font-size:7pt;color:#666">ESTIMATE ONLY</span></th><th>SHOT</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
+      : `<th>SHOT</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
 
     // Columns (no timeline): shot | subject | badge | shoot | setup | cast  = 6
     // Columns (timeline):    tl  | shot | subject | badge | shoot | setup | cast = 7
@@ -480,7 +486,7 @@ function buildSchedulePrintHtml() {
       : ''
 
     const basecampStr = day.basecamp
-      ? `<span class="day-basecamp">⚑ ${escapeHtml(day.basecamp)}</span>`
+      ? `<span class="day-basecamp">BASECAMP: ${escapeHtml(day.basecamp)}</span>`
       : ''
 
     const shotCount = day.shotBlocks.filter(b => b.type !== 'break').length
@@ -561,9 +567,10 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #1a1a1a;
-  color: #fff;
+  background: #f5f3ee;
+  color: #111;
   padding: 6px 10px;
+  border: 1px solid #bbb;
   border-radius: 2px 2px 0 0;
   margin-bottom: 0;
 }
@@ -581,20 +588,21 @@ html, body {
 .day-date {
   font-size: 9pt;
   font-weight: 400;
-  opacity: 0.85;
+  color: #444;
 }
-.no-date { opacity: 0.4; font-style: italic; }
+.no-date { color: #999; font-style: italic; }
 .call-time {
   font-size: 9pt;
   font-weight: 700;
-  background: rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.07);
   padding: 1px 6px;
   border-radius: 3px;
   letter-spacing: 0.04em;
+  color: #111;
 }
 .shot-count {
   font-size: 8pt;
-  opacity: 0.6;
+  color: #555;
   letter-spacing: 0.06em;
 }
 .no-shots {
@@ -688,23 +696,14 @@ tr.deleted-row td { background: #fff5f5; color: #ddd; }
   font-size: 8.5pt;
 }
 .total-val { font-weight: 700; color: #1a1a1a; }
-.estimate-notice {
-  margin-top: 8px;
-  padding: 6px 10px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 3px;
-  font-size: 7.5pt;
-  color: #1e40af;
-  break-inside: avoid;
-}
 .day-basecamp {
   font-size: 8pt;
   font-weight: 600;
-  background: rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.07);
   padding: 1px 6px;
   border-radius: 3px;
   letter-spacing: 0.02em;
+  color: #111;
 }
 tr.break-row td {
   background: #fef9c3 !important;
@@ -737,6 +736,14 @@ tr.break-row td {
   display: flex;
   justify-content: space-between;
 }
+@page {
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 7pt;
+    color: #aaa;
+  }
+}
 </style>
 </head>
 <body>
@@ -748,15 +755,11 @@ tr.break-row td {
   <div class="doc-title-sub">${schedule.length} day${schedule.length !== 1 ? 's' : ''} · ${schedule.reduce((n, d) => n + d.shotBlocks.filter(b => b.type !== 'break').length, 0)} shots scheduled</div>
 </div>
 
-${schedule.some(d => d.startTime) ? `<div class="estimate-notice">
-  ⚠ Projected times marked "EST." are rough estimates calculated from cumulative shoot and setup durations. Actual times will vary.
-</div><br>` : ''}
-
 ${dayDivs.join('\n')}
 
 <div class="footer">
-  <span>Generated by ShotScribe</span>
-  <span>${escapeHtml(today)}</span>
+  <span>Generated by ShotScribe · ${escapeHtml(today)}</span>
+  <span class="footer-page">Page <span class="page-num"></span></span>
 </div>
 </body>
 </html>`
@@ -770,7 +773,7 @@ ${dayDivs.join('\n')}
 // Always uses a hardcoded light theme.
 
 function buildShotlistPrintHtml() {
-  const { scenes, shotlistColumnConfig, customColumns } = useStore.getState()
+  const { scenes, shotlistColumnConfig, customColumns, projectName } = useStore.getState()
 
   // Build a unified column map (built-in + custom)
   const allColumnsMap = {}
@@ -836,7 +839,12 @@ function buildShotlistPrintHtml() {
 
       const cells = visibleColumns.map(col => {
         const val = getCellValue(col.key, shot, scene)
-        const cls = col.key === 'checked' ? ' class="col-c"' : ''
+        // Notes column wraps; all others truncate
+        const isNotes = col.key === 'notes'
+        const clsParts = []
+        if (col.key === 'checked') clsParts.push('col-c')
+        if (!isNotes) clsParts.push('no-wrap')
+        const cls = clsParts.length ? ` class="${clsParts.join(' ')}"` : ''
         return `<td${cls}>${escapeHtml(String(val))}</td>`
       }).join('')
 
@@ -844,13 +852,23 @@ function buildShotlistPrintHtml() {
     })
   })
 
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Shotlist</title>
+<title>Shotlist — ${escapeHtml(projectName || 'Untitled')}</title>
 <style>
-@page { size: A4 landscape; margin: 12mm 10mm; }
+@page { size: A4 landscape; margin: 12mm 10mm 14mm; }
+@page {
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 7pt;
+    color: #aaa;
+  }
+}
 @media print { html, body { margin: 0; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -858,6 +876,23 @@ html, body {
   color: #111;
   font-family: 'Courier New', Courier, monospace;
   font-size: 9pt;
+}
+.doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #111;
+  margin-bottom: 10px;
+}
+.doc-title-main {
+  font-size: 14pt;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.doc-title-sub {
+  font-size: 8pt;
+  color: #444;
 }
 table {
   width: 100%;
@@ -887,13 +922,19 @@ tbody td {
   padding: 3px 5px;
   border-bottom: 1px solid #e0dbd0;
   border-right: 1px solid #e0dbd0;
-  vertical-align: middle;
+  vertical-align: top;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+}
+tbody td.no-wrap {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
 }
 tbody td:last-child { border-right: none; }
-tbody td.col-c { text-align: center; }
+tbody td.col-c { text-align: center; vertical-align: middle; }
 tr.scene-hdr td {
   background: #2a2a2a;
   color: #fff;
@@ -921,6 +962,13 @@ tr.row-chk  td { opacity: 0.45; text-decoration: line-through; }
 </style>
 </head>
 <body>
+<div class="doc-header">
+  <div>
+    <div class="doc-title-main">SHOTLIST</div>
+    <div class="doc-title-sub">${escapeHtml(projectName || 'Untitled Project')}</div>
+  </div>
+  <div class="doc-title-sub">${escapeHtml(today)}</div>
+</div>
 <table>
   <colgroup>
     ${colgroupHtml}

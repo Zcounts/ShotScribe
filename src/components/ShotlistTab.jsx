@@ -30,7 +30,7 @@ const BUILTIN_COLUMNS = [
   { key: 'displayId',      label: 'SHOT#',              width: 54,  type: 'readonly' },
   { key: '__int__',        label: 'I/E',                width: 52,  type: 'intExt' },
   { key: '__dn__',         label: 'D/N',                width: 52,  type: 'dayNight' },
-  { key: 'subject',        label: 'SUBJECT',            width: 130, type: 'text' },
+  { key: 'cast',           label: 'CAST',               width: 130, type: 'text' },
   { key: 'specs.type',     label: 'ANGLE',              width: 96,  type: 'dropdown', options: TYPE_OPTIONS,  customOptionsField: 'type'  },
   { key: 'focalLength',    label: 'LENS',               width: 64,  type: 'text' },
   { key: 'specs.equip',    label: 'EQUIPMENT',          width: 100, type: 'dropdown', options: EQUIP_OPTIONS, customOptionsField: 'equip' },
@@ -223,8 +223,20 @@ function EditableCell({ value, onChange, type, options, customOptions, onAddCust
     return (
       <textarea
         value={localValue}
-        onChange={e => setLocalValue(e.target.value)}
-        onFocus={handleFocus}
+        onChange={e => {
+          setLocalValue(e.target.value)
+          // Auto-resize to fit content
+          const el = e.target
+          el.style.height = 'auto'
+          el.style.height = el.scrollHeight + 'px'
+        }}
+        onFocus={(e) => {
+          handleFocus(e)
+          // Resize on focus too
+          const el = e.target
+          el.style.height = 'auto'
+          el.style.height = el.scrollHeight + 'px'
+        }}
         onBlur={handleBlur}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -232,11 +244,19 @@ function EditableCell({ value, onChange, type, options, customOptions, onAddCust
             e.target.blur()
           }
         }}
+        ref={(el) => {
+          if (el) {
+            el.style.height = 'auto'
+            el.style.height = el.scrollHeight + 'px'
+          }
+        }}
         style={{
           ...inputStyle,
+          height: 'auto',
+          minHeight: ROW_H,
           padding: '2px 6px',
           resize: 'none',
-          overflow: 'auto',
+          overflow: 'hidden',
           lineHeight: 1.4,
           verticalAlign: 'top',
         }}
@@ -749,13 +769,12 @@ function SortableShotRow({
       {/* Data cells */}
       {visibleColumns.map((col, colIdx) => {
         const isLastCol = colIdx === visibleColumns.length - 1
+        const isNotes = col.type === 'textarea'
         const cellStyle = {
           borderBottom: `1px solid ${c.border}`,
           borderRight: !isLastCol ? `1px solid ${c.border}` : 'none',
           padding: 0,
-          height: ROW_H,
-          overflow: 'hidden',
-          verticalAlign: 'middle',
+          ...(isNotes ? { minHeight: ROW_H, overflow: 'visible', verticalAlign: 'top' } : { height: ROW_H, overflow: 'hidden', verticalAlign: 'middle' }),
           userSelect: 'none',
         }
 

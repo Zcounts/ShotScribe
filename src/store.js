@@ -17,7 +17,7 @@ export const DEFAULT_COLUMN_CONFIG = [
   { key: 'displayId',      visible: true },
   { key: '__int__',        visible: true },
   { key: '__dn__',         visible: true },
-  { key: 'subject',        visible: true },
+  { key: 'cast',           visible: true },
   { key: 'specs.type',     visible: true },
   { key: 'focalLength',    visible: true },
   { key: 'specs.equip',    visible: true },
@@ -64,6 +64,7 @@ function createShot(overrides = {}) {
     },
     notes: '',
     subject: '',
+    cast: '',
     checked: false,
     // Per-shot I/E and D/N (shotlist-only; scene heading uses scene.intOrExt/dayNight)
     intOrExt: '',
@@ -121,6 +122,7 @@ const useStore = create((set, get) => ({
   projectPath: null,
   projectName: 'Untitled Shotlist',
   lastSaved: null,
+  hasUnsavedChanges: false,
 
   // Scenes (multi-scene support)
   scenes: [initialScene],
@@ -182,7 +184,7 @@ const useStore = create((set, get) => ({
           // Null when the referenced shot has been deleted
           shotData: found ? {
             displayId: found.displayId,
-            subject: found.shot.subject,
+            cast: found.shot.cast || '',
             notes: found.shot.notes,
             intOrExt: found.shot.intOrExt || found.scene.intOrExt,
             dayNight: found.shot.dayNight || found.scene.dayNight,
@@ -588,6 +590,7 @@ const useStore = create((set, get) => ({
               : { size: '', type: '', move: '', equip: '' },
             notes: s.notes,
             subject: s.subject,
+            cast: s.cast || '',
             checked: s.checked,
             intOrExt: s.intOrExt,
             dayNight: s.dayNight,
@@ -674,7 +677,7 @@ const useStore = create((set, get) => ({
           result = await window.electronAPI.saveProject(defaultName, json)
         }
         if (result.success) {
-          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath })
+          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
         } else if (result.error) {
           alert(`Save failed: ${result.error}`)
         }
@@ -693,7 +696,7 @@ const useStore = create((set, get) => ({
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
-        set({ lastSaved: new Date().toISOString() })
+        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false })
       } catch (err) {
         alert(`Save failed: ${err.message}`)
       }
@@ -728,7 +731,7 @@ const useStore = create((set, get) => ({
       try {
         const result = await window.electronAPI.saveProject(defaultName, json)
         if (result.success) {
-          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath })
+          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
         } else if (result.error) {
           alert(`Save failed: ${result.error}`)
         }
@@ -746,7 +749,7 @@ const useStore = create((set, get) => ({
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
-        set({ lastSaved: new Date().toISOString() })
+        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false })
       } catch (err) {
         alert(`Save failed: ${err.message}`)
       }
@@ -771,6 +774,7 @@ const useStore = create((set, get) => ({
       specs: s.specs || { size: '', type: '', move: '', equip: '' },
       notes: s.notes || '',
       subject: s.subject || '',
+      cast: s.cast || '',
       checked: s.checked || false,
       // Per-shot I/E and D/N: use saved value if present, else inherit from scene (migration)
       intOrExt: s.intOrExt !== undefined ? s.intOrExt : (sceneIntOrExt || ''),
@@ -866,14 +870,16 @@ const useStore = create((set, get) => ({
           }
         }
         const base = didMigrate ? migrated : saved
+        // Migrate subject → cast column key
+        const migratedCast = base.map(c => c.key === 'subject' ? { ...c, key: 'cast' } : c)
         // Append any built-in columns not yet in saved config
-        const savedKeys = new Set(base.map(c => c.key))
+        const savedKeys = new Set(migratedCast.map(c => c.key))
         const newBuiltin = DEFAULT_COLUMN_CONFIG.filter(c => !savedKeys.has(c.key))
         // Append any custom columns from saved data not yet in config
         const customInConfig = loadedCustomColumns
           .filter(c => !savedKeys.has(c.key))
           .map(c => ({ key: c.key, visible: true }))
-        const all = [...base, ...newBuiltin, ...customInConfig]
+        const all = [...migratedCast, ...newBuiltin, ...customInConfig]
         return all
       })(),
       customColumns: loadedCustomColumns,
@@ -889,6 +895,7 @@ const useStore = create((set, get) => ({
         return [...saved, ...newCols]
       })(),
       lastSaved: new Date().toISOString(),
+      hasUnsavedChanges: false,
     })
   },
 
@@ -987,6 +994,7 @@ const useStore = create((set, get) => ({
 
   _autoSaveTimeout: null,
   _scheduleAutoSave: () => {
+    set({ hasUnsavedChanges: true })
     const state = get()
     if (!state.autoSave) return
     if (state._autoSaveTimeout) clearTimeout(state._autoSaveTimeout)

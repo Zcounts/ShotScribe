@@ -297,11 +297,8 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   }, [dayId, block.id, updateShotBlock])
 
   const handleCastChange = useCallback((val) => {
-    if (dayId) {
-      const arr = val.split(',').map(s => s.trim()).filter(Boolean)
-      updateShotBlock(dayId, block.id, { castMembers: arr })
-    }
-  }, [dayId, block.id, updateShotBlock])
+    if (block.shotId) updateShot(block.shotId, { cast: val })
+  }, [block.shotId, updateShot])
 
   // Feature 1: shoot/setup time writes go directly to the shot (single source of truth)
   const handleShootTimeChange = useCallback((val) => {
@@ -408,6 +405,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       gridTemplateColumns: 'auto 1fr auto',
       gap: '0 10px',
       alignItems: 'start',
+      position: 'relative',
     }}>
 
       {/* Drag handle */}
@@ -493,9 +491,6 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
                 }}>
                   {shotData.displayId}
                 </span>
-                {shotData.subject && (
-                  <span style={{ fontSize: 13, fontWeight: 700, color: fg, letterSpacing: '-0.01em' }}>{shotData.subject}</span>
-                )}
                 <Badge label={shotData.intOrExt} />
                 <Badge label={shotData.dayNight} />
               </div>
@@ -544,7 +539,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
                           onChange={handleShootTimeChange}
                           placeholder="—"
                           isDark={isDark}
-                          label="Shoot (min)"
+                          label="SHOOT"
                           inputWidth={40}
                         />
                       )}
@@ -554,7 +549,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
                           onChange={handleSetupTimeChange}
                           placeholder="—"
                           isDark={isDark}
-                          label="Setup (min)"
+                          label="SETUP"
                           inputWidth={40}
                         />
                       )}
@@ -566,16 +561,16 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
                       onChange={handleLocationChange}
                       placeholder="Shooting location…"
                       isDark={isDark}
-                      label="Location"
+                      label="LOCATION"
                     />
                   )}
                   {showCast && (
                     <InlineField
-                      value={(block.castMembers || []).join(', ')}
+                      value={shotData?.cast || ''}
                       onChange={handleCastChange}
-                      placeholder="Cast (comma-separated)…"
+                      placeholder="Cast…"
                       isDark={isDark}
-                      label="Cast"
+                      label="CAST"
                     />
                   )}
                 </div>
@@ -589,7 +584,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
         )}
       </div>
 
-      {/* Right column: collapse toggle + remove button — Feature 2 & 4 */}
+      {/* Right column: collapse toggle only */}
       {!isOverlay && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, paddingTop: 1 }}>
           {onToggleCollapse && shotData && (
@@ -602,9 +597,17 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
               <ChevronIcon collapsed={false} color={mutedFg} size={10} />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Delete X — bottom right corner of the expanded block */}
+      {!isOverlay && (
+        <div
+          style={{ position: 'absolute', bottom: 10, right: 14 }}
+          onPointerDown={e => e.stopPropagation()}
+        >
           <IconButton
             onClick={() => setShowRemoveConfirm(true)}
-            onPointerDown={e => e.stopPropagation()}
             title="Remove from schedule"
             danger
             small
@@ -1918,6 +1921,7 @@ function EmptyState({ isDark, onAddDay }) {
 
 export default function ScheduleTab() {
   const schedule = useStore(s => s.schedule)
+  const scenes = useStore(s => s.scenes)
   const theme = useStore(s => s.theme)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const addShootingDay = useStore(s => s.addShootingDay)
@@ -1962,7 +1966,7 @@ export default function ScheduleTab() {
       d.shotBlocks.forEach(b => { map[b.id] = b.shotData })
     })
     return map
-  }, [schedule]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [schedule, scenes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBlocksForDay = useCallback((dayId) => {
     const ids = localBlocksByDay
