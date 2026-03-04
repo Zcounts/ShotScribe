@@ -24,6 +24,8 @@ export const DEFAULT_COLUMN_CONFIG = [
   { key: 'specs.move',     visible: true },
   { key: 'specs.size',     visible: true },
   { key: 'notes',          visible: true },
+  { key: 'sound',          visible: true },
+  { key: 'props',          visible: true },
   { key: 'scriptTime',     visible: true },
   { key: 'setupTime',      visible: true },
   { key: 'predictedTakes', visible: true },
@@ -75,6 +77,8 @@ function createShot(overrides = {}) {
     predictedTakes: '',
     shootTime: '',
     takeNumber: '',
+    sound: '',
+    props: '',
     ...overrides,
   }
 }
@@ -149,6 +153,16 @@ const useStore = create((set, get) => ({
   activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'schedule'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
+
+  // Per-column width overrides for the shotlist table (key → px width).
+  // Saved with the project so widths are restored on reload.
+  shotlistColumnWidths: {},
+
+  // Schedule tab collapse state — persists through tab switches (in-memory only,
+  // not written to the project file).
+  // days: { [dayId]: bool }   true = collapsed
+  // blocks: { [blockId]: bool } true = collapsed
+  scheduleCollapseState: { days: {}, blocks: {} },
 
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
@@ -552,6 +566,41 @@ const useStore = create((set, get) => ({
   showContextMenu: (shotId, sceneId, x, y) => set({ contextMenu: { shotId, sceneId, x, y } }),
   hideContextMenu: () => set({ contextMenu: null }),
 
+  // ── Shotlist column widths ────────────────────────────────────────────
+  setShotlistColumnWidth: (key, width) => {
+    set(state => ({
+      shotlistColumnWidths: { ...state.shotlistColumnWidths, [key]: width },
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  // ── Schedule collapse state ───────────────────────────────────────────
+  setDayCollapsed: (dayId, collapsed) => {
+    set(state => ({
+      scheduleCollapseState: {
+        ...state.scheduleCollapseState,
+        days: { ...state.scheduleCollapseState.days, [dayId]: collapsed },
+      },
+    }))
+  },
+
+  setBlockCollapsed: (blockId, collapsed) => {
+    set(state => ({
+      scheduleCollapseState: {
+        ...state.scheduleCollapseState,
+        blocks: { ...state.scheduleCollapseState.blocks, [blockId]: collapsed },
+      },
+    }))
+  },
+
+  setDayBlocksCollapsed: (blockIds, collapsed) => {
+    set(state => {
+      const next = { ...state.scheduleCollapseState.blocks }
+      blockIds.forEach(id => { next[id] = collapsed })
+      return { scheduleCollapseState: { ...state.scheduleCollapseState, blocks: next } }
+    })
+  },
+
   // ── Save / Load ──────────────────────────────────────────────────────
 
   getProjectData: () => {
@@ -559,6 +608,7 @@ const useStore = create((set, get) => ({
       projectName, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
+      shotlistColumnWidths,
     } = get()
     return {
       version: 2,
@@ -570,6 +620,7 @@ const useStore = create((set, get) => ({
       useDropdowns,
       shotlistColumnConfig,
       scheduleColumnConfig,
+      shotlistColumnWidths: shotlistColumnWidths || {},
       customColumns,
       customDropdownOptions,
       // Scenes and shots are reconstructed field-by-field so that any
@@ -599,6 +650,8 @@ const useStore = create((set, get) => ({
             predictedTakes: s.predictedTakes,
             shootTime: s.shootTime,
             takeNumber: s.takeNumber,
+            sound: s.sound || '',
+            props: s.props || '',
           }
           for (const key of Object.keys(s)) {
             if (key.startsWith('custom_')) shot[key] = s[key]
@@ -784,6 +837,8 @@ const useStore = create((set, get) => ({
       predictedTakes: s.predictedTakes || '',
       shootTime: s.shootTime || '',
       takeNumber: s.takeNumber || '',
+      sound: s.sound || '',
+      props: s.props || '',
       // Preserve any extra fields (e.g. custom columns)
       ...Object.fromEntries(
         Object.entries(s).filter(([k]) => k.startsWith('custom_'))
@@ -894,6 +949,9 @@ const useStore = create((set, get) => ({
         const newCols = DEFAULT_SCHEDULE_COLUMN_CONFIG.filter(c => !savedKeys.has(c.key))
         return [...saved, ...newCols]
       })(),
+      shotlistColumnWidths: (typeof data.shotlistColumnWidths === 'object' && data.shotlistColumnWidths !== null)
+        ? data.shotlistColumnWidths
+        : {},
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
     })

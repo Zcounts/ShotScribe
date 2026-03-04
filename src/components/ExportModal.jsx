@@ -199,7 +199,7 @@ html, body {
   color: #777;
   margin-top: 2px;
 }
-.hdr-center { text-align: center; }
+.hdr-center { text-align: left; }
 .hdr-right { text-align: right; }
 .hdr-cam {
   display: flex;
@@ -211,7 +211,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 8pt;
+  font-size: 9pt;
   font-weight: 600;
   font-family: monospace;
   color: #555;
@@ -225,10 +225,10 @@ html, body {
   border: 0.5px solid rgba(0,0,0,0.2);
 }
 .pg-notes {
-  font-size: 7pt;
+  font-size: 8pt;
   color: #666;
   white-space: pre-line;
-  text-align: center;
+  text-align: left;
 }
 .card-grid {
   display: grid;
@@ -262,8 +262,8 @@ html, body {
   background: #f0ede4;
   flex-shrink: 0;
 }
-.sid { font-size: 7pt; font-weight: 700; font-family: monospace; }
-.fl  { font-size: 7pt; font-weight: 400; font-family: monospace; color: #666; }
+.sid { font-size: 9pt; font-weight: 700; font-family: monospace; }
+.fl  { font-size: 9pt; font-weight: 400; font-family: monospace; color: #666; }
 .card-img {
   flex: 0 0 52%;
   border-top: 2px solid #4ade80;
@@ -284,7 +284,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 7pt;
+  font-size: 8pt;
   color: #999;
   font-family: monospace;
 }
@@ -297,31 +297,31 @@ html, body {
 .specs-tbl th {
   background: #f8f7f3;
   color: #888;
-  font-size: 5.5pt;
+  font-size: 7pt;
   font-weight: 700;
   font-family: monospace;
   letter-spacing: 0.08em;
   text-align: center;
-  padding: 1px 0;
+  padding: 2px 3px;
   border-bottom: 1px solid #e0dbd0;
   border-right: 1px solid #e0dbd0;
 }
 .specs-tbl th:last-child { border-right: none; }
 .specs-tbl td {
-  font-size: 6pt;
+  font-size: 8pt;
   font-family: monospace;
   text-align: center;
-  padding: 1px 0;
+  padding: 2px 3px;
   border-right: 1px solid #e0dbd0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: top;
 }
 .specs-tbl td:last-child { border-right: none; }
 .card-notes {
   flex: 1 1 0;
-  padding: 2px 4px;
-  font-size: 6.5pt;
+  padding: 3px 5px;
+  font-size: 8.5pt;
   white-space: pre-wrap;
   word-break: break-word;
   color: #333;

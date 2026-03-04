@@ -270,7 +270,7 @@ function ProjectedTimeBadge({ totalMins, isDark }) {
 //   isCollapsed / onToggleCollapse — Feature 2: per-block collapse
 //   shotData.shootTime / shotData.setupTime — Feature 1: synced via shot store
 
-function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, columnConfig, isCollapsed, onToggleCollapse }) {
+function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, columnConfig, isCollapsed, onToggleCollapse, onCtrlToggleAll }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
   const updateShot = useStore(s => s.updateShot)
@@ -357,9 +357,9 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
 
         {/* Collapse toggle */}
         <button
-          onClick={onToggleCollapse}
+          onClick={e => { e.stopPropagation(); if (e.ctrlKey && onCtrlToggleAll) { onCtrlToggleAll() } else { onToggleCollapse() } }}
           onPointerDown={e => e.stopPropagation()}
-          title="Expand"
+          title="Expand (Ctrl+click to expand all in day)"
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedFg, padding: '2px 4px', display: 'flex', alignItems: 'center' }}
         >
           <ChevronIcon collapsed={true} color={mutedFg} size={10} />
@@ -589,9 +589,9 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, paddingTop: 1 }}>
           {onToggleCollapse && shotData && (
             <button
-              onClick={onToggleCollapse}
+              onClick={e => { e.stopPropagation(); if (e.ctrlKey && onCtrlToggleAll) { onCtrlToggleAll() } else { onToggleCollapse() } }}
               onPointerDown={e => e.stopPropagation()}
-              title="Collapse"
+              title="Collapse (Ctrl+click to collapse all in day)"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedFg, padding: '2px 4px', display: 'flex', alignItems: 'center' }}
             >
               <ChevronIcon collapsed={false} color={mutedFg} size={10} />
@@ -696,7 +696,7 @@ function RemoveConfirmDialog({ displayId, isDark, onConfirm, onCancel }) {
 
 // ── SortableShotBlock ─────────────────────────────────────────────────────────
 
-function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, columnConfig, isCollapsed, onToggleCollapse }) {
+function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, columnConfig, isCollapsed, onToggleCollapse, onCtrlToggleAll }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
     data: { type: 'block', dayId },
@@ -734,6 +734,7 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, colu
           columnConfig={columnConfig}
           isCollapsed={isCollapsed}
           onToggleCollapse={onToggleCollapse}
+          onCtrlToggleAll={onCtrlToggleAll}
         />
       )}
     </div>
@@ -1586,18 +1587,22 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
 function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, columnConfig }) {
   const removeShootingDay = useStore(s => s.removeShootingDay)
   const updateShootingDay = useStore(s => s.updateShootingDay)
-  const [collapsed, setCollapsed] = useState(false)
-  // Feature 2: per-block collapse state (Set of collapsed block IDs); default expanded
-  const [collapsedBlocks, setCollapsedBlocks] = useState(new Set())
+  const setDayCollapsed = useStore(s => s.setDayCollapsed)
+  const setBlockCollapsed = useStore(s => s.setBlockCollapsed)
+  const setDayBlocksCollapsed = useStore(s => s.setDayBlocksCollapsed)
+  const collapseState = useStore(s => s.scheduleCollapseState)
+  const collapsed = collapseState.days[day.id] || false
+  const collapsedBlocksMap = collapseState.blocks
 
   const toggleBlockCollapse = useCallback((blockId) => {
-    setCollapsedBlocks(prev => {
-      const next = new Set(prev)
-      if (next.has(blockId)) next.delete(blockId)
-      else next.add(blockId)
-      return next
-    })
-  }, [])
+    setBlockCollapsed(blockId, !collapsedBlocksMap[blockId])
+  }, [setBlockCollapsed, collapsedBlocksMap])
+
+  const handleCtrlToggleAllBlocks = useCallback(() => {
+    const shotBlockIds = blocks.filter(b => b.type !== 'break').map(b => b.id)
+    const anyExpanded = shotBlockIds.some(id => !collapsedBlocksMap[id])
+    setDayBlocksCollapsed(shotBlockIds, anyExpanded)
+  }, [blocks, collapsedBlocksMap, setDayBlocksCollapsed])
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: day.id,
@@ -1650,179 +1655,183 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
       <div
         {...attributes}
         {...listeners}
-        onClick={() => setCollapsed(c => !c)}
+        onClick={() => setDayCollapsed(day.id, !collapsed)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
           padding: '8px 14px',
           background: headerBg,
           borderBottom: collapsed ? 'none' : `1px solid ${borderColor}`,
           borderRadius: collapsed ? 6 : '6px 6px 0 0',
           cursor: isDragging ? 'grabbing' : 'grab',
           userSelect: 'none',
-          flexWrap: 'wrap',
         }}
       >
-        {/* Handle icon */}
-        <span style={{ color: mutedFg, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          <DragHandleIcon color={mutedFg} size={12} />
-        </span>
-
-        {/* Day number */}
-        <span style={{
-          fontFamily: 'monospace',
-          fontSize: 12,
-          fontWeight: 700,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          color: fg,
-          flexShrink: 0,
-        }}>
-          Day {dayIndex + 1}
-        </span>
-
-        {/* Date picker */}
-        <input
-          type="date"
-          value={day.date || ''}
-          onChange={e => updateShootingDay(day.id, { date: e.target.value })}
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}
-          style={{
-            fontFamily: 'monospace',
-            fontSize: 12,
-            border: 'none',
-            background: 'none',
-            color: fg,
-            cursor: 'pointer',
-            outline: 'none',
-            padding: 0,
-          }}
-        />
-
-        {/* Formatted date label */}
-        {formattedDate && (
-          <span style={{ fontSize: 12, color: fg, fontFamily: 'monospace' }}>
-            {formattedDate}
+        {/* Row 1: primary info — day number, date, call time */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Handle icon */}
+          <span style={{ color: mutedFg, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <DragHandleIcon color={mutedFg} size={12} />
           </span>
-        )}
-        {!day.date && (
-          <span style={{ fontSize: 11, color: mutedFg, fontStyle: 'italic', fontFamily: 'monospace' }}>
-            No date set
-          </span>
-        )}
 
-        {/* Call time / start time input */}
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}
-        >
+          {/* Day number */}
           <span style={{
-            fontSize: 9,
             fontFamily: 'monospace',
-            color: mutedFg,
-            letterSpacing: '0.07em',
+            fontSize: 13,
+            fontWeight: 800,
+            letterSpacing: '0.08em',
             textTransform: 'uppercase',
-            fontWeight: 700,
+            color: fg,
             flexShrink: 0,
           }}>
-            Call:
+            Day {dayIndex + 1}
           </span>
+
+          {/* Date picker */}
           <input
-            type="time"
-            value={day.startTime || ''}
-            onChange={e => updateShootingDay(day.id, { startTime: e.target.value })}
+            type="date"
+            value={day.date || ''}
+            onChange={e => updateShootingDay(day.id, { date: e.target.value })}
             onPointerDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
-            title="Set call time / start time to generate projected timeline"
             style={{
               fontFamily: 'monospace',
-              fontSize: 11,
-              border: `1px solid ${day.startTime ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
-              background: day.startTime ? (isDark ? '#252525' : '#fff') : 'transparent',
-              color: day.startTime ? fg : mutedFg,
+              fontSize: 13,
+              fontWeight: 700,
+              border: 'none',
+              background: 'none',
+              color: fg,
               cursor: 'pointer',
               outline: 'none',
-              borderRadius: 3,
-              padding: day.startTime ? '1px 5px' : '1px 0',
-              width: 80,
-              transition: 'border-color 0.1s, background 0.1s',
+              padding: 0,
             }}
           />
+
+          {/* Formatted date label */}
+          {formattedDate && (
+            <span style={{ fontSize: 13, fontWeight: 700, color: fg, fontFamily: 'monospace' }}>
+              {formattedDate}
+            </span>
+          )}
+          {!day.date && (
+            <span style={{ fontSize: 11, color: mutedFg, fontStyle: 'italic', fontFamily: 'monospace' }}>
+              No date set
+            </span>
+          )}
+
+          {/* Call time / start time input */}
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+          >
+            <span style={{
+              fontSize: 9,
+              fontFamily: 'monospace',
+              color: mutedFg,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              flexShrink: 0,
+            }}>
+              Call:
+            </span>
+            <input
+              type="time"
+              value={day.startTime || ''}
+              onChange={e => updateShootingDay(day.id, { startTime: e.target.value })}
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+              title="Set call time / start time to generate projected timeline"
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 13,
+                fontWeight: 700,
+                border: `1px solid ${day.startTime ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
+                background: day.startTime ? (isDark ? '#252525' : '#fff') : 'transparent',
+                color: day.startTime ? fg : mutedFg,
+                cursor: 'pointer',
+                outline: 'none',
+                borderRadius: 3,
+                padding: day.startTime ? '1px 5px' : '1px 0',
+                width: 90,
+                transition: 'border-color 0.1s, background 0.1s',
+              }}
+            />
+          </div>
+
+          <div style={{ flex: 1 }} />
+
+          {/* Collapse chevron */}
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            color: mutedFg,
+            flexShrink: 0,
+            marginRight: 2,
+          }}>
+            <ChevronIcon collapsed={collapsed} color={mutedFg} size={11} />
+          </span>
+
+          {/* Remove day */}
+          <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+            <IconButton
+              onClick={() => removeShootingDay(day.id)}
+              title="Remove this shooting day"
+              danger
+              small
+            >
+              Remove Day
+            </IconButton>
+          </div>
         </div>
 
-        {/* Basecamp input */}
+        {/* Row 2: secondary info — basecamp and shot count */}
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, paddingLeft: 22, flexWrap: 'wrap' }}
           onPointerDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
         >
-          <span style={{
-            fontSize: 9,
-            fontFamily: 'monospace',
-            color: mutedFg,
-            letterSpacing: '0.07em',
-            textTransform: 'uppercase',
-            fontWeight: 700,
-            flexShrink: 0,
-          }}>
-            Basecamp:
-          </span>
-          <input
-            type="text"
-            value={day.basecamp || ''}
-            onChange={e => updateShootingDay(day.id, { basecamp: e.target.value })}
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => e.stopPropagation()}
-            placeholder="Location…"
-            title="Basecamp / unit base location for the whole day"
-            style={{
+          {/* Basecamp input */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            <span style={{
+              fontSize: 9,
               fontFamily: 'monospace',
-              fontSize: 11,
-              border: `1px solid ${day.basecamp ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
-              background: day.basecamp ? (isDark ? '#252525' : '#fff') : 'transparent',
-              color: day.basecamp ? fg : mutedFg,
-              cursor: 'text',
-              outline: 'none',
-              borderRadius: 3,
-              padding: day.basecamp ? '1px 5px' : '1px 0',
-              width: 130,
-              transition: 'border-color 0.1s, background 0.1s',
-            }}
-          />
-        </div>
+              color: mutedFg,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              flexShrink: 0,
+            }}>
+              Basecamp:
+            </span>
+            <input
+              type="text"
+              value={day.basecamp || ''}
+              onChange={e => updateShootingDay(day.id, { basecamp: e.target.value })}
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+              placeholder="Location…"
+              title="Basecamp / unit base location for the whole day"
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 11,
+                border: `1px solid ${day.basecamp ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
+                background: day.basecamp ? (isDark ? '#252525' : '#fff') : 'transparent',
+                color: day.basecamp ? fg : mutedFg,
+                cursor: 'text',
+                outline: 'none',
+                borderRadius: 3,
+                padding: day.basecamp ? '1px 5px' : '1px 0',
+                width: 130,
+                transition: 'border-color 0.1s, background 0.1s',
+              }}
+            />
+          </div>
 
-        {/* Shot count */}
-        <span style={{ fontSize: 11, color: mutedFg, fontFamily: 'monospace', marginLeft: 4 }}>
-          {shotCount} shot{shotCount !== 1 ? 's' : ''}
-          {breakCount > 0 ? `, ${breakCount} break${breakCount !== 1 ? 's' : ''}` : ''}
-        </span>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Collapse chevron */}
-        <span style={{
-          display: 'flex',
-          alignItems: 'center',
-          color: mutedFg,
-          flexShrink: 0,
-          marginRight: 2,
-        }}>
-          <ChevronIcon collapsed={collapsed} color={mutedFg} size={11} />
-        </span>
-
-        {/* Remove day */}
-        <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-          <IconButton
-            onClick={() => removeShootingDay(day.id)}
-            title="Remove this shooting day"
-            danger
-            small
-          >
-            Remove Day
-          </IconButton>
+          {/* Shot count */}
+          <span style={{ fontSize: 11, color: mutedFg, fontFamily: 'monospace' }}>
+            {shotCount} shot{shotCount !== 1 ? 's' : ''}
+            {breakCount > 0 ? `, ${breakCount} break${breakCount !== 1 ? 's' : ''}` : ''}
+          </span>
         </div>
       </div>
 
@@ -1844,8 +1853,9 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
                     isDark={isDark}
                     projectedTime={projectedTime}
                     columnConfig={columnConfig}
-                    isCollapsed={collapsedBlocks.has(block.id)}
+                    isCollapsed={collapsedBlocksMap[block.id] || false}
                     onToggleCollapse={() => toggleBlockCollapse(block.id)}
+                    onCtrlToggleAll={handleCtrlToggleAllBlocks}
                   />
                 ))}
                 <DayEndDropZone dayId={day.id} />
