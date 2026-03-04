@@ -321,11 +321,19 @@ const useStore = create((set, get) => ({
   },
 
   deleteScene: (sceneId) => {
-    set(state => ({
-      scenes: state.scenes.length > 1
-        ? state.scenes.filter(s => s.id !== sceneId)
-        : state.scenes, // never delete the last scene
-    }))
+    set(state => {
+      if (state.scenes.length <= 1) return state
+      const scene = state.scenes.find(s => s.id === sceneId)
+      const deletedShotIds = new Set(scene ? scene.shots.map(sh => sh.id) : [])
+      return {
+        scenes: state.scenes.filter(s => s.id !== sceneId),
+        // Remove any schedule blocks that reference shots from the deleted scene
+        schedule: state.schedule.map(day => ({
+          ...day,
+          shotBlocks: day.shotBlocks.filter(b => !deletedShotIds.has(b.shotId)),
+        })),
+      }
+    })
     get()._scheduleAutoSave()
   },
 

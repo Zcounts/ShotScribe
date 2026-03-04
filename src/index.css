@@ -384,6 +384,30 @@
     background: #fef2f2;
   }
 
+  /* Scene delete button — subtle trash icon at right end of scene header */
+  .scene-delete-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+    color: #9ca3af;
+    opacity: 0.35;
+    transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+    padding: 3px;
+    flex-shrink: 0;
+  }
+
+  .scene-delete-btn:hover {
+    opacity: 1;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+  }
+
   /* Add shot button */
   .add-shot-btn {
     border: 2px dashed #c4bfb5;
@@ -442,6 +466,7 @@
     .add-scene-btn,
     .add-scene-row,
     .scene-separator,
+    .scene-delete-btn,
     .shot-card .delete-btn,
     .shot-card .drag-handle {
       display: none !important;
