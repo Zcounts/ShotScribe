@@ -16,7 +16,6 @@ import ShotCard from './components/ShotCard'
 import SettingsPanel from './components/SettingsPanel'
 import ContextMenu from './components/ContextMenu'
 import ExportModal from './components/ExportModal'
-import RecentProjects from './components/RecentProjects'
 import ShotlistTab from './components/ShotlistTab'
 import ScheduleTab from './components/ScheduleTab'
 
@@ -318,9 +317,6 @@ export default function App() {
           setExportModalOpen(true)
         }}
       />
-
-      {/* Recent Projects bar */}
-      <RecentProjects />
 
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
       <div className="tab-nav" style={{

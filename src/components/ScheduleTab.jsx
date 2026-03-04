@@ -267,7 +267,7 @@ function ProjectedTimeBadge({ totalMins, isDark }) {
 // Renders the visual content of a single shot block.
 // Used both in the sortable list and in the DragOverlay.
 
-function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime }) {
+function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, columnConfig }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
 
@@ -275,6 +275,14 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   const mutedFg = isDark ? '#666' : '#555'
   const borderColor = isDark ? '#2a2a2a' : '#ede9df'
   const bg = isDark ? '#1c1c1c' : '#fff'
+
+  const showImage = isColVisible(columnConfig, 'image')
+  const showNotes = isColVisible(columnConfig, 'notes')
+  const showLocation = isColVisible(columnConfig, 'shootingLocation')
+  const showCast = isColVisible(columnConfig, 'castMembers')
+  const showShootTime = isColVisible(columnConfig, 'estimatedShootTime')
+  const showSetupTime = isColVisible(columnConfig, 'estimatedSetupTime')
+  const showProjectedTime = isColVisible(columnConfig, 'projectedTime')
 
   const handleLocationChange = useCallback((val) => {
     if (dayId) updateShotBlock(dayId, block.id, { shootingLocation: val })
@@ -326,6 +334,43 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       <div style={{ minWidth: 0 }}>
         {shotData ? (
           <>
+            {/* Storyboard image (when column enabled) */}
+            {showImage && (
+              <div style={{ marginBottom: 8 }}>
+                {shotData.image ? (
+                  <img
+                    src={shotData.image}
+                    alt=""
+                    style={{
+                      width: 100,
+                      height: 68,
+                      objectFit: 'cover',
+                      borderRadius: 3,
+                      display: 'block',
+                      border: `1px solid ${borderColor}`,
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 100,
+                    height: 68,
+                    borderRadius: 3,
+                    background: isDark ? '#252525' : '#f0ece4',
+                    border: `1px solid ${borderColor}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={mutedFg} strokeWidth="1.5" opacity="0.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21,15 16,10 5,21" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Shot identifier row + projected time */}
             <div style={{
               display: 'flex',
@@ -335,7 +380,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
               marginBottom: 3,
             }}>
               {/* Projected time badge (before shot ID if start time is set) */}
-              {projectedTime !== null && projectedTime !== undefined && !isOverlay && (
+              {showProjectedTime && projectedTime !== null && projectedTime !== undefined && !isOverlay && (
                 <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
               )}
               <span style={{
@@ -359,14 +404,14 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
               fontSize: 11,
               fontFamily: 'monospace',
               color: fg,
-              marginBottom: shotData.notes ? 3 : 0,
+              marginBottom: (showNotes && shotData.notes) ? 3 : 0,
             }}>
               {shotData.sceneLabel}
               {shotData.location ? <span style={{ color: mutedFg }}>{` · ${shotData.location}`}</span> : ''}
             </div>
 
             {/* Notes (truncated to 2 lines) */}
-            {shotData.notes && (
+            {showNotes && shotData.notes && (
               <div style={{
                 fontSize: 11,
                 color: mutedFg,
@@ -382,41 +427,51 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
             )}
 
             {/* Inline-editable schedule fields (not shown in overlay) */}
-            {!isOverlay && (
+            {!isOverlay && (showShootTime || showSetupTime || showLocation || showCast) && (
               <div style={{ marginTop: 4 }}>
                 {/* Time fields row */}
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 0 }}>
+                {(showShootTime || showSetupTime) && (
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 0 }}>
+                    {showShootTime && (
+                      <InlineField
+                        value={block.estimatedShootTime}
+                        onChange={handleShootTimeChange}
+                        placeholder="—"
+                        isDark={isDark}
+                        label="Shoot (min)"
+                        inputWidth={40}
+                      />
+                    )}
+                    {showSetupTime && (
+                      <InlineField
+                        value={block.estimatedSetupTime}
+                        onChange={handleSetupTimeChange}
+                        placeholder="—"
+                        isDark={isDark}
+                        label="Setup (min)"
+                        inputWidth={40}
+                      />
+                    )}
+                  </div>
+                )}
+                {showLocation && (
                   <InlineField
-                    value={block.estimatedShootTime}
-                    onChange={handleShootTimeChange}
-                    placeholder="—"
+                    value={block.shootingLocation}
+                    onChange={handleLocationChange}
+                    placeholder="Shooting location…"
                     isDark={isDark}
-                    label="Shoot (min)"
-                    inputWidth={40}
+                    label="Location"
                   />
+                )}
+                {showCast && (
                   <InlineField
-                    value={block.estimatedSetupTime}
-                    onChange={handleSetupTimeChange}
-                    placeholder="—"
+                    value={(block.castMembers || []).join(', ')}
+                    onChange={handleCastChange}
+                    placeholder="Cast (comma-separated)…"
                     isDark={isDark}
-                    label="Setup (min)"
-                    inputWidth={40}
+                    label="Cast"
                   />
-                </div>
-                <InlineField
-                  value={block.shootingLocation}
-                  onChange={handleLocationChange}
-                  placeholder="Shooting location…"
-                  isDark={isDark}
-                  label="Location"
-                />
-                <InlineField
-                  value={(block.castMembers || []).join(', ')}
-                  onChange={handleCastChange}
-                  placeholder="Cast (comma-separated)…"
-                  isDark={isDark}
-                  label="Cast"
-                />
+                )}
               </div>
             )}
           </>
@@ -447,7 +502,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
 
 // ── SortableShotBlock ─────────────────────────────────────────────────────────
 
-function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime }) {
+function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, columnConfig }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
     data: { type: 'block', dayId },
@@ -482,6 +537,7 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime }) {
           isDark={isDark}
           projectedTime={projectedTime}
           dragHandleProps={{ ...attributes, ...listeners }}
+          columnConfig={columnConfig}
         />
       )}
     </div>
@@ -535,6 +591,126 @@ function DayEndDropZone({ dayId }) {
         margin: '0 14px',
       }}
     />
+  )
+}
+
+// ── Column visibility helper ──────────────────────────────────────────────────
+
+function isColVisible(config, key) {
+  if (!config || !Array.isArray(config)) return true
+  const col = config.find(c => c.key === key)
+  return col ? col.visible : true
+}
+
+// ── ScheduleColumnConfigPanel ─────────────────────────────────────────────────
+
+function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
+  const bg = isDark ? '#1a1a1a' : '#fff'
+  const borderColor = isDark ? '#3a3a3a' : '#d4d0c8'
+  const fg = isDark ? '#ddd' : '#222'
+  const mutedFg = isDark ? '#555' : '#888'
+  const hoverBg = isDark ? '#252525' : '#f5f3ee'
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 34,
+        right: 0,
+        zIndex: 200,
+        width: 220,
+        background: bg,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 6,
+        boxShadow: isDark
+          ? '0 8px 28px rgba(0,0,0,0.7)'
+          : '0 8px 28px rgba(0,0,0,0.18)',
+        padding: '10px 8px 8px',
+      }}
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+        paddingBottom: 7,
+        borderBottom: `1px solid ${isDark ? '#2e2e2e' : '#eee'}`,
+      }}>
+        <span style={{
+          fontSize: 9,
+          fontWeight: 700,
+          fontFamily: 'monospace',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: mutedFg,
+        }}>
+          Configure Columns
+        </span>
+        <button
+          onClick={onClose}
+          style={{
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            color: mutedFg,
+            fontSize: 16,
+            lineHeight: 1,
+            padding: '0 2px',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Toggle list */}
+      {config.map(col => (
+        <button
+          key={col.key}
+          onClick={() => onChange(config.map(c => c.key === col.key ? { ...c, visible: !c.visible } : c))}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+            padding: '5px 6px',
+            border: 'none',
+            borderRadius: 3,
+            background: 'none',
+            color: col.visible ? fg : mutedFg,
+            cursor: 'pointer',
+            textAlign: 'left',
+            fontFamily: 'monospace',
+            fontSize: 11,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = hoverBg }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+        >
+          {/* Checkbox visual */}
+          <span style={{
+            width: 12,
+            height: 12,
+            border: `1px solid ${col.visible ? (isDark ? '#4ade80' : '#16a34a') : borderColor}`,
+            borderRadius: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            background: col.visible ? (isDark ? '#4ade80' : '#16a34a') : 'transparent',
+          }}>
+            {col.visible && (
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round">
+                <polyline points="1.5,4 3,5.5 6.5,2" />
+              </svg>
+            )}
+          </span>
+          {col.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -651,9 +827,12 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Close if user scrolls (panel position would become stale)
+  // Close if user scrolls outside the panel (panel position would become stale)
   useEffect(() => {
-    const handler = () => onClose()
+    const handler = (e) => {
+      if (panelRef.current && panelRef.current.contains(e.target)) return
+      onClose()
+    }
     window.addEventListener('scroll', handler, true)
     return () => window.removeEventListener('scroll', handler, true)
   }, [onClose])
@@ -670,6 +849,7 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
   return (
     <div
       ref={panelRef}
+      onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'fixed',
         top: pos.top === 'auto' ? 'auto' : pos.top,
@@ -1200,7 +1380,7 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
 
 // ── SortableShootingDay ───────────────────────────────────────────────────────
 
-function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }) {
+function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, columnConfig }) {
   const removeShootingDay = useStore(s => s.removeShootingDay)
   const updateShootingDay = useStore(s => s.updateShootingDay)
   const [collapsed, setCollapsed] = useState(false)
@@ -1447,6 +1627,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark }
                     dayId={day.id}
                     isDark={isDark}
                     projectedTime={projectedTime}
+                    columnConfig={columnConfig}
                   />
                 ))}
                 <DayEndDropZone dayId={day.id} />
@@ -1527,10 +1708,27 @@ export default function ScheduleTab() {
   const addShootingDay = useStore(s => s.addShootingDay)
   const reorderDays = useStore(s => s.reorderDays)
   const applyScheduleDrag = useStore(s => s.applyScheduleDrag)
+  const scheduleColumnConfig = useStore(s => s.scheduleColumnConfig)
+  const setScheduleColumnConfig = useStore(s => s.setScheduleColumnConfig)
 
   const isDark = theme === 'dark'
   const fg = isDark ? '#ddd' : '#111'
   const mutedFg = isDark ? '#666' : '#555'
+
+  const [configPanelOpen, setConfigPanelOpen] = useState(false)
+  const configPanelRef = useRef(null)
+
+  // Close config panel when clicking outside
+  useEffect(() => {
+    if (!configPanelOpen) return
+    const handler = (e) => {
+      if (configPanelRef.current && !configPanelRef.current.contains(e.target)) {
+        setConfigPanelOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [configPanelOpen])
 
   // ── DnD state ───────────────────────────────────────────────────────────────
 
@@ -1716,25 +1914,67 @@ export default function ScheduleTab() {
         </div>
 
         {schedule.length > 0 && (
-          <button
-            onClick={() => addShootingDay()}
-            style={{
-              padding: '7px 16px',
-              fontFamily: 'monospace',
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              border: `1px solid ${isDark ? '#555' : '#bbb'}`,
-              borderRadius: 4,
-              background: 'none',
-              color: fg,
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-          >
-            + Add Day
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            {/* Configure Columns button */}
+            <div ref={configPanelRef} style={{ position: 'relative' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfigPanelOpen(p => !p) }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '7px 12px',
+                  border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
+                  borderRadius: 4,
+                  background: configPanelOpen
+                    ? (isDark ? '#2a2a2a' : '#e4e0d8')
+                    : (isDark ? '#1e1e1e' : '#f0ede4'),
+                  color: mutedFg,
+                  cursor: 'pointer',
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  transition: 'background 0.1s',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
+                </svg>
+                Columns
+              </button>
+
+              {configPanelOpen && (
+                <ScheduleColumnConfigPanel
+                  config={scheduleColumnConfig}
+                  isDark={isDark}
+                  onChange={setScheduleColumnConfig}
+                  onClose={() => setConfigPanelOpen(false)}
+                />
+              )}
+            </div>
+
+            <button
+              onClick={() => addShootingDay()}
+              style={{
+                padding: '7px 16px',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                border: `1px solid ${isDark ? '#555' : '#bbb'}`,
+                borderRadius: 4,
+                background: 'none',
+                color: fg,
+                cursor: 'pointer',
+              }}
+            >
+              + Add Day
+            </button>
+          </div>
         )}
       </div>
 
@@ -1759,6 +1999,7 @@ export default function ScheduleTab() {
                 blocks={getBlocksForDay(day.id)}
                 enrichedBlockMap={enrichedBlockMap}
                 isDark={isDark}
+                columnConfig={scheduleColumnConfig}
               />
             ))}
           </SortableContext>
@@ -1785,6 +2026,7 @@ export default function ScheduleTab() {
                   dayId={null}
                   isDark={isDark}
                   isOverlay
+                  columnConfig={scheduleColumnConfig}
                 />
               )
             ) : null}

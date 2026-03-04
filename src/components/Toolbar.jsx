@@ -14,13 +14,17 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const saveProject = useStore(s => s.saveProject)
   const saveProjectAs = useStore(s => s.saveProjectAs)
   const openProject = useStore(s => s.openProject)
+  const openProjectFromPath = useStore(s => s.openProjectFromPath)
+  const recentProjects = useStore(s => s.recentProjects)
   const newProject = useStore(s => s.newProject)
   const setProjectName = useStore(s => s.setProjectName)
   const [editingName, setEditingName] = useState(false)
   const [pdfMenuOpen, setPdfMenuOpen] = useState(false)
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
+  const [openMenuOpen, setOpenMenuOpen] = useState(false)
   const pdfMenuRef = useRef(null)
   const saveMenuRef = useRef(null)
+  const openMenuRef = useRef(null)
 
   // Extract just the filename from the full path for display
   const fileName = projectPath ? projectPath.split(/[\\/]/).pop() : null
@@ -54,6 +58,18 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [saveMenuOpen])
+
+  // Close Open menu when clicking outside it
+  useEffect(() => {
+    if (!openMenuOpen) return
+    const handler = (e) => {
+      if (openMenuRef.current && !openMenuRef.current.contains(e.target)) {
+        setOpenMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [openMenuOpen])
 
   // The main PDF button always exports based on the current active tab.
   // The chevron opens a menu for explicit storyboard/shotlist/schedule choice.
@@ -130,9 +146,101 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
         <button className="toolbar-btn" onClick={newProject} title="New project">
           New
         </button>
-        <button className="toolbar-btn" onClick={openProject} title="Open .shotlist file">
-          Open
-        </button>
+        {/* Split Open button: left half opens file browser, right half shows recent projects */}
+        <div ref={openMenuRef} style={{ position: 'relative', display: 'flex' }}>
+          <button
+            className="toolbar-btn"
+            onClick={openProject}
+            title="Open .shotlist file"
+            style={recentProjects.length > 0 ? { borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 } : {}}
+          >
+            Open
+          </button>
+          {recentProjects.length > 0 && (
+            <button
+              className="toolbar-btn"
+              onClick={() => setOpenMenuOpen(o => !o)}
+              title="Recent projects"
+              style={{
+                borderRadius: '0 4px 4px 0',
+                borderLeft: '1px solid rgba(255,255,255,0.15)',
+                padding: '4px 6px',
+                fontSize: 9,
+              }}
+            >
+              ▾
+            </button>
+          )}
+
+          {openMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              zIndex: 500,
+              background: '#2a2a2a',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 4,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+              minWidth: 220,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '5px 14px 4px',
+                fontSize: 9,
+                fontFamily: 'monospace',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.35)',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+              }}>
+                Recent Projects
+              </div>
+              {recentProjects.slice(0, 10).map((project, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setOpenMenuOpen(false)
+                    if (window.electronAPI && project.path && project.path !== project.name) {
+                      openProjectFromPath(project.path)
+                    } else {
+                      openProject()
+                    }
+                  }}
+                  title={`${project.shots} shots — ${new Date(project.date).toLocaleDateString()}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    width: '100%',
+                    padding: '7px 14px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                    color: '#e0e0e0',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    overflow: 'hidden',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 20 20" fill="rgba(255,255,255,0.4)" style={{ flexShrink: 0 }}>
+                    <path d="M3 4a1 1 0 011-1h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0116 9.414V17a1 1 0 01-1 1H4a1 1 0 01-1-1V4z" />
+                  </svg>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {project.name}
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.3)', flexShrink: 0, paddingLeft: 8 }}>
+                    {project.shots} shots
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {/* Split Save button: left half saves (silent if path known), right half opens Save As menu */}
         <div ref={saveMenuRef} style={{ position: 'relative', display: 'flex' }}>
           <button

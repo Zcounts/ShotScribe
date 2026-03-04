@@ -1,5 +1,101 @@
-import React from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
+
+const CAMERA_COLORS = [
+  '#4ade80', '#22d3ee', '#facc15', '#f87171', '#60a5fa',
+  '#fb923c', '#c084fc', '#f472b6', '#ffffff', '#9ca3af',
+]
+
+function CameraColorSwatch({ color, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        title="Camera color"
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: 2,
+          background: color || '#9ca3af',
+          border: color ? '1px solid rgba(0,0,0,0.25)' : '1px dashed rgba(0,0,0,0.25)',
+          cursor: 'pointer',
+          padding: 0,
+          flexShrink: 0,
+          display: 'block',
+        }}
+      />
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: '100%',
+            marginTop: 4,
+            zIndex: 100,
+            background: '#fff',
+            border: '1px solid #d1d5db',
+            borderRadius: 6,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            padding: 6,
+          }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 3 }}>
+            {CAMERA_COLORS.map(c => (
+              <button
+                key={c}
+                onClick={() => { onChange(c); setOpen(false) }}
+                title={c}
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 3,
+                  background: c,
+                  border: color === c ? '2px solid #1a1a1a' : '1px solid rgba(0,0,0,0.15)',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              />
+            ))}
+            <button
+              onClick={() => { onChange(null); setOpen(false) }}
+              title="No color"
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: 3,
+                background: 'none',
+                border: '1px dashed #d1d5db',
+                cursor: 'pointer',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 9,
+                color: '#9ca3af',
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function PageHeader({ scene, isContinuation = false, pageNum = 1 }) {
   const updateScene = useStore(s => s.updateScene)
@@ -118,6 +214,10 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1 
         <div className="flex flex-col items-end gap-0.5">
           {cameras.map((cam, idx) => (
             <div key={idx} className="flex items-center gap-1 text-xs font-semibold">
+              <CameraColorSwatch
+                color={cam.color || null}
+                onChange={color => updateCamera(idx, 'color', color)}
+              />
               <input
                 type="text"
                 value={cam.name}
