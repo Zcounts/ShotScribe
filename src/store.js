@@ -83,11 +83,17 @@ function createScene(overrides = {}) {
   }
 }
 
+// Valid shot letters: A-Z excluding I (confused with 1), O (confused with 0), S (confused with 5)
+const VALID_SHOT_LETTERS = 'ABCDEFGHJKLMNPQRTUVWXYZ' // 23 letters
+
 function getShotLetter(index) {
-  if (index < 26) return String.fromCharCode(65 + index)
-  const firstChar = String.fromCharCode(65 + Math.floor(index / 26) - 1)
-  const secondChar = String.fromCharCode(65 + (index % 26))
-  return firstChar + secondChar
+  const n = VALID_SHOT_LETTERS.length // 23
+  if (index < n) return VALID_SHOT_LETTERS[index]
+  // Double-letter format (AA, AB, ...) also skipping I, O, S in both positions
+  const adjusted = index - n
+  const firstIdx = Math.floor(adjusted / n)
+  const secondIdx = adjusted % n
+  return VALID_SHOT_LETTERS[firstIdx] + VALID_SHOT_LETTERS[secondIdx]
 }
 
 const initialScene = createScene({

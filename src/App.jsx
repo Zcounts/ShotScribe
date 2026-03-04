@@ -43,8 +43,27 @@ function SceneSection({
   const getShotsForScene = useStore(s => s.getShotsForScene)
   const addShot = useStore(s => s.addShot)
   const reorderShots = useStore(s => s.reorderShots)
+  const deleteScene = useStore(s => s.deleteScene)
+  const scenes = useStore(s => s.scenes)
 
   const [activeId, setActiveId] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const canDelete = scenes.length > 1
+  const shotCount = scene.shots ? scene.shots.length : 0
+
+  const handleDeleteClick = () => {
+    if (shotCount > 0) {
+      setShowDeleteConfirm(true)
+    } else {
+      deleteScene(scene.id)
+    }
+  }
+
+  const handleConfirmDelete = () => {
+    setShowDeleteConfirm(false)
+    deleteScene(scene.id)
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -103,12 +122,66 @@ function SceneSection({
               />
 
               <div className="page-footer">
+                {/* Delete scene button — lower-left of footer, first page only, subtle trash icon */}
+                {!isContinuation && canDelete && (
+                  <button
+                    className="scene-delete-btn"
+                    onClick={handleDeleteClick}
+                    title="Delete scene"
+                    style={{ position: 'absolute', left: 12 }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
+                )}
                 {globalPageNum}
               </div>
             </div>
           )
         })}
       </SortableContext>
+
+      {/* Confirmation dialog — shown when deleting a scene that has shots */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay" style={{ zIndex: 500 }} onClick={() => setShowDeleteConfirm(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <p style={{ marginBottom: 8, fontFamily: 'monospace', fontSize: 14, fontWeight: 700 }}>
+              Delete scene?
+            </p>
+            <p style={{ marginBottom: 6, fontSize: 13, color: '#333' }}>
+              <strong>{scene.sceneLabel}</strong> — {scene.location}
+            </p>
+            <p style={{ marginBottom: 16, fontSize: 13, color: '#666' }}>
+              This will permanently delete the scene and all{' '}
+              <strong>{shotCount} shot{shotCount !== 1 ? 's' : ''}</strong> within it.
+              This cannot be undone.
+            </p>
+            {shotCount > 0 && (
+              <p style={{ marginBottom: 16, fontSize: 12, color: '#ef4444', background: '#fef2f2', padding: '8px 10px', borderRadius: 4 }}>
+                {shotCount} shot{shotCount !== 1 ? 's' : ''} will be lost, including any schedule blocks referencing {shotCount !== 1 ? 'them' : 'it'}.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{ padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, border: '1px solid #ccc', borderRadius: 4, background: '#fff' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                style={{ padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4 }}
+              >
+                Delete Scene
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DragOverlay>
         {activeShot ? (
