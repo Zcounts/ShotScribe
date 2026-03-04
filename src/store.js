@@ -31,6 +31,16 @@ export const DEFAULT_COLUMN_CONFIG = [
   { key: 'takeNumber',     visible: true },
 ]
 
+export const DEFAULT_SCHEDULE_COLUMN_CONFIG = [
+  { key: 'image',              visible: true,  label: 'Storyboard Image' },
+  { key: 'notes',              visible: true,  label: 'Notes' },
+  { key: 'shootingLocation',   visible: true,  label: 'Shooting Location' },
+  { key: 'castMembers',        visible: true,  label: 'Cast' },
+  { key: 'estimatedShootTime', visible: true,  label: 'Shoot Time' },
+  { key: 'estimatedSetupTime', visible: true,  label: 'Setup Time' },
+  { key: 'projectedTime',      visible: true,  label: 'Estimated Time' },
+]
+
 const DEFAULT_COLOR = '#4ade80'
 
 let shotCounter = 0
@@ -136,6 +146,7 @@ const useStore = create((set, get) => ({
   contextMenu: null, // { shotId, sceneId, x, y }
   activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'schedule'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
+  scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
 
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
@@ -177,6 +188,7 @@ const useStore = create((set, get) => ({
             dayNight: found.shot.dayNight || found.scene.dayNight,
             sceneLabel: found.scene.sceneLabel,
             location: found.scene.location,
+            image: found.shot.image || null,
           } : null,
         }
       }),
@@ -490,6 +502,11 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
+  setScheduleColumnConfig: (config) => {
+    set({ scheduleColumnConfig: config })
+    get()._scheduleAutoSave()
+  },
+
   addCustomColumn: (label, fieldType) => {
     const key = `custom_${Date.now()}`
     const col = { key, label, fieldType: fieldType || 'text' }
@@ -531,7 +548,7 @@ const useStore = create((set, get) => ({
     const {
       projectName, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
-      customColumns, customDropdownOptions, schedule,
+      customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
     } = get()
     return {
       version: 2,
@@ -542,6 +559,7 @@ const useStore = create((set, get) => ({
       autoSave,
       useDropdowns,
       shotlistColumnConfig,
+      scheduleColumnConfig,
       customColumns,
       customDropdownOptions,
       // Scenes and shots are reconstructed field-by-field so that any
@@ -850,6 +868,14 @@ const useStore = create((set, get) => ({
       customDropdownOptions: loadedCustomDropdownOptions,
       scenes,
       schedule: loadedSchedule,
+      scheduleColumnConfig: (() => {
+        const saved = data.scheduleColumnConfig
+        if (!saved || !Array.isArray(saved) || saved.length === 0) return DEFAULT_SCHEDULE_COLUMN_CONFIG
+        // Append any new columns added since the project was saved
+        const savedKeys = new Set(saved.map(c => c.key))
+        const newCols = DEFAULT_SCHEDULE_COLUMN_CONFIG.filter(c => !savedKeys.has(c.key))
+        return [...saved, ...newCols]
+      })(),
       lastSaved: new Date().toISOString(),
     })
   },
