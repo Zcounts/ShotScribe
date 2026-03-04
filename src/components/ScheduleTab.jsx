@@ -266,10 +266,18 @@ function ProjectedTimeBadge({ totalMins, isDark }) {
 // ── ShotBlockContent ──────────────────────────────────────────────────────────
 // Renders the visual content of a single shot block.
 // Used both in the sortable list and in the DragOverlay.
+//
+// Shoot/setup times live on the shot (shot.shootTime / shot.setupTime) so they
+// stay in sync between the Shotlist and Schedule.  Editing them here calls
+// updateShot, not updateShotBlock.
 
 function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, columnConfig }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
+  const updateShot = useStore(s => s.updateShot)
+
+  const [collapsed, setCollapsed] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   const fg = isDark ? '#ddd' : '#111'
   const mutedFg = isDark ? '#666' : '#555'
@@ -295,13 +303,18 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
     }
   }, [dayId, block.id, updateShotBlock])
 
+  // Times live on the shot — edit here updates the shot directly so Shotlist
+  // and Schedule always show the same value.
   const handleShootTimeChange = useCallback((val) => {
-    if (dayId) updateShotBlock(dayId, block.id, { estimatedShootTime: val })
-  }, [dayId, block.id, updateShotBlock])
+    if (block.shotId) updateShot(block.shotId, { shootTime: val })
+  }, [block.shotId, updateShot])
 
   const handleSetupTimeChange = useCallback((val) => {
-    if (dayId) updateShotBlock(dayId, block.id, { estimatedSetupTime: val })
-  }, [dayId, block.id, updateShotBlock])
+    if (block.shotId) updateShot(block.shotId, { setupTime: val })
+  }, [block.shotId, updateShot])
+
+  const shootMins = shotData ? parseMinutes(shotData.shootTime) : 0
+  const setupMins = shotData ? parseMinutes(shotData.setupTime) : 0
 
   return (
     <div style={{
@@ -309,191 +322,291 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       borderRadius: isOverlay ? 6 : 0,
       boxShadow: isOverlay ? '0 8px 28px rgba(0,0,0,0.22)' : 'none',
       borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
-      padding: '10px 14px',
-      display: 'grid',
-      gridTemplateColumns: 'auto 1fr auto',
-      gap: '0 10px',
-      alignItems: 'start',
     }}>
 
-      {/* Drag handle */}
-      <div
-        {...(dragHandleProps || {})}
-        style={{
-          paddingTop: 2,
-          color: mutedFg,
-          cursor: dragHandleProps ? 'grab' : 'default',
-          userSelect: 'none',
-          opacity: isOverlay ? 0 : 1,
-        }}
-      >
-        <DragHandleIcon color={mutedFg} />
-      </div>
+      {/* ── Always-visible header row ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'auto 1fr auto',
+        gap: '0 8px',
+        alignItems: 'center',
+        padding: '8px 12px',
+      }}>
 
-      {/* Main content */}
-      <div style={{ minWidth: 0 }}>
-        {shotData ? (
-          <>
-            {/* Storyboard image (when column enabled) */}
-            {showImage && (
-              <div style={{ marginBottom: 8 }}>
-                {shotData.image ? (
-                  <img
-                    src={shotData.image}
-                    alt=""
-                    style={{
-                      width: 100,
-                      height: 68,
-                      objectFit: 'cover',
-                      borderRadius: 3,
-                      display: 'block',
-                      border: `1px solid ${borderColor}`,
-                    }}
-                  />
-                ) : (
-                  <div style={{
-                    width: 100,
-                    height: 68,
-                    borderRadius: 3,
-                    background: isDark ? '#252525' : '#f0ece4',
-                    border: `1px solid ${borderColor}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={mutedFg} strokeWidth="1.5" opacity="0.5">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21,15 16,10 5,21" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-            )}
+        {/* Drag handle */}
+        <div
+          {...(dragHandleProps || {})}
+          style={{
+            color: mutedFg,
+            cursor: dragHandleProps ? 'grab' : 'default',
+            userSelect: 'none',
+            opacity: isOverlay ? 0 : 1,
+            paddingTop: 1,
+            flexShrink: 0,
+          }}
+        >
+          <DragHandleIcon color={mutedFg} />
+        </div>
 
-            {/* Shot identifier row + projected time */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 7,
-              flexWrap: 'wrap',
-              marginBottom: 3,
-            }}>
-              {/* Projected time badge (before shot ID if start time is set) */}
-              {showProjectedTime && projectedTime !== null && projectedTime !== undefined && !isOverlay && (
-                <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
-              )}
+        {/* Summary info (always visible) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+          {/* Projected time badge */}
+          {showProjectedTime && projectedTime !== null && projectedTime !== undefined && !isOverlay && (
+            <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
+          )}
+          {shotData ? (
+            <>
               <span style={{
                 fontFamily: 'monospace',
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 700,
                 color: fg,
                 flexShrink: 0,
               }}>
                 {shotData.displayId}
               </span>
-              {shotData.subject && (
-                <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{shotData.subject}</span>
+              <span style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: fg,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {shotData.sceneLabel}
+                {shotData.subject ? ` — ${shotData.subject}` : ''}
+              </span>
+              {/* Compact time summary — always visible at a glance */}
+              {shootMins > 0 && (
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: mutedFg, flexShrink: 0 }}>
+                  {formatMins(shootMins)} shoot
+                </span>
+              )}
+              {setupMins > 0 && (
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: mutedFg, flexShrink: 0 }}>
+                  {formatMins(setupMins)} setup
+                </span>
+              )}
+            </>
+          ) : (
+            <span style={{ fontSize: 12, color: '#f87171', fontFamily: 'monospace' }}>
+              Shot deleted — remove this entry
+            </span>
+          )}
+        </div>
+
+        {/* Right controls: collapse toggle + remove */}
+        {!isOverlay && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            {/* Collapse toggle (only for valid shot blocks) */}
+            {shotData && (
+              <button
+                onClick={() => { setCollapsed(c => !c); setConfirmRemove(false) }}
+                onPointerDown={e => e.stopPropagation()}
+                title={collapsed ? 'Expand block' : 'Collapse block'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 20,
+                  height: 20,
+                  border: 'none',
+                  background: 'none',
+                  color: mutedFg,
+                  cursor: 'pointer',
+                  opacity: 0.55,
+                  borderRadius: 3,
+                  padding: 0,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '0.55')}
+              >
+                <ChevronIcon collapsed={collapsed} color={mutedFg} size={10} />
+              </button>
+            )}
+            {/* Remove — shows confirm flow */}
+            {confirmRemove ? null : (
+              <IconButton
+                onClick={() => setConfirmRemove(true)}
+                onPointerDown={e => e.stopPropagation()}
+                title="Remove from schedule"
+                danger
+                small
+              >
+                ✕
+              </IconButton>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Confirmation banner (schedule-remove only) ── */}
+      {!isOverlay && confirmRemove && (
+        <div style={{
+          padding: '7px 12px 7px 34px',
+          background: isDark ? 'rgba(248,113,113,0.08)' : 'rgba(239,68,68,0.05)',
+          borderTop: `1px solid ${isDark ? 'rgba(248,113,113,0.15)' : 'rgba(239,68,68,0.15)'}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          flexWrap: 'wrap',
+        }}>
+          <span style={{
+            fontSize: 11,
+            fontFamily: 'monospace',
+            color: isDark ? '#f87171' : '#dc2626',
+            flex: 1,
+            minWidth: 180,
+          }}>
+            Only removes from the schedule — shot stays in storyboard &amp; shotlist.
+          </span>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <IconButton
+              onClick={() => removeShotBlock(dayId, block.id)}
+              onPointerDown={e => e.stopPropagation()}
+              danger
+              small
+            >
+              Remove
+            </IconButton>
+            <IconButton
+              onClick={() => setConfirmRemove(false)}
+              onPointerDown={e => e.stopPropagation()}
+              small
+            >
+              Cancel
+            </IconButton>
+          </div>
+        </div>
+      )}
+
+      {/* ── Expanded body ── */}
+      {!collapsed && !isOverlay && shotData && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: showImage ? '112px 1fr' : '1fr',
+          gap: 12,
+          padding: '2px 12px 10px 30px',
+        }}>
+
+          {/* Left column: storyboard image */}
+          {showImage && (
+            <div style={{ flexShrink: 0 }}>
+              {shotData.image ? (
+                <img
+                  src={shotData.image}
+                  alt=""
+                  style={{
+                    width: 112,
+                    height: 75,
+                    objectFit: 'cover',
+                    borderRadius: 3,
+                    display: 'block',
+                    border: `1px solid ${borderColor}`,
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: 112,
+                  height: 75,
+                  borderRadius: 3,
+                  background: isDark ? '#252525' : '#f0ece4',
+                  border: `1px solid ${borderColor}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={mutedFg} strokeWidth="1.5" opacity="0.4">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21,15 16,10 5,21" />
+                  </svg>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Right column: structured info */}
+          <div style={{ minWidth: 0 }}>
+            {/* Scene + location with I/E · D/N badges */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
+              <span style={{
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fontWeight: 700,
+                color: fg,
+              }}>
+                {shotData.sceneLabel}
+              </span>
+              {shotData.location && (
+                <span style={{ fontSize: 11, color: mutedFg }}>
+                  {shotData.location}
+                </span>
               )}
               <Badge label={shotData.intOrExt} />
               <Badge label={shotData.dayNight} />
             </div>
 
-            {/* Scene label + location (live from store) */}
-            <div style={{
-              fontSize: 11,
-              fontFamily: 'monospace',
-              color: fg,
-              marginBottom: (showNotes && shotData.notes) ? 3 : 0,
-            }}>
-              {shotData.sceneLabel}
-              {shotData.location ? <span style={{ color: mutedFg }}>{` · ${shotData.location}`}</span> : ''}
-            </div>
-
-            {/* Notes (truncated to 2 lines) */}
+            {/* Notes — italic, visually distinct */}
             {showNotes && shotData.notes && (
               <div style={{
                 fontSize: 11,
-                color: mutedFg,
                 fontStyle: 'italic',
-                overflow: 'hidden',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                marginBottom: 2,
+                color: isDark ? '#888' : '#666',
+                lineHeight: 1.45,
+                marginBottom: 5,
               }}>
                 {shotData.notes}
               </div>
             )}
 
-            {/* Inline-editable schedule fields (not shown in overlay) */}
-            {!isOverlay && (showShootTime || showSetupTime || showLocation || showCast) && (
-              <div style={{ marginTop: 4 }}>
-                {/* Time fields row */}
-                {(showShootTime || showSetupTime) && (
-                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 0 }}>
-                    {showShootTime && (
-                      <InlineField
-                        value={block.estimatedShootTime}
-                        onChange={handleShootTimeChange}
-                        placeholder="—"
-                        isDark={isDark}
-                        label="Shoot (min)"
-                        inputWidth={40}
-                      />
-                    )}
-                    {showSetupTime && (
-                      <InlineField
-                        value={block.estimatedSetupTime}
-                        onChange={handleSetupTimeChange}
-                        placeholder="—"
-                        isDark={isDark}
-                        label="Setup (min)"
-                        inputWidth={40}
-                      />
-                    )}
-                  </div>
-                )}
-                {showLocation && (
-                  <InlineField
-                    value={block.shootingLocation}
-                    onChange={handleLocationChange}
-                    placeholder="Shooting location…"
-                    isDark={isDark}
-                    label="Location"
-                  />
-                )}
-                {showCast && (
-                  <InlineField
-                    value={(block.castMembers || []).join(', ')}
-                    onChange={handleCastChange}
-                    placeholder="Cast (comma-separated)…"
-                    isDark={isDark}
-                    label="Cast"
-                  />
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <span style={{ fontSize: 12, color: '#f87171', fontFamily: 'monospace' }}>
-            Shot deleted — remove this entry
-          </span>
-        )}
-      </div>
-
-      {/* Remove button */}
-      {!isOverlay && (
-        <div style={{ paddingTop: 1 }}>
-          <IconButton
-            onClick={() => removeShotBlock(dayId, block.id)}
-            onPointerDown={e => e.stopPropagation()}
-            title="Remove from schedule"
-            danger
-            small
-          >
-            ✕
-          </IconButton>
+            {/* Editable schedule-specific fields */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {showLocation && (
+                <InlineField
+                  value={block.shootingLocation}
+                  onChange={handleLocationChange}
+                  placeholder="Shooting location…"
+                  isDark={isDark}
+                  label="Location"
+                />
+              )}
+              {showCast && (
+                <InlineField
+                  value={(block.castMembers || []).join(', ')}
+                  onChange={handleCastChange}
+                  placeholder="Cast (comma-separated)…"
+                  isDark={isDark}
+                  label="Cast"
+                />
+              )}
+              {/* Shoot / Setup times — edit here syncs back to the shot */}
+              {(showShootTime || showSetupTime) && (
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: (showLocation || showCast) ? 3 : 0 }}>
+                  {showShootTime && (
+                    <InlineField
+                      value={shotData.shootTime}
+                      onChange={handleShootTimeChange}
+                      placeholder="—"
+                      isDark={isDark}
+                      label="Shoot (min)"
+                      inputWidth={40}
+                    />
+                  )}
+                  {showSetupTime && (
+                    <InlineField
+                      value={shotData.setupTime}
+                      onChange={handleSetupTimeChange}
+                      placeholder="—"
+                      isDark={isDark}
+                      label="Setup (min)"
+                      inputWidth={40}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -716,13 +829,21 @@ function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
 
 // ── DayTotals ─────────────────────────────────────────────────────────────────
 
-function DayTotals({ blocks, isDark }) {
+// enrichedBlockMap: { blockId: shotData } — used to read shoot/setup times from
+// the shot (canonical source) rather than the legacy block fields.
+function DayTotals({ blocks, isDark, enrichedBlockMap }) {
   if (blocks.length === 0) return null
 
   const shotBlocks = blocks.filter(b => b.type !== 'break')
   const breakBlocks = blocks.filter(b => b.type === 'break')
-  const totalShootMins = shotBlocks.reduce((sum, b) => sum + parseMinutes(b.estimatedShootTime), 0)
-  const totalSetupMins = shotBlocks.reduce((sum, b) => sum + parseMinutes(b.estimatedSetupTime), 0)
+  const totalShootMins = shotBlocks.reduce((sum, b) => {
+    const sd = enrichedBlockMap && enrichedBlockMap[b.id]
+    return sum + parseMinutes(sd ? sd.shootTime : b.estimatedShootTime)
+  }, 0)
+  const totalSetupMins = shotBlocks.reduce((sum, b) => {
+    const sd = enrichedBlockMap && enrichedBlockMap[b.id]
+    return sum + parseMinutes(sd ? sd.setupTime : b.estimatedSetupTime)
+  }, 0)
   const totalBreakMins = breakBlocks.reduce((sum, b) => sum + parseMinutes(b.breakDuration), 0)
   const totalMins = totalShootMins + totalSetupMins + totalBreakMins
 
@@ -1402,7 +1523,8 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
   const shotCount = blocks.filter(b => b.type !== 'break').length
   const breakCount = blocks.filter(b => b.type === 'break').length
 
-  // Calculate cumulative projected times for each block (if start time is set)
+  // Calculate cumulative projected times for each block (if start time is set).
+  // Shoot/setup times come from the enriched shot data (canonical source).
   const startMins = parseStartTime(day.startTime)
   let cumulativeMins = 0
   const blockProjections = blocks.map(block => {
@@ -1410,7 +1532,10 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
     if (block.type === 'break') {
       cumulativeMins += parseMinutes(block.breakDuration)
     } else {
-      cumulativeMins += parseMinutes(block.estimatedShootTime) + parseMinutes(block.estimatedSetupTime)
+      const sd = enrichedBlockMap[block.id]
+      const shootT = sd ? sd.shootTime : block.estimatedShootTime
+      const setupT = sd ? sd.setupTime : block.estimatedSetupTime
+      cumulativeMins += parseMinutes(shootT) + parseMinutes(setupT)
     }
     return { block, projectedTime }
   })
@@ -1636,7 +1761,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
           </SortableContext>
 
           {/* Day totals */}
-          <DayTotals blocks={blocks} isDark={isDark} />
+          <DayTotals blocks={blocks} isDark={isDark} enrichedBlockMap={enrichedBlockMap} />
 
           {/* Add shot footer */}
           <AddShotFooter

@@ -81,11 +81,14 @@ function buildStoryboardPrintHtml() {
 
     const cameras = scene.cameras || [{ name: 'Camera 1', body: 'fx30' }]
     const cameraStr = cameras.map(c => `${escapeHtml(c.name)} = ${escapeHtml(c.body)}`).join(' &middot; ')
-    const notesHtml = scene.pageNotes
-      ? `<div class="pg-notes">${escapeHtml(scene.pageNotes)}</div>`
-      : ''
 
     groups.forEach((pageShots, pageIdx) => {
+      // Per-page notes: use pageNotesPerPage[pageIdx] if available, fall back to
+      // the legacy pageNotes field (for projects saved before this feature).
+      const pageNotes = (scene.pageNotesPerPage && scene.pageNotesPerPage[pageIdx]) || ''
+      const notesHtml = pageNotes
+        ? `<div class="pg-notes">${escapeHtml(pageNotes)}</div>`
+        : ''
       const isContinuation = pageIdx > 0
       const continuationHtml = isContinuation
         ? `<span class="continuation">(CONTINUED &mdash; PAGE ${pageIdx + 1})</span>`

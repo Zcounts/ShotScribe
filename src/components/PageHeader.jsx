@@ -193,11 +193,15 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1 
         )}
       </div>
 
-      {/* Center: Notes block */}
+      {/* Center: Per-page notes (independent for each page of this scene) */}
       <div className="text-xs leading-relaxed border-l border-r border-gray-200 px-4">
         <textarea
-          value={scene.pageNotes}
-          onChange={e => set({ pageNotes: e.target.value })}
+          value={(scene.pageNotesPerPage && scene.pageNotesPerPage[pageNum - 1]) || ''}
+          onChange={e => {
+            const updated = [...(scene.pageNotesPerPage || [])]
+            updated[pageNum - 1] = e.target.value
+            set({ pageNotesPerPage: updated })
+          }}
           className="w-full border-none outline-none resize-none text-xs leading-relaxed bg-transparent font-sans"
           rows={3}
           placeholder="*NOTE: &#10;*SHOOT ORDER: "
