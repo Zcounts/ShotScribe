@@ -109,6 +109,7 @@ function SceneSection({
                 scene={scene}
                 isContinuation={isContinuation}
                 pageNum={pageIdx + 1}
+                pageIndex={pageIdx}
               />
 
               <ShotGrid
