@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useMemo, useRef, useEffect, useLayoutEffect } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -617,11 +617,25 @@ function DayTotals({ blocks, isDark }) {
 
 // ── ShotPickerPanel ───────────────────────────────────────────────────────────
 
-function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
+function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) {
   const scenes = useStore(s => s.scenes)
   const getShotsForScene = useStore(s => s.getShotsForScene)
   const addShotBlock = useStore(s => s.addShotBlock)
   const panelRef = useRef(null)
+  const [pos, setPos] = useState({ top: 'auto', bottom: 'auto', left: 0 })
+
+  // Compute fixed position from anchor element so the panel isn't clipped by overflow containers
+  useLayoutEffect(() => {
+    if (!anchorEl) return
+    const rect = anchorEl.getBoundingClientRect()
+    const panelMaxH = 340
+    const spaceAbove = rect.top
+    if (spaceAbove >= panelMaxH + 8) {
+      setPos({ bottom: window.innerHeight - rect.top + 4, top: 'auto', left: rect.left })
+    } else {
+      setPos({ top: rect.bottom + 4, bottom: 'auto', left: rect.left })
+    }
+  }, [anchorEl])
 
   useEffect(() => {
     const handler = (e) => {
@@ -637,6 +651,13 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
+  // Close if user scrolls (panel position would become stale)
+  useEffect(() => {
+    const handler = () => onClose()
+    window.addEventListener('scroll', handler, true)
+    return () => window.removeEventListener('scroll', handler, true)
+  }, [onClose])
+
   const bg = isDark ? '#1e1e1e' : '#fff'
   const borderColor = isDark ? '#333' : '#d4cfc6'
   const fg = isDark ? '#ddd' : '#1a1a1a'
@@ -650,10 +671,11 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose }) {
     <div
       ref={panelRef}
       style={{
-        position: 'absolute',
-        bottom: 'calc(100% + 4px)',
-        left: 0,
-        zIndex: 200,
+        position: 'fixed',
+        top: pos.top === 'auto' ? 'auto' : pos.top,
+        bottom: pos.bottom === 'auto' ? 'auto' : pos.bottom,
+        left: pos.left,
+        zIndex: 1000,
         width: 380,
         maxWidth: 'calc(100vw - 48px)',
         background: bg,
@@ -917,11 +939,25 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
 
 const BREAK_PRESETS = ['Lunch', 'Company Move', '10-1', 'Meal Penalty', 'Camera Reload', 'Lighting Reset']
 
-function BreakPickerPanel({ dayId, isDark, onClose }) {
+function BreakPickerPanel({ dayId, isDark, onClose, anchorEl }) {
   const addBreakBlock = useStore(s => s.addBreakBlock)
   const [name, setName] = useState('Lunch')
   const [duration, setDuration] = useState('30')
   const panelRef = useRef(null)
+  const [pos, setPos] = useState({ top: 'auto', bottom: 'auto', left: 0 })
+
+  // Compute fixed position from anchor element so the panel isn't clipped by overflow containers
+  useLayoutEffect(() => {
+    if (!anchorEl) return
+    const rect = anchorEl.getBoundingClientRect()
+    const panelEstH = 280
+    const spaceAbove = rect.top
+    if (spaceAbove >= panelEstH + 8) {
+      setPos({ bottom: window.innerHeight - rect.top + 4, top: 'auto', left: rect.left })
+    } else {
+      setPos({ top: rect.bottom + 4, bottom: 'auto', left: rect.left })
+    }
+  }, [anchorEl])
 
   useEffect(() => {
     const handler = (e) => { if (panelRef.current && !panelRef.current.contains(e.target)) onClose() }
@@ -933,6 +969,13 @@ function BreakPickerPanel({ dayId, isDark, onClose }) {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  // Close if user scrolls (panel position would become stale)
+  useEffect(() => {
+    const handler = () => onClose()
+    window.addEventListener('scroll', handler, true)
+    return () => window.removeEventListener('scroll', handler, true)
   }, [onClose])
 
   const handleAdd = useCallback(() => {
@@ -950,10 +993,11 @@ function BreakPickerPanel({ dayId, isDark, onClose }) {
     <div
       ref={panelRef}
       style={{
-        position: 'absolute',
-        bottom: 'calc(100% + 4px)',
-        left: 0,
-        zIndex: 200,
+        position: 'fixed',
+        top: pos.top === 'auto' ? 'auto' : pos.top,
+        bottom: pos.bottom === 'auto' ? 'auto' : pos.bottom,
+        left: pos.left,
+        zIndex: 1000,
         width: 300,
         maxWidth: 'calc(100vw - 48px)',
         background: bg,
@@ -1086,6 +1130,8 @@ function BreakPickerPanel({ dayId, isDark, onClose }) {
 function AddShotFooter({ dayId, existingShotIds, isDark }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [breakPickerOpen, setBreakPickerOpen] = useState(false)
+  const shotBtnRef = useRef(null)
+  const breakBtnRef = useRef(null)
 
   const borderColor = isDark ? '#2a2a2a' : '#e5e0d8'
   const fg = isDark ? '#ccc' : '#333'
@@ -1111,7 +1157,6 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
     <div style={{
       padding: '8px 14px',
       borderTop: `1px solid ${borderColor}`,
-      position: 'relative',
     }}>
       {pickerOpen && (
         <ShotPickerPanel
@@ -1119,6 +1164,7 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
           existingShotIds={existingShotIds}
           isDark={isDark}
           onClose={() => setPickerOpen(false)}
+          anchorEl={shotBtnRef.current}
         />
       )}
       {breakPickerOpen && (
@@ -1126,10 +1172,12 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
           dayId={dayId}
           isDark={isDark}
           onClose={() => setBreakPickerOpen(false)}
+          anchorEl={breakBtnRef.current}
         />
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button
+          ref={shotBtnRef}
           onClick={() => { setPickerOpen(p => !p); setBreakPickerOpen(false) }}
           style={btnStyle(pickerOpen)}
         >
@@ -1138,6 +1186,7 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
           <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{pickerOpen ? '▲' : '▼'}</span>
         </button>
         <button
+          ref={breakBtnRef}
           onClick={() => { setBreakPickerOpen(p => !p); setPickerOpen(false) }}
           style={btnStyle(breakPickerOpen)}
         >

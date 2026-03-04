@@ -38,8 +38,9 @@
     position: relative;
   }
 
-  /* Page footer (page number) */
+  /* Page footer (page number + scene delete button) */
   .page-footer {
+    position: relative;
     text-align: center;
     padding: 10px 0 8px;
     font-size: 12px;
