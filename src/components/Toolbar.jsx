@@ -412,6 +412,27 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
               >
                 Export Schedule PDF
               </button>
+              <button
+                onClick={() => handlePdfExplicit('all')}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  borderTop: '2px solid rgba(255,255,255,0.15)',
+                  color: '#93c5fd',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontWeight: 600,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Export All…
+              </button>
             </div>
           )}
         </div>
