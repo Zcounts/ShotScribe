@@ -5,6 +5,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const projectName = useStore(s => s.projectName)
   const projectPath = useStore(s => s.projectPath)
   const lastSaved = useStore(s => s.lastSaved)
+  const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
   const autoSave = useStore(s => s.autoSave)
   const scenes = useStore(s => s.scenes)
   const activeTab = useStore(s => s.activeTab)
@@ -22,6 +23,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const [pdfMenuOpen, setPdfMenuOpen] = useState(false)
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
+  const [unsavedDialog, setUnsavedDialog] = useState(null) // { action: fn }
   const pdfMenuRef = useRef(null)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
@@ -70,6 +72,15 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [openMenuOpen])
+
+  // Guard that shows unsaved-changes dialog before running an action
+  const guardUnsaved = (action) => {
+    if (hasUnsavedChanges) {
+      setUnsavedDialog({ action })
+    } else {
+      action()
+    }
+  }
 
   // The main PDF button always exports based on the current active tab.
   // The chevron opens a menu for explicit storyboard/shotlist/schedule choice.
@@ -143,14 +154,14 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
 
       {/* Center: File operations */}
       <div className="flex items-center gap-2">
-        <button className="toolbar-btn" onClick={newProject} title="New project">
+        <button className="toolbar-btn" onClick={() => guardUnsaved(newProject)} title="New project">
           New
         </button>
         {/* Split Open button: left half opens file browser, right half shows recent projects */}
         <div ref={openMenuRef} style={{ position: 'relative', display: 'flex' }}>
           <button
             className="toolbar-btn"
-            onClick={openProject}
+            onClick={() => guardUnsaved(openProject)}
             title="Open .shotlist file"
             style={recentProjects.length > 0 ? { borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 } : {}}
           >
@@ -202,9 +213,9 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                   onClick={() => {
                     setOpenMenuOpen(false)
                     if (window.electronAPI && project.path && project.path !== project.name) {
-                      openProjectFromPath(project.path)
+                      guardUnsaved(() => openProjectFromPath(project.path))
                     } else {
-                      openProject()
+                      guardUnsaved(openProject)
                     }
                   }}
                   title={`${project.shots} shots — ${new Date(project.date).toLocaleDateString()}`}
@@ -415,6 +426,83 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
           </svg>
         </button>
       </div>
+
+      {/* Unsaved changes dialog */}
+      {unsavedDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 9000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => setUnsavedDialog(null)}
+        >
+          <div
+            style={{
+              background: '#1e1e1e',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 8,
+              padding: '24px 28px',
+              maxWidth: 360,
+              width: '100%',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#e0e0e0', margin: '0 0 6px', fontFamily: 'inherit' }}>
+              Unsaved Changes
+            </p>
+            <p style={{ fontSize: 12, color: '#aaa', margin: '0 0 20px', fontFamily: 'inherit', lineHeight: 1.5 }}>
+              You have unsaved changes. Do you want to save before continuing?
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setUnsavedDialog(null)}
+                style={{
+                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
+                  background: 'none', border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 4, color: '#aaa', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const action = unsavedDialog.action
+                  setUnsavedDialog(null)
+                  action()
+                }}
+                style={{
+                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
+                  background: 'none', border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 4, color: '#f87171', cursor: 'pointer',
+                }}
+              >
+                Discard Changes
+              </button>
+              <button
+                onClick={async () => {
+                  const action = unsavedDialog.action
+                  setUnsavedDialog(null)
+                  await saveProject()
+                  action()
+                }}
+                style={{
+                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
+                  background: '#3b82f6', border: 'none',
+                  borderRadius: 4, color: '#fff', cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
