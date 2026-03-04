@@ -97,10 +97,22 @@ function CameraColorSwatch({ color, onChange }) {
   )
 }
 
-export default function PageHeader({ scene, isContinuation = false, pageNum = 1 }) {
+export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0 }) {
   const updateScene = useStore(s => s.updateScene)
 
   const set = (updates) => updateScene(scene.id, updates)
+
+  // Per-page notes: pageNotes is stored as an array (one element per page).
+  // Legacy projects saved it as a plain string — treat that as page 0.
+  const pageNotesArray = Array.isArray(scene.pageNotes) ? scene.pageNotes : [scene.pageNotes || '']
+  const currentPageNotes = pageNotesArray[pageIndex] || ''
+
+  const setPageNotes = (val) => {
+    const updated = [...pageNotesArray]
+    while (updated.length <= pageIndex) updated.push('')
+    updated[pageIndex] = val
+    set({ pageNotes: updated })
+  }
 
   const cycleIntExt = () => {
     const next = { INT: 'EXT', EXT: 'INT/EXT', 'INT/EXT': 'INT' }
@@ -193,11 +205,11 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1 
         )}
       </div>
 
-      {/* Center: Notes block */}
+      {/* Center: Notes block (per-page) */}
       <div className="text-xs leading-relaxed border-l border-r border-gray-200 px-4">
         <textarea
-          value={scene.pageNotes}
-          onChange={e => set({ pageNotes: e.target.value })}
+          value={currentPageNotes}
+          onChange={e => setPageNotes(e.target.value)}
           className="w-full border-none outline-none resize-none text-xs leading-relaxed bg-transparent font-sans"
           rows={3}
           placeholder="*NOTE: &#10;*SHOOT ORDER: "

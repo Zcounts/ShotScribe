@@ -87,7 +87,7 @@ function createScene(overrides = {}) {
     intOrExt: 'INT',
     dayNight: 'DAY',
     cameras: [{ name: 'Camera 1', body: 'fx30' }],
-    pageNotes: '*NOTE: \n*SHOOT ORDER: ',
+    pageNotes: ['*NOTE: \n*SHOOT ORDER: '],
     shots: [],
     ...overrides,
   }
@@ -189,6 +189,9 @@ const useStore = create((set, get) => ({
             sceneLabel: found.scene.sceneLabel,
             location: found.scene.location,
             image: found.shot.image || null,
+            // Shared time fields — source of truth lives on the shot
+            shootTime: found.shot.shootTime || '',
+            setupTime: found.shot.setupTime || '',
           } : null,
         }
       }),
@@ -388,6 +391,11 @@ const useStore = create((set, get) => ({
       scenes: state.scenes.map(s => ({
         ...s,
         shots: s.shots.filter(sh => sh.id !== shotId),
+      })),
+      // Also remove any schedule blocks that reference the deleted shot
+      schedule: state.schedule.map(day => ({
+        ...day,
+        shotBlocks: day.shotBlocks.filter(b => b.shotId !== shotId),
       })),
     }))
     get()._scheduleAutoSave()
@@ -601,7 +609,8 @@ const useStore = create((set, get) => ({
           intOrExt: scene.intOrExt,
           dayNight: scene.dayNight,
           cameras: scene.cameras,
-          pageNotes: scene.pageNotes,
+          // pageNotes is stored as an array (one entry per storyboard page)
+          pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes : [scene.pageNotes || ''],
           shots,
         }
       }),
@@ -787,7 +796,10 @@ const useStore = create((set, get) => ({
         intOrExt: scene.intOrExt || 'INT',
         dayNight: scene.dayNight || 'DAY',
         cameras: scene.cameras || [{ name: scene.cameraName || 'Camera 1', body: scene.cameraBody || 'fx30' }],
-        pageNotes: scene.pageNotes || '',
+        // Migrate string pageNotes (legacy) to array format
+        pageNotes: Array.isArray(scene.pageNotes)
+          ? scene.pageNotes
+          : [scene.pageNotes || ''],
         shots: (scene.shots || []).map(s => mapShot(s, scene.intOrExt, scene.dayNight)),
       }))
     } else {
@@ -799,7 +811,7 @@ const useStore = create((set, get) => ({
         intOrExt: data.intOrExt || 'INT',
         dayNight: data.dayNight || 'DAY',
         cameras: [{ name: data.cameraName || 'Camera 1', body: data.cameraBody || 'fx30' }],
-        pageNotes: data.pageNotes || '',
+        pageNotes: Array.isArray(data.pageNotes) ? data.pageNotes : [data.pageNotes || ''],
         shots: (data.shots || []).map(s => mapShot(s, data.intOrExt, data.dayNight)),
       })]
     }
