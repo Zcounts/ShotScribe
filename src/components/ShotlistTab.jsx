@@ -37,6 +37,8 @@ const BUILTIN_COLUMNS = [
   { key: 'specs.move',     label: 'MOVEMENT',           width: 96,  type: 'dropdown', options: MOVE_OPTIONS,  customOptionsField: 'move'  },
   { key: 'specs.size',     label: 'COVERAGE',           width: 110, type: 'dropdown', options: SIZE_OPTIONS,  customOptionsField: 'size'  },
   { key: 'notes',          label: 'NOTES',              width: 160, type: 'textarea' },
+  { key: 'sound',          label: 'SOUND',              width: 100, type: 'text' },
+  { key: 'props',          label: 'PROPS',              width: 100, type: 'text' },
   { key: 'scriptTime',     label: 'SCRIPT TIME',        width: 84,  type: 'text' },
   { key: 'setupTime',      label: 'SETUP TIME',         width: 84,  type: 'text' },
   { key: 'predictedTakes', label: 'PREDIC# OF TAKES',  width: 104, type: 'text' },
@@ -669,6 +671,41 @@ function ColumnConfigPanel({ config, isDark, onChange, onClose, customColumns, o
   )
 }
 
+// ── ColResizeHandle ───────────────────────────────────────────────────────────
+function ColResizeHandle({ colKey, width, isDark, onResizeStart }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onMouseDown={e => onResizeStart(e, colKey, width)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'absolute',
+        right: -7,
+        top: 0,
+        bottom: 0,
+        width: 8,
+        cursor: 'col-resize',
+        zIndex: 2,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      title="Drag to resize column"
+    >
+      <div style={{
+        width: 2,
+        height: '60%',
+        borderRadius: 1,
+        background: isDark ? '#555' : '#a09a92',
+        opacity: hovered ? 1 : 0,
+        transition: 'opacity 0.12s',
+        pointerEvents: 'none',
+      }} />
+    </div>
+  )
+}
+
 // ── SortableShotRow ───────────────────────────────────────────────────────────
 function SortableShotRow({
   shot, shotIndex, scene, visibleColumns,
@@ -885,9 +922,37 @@ export default function ShotlistTab({ containerRef }) {
   const customColumns           = useStore(s => s.customColumns)
   const addCustomColumn         = useStore(s => s.addCustomColumn)
   const removeCustomColumn      = useStore(s => s.removeCustomColumn)
+  const shotlistColumnWidths    = useStore(s => s.shotlistColumnWidths)
+  const setShotlistColumnWidth  = useStore(s => s.setShotlistColumnWidth)
   const isDark = theme === 'dark'
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
+
+  // ── Column resize state ────────────────────────────────────────────────────
+  // Track active resize: { key, startX, startWidth }
+  const resizingRef = useRef(null)
+
+  const handleResizeStart = useCallback((e, colKey, currentWidth) => {
+    e.preventDefault()
+    e.stopPropagation()
+    resizingRef.current = { key: colKey, startX: e.clientX, startWidth: currentWidth }
+
+    const onMouseMove = (me) => {
+      if (!resizingRef.current) return
+      const delta = me.clientX - resizingRef.current.startX
+      const newWidth = Math.max(40, resizingRef.current.startWidth + delta)
+      setShotlistColumnWidth(resizingRef.current.key, newWidth)
+    }
+
+    const onMouseUp = () => {
+      resizingRef.current = null
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }, [setShotlistColumnWidth])
 
   // Shared sensors for row drag-and-drop (one per scene DndContext).
   // distance: 8 means the pointer must move 8px before drag activates,
@@ -914,13 +979,18 @@ export default function ShotlistTab({ containerRef }) {
     return map
   }, [customColumns])
 
-  // Compute visible columns in config order
+  // Compute visible columns in config order, applying any user-set width overrides
   const visibleColumns = useMemo(() => {
     return (shotlistColumnConfig || [])
       .filter(c => c.visible)
-      .map(c => allColumnsMap[c.key])
+      .map(c => {
+        const col = allColumnsMap[c.key]
+        if (!col) return null
+        const overrideWidth = shotlistColumnWidths?.[col.key]
+        return overrideWidth != null ? { ...col, width: overrideWidth } : col
+      })
       .filter(Boolean)
-  }, [shotlistColumnConfig, allColumnsMap])
+  }, [shotlistColumnConfig, allColumnsMap, shotlistColumnWidths])
 
   const totalTableWidth = DRAG_COL_WIDTH + visibleColumns.reduce((sum, col) => sum + col.width, 0)
 
@@ -1084,9 +1154,15 @@ export default function ShotlistTab({ containerRef }) {
                     whiteSpace: 'nowrap',
                     userSelect: 'none',
                     overflow: 'hidden',
+                    // Make room for the resize handle
+                    paddingRight: col.type === 'checkbox' ? 0 : 14,
                   }}
                 >
-                  {col.label}
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{col.label}</span>
+                    {/* Resize handle */}
+                    <ColResizeHandle colKey={col.key} width={col.width} isDark={isDark} onResizeStart={handleResizeStart} />
+                  </div>
                 </th>
               ))}
             </tr>
