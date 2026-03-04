@@ -80,7 +80,10 @@ function buildStoryboardPrintHtml() {
       : [[]]
 
     const cameras = scene.cameras || [{ name: 'Camera 1', body: 'fx30' }]
-    const cameraStr = cameras.map(c => `${escapeHtml(c.name)} = ${escapeHtml(c.body)}`).join(' &middot; ')
+    const cameraHtml = cameras.map(c => {
+      const swatchColor = escapeHtml(c.color || '#4ade80')
+      return `<span class="hdr-cam-row"><span class="cam-swatch" style="background:${swatchColor};"></span>${escapeHtml(c.name)} = ${escapeHtml(c.body || '')}</span>`
+    }).join('\n')
     const notesHtml = scene.pageNotes
       ? `<div class="pg-notes">${escapeHtml(scene.pageNotes)}</div>`
       : ''
@@ -131,7 +134,7 @@ function buildStoryboardPrintHtml() {
       ${notesHtml}
     </div>
     <div class="hdr-right">
-      <span class="hdr-cam">${cameraStr}</span>
+      <div class="hdr-cam">${cameraHtml}</div>
     </div>
   </div>
   <div class="card-grid cols-${cols}">
@@ -162,7 +165,7 @@ html, body {
 }
 .page-doc {
   width: 100%;
-  height: 193mm;
+  height: 188mm;
   display: flex;
   flex-direction: column;
   break-after: page;
@@ -199,11 +202,27 @@ html, body {
 .hdr-center { text-align: center; }
 .hdr-right { text-align: right; }
 .hdr-cam {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.hdr-cam-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 8pt;
   font-weight: 600;
   font-family: monospace;
   color: #555;
-  display: block;
+}
+.cam-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  border: 0.5px solid rgba(0,0,0,0.2);
 }
 .pg-notes {
   font-size: 7pt;
@@ -561,7 +580,6 @@ html, body {
 }
 .day-section {
   margin-bottom: 18px;
-  break-inside: avoid;
 }
 .day-header {
   display: flex;
@@ -1279,6 +1297,121 @@ export async function exportToPNG(pageRefs) {
   }
 }
 
+// ── Combined export HTML builder ──────────────────────────────────────────────
+// Strips @page rules (including nested @bottom-* rules) from a CSS string so
+// we can replace them with named-page rules for the combined document.
+function _stripPageRules(css) {
+  let result = ''
+  let i = 0
+  while (i < css.length) {
+    const idx = css.indexOf('@page', i)
+    if (idx === -1) { result += css.slice(i); break }
+    result += css.slice(i, idx)
+    const openIdx = css.indexOf('{', idx)
+    if (openIdx === -1) { result += css.slice(idx); break }
+    let depth = 1
+    let j = openIdx + 1
+    while (j < css.length && depth > 0) {
+      if (css[j] === '{') depth++
+      else if (css[j] === '}') depth--
+      j++
+    }
+    i = j
+  }
+  return result
+}
+
+function buildCombinedPrintHtml() {
+  const { projectName } = useStore.getState()
+
+  const sbHtml = buildStoryboardPrintHtml()
+  const slHtml = buildShotlistPrintHtml()
+  const scHtml = buildSchedulePrintHtml()
+
+  const extractStyle = (html) => { const m = html.match(/<style>([\s\S]*?)<\/style>/); return m ? m[1] : '' }
+  const extractBody  = (html) => { const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/); return m ? m[1].trim() : '' }
+
+  const sbCss = _stripPageRules(extractStyle(sbHtml))
+  const slCss = _stripPageRules(extractStyle(slHtml))
+  const scCss = _stripPageRules(extractStyle(scHtml))
+
+  const sbBody = extractBody(sbHtml)
+  const slBody = extractBody(slHtml)
+  const scBody = extractBody(scHtml)
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(projectName || 'Untitled')} — Complete Export</title>
+<style>
+/* Named pages handle orientation per section */
+@page sb-page { size: A4 landscape; margin: 8mm 10mm 14mm; }
+@page sl-page { size: A4 landscape; margin: 12mm 10mm 14mm; }
+@page sc-page { size: A4; margin: 12mm 12mm 14mm; }
+@media print { html, body { margin: 0; } }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #fff; color: #111; }
+.combined-storyboard { page: sb-page; }
+.combined-shotlist   { page: sl-page; break-before: page; page-break-before: always; }
+.combined-schedule   { page: sc-page; break-before: page; page-break-before: always; }
+/* Per-section styles */
+${sbCss}
+${slCss}
+${scCss}
+</style>
+</head>
+<body>
+<div class="combined-storyboard">
+${sbBody}
+</div>
+<div class="combined-shotlist">
+${slBody}
+</div>
+<div class="combined-schedule">
+${scBody}
+</div>
+</body>
+</html>`
+}
+
+export async function exportAllCombinedPDF(projectName) {
+  try {
+    const html = buildCombinedPrintHtml()
+    if (window.electronAPI?.printToPDF) {
+      await exportViaPrint(html, projectName, 'complete')
+    } else {
+      const win = window.open('', '_blank', 'width=900,height=700')
+      if (!win) {
+        const blob = new Blob([html], { type: 'text/html' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${(projectName || 'export').replace(/[^a-z0-9]/gi, '_')}_complete.html`
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        return
+      }
+      win.document.write(html); win.document.close()
+      setTimeout(() => { win.focus(); win.print() }, 500)
+    }
+  } catch (err) {
+    console.error('[PDF Export] Combined export failed:', err)
+    _handleExportError(err)
+  }
+}
+
+export async function exportAllSeparatePDFs(pageRefs, shotlistRef, projectName) {
+  try {
+    await exportStoryboardPDF(pageRefs, projectName)
+    await exportShotlistPDF(shotlistRef, projectName)
+    await exportSchedulePDF(projectName)
+  } catch (err) {
+    console.error('[PDF Export] Export All (separate) failed:', err)
+    _handleExportError(err)
+  }
+}
+
 function _handleExportError(err) {
   const raw = err?.message || String(err) || 'Unknown error'
   let msg = `PDF export failed: ${raw}`
@@ -1300,11 +1433,12 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
 
   if (!isOpen) return null
 
-  const isSchedule = activeTab === 'schedule'
-  const isShotlist = activeTab === 'shotlist'
-  const isStoryboard = !isSchedule && !isShotlist
+  const isAll       = activeTab === 'all'
+  const isSchedule  = activeTab === 'schedule'
+  const isShotlist  = activeTab === 'shotlist'
+  const isStoryboard = !isAll && !isSchedule && !isShotlist
 
-  const tabLabel = isSchedule ? 'Schedule' : isShotlist ? 'Shotlist' : 'Storyboard'
+  const tabLabel = isSchedule ? 'Schedule' : isShotlist ? 'Shotlist' : isAll ? 'All' : 'Storyboard'
 
   const handleExportPDF = async (forceTab) => {
     const tab = forceTab ?? activeTab
@@ -1315,6 +1449,10 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
         await exportShotlistPDF(shotlistRef, projectName)
       } else if (tab === 'schedule') {
         await exportSchedulePDF(projectName)
+      } else if (tab === 'all-combined') {
+        await exportAllCombinedPDF(projectName)
+      } else if (tab === 'all-separate') {
+        await exportAllSeparatePDFs(pageRefs, shotlistRef, projectName)
       } else {
         await exportStoryboardPDF(pageRefs, projectName)
       }
@@ -1338,6 +1476,49 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   }
 
   const pageCount = (pageRefs?.current || []).filter(Boolean).length
+
+  // ── Export All dialog ──────────────────────────────────────────────────────
+  if (isAll) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold">Export All</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="5" y1="5" x2="15" y2="15" /><line x1="15" y1="5" x2="5" y2="15" />
+              </svg>
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 mb-5">
+            Export the storyboard, shotlist, and schedule as PDFs. Choose how you'd like to save them.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleExportPDF('all-combined')}
+              disabled={exporting}
+              className="flex-1 py-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors text-left px-4"
+            >
+              <div style={{ fontSize: 15, marginBottom: 4 }}>
+                {exporting && exportType === 'pdf-all-combined' ? 'Exporting…' : 'One Combined PDF'}
+              </div>
+              <div className="text-xs font-normal opacity-75">All three documents in a single file</div>
+            </button>
+            <button
+              onClick={() => handleExportPDF('all-separate')}
+              disabled={exporting}
+              className="flex-1 py-4 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800 disabled:opacity-50 transition-colors text-left px-4"
+            >
+              <div style={{ fontSize: 15, marginBottom: 4 }}>
+                {exporting && exportType === 'pdf-all-separate' ? 'Exporting…' : 'Separate PDFs'}
+              </div>
+              <div className="text-xs font-normal opacity-75">Three individual PDF files, one per document</div>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
