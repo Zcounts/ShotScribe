@@ -725,12 +725,7 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
   }
 
   const updateRow = (id, field, value) => {
-    const row = cast.find(r => r.id === id)
     onUpdate({ cast: cast.map(r => r.id === id ? { ...r, [field]: value } : r) })
-    // If this row came from the roster and we changed name or character, prompt to update roster
-    if (row?.rosterId && (field === 'name' || field === 'character')) {
-      setUpdatePrompt({ rowId: id, field, value, rosterId: row.rosterId })
-    }
   }
 
   const handleUpdateRoster = () => {
@@ -746,14 +741,23 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
     onUpdate({ cast: cast.filter(r => r.id !== id) })
   }
 
-  // When a row's name or character is blurred and the row has no rosterId, save to roster
+  // When a row's name or character is blurred, either save new member to roster silently
+  // or prompt to update an existing roster member if their details have changed.
   const handleBlurSaveToRoster = (row) => {
     if (!row.name) return
-    if (row.rosterId) return // already in roster; update handled separately
-    castIdCounter++
-    const rosterId = `croster_${Date.now()}_${castIdCounter}`
-    upsertCastRosterEntry({ id: rosterId, name: row.name, character: row.character || '' })
-    onUpdate({ cast: cast.map(r => r.id === row.id ? { ...r, rosterId } : r) })
+    if (!row.rosterId) {
+      // New member: save silently to the roster
+      castIdCounter++
+      const rosterId = `croster_${Date.now()}_${castIdCounter}`
+      upsertCastRosterEntry({ id: rosterId, name: row.name, character: row.character || '' })
+      onUpdate({ cast: cast.map(r => r.id === row.id ? { ...r, rosterId } : r) })
+      return
+    }
+    // Existing roster member: prompt only if name or character actually changed
+    const rosterEntry = castRoster.find(r => r.id === row.rosterId)
+    if (rosterEntry && (rosterEntry.name !== row.name || rosterEntry.character !== row.character)) {
+      setUpdatePrompt({ rowId: row.id, rosterId: row.rosterId })
+    }
   }
 
   const thStyle = {
@@ -929,11 +933,7 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
   }
 
   const updateRow = (id, field, value) => {
-    const row = crew.find(r => r.id === id)
     onUpdate({ crew: crew.map(r => r.id === id ? { ...r, [field]: value } : r) })
-    if (row?.rosterId && (field === 'name' || field === 'role')) {
-      setUpdatePrompt({ rowId: id, field, value, rosterId: row.rosterId })
-    }
   }
 
   const handleUpdateRoster = () => {
@@ -951,11 +951,19 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
 
   const handleBlurSaveToRoster = (row) => {
     if (!row.name) return
-    if (row.rosterId) return
-    crewIdCounter++
-    const rosterId = `rroster_${Date.now()}_${crewIdCounter}`
-    upsertCrewRosterEntry({ id: rosterId, name: row.name, role: row.role || '' })
-    onUpdate({ crew: crew.map(r => r.id === row.id ? { ...r, rosterId } : r) })
+    if (!row.rosterId) {
+      // New member: save silently to the roster
+      crewIdCounter++
+      const rosterId = `rroster_${Date.now()}_${crewIdCounter}`
+      upsertCrewRosterEntry({ id: rosterId, name: row.name, role: row.role || '' })
+      onUpdate({ crew: crew.map(r => r.id === row.id ? { ...r, rosterId } : r) })
+      return
+    }
+    // Existing roster member: prompt only if name or role actually changed
+    const rosterEntry = crewRoster.find(r => r.id === row.rosterId)
+    if (rosterEntry && (rosterEntry.name !== row.name || rosterEntry.role !== row.role)) {
+      setUpdatePrompt({ rowId: row.id, rosterId: row.rosterId })
+    }
   }
 
   const thStyle = {
