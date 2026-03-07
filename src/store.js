@@ -164,6 +164,12 @@ const useStore = create((set, get) => ({
   //   directions, mapsLink, additionalNotes } }
   callsheets: {},
 
+  // Global cast/crew rosters — shared across all callsheets in the project.
+  // Cast roster entry:  { id, name, character }
+  // Crew roster entry:  { id, name, department, role }
+  castRoster: [],
+  crewRoster: [],
+
   // UI state
   settingsOpen: false,
   contextMenu: null, // { shotId, sceneId, x, y }
@@ -374,6 +380,53 @@ const useStore = create((set, get) => ({
 
   setCallsheetSectionConfig: (config) => {
     set({ callsheetSectionConfig: config })
+    get()._scheduleAutoSave()
+  },
+
+  // ── Cast/Crew Roster actions ──────────────────────────────────────────
+
+  // Upsert a cast member into the global roster (matched by id or name+character).
+  upsertCastRosterEntry: (entry) => {
+    set(state => {
+      const existing = state.castRoster.findIndex(r => r.id === entry.id)
+      if (existing !== -1) {
+        const next = [...state.castRoster]
+        next[existing] = { ...next[existing], ...entry }
+        return { castRoster: next }
+      }
+      // Check for same name+character to avoid duplicates when re-adding
+      const byName = state.castRoster.findIndex(
+        r => r.name && r.name === entry.name && r.character === entry.character
+      )
+      if (byName !== -1) {
+        const next = [...state.castRoster]
+        next[byName] = { ...next[byName], ...entry }
+        return { castRoster: next }
+      }
+      return { castRoster: [...state.castRoster, entry] }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  // Upsert a crew member into the global roster (matched by id or name+role).
+  upsertCrewRosterEntry: (entry) => {
+    set(state => {
+      const existing = state.crewRoster.findIndex(r => r.id === entry.id)
+      if (existing !== -1) {
+        const next = [...state.crewRoster]
+        next[existing] = { ...next[existing], ...entry }
+        return { crewRoster: next }
+      }
+      const byName = state.crewRoster.findIndex(
+        r => r.name && r.name === entry.name && r.role === entry.role
+      )
+      if (byName !== -1) {
+        const next = [...state.crewRoster]
+        next[byName] = { ...next[byName], ...entry }
+        return { crewRoster: next }
+      }
+      return { crewRoster: [...state.crewRoster, entry] }
+    })
     get()._scheduleAutoSave()
   },
 
@@ -663,6 +716,7 @@ const useStore = create((set, get) => ({
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
       shotlistColumnWidths, callsheets, callsheetSectionConfig,
+      castRoster, crewRoster,
     } = get()
     return {
       version: 2,
@@ -745,6 +799,8 @@ const useStore = create((set, get) => ({
       })),
       callsheets: callsheets || {},
       callsheetSectionConfig: callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG,
+      castRoster: castRoster || [],
+      crewRoster: crewRoster || [],
       exportedAt: new Date().toISOString(),
     }
   },
@@ -1011,6 +1067,8 @@ const useStore = create((set, get) => ({
       callsheets: (typeof data.callsheets === 'object' && data.callsheets !== null)
         ? data.callsheets
         : {},
+      castRoster: Array.isArray(data.castRoster) ? data.castRoster : [],
+      crewRoster: Array.isArray(data.crewRoster) ? data.crewRoster : [],
       callsheetSectionConfig: (() => {
         const saved = data.callsheetSectionConfig
         if (!saved || !Array.isArray(saved) || saved.length === 0) return DEFAULT_CALLSHEET_SECTION_CONFIG
@@ -1110,6 +1168,8 @@ const useStore = create((set, get) => ({
       scenes: [scene],
       schedule: [],
       callsheets: {},
+      castRoster: [],
+      crewRoster: [],
       projectPath: null,
       lastSaved: null,
     })
