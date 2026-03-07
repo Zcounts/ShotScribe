@@ -18,6 +18,7 @@ import ContextMenu from './components/ContextMenu'
 import ExportModal from './components/ExportModal'
 import ShotlistTab from './components/ShotlistTab'
 import ScheduleTab from './components/ScheduleTab'
+import CallsheetTab from './components/CallsheetTab'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -331,6 +332,7 @@ export default function App() {
           { id: 'storyboard', label: 'Storyboard' },
           { id: 'shotlist',   label: 'Shotlist' },
           { id: 'schedule',   label: 'Schedule' },
+          { id: 'callsheet',  label: 'Callsheet' },
         ].map(({ id, label }) => (
           <button
             key={id}
@@ -404,11 +406,15 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-auto">
           <ShotlistTab containerRef={shotlistRef} />
         </div>
-      ) : (
+      ) : activeTab === 'schedule' ? (
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0ede4' }}>
           <ScheduleTab />
         </div>
-      )}
+      ) : activeTab === 'callsheet' ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <CallsheetTab />
+        </div>
+      ) : null}
 
       {/* Settings Panel */}
       <SettingsPanel />

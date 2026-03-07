@@ -776,6 +776,404 @@ ${dayDivs.join('\n')}
 </html>`
 }
 
+// ── Callsheet print HTML: built from store data ───────────────────────────────
+//
+// Generates a professional production callsheet for all shooting days.
+// Each day starts on a new page.  Call time and basecamp come from the
+// schedule; all other fields come from the callsheets store map.
+
+function buildCallsheetPrintHtml() {
+  const { schedule, callsheets, projectName, scenes } = useStore.getState()
+
+  if (schedule.length === 0) {
+    return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40px"><p>No shooting days scheduled.</p></body></html>`
+  }
+
+  // Build shotMap for Advanced Schedule section
+  const shotMap = new Map()
+  scenes.forEach((scene, sceneIdx) => {
+    scene.shots.forEach((shot, shotIdx) => {
+      shotMap.set(shot.id, { shot, scene, displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}` })
+    })
+  })
+
+  function fmt12(t) {
+    if (!t) return ''
+    const [h, m] = t.split(':').map(Number)
+    if (isNaN(h) || isNaN(m)) return t
+    const ap = h >= 12 ? 'PM' : 'AM'
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ap}`
+  }
+
+  function fmtDate(d) {
+    if (!d) return ''
+    const [y, mo, da] = d.split('-')
+    return `${mo}/${da}/${y}`
+  }
+
+  const dayPages = schedule.map((day, dayIdx) => {
+    const cs = callsheets[day.id] || {}
+    const productionTitle = cs.productionTitle !== undefined ? cs.productionTitle : (projectName || 'Untitled Project')
+
+    // ── General Info rows
+    const genRows = [
+      ['PRODUCTION', escapeHtml(productionTitle)],
+      ['DATE', day.date ? escapeHtml(fmtDate(day.date)) : '<em>Not set</em>'],
+      ['GENERAL CALL', day.startTime ? `<strong>${escapeHtml(fmt12(day.startTime))}</strong>` : '<em>Not set</em>'],
+      ['BASECAMP / UNIT BASE', day.basecamp ? escapeHtml(day.basecamp) : '<em>Not set</em>'],
+      ['SHOOT LOCATION', cs.shootLocation ? escapeHtml(cs.shootLocation) : '<em>Not set</em>'],
+      ['WEATHER', cs.weather ? escapeHtml(cs.weather) : ''],
+      ['NEAREST HOSPITAL', cs.nearestHospital ? escapeHtml(cs.nearestHospital) : ''],
+      ['EMERGENCY CONTACTS', cs.emergencyContacts ? escapeHtml(cs.emergencyContacts).replace(/\n/g, '<br>') : ''],
+    ].filter(([, v]) => v !== '').map(([label, value]) =>
+      `<tr><td class="info-label">${label}</td><td class="info-value">${value}</td></tr>`
+    ).join('\n')
+
+    // ── Advanced Schedule: group shot blocks by scene
+    const sceneGroups = []
+    const seenScenes = new Map()
+    const breaks = []
+    day.shotBlocks.forEach(block => {
+      if (block.type === 'break') {
+        breaks.push(block)
+        return
+      }
+      const found = shotMap.get(block.shotId)
+      if (!found) return
+      const { scene } = found
+      const key = `${scene.id}`
+      if (!seenScenes.has(key)) {
+        seenScenes.set(key, sceneGroups.length)
+        sceneGroups.push({ sceneLabel: scene.sceneLabel, location: scene.location, intOrExt: found.shot.intOrExt || scene.intOrExt, dayNight: found.shot.dayNight || scene.dayNight, count: 0 })
+      }
+      sceneGroups[seenScenes.get(key)].count++
+    })
+
+    const advSceneRows = sceneGroups.map((sg, i) =>
+      `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">
+        <td>${escapeHtml(sg.sceneLabel)}</td>
+        <td>${escapeHtml(sg.location)}</td>
+        <td>${escapeHtml(sg.intOrExt)}</td>
+        <td>${escapeHtml(sg.dayNight)}</td>
+        <td style="text-align:right">${sg.count}</td>
+      </tr>`
+    ).join('\n')
+
+    const breakRows = breaks.map(b =>
+      `<tr class="break-adv-row"><td colspan="4" style="font-style:italic;color:#666">☕ ${escapeHtml(b.breakName || 'Break')}</td><td style="text-align:right;color:#999">${b.breakDuration ? b.breakDuration + ' min' : ''}</td></tr>`
+    ).join('\n')
+
+    // ── Cast List
+    const cast = cs.cast || []
+    const castRows = cast.length === 0
+      ? `<tr><td colspan="5" style="color:#aaa;font-style:italic;padding:6px 8px">No cast listed</td></tr>`
+      : cast.map((r, i) =>
+          `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">
+            <td>${escapeHtml(r.name || '')}</td>
+            <td>${escapeHtml(r.character || '')}</td>
+            <td>${escapeHtml(r.pickupTime || '')}</td>
+            <td>${escapeHtml(r.makeupCall || '')}</td>
+            <td>${escapeHtml(r.setCall || '')}</td>
+          </tr>`
+        ).join('\n')
+
+    // ── Crew List
+    const crew = cs.crew || []
+    const crewRows = crew.length === 0
+      ? `<tr><td colspan="3" style="color:#aaa;font-style:italic;padding:6px 8px">No crew listed</td></tr>`
+      : crew.map((r, i) =>
+          `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">
+            <td>${escapeHtml(r.name || '')}</td>
+            <td>${escapeHtml(r.role || '')}</td>
+            <td>${escapeHtml(r.callTime || '')}</td>
+          </tr>`
+        ).join('\n')
+
+    // ── Location Details
+    const locLines = []
+    if (cs.locationAddress) locLines.push(`<div class="loc-row"><span class="loc-label">Address</span><span>${escapeHtml(cs.locationAddress)}</span></div>`)
+    if (cs.parkingNotes)    locLines.push(`<div class="loc-row"><span class="loc-label">Parking</span><span>${escapeHtml(cs.parkingNotes).replace(/\n/g, '<br>')}</span></div>`)
+    if (cs.directions)      locLines.push(`<div class="loc-row"><span class="loc-label">Directions</span><span>${escapeHtml(cs.directions).replace(/\n/g, '<br>')}</span></div>`)
+    if (cs.mapsLink)        locLines.push(`<div class="loc-row"><span class="loc-label">Maps</span><span>${escapeHtml(cs.mapsLink)}</span></div>`)
+
+    const advNotes = cs.additionalNotes
+      ? `<div class="adv-notes">${escapeHtml(cs.additionalNotes).replace(/\n/g, '<br>')}</div>`
+      : `<div style="color:#aaa;font-style:italic">None</div>`
+
+    return `<div class="day-page">
+  <!-- HEADER -->
+  <div class="cs-header">
+    <div class="cs-header-left">
+      <div class="cs-title">CALLSHEET</div>
+      <div class="cs-subtitle">${escapeHtml(productionTitle)}</div>
+    </div>
+    <div class="cs-header-right">
+      <div class="cs-day">Day ${dayIdx + 1}${day.date ? ` — ${escapeHtml(fmtDate(day.date))}` : ''}</div>
+      ${day.startTime ? `<div class="cs-calltime">General Call: <strong>${escapeHtml(fmt12(day.startTime))}</strong></div>` : ''}
+    </div>
+  </div>
+
+  <!-- GENERAL INFO -->
+  <div class="section">
+    <div class="section-title">GENERAL INFO</div>
+    <table class="info-table">
+      <colgroup><col style="width:130px"><col style="width:auto"></colgroup>
+      <tbody>${genRows}</tbody>
+    </table>
+  </div>
+
+  <!-- ADVANCED SCHEDULE -->
+  <div class="section">
+    <div class="section-title">ADVANCED SCHEDULE</div>
+    ${sceneGroups.length === 0 && breaks.length === 0
+      ? '<p class="empty-msg">No shots scheduled for this day.</p>'
+      : `<table>
+          <colgroup>
+            <col style="width:18%"><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:50px">
+          </colgroup>
+          <thead><tr><th>SCENE</th><th>LOCATION</th><th>INT/EXT</th><th>DAY/NIGHT</th><th style="text-align:right">SHOTS</th></tr></thead>
+          <tbody>
+            ${advSceneRows}
+            ${breakRows}
+          </tbody>
+        </table>`
+    }
+  </div>
+
+  <!-- CAST LIST -->
+  <div class="section">
+    <div class="section-title">CAST LIST</div>
+    <table>
+      <colgroup>
+        <col style="width:22%"><col style="width:18%"><col style="width:16%"><col style="width:16%"><col style="width:16%">
+      </colgroup>
+      <thead><tr><th>NAME</th><th>CHARACTER</th><th>PICKUP</th><th>MAKEUP CALL</th><th>SET CALL</th></tr></thead>
+      <tbody>${castRows}</tbody>
+    </table>
+  </div>
+
+  <!-- CREW LIST -->
+  <div class="section">
+    <div class="section-title">CREW LIST</div>
+    <table>
+      <colgroup>
+        <col style="width:30%"><col style="width:auto"><col style="width:100px">
+      </colgroup>
+      <thead><tr><th>NAME</th><th>DEPARTMENT / ROLE</th><th>CALL TIME</th></tr></thead>
+      <tbody>${crewRows}</tbody>
+    </table>
+  </div>
+
+  <!-- LOCATION DETAILS -->
+  ${locLines.length > 0 ? `
+  <div class="section">
+    <div class="section-title">LOCATION DETAILS</div>
+    ${locLines.join('\n    ')}
+  </div>` : ''}
+
+  <!-- ADDITIONAL NOTES -->
+  <div class="section">
+    <div class="section-title">ADDITIONAL NOTES / SPECIAL INSTRUCTIONS</div>
+    ${advNotes}
+  </div>
+
+  <div class="cs-footer">
+    <span>Generated by ShotScribe · ${escapeHtml(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))}</span>
+    <span>CONFIDENTIAL — FOR PRODUCTION USE ONLY</span>
+  </div>
+</div>`
+  })
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Callsheet — ${escapeHtml(projectName || 'Untitled')}</title>
+<style>
+@page { size: A4; margin: 12mm 14mm 14mm; }
+@media print { html, body { margin: 0; } }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: #fff;
+  color: #111;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9pt;
+}
+.day-page {
+  break-after: page;
+  page-break-after: always;
+}
+.day-page:last-child {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+/* Header */
+.cs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: #1a1a1a;
+  color: #fff;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border-radius: 2px;
+}
+.cs-title {
+  font-size: 16pt;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.cs-subtitle {
+  font-size: 8pt;
+  color: rgba(255,255,255,0.6);
+  margin-top: 2px;
+}
+.cs-header-right {
+  text-align: right;
+}
+.cs-day {
+  font-size: 11pt;
+  font-weight: 700;
+}
+.cs-calltime {
+  font-size: 9pt;
+  color: rgba(255,255,255,0.7);
+  margin-top: 2px;
+}
+
+/* Sections */
+.section {
+  margin-bottom: 10px;
+}
+.section-title {
+  background: #f0ede4;
+  border: 1px solid #ccc;
+  border-bottom: none;
+  padding: 3px 8px;
+  font-size: 7.5pt;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #333;
+}
+.empty-msg {
+  padding: 6px 8px;
+  font-style: italic;
+  color: #aaa;
+  border: 1px solid #e5e5e5;
+  font-size: 8.5pt;
+}
+
+/* General Info table */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #ddd;
+  table-layout: fixed;
+}
+.info-label {
+  padding: 3px 8px;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #666;
+  border-bottom: 1px solid #e8e5e0;
+  border-right: 1px solid #e8e5e0;
+  background: #faf8f5;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.info-value {
+  padding: 3px 8px;
+  font-size: 8.5pt;
+  border-bottom: 1px solid #e8e5e0;
+  vertical-align: top;
+}
+
+/* Standard tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #ddd;
+  table-layout: fixed;
+}
+thead th {
+  background: #f0ede4;
+  color: #555;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 3px 6px;
+  border-bottom: 1.5px solid #bbb;
+  border-right: 1px solid #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+}
+thead th:last-child { border-right: none; }
+tbody td {
+  padding: 3px 6px;
+  border-bottom: 1px solid #e8e5e0;
+  border-right: 1px solid #e8e5e0;
+  font-size: 8.5pt;
+  vertical-align: top;
+}
+tbody td:last-child { border-right: none; }
+tr.row-even td { background: #fff; }
+tr.row-odd td  { background: #faf8f5; }
+tr.break-adv-row td { background: #fefce8; border-bottom-color: #fde68a; }
+
+/* Location details */
+.loc-row {
+  display: flex;
+  gap: 10px;
+  padding: 3px 8px;
+  border: 1px solid #ddd;
+  border-top: none;
+  font-size: 8.5pt;
+}
+.loc-row:first-child { border-top: 1px solid #ddd; }
+.loc-label {
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #666;
+  width: 70px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+/* Additional Notes */
+.adv-notes {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  font-size: 8.5pt;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Footer */
+.cs-footer {
+  margin-top: 10px;
+  padding-top: 5px;
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  font-size: 7pt;
+  color: #aaa;
+}
+</style>
+</head>
+<body>
+${dayPages.join('\n')}
+</body>
+</html>`
+}
+
 // ── Shotlist print HTML: built from store data ────────────────────────────────
 //
 // Generates a self-contained HTML table using the user's current column config.
@@ -1250,6 +1648,38 @@ export async function exportSchedulePDF(projectName) {
   }
 }
 
+/**
+ * Export callsheets as a PDF — one page per shooting day.
+ */
+export async function exportCallsheetPDF(projectName) {
+  try {
+    const html = buildCallsheetPrintHtml()
+    if (window.electronAPI?.printToPDF) {
+      await exportViaPrint(html, projectName, 'callsheet')
+    } else {
+      const win = window.open('', '_blank', 'width=900,height=700')
+      if (!win) {
+        const blob = new Blob([html], { type: 'text/html' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${(projectName || 'callsheet').replace(/[^a-z0-9]/gi, '_')}_callsheet.html`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        return
+      }
+      win.document.write(html)
+      win.document.close()
+      setTimeout(() => { win.focus(); win.print() }, 500)
+    }
+  } catch (err) {
+    console.error('[PDF Export] Callsheet export failed:', err)
+    _handleExportError(err)
+  }
+}
+
 /** @deprecated Use exportStoryboardPDF or exportShotlistPDF directly */
 export async function exportToPDF(pageRefs, projectName) {
   return exportStoryboardPDF(pageRefs, projectName)
@@ -1320,6 +1750,7 @@ function buildCombinedPrintHtml() {
   const sbHtml = buildStoryboardPrintHtml()
   const slHtml = buildShotlistPrintHtml()
   const scHtml = buildSchedulePrintHtml()
+  const csHtml = buildCallsheetPrintHtml()
 
   const extractStyle = (html) => { const m = html.match(/<style>([\s\S]*?)<\/style>/); return m ? m[1] : '' }
   const extractBody  = (html) => { const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/); return m ? m[1].trim() : '' }
@@ -1327,10 +1758,12 @@ function buildCombinedPrintHtml() {
   const sbCss = _stripPageRules(extractStyle(sbHtml))
   const slCss = _stripPageRules(extractStyle(slHtml))
   const scCss = _stripPageRules(extractStyle(scHtml))
+  const csCss = _stripPageRules(extractStyle(csHtml))
 
   const sbBody = extractBody(sbHtml)
   const slBody = extractBody(slHtml)
   const scBody = extractBody(scHtml)
+  const csBody = extractBody(csHtml)
 
   return `<!DOCTYPE html>
 <html>
@@ -1342,16 +1775,19 @@ function buildCombinedPrintHtml() {
 @page sb-page { size: A4 landscape; margin: 8mm 10mm 14mm; }
 @page sl-page { size: A4 landscape; margin: 12mm 10mm 14mm; }
 @page sc-page { size: A4; margin: 12mm 12mm 14mm; }
+@page cs-page { size: A4; margin: 12mm 14mm 14mm; }
 @media print { html, body { margin: 0; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: #fff; color: #111; }
 .combined-storyboard { page: sb-page; }
 .combined-shotlist   { page: sl-page; break-before: page; page-break-before: always; }
 .combined-schedule   { page: sc-page; break-before: page; page-break-before: always; }
+.combined-callsheet  { page: cs-page; break-before: page; page-break-before: always; }
 /* Per-section styles */
 ${sbCss}
 ${slCss}
 ${scCss}
+${csCss}
 </style>
 </head>
 <body>
@@ -1363,6 +1799,9 @@ ${slBody}
 </div>
 <div class="combined-schedule">
 ${scBody}
+</div>
+<div class="combined-callsheet">
+${csBody}
 </div>
 </body>
 </html>`
@@ -1399,6 +1838,7 @@ export async function exportAllSeparatePDFs(pageRefs, shotlistRef, projectName) 
     await exportStoryboardPDF(pageRefs, projectName)
     await exportShotlistPDF(shotlistRef, projectName)
     await exportSchedulePDF(projectName)
+    await exportCallsheetPDF(projectName)
   } catch (err) {
     console.error('[PDF Export] Export All (separate) failed:', err)
     _handleExportError(err)
@@ -1426,12 +1866,13 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
 
   if (!isOpen) return null
 
-  const isAll       = activeTab === 'all'
-  const isSchedule  = activeTab === 'schedule'
-  const isShotlist  = activeTab === 'shotlist'
-  const isStoryboard = !isAll && !isSchedule && !isShotlist
+  const isAll        = activeTab === 'all'
+  const isSchedule   = activeTab === 'schedule'
+  const isShotlist   = activeTab === 'shotlist'
+  const isCallsheet  = activeTab === 'callsheet'
+  const isStoryboard = !isAll && !isSchedule && !isShotlist && !isCallsheet
 
-  const tabLabel = isSchedule ? 'Schedule' : isShotlist ? 'Shotlist' : isAll ? 'All' : 'Storyboard'
+  const tabLabel = isSchedule ? 'Schedule' : isShotlist ? 'Shotlist' : isAll ? 'All' : isCallsheet ? 'Callsheet' : 'Storyboard'
 
   const handleExportPDF = async (forceTab) => {
     const tab = forceTab ?? activeTab
@@ -1442,6 +1883,8 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
         await exportShotlistPDF(shotlistRef, projectName)
       } else if (tab === 'schedule') {
         await exportSchedulePDF(projectName)
+      } else if (tab === 'callsheet') {
+        await exportCallsheetPDF(projectName)
       } else if (tab === 'all-combined') {
         await exportAllCombinedPDF(projectName)
       } else if (tab === 'all-separate') {
@@ -1484,7 +1927,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
             </button>
           </div>
           <p className="text-sm text-gray-600 mb-5">
-            Export the storyboard, shotlist, and schedule as PDFs. Choose how you'd like to save them.
+            Export the storyboard, shotlist, schedule, and callsheet as PDFs. Choose how you'd like to save them.
           </p>
           <div className="flex gap-3">
             <button
@@ -1495,7 +1938,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               <div style={{ fontSize: 15, marginBottom: 4 }}>
                 {exporting && exportType === 'pdf-all-combined' ? 'Exporting…' : 'One Combined PDF'}
               </div>
-              <div className="text-xs font-normal opacity-75">All three documents in a single file</div>
+              <div className="text-xs font-normal opacity-75">All four documents in a single file</div>
             </button>
             <button
               onClick={() => handleExportPDF('all-separate')}
@@ -1505,7 +1948,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               <div style={{ fontSize: 15, marginBottom: 4 }}>
                 {exporting && exportType === 'pdf-all-separate' ? 'Exporting…' : 'Separate PDFs'}
               </div>
-              <div className="text-xs font-normal opacity-75">Three individual PDF files, one per document</div>
+              <div className="text-xs font-normal opacity-75">Four individual PDF files, one per document</div>
             </button>
           </div>
         </div>
@@ -1540,9 +1983,11 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
             <div className="text-xs font-normal opacity-75">
               {isSchedule
                 ? 'Day-by-day layout with timeline & totals'
-                : isStoryboard
-                  ? 'Card grid layout, one page per scene'
-                  : 'Full table layout'}
+                : isCallsheet
+                  ? 'Professional callsheet, one page per shoot day'
+                  : isStoryboard
+                    ? 'Card grid layout, one page per scene'
+                    : 'Full table layout'}
             </div>
           </button>
 
@@ -1597,6 +2042,15 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               Schedule PDF →
             </button>
           )}
+          {activeTab !== 'callsheet' && (
+            <button
+              onClick={() => handleExportPDF('callsheet')}
+              disabled={exporting}
+              className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
+            >
+              Callsheet PDF →
+            </button>
+          )}
           {!isStoryboard && (
             <button
               onClick={() => handleExportPNG()}
@@ -1616,6 +2070,11 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
         {isSchedule && (
           <p className="text-xs text-gray-400 mt-3">
             Schedule PDF includes projected timeline (where call times are set) and day totals.
+          </p>
+        )}
+        {isCallsheet && (
+          <p className="text-xs text-gray-400 mt-3">
+            Callsheet PDF includes all shooting days, each on its own page with cast, crew, and location details.
           </p>
         )}
       </div>
