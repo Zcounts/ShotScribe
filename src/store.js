@@ -99,9 +99,9 @@ function createScene(overrides = {}) {
 }
 
 // Valid shot letters: A-Z excluding I (confused with 1), O (confused with 0), S (confused with 5)
-const VALID_SHOT_LETTERS = 'ABCDEFGHJKLMNPQRTUVWXYZ' // 23 letters
+export const VALID_SHOT_LETTERS = 'ABCDEFGHJKLMNPQRTUVWXYZ' // 23 letters
 
-function getShotLetter(index) {
+export function getShotLetter(index) {
   const n = VALID_SHOT_LETTERS.length // 23
   if (index < n) return VALID_SHOT_LETTERS[index]
   // Double-letter format (AA, AB, ...) also skipping I, O, S in both positions
