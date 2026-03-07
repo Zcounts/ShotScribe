@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -14,6 +14,30 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore, { DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
+
+// ── Time Utilities (mirrored from ScheduleTab) ────────────────────────────────
+
+function parseMinutes(str) {
+  const s = String(str || '').trim()
+  if (!s) return 0
+  return Math.max(0, parseFloat(s) || 0)
+}
+
+function parseStartTime(timeStr) {
+  if (!timeStr || !timeStr.includes(':')) return null
+  const [h, m] = timeStr.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return null
+  return h * 60 + m
+}
+
+function formatTimeOfDay(totalMins) {
+  const safeTotal = ((Math.round(totalMins) % (24 * 60)) + 24 * 60) % (24 * 60)
+  const h24 = Math.floor(safeTotal / 60)
+  const m = safeTotal % 60
+  const h12 = h24 % 12 || 12
+  const ampm = h24 < 12 ? 'AM' : 'PM'
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -113,10 +137,6 @@ function ConfigureSectionsPanel({ config, isDark, onChange, onClose }) {
 
   return (
     <div style={{
-      position: 'absolute',
-      top: 40,
-      right: 0,
-      zIndex: 200,
       width: 260,
       background: isDark ? '#1e1e1e' : '#fff',
       border: `1px solid ${isDark ? '#444' : '#ccc'}`,
@@ -346,6 +366,26 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
   const scheduledDay = scheduleWithShots.find(d => d.id === day.id)
   if (!scheduledDay) return null
 
+  // Calculate projected start time for each block (mirrors ScheduleTab logic)
+  const startMins = parseStartTime(day.startTime)
+  let cumulativeMins = 0
+  const blockProjections = scheduledDay.shotBlocks.map(block => {
+    const projectedStart = startMins !== null ? startMins + cumulativeMins : null
+    if (block.type === 'break') {
+      cumulativeMins += parseMinutes(block.breakDuration)
+    } else {
+      cumulativeMins += parseMinutes(block.shotData?.shootTime) + parseMinutes(block.shotData?.setupTime)
+    }
+    const projectedEnd = startMins !== null ? startMins + cumulativeMins : null
+    return { block, projectedStart, projectedEnd }
+  })
+
+  // Build a map of blockId → { projectedStart, projectedEnd }
+  const projMap = {}
+  blockProjections.forEach(({ block, projectedStart, projectedEnd }) => {
+    projMap[block.id] = { projectedStart, projectedEnd }
+  })
+
   // Group shot blocks by scene (using sceneLabel + location)
   const sceneGroups = []
   const seenScenes = new Map()
@@ -385,6 +425,8 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
     verticalAlign: 'top',
   }
 
+  const showTimes = startMins !== null
+
   return (
     <SectionBlock title="Advanced Schedule" isDark={isDark}>
       {sceneGroups.length === 0 && nonBreakBlocks.length === 0 ? (
@@ -399,23 +441,49 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
               <th style={thStyle}>Location</th>
               <th style={thStyle}>I/E</th>
               <th style={thStyle}>D/N</th>
+              {showTimes && <th style={thStyle}>Start</th>}
+              {showTimes && <th style={thStyle}>End</th>}
               <th style={{ ...thStyle, textAlign: 'right' }}># Shots</th>
             </tr>
           </thead>
           <tbody>
             {sceneGroups.map((sg, i) => {
-              const count = nonBreakBlocks.filter(b =>
+              const sceneBlocks = nonBreakBlocks.filter(b =>
                 b.shotData?.sceneLabel === sg.sceneLabel &&
                 b.shotData?.location === sg.location &&
                 b.shotData?.intOrExt === sg.intOrExt &&
                 b.shotData?.dayNight === sg.dayNight
-              ).length
+              )
+              const count = sceneBlocks.length
+
+              // Start time = projected start of the first block in this scene
+              // End time = projected end of the last block in this scene
+              let sceneStart = null
+              let sceneEnd = null
+              if (showTimes && sceneBlocks.length > 0) {
+                const firstProj = projMap[sceneBlocks[0].id]
+                const lastProj = projMap[sceneBlocks[sceneBlocks.length - 1].id]
+                if (firstProj) sceneStart = firstProj.projectedStart
+                if (lastProj) sceneEnd = lastProj.projectedEnd
+              }
+
+              const colSpan = showTimes ? 7 : 5
               return (
                 <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)') }}>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>{sg.sceneLabel}</td>
                   <td style={tdStyle}>{sg.location}</td>
                   <td style={{ ...tdStyle, color: '#888' }}>{sg.intOrExt}</td>
                   <td style={{ ...tdStyle, color: '#888' }}>{sg.dayNight}</td>
+                  {showTimes && (
+                    <td style={{ ...tdStyle, color: isDark ? '#7dd3fc' : '#2563eb', whiteSpace: 'nowrap' }}>
+                      {sceneStart !== null ? formatTimeOfDay(sceneStart) : '—'}
+                    </td>
+                  )}
+                  {showTimes && (
+                    <td style={{ ...tdStyle, color: isDark ? '#7dd3fc' : '#2563eb', whiteSpace: 'nowrap' }}>
+                      {sceneEnd !== null ? formatTimeOfDay(sceneEnd) : '—'}
+                    </td>
+                  )}
                   <td style={{ ...tdStyle, textAlign: 'right', color: '#888' }}>{count}</td>
                 </tr>
               )
@@ -423,13 +491,13 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
             {breakBlocks.length > 0 && (
               <>
                 <tr>
-                  <td colSpan={5} style={{ ...tdStyle, paddingTop: 8, paddingBottom: 2, fontSize: 10, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  <td colSpan={showTimes ? 7 : 5} style={{ ...tdStyle, paddingTop: 8, paddingBottom: 2, fontSize: 10, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     Breaks
                   </td>
                 </tr>
                 {breakBlocks.map((b, i) => (
                   <tr key={b.id} style={{ background: isDark ? 'rgba(250,204,21,0.05)' : 'rgba(250,204,21,0.08)' }}>
-                    <td colSpan={4} style={{ ...tdStyle, fontStyle: 'italic', color: '#888' }}>
+                    <td colSpan={showTimes ? 6 : 4} style={{ ...tdStyle, fontStyle: 'italic', color: '#888' }}>
                       ☕ {b.breakName}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', color: '#aaa', fontSize: 11 }}>
@@ -442,7 +510,182 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
           </tbody>
         </table>
       )}
+      {!showTimes && nonBreakBlocks.length > 0 && (
+        <p style={{ fontSize: 10, color: '#aaa', fontFamily: 'monospace', marginTop: 8, fontStyle: 'italic' }}>
+          Set a call time on the Schedule tab to see start/end times.
+        </p>
+      )}
     </SectionBlock>
+  )
+}
+
+// ── Member Picker Modal ───────────────────────────────────────────────────────
+
+function MemberPickerModal({ title, roster, rosterFields, isDark, onSelect, onNewMember, onClose }) {
+  const [search, setSearch] = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus()
+  }, [])
+
+  const filtered = roster.filter(r => {
+    const q = search.toLowerCase()
+    return rosterFields.some(f => (r[f] || '').toLowerCase().includes(q))
+  })
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: isDark ? '#1e1e1e' : '#fff',
+          border: `1px solid ${isDark ? '#444' : '#ccc'}`,
+          borderRadius: 6,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+          width: 400,
+          maxHeight: '70vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid ${isDark ? '#333' : '#e0dbd0'}` }}>
+          <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: isDark ? '#ccc' : '#333' }}>
+            {title}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isDark ? '#666' : '#aaa', fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '8px 14px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#f0ede4'}` }}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search..."
+            style={{
+              width: '100%',
+              background: isDark ? '#2a2a2a' : '#f9f8f6',
+              border: `1px solid ${isDark ? '#444' : '#ddd'}`,
+              borderRadius: 3,
+              padding: '4px 8px',
+              fontSize: 12,
+              fontFamily: 'monospace',
+              color: isDark ? '#eee' : '#111',
+              outline: 'none',
+            }}
+          />
+        </div>
+
+        {/* List */}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {filtered.length === 0 && roster.length > 0 && (
+            <div style={{ padding: '10px 14px', fontSize: 12, fontFamily: 'monospace', color: '#aaa', fontStyle: 'italic' }}>No matches</div>
+          )}
+          {roster.length === 0 && (
+            <div style={{ padding: '10px 14px', fontSize: 12, fontFamily: 'monospace', color: '#aaa', fontStyle: 'italic' }}>No saved roster entries yet</div>
+          )}
+          {filtered.map(r => (
+            <button
+              key={r.id}
+              onClick={() => onSelect(r)}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 14px',
+                background: 'none',
+                border: 'none',
+                borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#f5f3ef'}`,
+                cursor: 'pointer',
+                fontFamily: 'monospace',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f5f3ef' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? '#ddd' : '#111' }}>{r.name}</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>
+                {rosterFields.filter(f => f !== 'name').map(f => r[f]).filter(Boolean).join(' · ')}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* New member option */}
+        <div style={{ borderTop: `1px solid ${isDark ? '#333' : '#e0dbd0'}`, padding: '8px 14px' }}>
+          <button
+            onClick={onNewMember}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 10px',
+              background: 'none',
+              border: `1px dashed ${isDark ? '#444' : '#ccc'}`,
+              borderRadius: 3,
+              cursor: 'pointer',
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: isDark ? '#888' : '#555',
+            }}
+          >
+            <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+            New Member (not in roster)
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Update Roster Prompt ──────────────────────────────────────────────────────
+
+function UpdateRosterPrompt({ isDark, memberName, onConfirm, onDismiss }) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onDismiss}
+    >
+      <div
+        style={{
+          background: isDark ? '#1e1e1e' : '#fff',
+          border: `1px solid ${isDark ? '#444' : '#ccc'}`,
+          borderRadius: 6,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          padding: '16px 20px',
+          width: 340,
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <p style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: isDark ? '#ddd' : '#111', marginBottom: 6 }}>
+          Update saved info for <em>{memberName}</em>?
+        </p>
+        <p style={{ fontSize: 11, fontFamily: 'monospace', color: '#888', marginBottom: 14 }}>
+          Save the edited details back to the roster so they're available on future callsheets.
+        </p>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button
+            onClick={onDismiss}
+            style={{ padding: '5px 14px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, border: `1px solid ${isDark ? '#444' : '#ccc'}`, borderRadius: 3, background: 'none', color: isDark ? '#aaa' : '#555' }}
+          >
+            Don't update
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{ padding: '5px 14px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, fontWeight: 700, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 3 }}
+          >
+            Update roster
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -452,18 +695,65 @@ let castIdCounter = 0
 
 function CastListSection({ callsheet, isDark, onUpdate }) {
   const cast = callsheet.cast || []
+  const castRoster = useStore(s => s.castRoster)
+  const upsertCastRosterEntry = useStore(s => s.upsertCastRosterEntry)
 
-  const addRow = () => {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [updatePrompt, setUpdatePrompt] = useState(null) // { id, field, value }
+
+  const addRowFromRoster = (rosterEntry) => {
     castIdCounter++
-    onUpdate({ cast: [...cast, { id: `cast_${Date.now()}_${castIdCounter}`, name: '', character: '', pickupTime: '', makeupCall: '', setCall: '' }] })
+    onUpdate({
+      cast: [...cast, {
+        id: `cast_${Date.now()}_${castIdCounter}`,
+        rosterId: rosterEntry.id,
+        name: rosterEntry.name || '',
+        character: rosterEntry.character || '',
+        pickupTime: '',
+        makeupCall: '',
+        setCall: '',
+      }]
+    })
+    setPickerOpen(false)
+  }
+
+  const addNewRow = () => {
+    castIdCounter++
+    const newEntry = { id: `cast_${Date.now()}_${castIdCounter}`, name: '', character: '', pickupTime: '', makeupCall: '', setCall: '' }
+    onUpdate({ cast: [...cast, newEntry] })
+    setPickerOpen(false)
   }
 
   const updateRow = (id, field, value) => {
+    const row = cast.find(r => r.id === id)
     onUpdate({ cast: cast.map(r => r.id === id ? { ...r, [field]: value } : r) })
+    // If this row came from the roster and we changed name or character, prompt to update roster
+    if (row?.rosterId && (field === 'name' || field === 'character')) {
+      setUpdatePrompt({ rowId: id, field, value, rosterId: row.rosterId })
+    }
+  }
+
+  const handleUpdateRoster = () => {
+    if (!updatePrompt) return
+    const row = cast.find(r => r.id === updatePrompt.rowId)
+    if (row && row.rosterId) {
+      upsertCastRosterEntry({ id: row.rosterId, name: row.name, character: row.character })
+    }
+    setUpdatePrompt(null)
   }
 
   const removeRow = (id) => {
     onUpdate({ cast: cast.filter(r => r.id !== id) })
+  }
+
+  // When a row's name or character is blurred and the row has no rosterId, save to roster
+  const handleBlurSaveToRoster = (row) => {
+    if (!row.name) return
+    if (row.rosterId) return // already in roster; update handled separately
+    castIdCounter++
+    const rosterId = `croster_${Date.now()}_${castIdCounter}`
+    upsertCastRosterEntry({ id: rosterId, name: row.name, character: row.character || '' })
+    onUpdate({ cast: cast.map(r => r.id === row.id ? { ...r, rosterId } : r) })
   }
 
   const thStyle = {
@@ -528,8 +818,24 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
           )}
           {cast.map((row, idx) => (
             <tr key={row.id} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
-              <td style={cellStyle}><input style={inputStyle} value={row.name} onChange={e => updateRow(row.id, 'name', e.target.value)} placeholder="Actor name" /></td>
-              <td style={cellStyle}><input style={inputStyle} value={row.character} onChange={e => updateRow(row.id, 'character', e.target.value)} placeholder="Character" /></td>
+              <td style={cellStyle}>
+                <input
+                  style={inputStyle}
+                  value={row.name}
+                  onChange={e => updateRow(row.id, 'name', e.target.value)}
+                  onBlur={() => handleBlurSaveToRoster(row)}
+                  placeholder="Actor name"
+                />
+              </td>
+              <td style={cellStyle}>
+                <input
+                  style={inputStyle}
+                  value={row.character}
+                  onChange={e => updateRow(row.id, 'character', e.target.value)}
+                  onBlur={() => handleBlurSaveToRoster(row)}
+                  placeholder="Character"
+                />
+              </td>
               <td style={cellStyle}><input style={inputStyle} value={row.pickupTime} onChange={e => updateRow(row.id, 'pickupTime', e.target.value)} placeholder="7:00 AM" /></td>
               <td style={cellStyle}><input style={inputStyle} value={row.makeupCall} onChange={e => updateRow(row.id, 'makeupCall', e.target.value)} placeholder="7:30 AM" /></td>
               <td style={cellStyle}><input style={inputStyle} value={row.setCall} onChange={e => updateRow(row.id, 'setCall', e.target.value)} placeholder="9:00 AM" /></td>
@@ -547,7 +853,7 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
         </tbody>
       </table>
       <button
-        onClick={addRow}
+        onClick={() => setPickerOpen(true)}
         style={{
           marginTop: 8,
           display: 'flex',
@@ -565,6 +871,27 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
       >
         + Add Cast Member
       </button>
+
+      {pickerOpen && (
+        <MemberPickerModal
+          title="Add Cast Member"
+          roster={castRoster}
+          rosterFields={['name', 'character']}
+          isDark={isDark}
+          onSelect={addRowFromRoster}
+          onNewMember={addNewRow}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {updatePrompt && (
+        <UpdateRosterPrompt
+          isDark={isDark}
+          memberName={cast.find(r => r.id === updatePrompt.rowId)?.name || ''}
+          onConfirm={handleUpdateRoster}
+          onDismiss={() => setUpdatePrompt(null)}
+        />
+      )}
     </SectionBlock>
   )
 }
@@ -575,18 +902,60 @@ let crewIdCounter = 0
 
 function CrewListSection({ callsheet, isDark, onUpdate }) {
   const crew = callsheet.crew || []
+  const crewRoster = useStore(s => s.crewRoster)
+  const upsertCrewRosterEntry = useStore(s => s.upsertCrewRosterEntry)
 
-  const addRow = () => {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [updatePrompt, setUpdatePrompt] = useState(null)
+
+  const addRowFromRoster = (rosterEntry) => {
+    crewIdCounter++
+    onUpdate({
+      crew: [...crew, {
+        id: `crew_${Date.now()}_${crewIdCounter}`,
+        rosterId: rosterEntry.id,
+        name: rosterEntry.name || '',
+        role: rosterEntry.role || '',
+        callTime: '',
+      }]
+    })
+    setPickerOpen(false)
+  }
+
+  const addNewRow = () => {
     crewIdCounter++
     onUpdate({ crew: [...crew, { id: `crew_${Date.now()}_${crewIdCounter}`, name: '', role: '', callTime: '' }] })
+    setPickerOpen(false)
   }
 
   const updateRow = (id, field, value) => {
+    const row = crew.find(r => r.id === id)
     onUpdate({ crew: crew.map(r => r.id === id ? { ...r, [field]: value } : r) })
+    if (row?.rosterId && (field === 'name' || field === 'role')) {
+      setUpdatePrompt({ rowId: id, field, value, rosterId: row.rosterId })
+    }
+  }
+
+  const handleUpdateRoster = () => {
+    if (!updatePrompt) return
+    const row = crew.find(r => r.id === updatePrompt.rowId)
+    if (row && row.rosterId) {
+      upsertCrewRosterEntry({ id: row.rosterId, name: row.name, role: row.role })
+    }
+    setUpdatePrompt(null)
   }
 
   const removeRow = (id) => {
     onUpdate({ crew: crew.filter(r => r.id !== id) })
+  }
+
+  const handleBlurSaveToRoster = (row) => {
+    if (!row.name) return
+    if (row.rosterId) return
+    crewIdCounter++
+    const rosterId = `rroster_${Date.now()}_${crewIdCounter}`
+    upsertCrewRosterEntry({ id: rosterId, name: row.name, role: row.role || '' })
+    onUpdate({ crew: crew.map(r => r.id === row.id ? { ...r, rosterId } : r) })
   }
 
   const thStyle = {
@@ -647,8 +1016,24 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
           )}
           {crew.map((row, idx) => (
             <tr key={row.id} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
-              <td style={cellStyle}><input style={inputStyle} value={row.name} onChange={e => updateRow(row.id, 'name', e.target.value)} placeholder="Name" /></td>
-              <td style={cellStyle}><input style={inputStyle} value={row.role} onChange={e => updateRow(row.id, 'role', e.target.value)} placeholder="e.g. Director of Photography" /></td>
+              <td style={cellStyle}>
+                <input
+                  style={inputStyle}
+                  value={row.name}
+                  onChange={e => updateRow(row.id, 'name', e.target.value)}
+                  onBlur={() => handleBlurSaveToRoster(row)}
+                  placeholder="Name"
+                />
+              </td>
+              <td style={cellStyle}>
+                <input
+                  style={inputStyle}
+                  value={row.role}
+                  onChange={e => updateRow(row.id, 'role', e.target.value)}
+                  onBlur={() => handleBlurSaveToRoster(row)}
+                  placeholder="e.g. Director of Photography"
+                />
+              </td>
               <td style={cellStyle}><input style={inputStyle} value={row.callTime} onChange={e => updateRow(row.id, 'callTime', e.target.value)} placeholder="7:00 AM" /></td>
               <td style={cellStyle}>
                 <button
@@ -664,7 +1049,7 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
         </tbody>
       </table>
       <button
-        onClick={addRow}
+        onClick={() => setPickerOpen(true)}
         style={{
           marginTop: 8,
           display: 'flex',
@@ -682,6 +1067,27 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
       >
         + Add Crew Member
       </button>
+
+      {pickerOpen && (
+        <MemberPickerModal
+          title="Add Crew Member"
+          roster={crewRoster}
+          rosterFields={['name', 'role']}
+          isDark={isDark}
+          onSelect={addRowFromRoster}
+          onNewMember={addNewRow}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {updatePrompt && (
+        <UpdateRosterPrompt
+          isDark={isDark}
+          memberName={crew.find(r => r.id === updatePrompt.rowId)?.name || ''}
+          onConfirm={handleUpdateRoster}
+          onDismiss={() => setUpdatePrompt(null)}
+        />
+      )}
     </SectionBlock>
   )
 }
@@ -811,52 +1217,52 @@ export default function CallsheetTab() {
       overflow: 'hidden',
       backgroundColor: isDark ? '#1a1a1a' : '#f0ede4',
     }}>
-      {/* Day navigation bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 0,
-        padding: '8px 16px',
-        borderBottom: `1px solid ${isDark ? '#333' : '#ccc'}`,
-        background: isDark ? '#111' : '#d4cfc6',
-        flexShrink: 0,
-        overflowX: 'auto',
-      }}>
-        <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: isDark ? '#666' : '#888', marginRight: 10, flexShrink: 0 }}>
-          Day:
-        </span>
-        {schedule.map((day, idx) => {
-          const isActive = idx === activeDayIdx
-          const label = `Day ${idx + 1}${day.date ? ' — ' + formatDate(day.date) : ''}`
-          return (
-            <button
-              key={day.id}
-              onClick={() => setSelectedDayIdx(idx)}
-              style={{
-                padding: '5px 12px',
-                fontFamily: 'monospace',
-                fontSize: 11,
-                fontWeight: isActive ? 700 : 400,
-                border: 'none',
-                borderRadius: 3,
-                background: isActive ? (isDark ? '#3b82f6' : '#2a2a2a') : 'transparent',
-                color: isActive ? '#fff' : (isDark ? '#888' : '#666'),
-                cursor: 'pointer',
-                flexShrink: 0,
-                marginRight: 4,
-                transition: 'background 0.1s, color 0.1s',
-              }}
-            >
-              {label}
-            </button>
-          )
-        })}
+      {/* Day navigation bar — wrapped in a position:relative container so the
+          Configure Sections panel can escape the overflow-x:auto scroll bar */}
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0,
+          padding: '8px 16px',
+          borderBottom: `1px solid ${isDark ? '#333' : '#ccc'}`,
+          background: isDark ? '#111' : '#d4cfc6',
+          overflowX: 'auto',
+        }}>
+          <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: isDark ? '#666' : '#888', marginRight: 10, flexShrink: 0 }}>
+            Day:
+          </span>
+          {schedule.map((day, idx) => {
+            const isActive = idx === activeDayIdx
+            const label = `Day ${idx + 1}${day.date ? ' — ' + formatDate(day.date) : ''}`
+            return (
+              <button
+                key={day.id}
+                onClick={() => setSelectedDayIdx(idx)}
+                style={{
+                  padding: '5px 12px',
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  fontWeight: isActive ? 700 : 400,
+                  border: 'none',
+                  borderRadius: 3,
+                  background: isActive ? (isDark ? '#3b82f6' : '#2a2a2a') : 'transparent',
+                  color: isActive ? '#fff' : (isDark ? '#888' : '#666'),
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  marginRight: 4,
+                  transition: 'background 0.1s, color 0.1s',
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
 
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
+          {/* Spacer */}
+          <div style={{ flex: 1, minWidth: 8 }} />
 
-        {/* Configure Sections button */}
-        <div style={{ position: 'relative', flexShrink: 0 }}>
+          {/* Configure Sections button */}
           <button
             onClick={() => setConfigOpen(o => !o)}
             style={{
@@ -871,6 +1277,8 @@ export default function CallsheetTab() {
               background: configOpen ? (isDark ? '#2a2a2a' : '#e8e4db') : 'transparent',
               color: isDark ? '#aaa' : '#555',
               cursor: 'pointer',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}
           >
             <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
@@ -880,15 +1288,19 @@ export default function CallsheetTab() {
             </svg>
             Configure Sections
           </button>
-          {configOpen && (
+        </div>
+
+        {/* Panel rendered OUTSIDE the overflow scroll div so it is never clipped */}
+        {configOpen && (
+          <div style={{ position: 'absolute', top: '100%', right: 16, zIndex: 200 }}>
             <ConfigureSectionsPanel
               config={callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG}
               isDark={isDark}
               onChange={setCallsheetSectionConfig}
               onClose={() => setConfigOpen(false)}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Callsheet document canvas */}

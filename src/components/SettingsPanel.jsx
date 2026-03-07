@@ -1,5 +1,35 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import useStore from '../store'
+
+// ── Keyboard shortcuts per tab ────────────────────────────────────────────────
+
+const SHORTCUTS = {
+  storyboard: [
+    { keys: 'Ctrl + S',         desc: 'Save project' },
+    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
+    { keys: 'Drag card',        desc: 'Reorder shot within a scene' },
+  ],
+  shotlist: [
+    { keys: 'Ctrl + S',         desc: 'Save project' },
+    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
+    { keys: 'Click row header', desc: 'Select / deselect shot' },
+    { keys: 'Drag row',         desc: 'Reorder shots' },
+    { keys: 'Resize column',    desc: 'Drag column edge to resize' },
+  ],
+  schedule: [
+    { keys: 'Ctrl + S',         desc: 'Save project' },
+    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
+    { keys: 'Drag day header',  desc: 'Reorder shooting days' },
+    { keys: 'Drag shot block',  desc: 'Move shot between days or reorder' },
+    { keys: 'Click day header', desc: 'Collapse / expand day' },
+    { keys: 'Click block header', desc: 'Collapse / expand shot block' },
+  ],
+  callsheet: [
+    { keys: 'Ctrl + S',         desc: 'Save project' },
+    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
+    { keys: 'Drag section',     desc: 'Reorder callsheet sections' },
+  ],
+}
 
 function SettingsRow({ label, children }) {
   return (
@@ -32,11 +62,15 @@ export default function SettingsPanel() {
   const theme = useStore(s => s.theme)
   const autoSave = useStore(s => s.autoSave)
   const useDropdowns = useStore(s => s.useDropdowns)
+  const activeTab = useStore(s => s.activeTab)
   const setColumnCount = useStore(s => s.setColumnCount)
   const setDefaultFocalLength = useStore(s => s.setDefaultFocalLength)
   const setTheme = useStore(s => s.setTheme)
   const setAutoSave = useStore(s => s.setAutoSave)
   const setUseDropdowns = useStore(s => s.setUseDropdowns)
+
+  const shortcuts = useMemo(() => SHORTCUTS[activeTab] || SHORTCUTS.storyboard, [activeTab])
+  const tabLabel = { storyboard: 'Storyboard', shotlist: 'Shotlist', schedule: 'Schedule', callsheet: 'Callsheet' }[activeTab] || activeTab
 
   return (
     <>
@@ -152,6 +186,33 @@ export default function SettingsPanel() {
             </span>
           </div>
         </SettingsRow>
+
+        {/* Keyboard Shortcuts — context-aware: shows shortcuts for active tab */}
+        <div style={{ borderTop: '1px solid #374151', paddingTop: 16, marginTop: 4 }}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            Keyboard Shortcuts — {tabLabel}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {shortcuts.map((s, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <kbd style={{
+                  flexShrink: 0,
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                  background: '#374151',
+                  color: '#d1d5db',
+                  border: '1px solid #4b5563',
+                  borderRadius: 3,
+                  padding: '2px 5px',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {s.keys}
+                </kbd>
+                <span style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.4 }}>{s.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </>
   )
