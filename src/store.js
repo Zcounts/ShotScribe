@@ -43,6 +43,15 @@ export const DEFAULT_SCHEDULE_COLUMN_CONFIG = [
   { key: 'projectedTime',      visible: true,  label: 'Estimated Time' },
 ]
 
+export const DEFAULT_CALLSHEET_SECTION_CONFIG = [
+  { key: 'generalInfo',       visible: true,  label: 'General Info' },
+  { key: 'advancedSchedule',  visible: true,  label: 'Advanced Schedule' },
+  { key: 'castList',          visible: true,  label: 'Cast List' },
+  { key: 'crewList',          visible: true,  label: 'Crew List' },
+  { key: 'locationDetails',   visible: true,  label: 'Location Details' },
+  { key: 'additionalNotes',   visible: true,  label: 'Additional Notes' },
+]
+
 const DEFAULT_COLOR = '#4ade80'
 
 let shotCounter = 0
@@ -147,12 +156,21 @@ const useStore = create((set, get) => ({
   //           estimatedSetupTime, shootingLocation, castMembers }] }]
   schedule: [],
 
+  // Callsheets — keyed by schedule day id.
+  // Each entry stores callsheet-specific fields for one shooting day.
+  // Call time and basecamp are read from schedule (bidirectional sync).
+  // Shape: { [dayId]: { shootLocation, nearestHospital, emergencyContacts,
+  //   weather, cast: [], crew: [], locationAddress, parkingNotes,
+  //   directions, mapsLink, additionalNotes } }
+  callsheets: {},
+
   // UI state
   settingsOpen: false,
   contextMenu: null, // { shotId, sceneId, x, y }
-  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'schedule'
+  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'schedule' | 'callsheet'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
+  callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
 
   // Per-column width overrides for the shotlist table (key → px width).
   // Saved with the project so widths are restored on reload.
@@ -320,6 +338,42 @@ const useStore = create((set, get) => ({
         return update ? { ...d, shotBlocks: update.shotBlocks } : d
       }),
     }))
+    get()._scheduleAutoSave()
+  },
+
+  // ── Callsheet actions ────────────────────────────────────────────────
+
+  // Returns a callsheet for a day, merging defaults with stored data.
+  getCallsheet: (dayId) => {
+    const { callsheets } = get()
+    return {
+      shootLocation: '',
+      nearestHospital: '',
+      emergencyContacts: '',
+      weather: '',
+      cast: [],
+      crew: [],
+      locationAddress: '',
+      parkingNotes: '',
+      directions: '',
+      mapsLink: '',
+      additionalNotes: '',
+      ...(callsheets[dayId] || {}),
+    }
+  },
+
+  updateCallsheet: (dayId, updates) => {
+    set(state => ({
+      callsheets: {
+        ...state.callsheets,
+        [dayId]: { ...(state.callsheets[dayId] || {}), ...updates },
+      },
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  setCallsheetSectionConfig: (config) => {
+    set({ callsheetSectionConfig: config })
     get()._scheduleAutoSave()
   },
 
@@ -608,7 +662,7 @@ const useStore = create((set, get) => ({
       projectName, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
-      shotlistColumnWidths,
+      shotlistColumnWidths, callsheets, callsheetSectionConfig,
     } = get()
     return {
       version: 2,
@@ -689,6 +743,8 @@ const useStore = create((set, get) => ({
               }
         ),
       })),
+      callsheets: callsheets || {},
+      callsheetSectionConfig: callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG,
       exportedAt: new Date().toISOString(),
     }
   },
@@ -952,6 +1008,16 @@ const useStore = create((set, get) => ({
       shotlistColumnWidths: (typeof data.shotlistColumnWidths === 'object' && data.shotlistColumnWidths !== null)
         ? data.shotlistColumnWidths
         : {},
+      callsheets: (typeof data.callsheets === 'object' && data.callsheets !== null)
+        ? data.callsheets
+        : {},
+      callsheetSectionConfig: (() => {
+        const saved = data.callsheetSectionConfig
+        if (!saved || !Array.isArray(saved) || saved.length === 0) return DEFAULT_CALLSHEET_SECTION_CONFIG
+        const savedKeys = new Set(saved.map(c => c.key))
+        const newSections = DEFAULT_CALLSHEET_SECTION_CONFIG.filter(c => !savedKeys.has(c.key))
+        return [...saved, ...newSections]
+      })(),
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
     })
@@ -1043,6 +1109,7 @@ const useStore = create((set, get) => ({
       projectName: name,
       scenes: [scene],
       schedule: [],
+      callsheets: {},
       projectPath: null,
       lastSaved: null,
     })

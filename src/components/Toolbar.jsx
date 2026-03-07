@@ -98,7 +98,9 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     ? 'Shotlist'
     : activeTab === 'schedule'
       ? 'Schedule'
-      : 'Storyboard'
+      : activeTab === 'callsheet'
+        ? 'Callsheet'
+        : 'Storyboard'
 
   return (
     <div className="toolbar">
@@ -411,6 +413,26 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
                 Export Schedule PDF
+              </button>
+              <button
+                onClick={() => handlePdfExplicit('callsheet')}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  borderTop: '1px solid rgba(255,255,255,0.08)',
+                  color: '#e0e0e0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Export Callsheet PDF
               </button>
               <button
                 onClick={() => handlePdfExplicit('all')}
