@@ -1,16 +1,9 @@
 import React, { useState } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
-import useStore from '../store'
+import useStore, { getShotLetter } from '../store'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getShotLetterForPrint(index) {
-  if (index < 26) return String.fromCharCode(65 + index)
-  const firstChar = String.fromCharCode(65 + Math.floor(index / 26) - 1)
-  const secondChar = String.fromCharCode(65 + (index % 26))
-  return firstChar + secondChar
-}
 
 function escapeHtml(str) {
   return String(str ?? '')
@@ -68,7 +61,7 @@ function buildStoryboardPrintHtml() {
     const sceneNum = sceneIdx + 1
     const shots = scene.shots.map((shot, idx) => ({
       ...shot,
-      displayId: `${sceneNum}${getShotLetterForPrint(idx)}`,
+      displayId: `${sceneNum}${getShotLetter(idx)}`,
     }))
 
     // Group shots into pages; always produce at least one (possibly empty) page.
@@ -394,7 +387,7 @@ function buildSchedulePrintHtml() {
       shotMap.set(shot.id, {
         shot,
         scene,
-        displayId: `${sceneIdx + 1}${getShotLetterForPrint(shotIdx)}`,
+        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
       })
     })
   })
@@ -828,7 +821,7 @@ function buildShotlistPrintHtml() {
     const sceneNum = sceneIdx + 1
     const shots = scene.shots.map((shot, idx) => ({
       ...shot,
-      displayId: `${sceneNum}${getShotLetterForPrint(idx)}`,
+      displayId: `${sceneNum}${getShotLetter(idx)}`,
     }))
 
     const nCols = visibleColumns.length
