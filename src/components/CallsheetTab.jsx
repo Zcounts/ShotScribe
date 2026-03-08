@@ -495,16 +495,24 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
                     Breaks
                   </td>
                 </tr>
-                {breakBlocks.map((b, i) => (
-                  <tr key={b.id} style={{ background: isDark ? 'rgba(250,204,21,0.05)' : 'rgba(250,204,21,0.08)' }}>
-                    <td colSpan={showTimes ? 6 : 4} style={{ ...tdStyle, fontStyle: 'italic', color: '#888' }}>
-                      ☕ {b.breakName}
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: '#aaa', fontSize: 11 }}>
-                      {b.breakDuration ? `${b.breakDuration} min` : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {breakBlocks.map((b, i) => {
+                  const proj = projMap[b.id]
+                  const projStart = proj?.projectedStart ?? null
+                  return (
+                    <tr key={b.id} style={{ background: isDark ? 'rgba(250,204,21,0.05)' : 'rgba(250,204,21,0.08)' }}>
+                      <td colSpan={showTimes ? 6 : 4} style={{ ...tdStyle, fontStyle: 'italic', color: '#888' }}>
+                        ☕{' '}
+                        {showTimes && projStart !== null
+                          ? <><span style={{ color: isDark ? '#7dd3fc' : '#2563eb', fontStyle: 'normal', fontWeight: 600, marginRight: 6 }}>{formatTimeOfDay(projStart)}</span>— {b.breakName}</>
+                          : b.breakName
+                        }
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: '#aaa', fontSize: 11 }}>
+                        {b.breakDuration ? `${b.breakDuration} min` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
               </>
             )}
           </tbody>
