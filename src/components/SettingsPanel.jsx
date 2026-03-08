@@ -23,6 +23,7 @@ const SHORTCUTS = {
     { keys: 'Drag shot block',  desc: 'Move shot between days or reorder' },
     { keys: 'Click day header', desc: 'Collapse / expand day' },
     { keys: 'Click block header', desc: 'Collapse / expand shot block' },
+    { keys: 'Ctrl + Click collapse', desc: 'Collapse or expand all shots simultaneously' },
   ],
   callsheet: [
     { keys: 'Ctrl + S',         desc: 'Save project' },

@@ -904,8 +904,8 @@ function buildCallsheetPrintHtml() {
   <!-- HEADER -->
   <div class="cs-header">
     <div class="cs-header-left">
-      <div class="cs-title">CALLSHEET</div>
-      <div class="cs-subtitle">${escapeHtml(productionTitle)}</div>
+      <div class="cs-title">${escapeHtml(productionTitle)}</div>
+      <div class="cs-subtitle">CALLSHEET</div>
     </div>
     <div class="cs-header-right">
       <div class="cs-day">Day ${dayIdx + 1}${day.date ? ` — ${escapeHtml(fmtDate(day.date))}` : ''}</div>
@@ -1020,14 +1020,18 @@ html, body {
   border-radius: 2px;
 }
 .cs-title {
-  font-size: 16pt;
+  font-size: 20pt;
   font-weight: 900;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
 }
 .cs-subtitle {
-  font-size: 8pt;
-  color: rgba(255,255,255,0.6);
-  margin-top: 2px;
+  font-size: 12pt;
+  font-weight: 700;
+  color: rgba(255,255,255,0.75);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 3px;
 }
 .cs-header-right {
   text-align: right;
@@ -1182,7 +1186,7 @@ ${dayPages.join('\n')}
 // Always uses a hardcoded light theme.
 
 function buildShotlistPrintHtml() {
-  const { scenes, shotlistColumnConfig, customColumns, projectName } = useStore.getState()
+  const { scenes, schedule, shotlistColumnConfig, customColumns, projectName } = useStore.getState()
 
   // Build a unified column map (built-in + custom)
   const allColumnsMap = {}
@@ -1214,54 +1218,116 @@ function buildShotlistPrintHtml() {
     })
     .join('')
 
-  const bodyRows = []
+  const nCols = visibleColumns.length
+
+  // Build global shotId→{shot, scene, displayId} map once
+  const shotMap = new Map()
   scenes.forEach((scene, sceneIdx) => {
-    const sceneNum = sceneIdx + 1
-    const shots = scene.shots.map((shot, idx) => ({
-      ...shot,
-      displayId: `${sceneNum}${getShotLetter(idx)}`,
-    }))
-
-    const nCols = visibleColumns.length
-    const sceneInfo = [scene.sceneLabel, scene.location, scene.intOrExt, scene.dayNight || 'DAY'].join(' | ')
-    const shotCount = `${shots.length} SHOT${shots.length !== 1 ? 'S' : ''}`
-
-    bodyRows.push(
-      `<tr class="scene-hdr"><td colspan="${nCols}">` +
-      `<div class="scene-hdr-inner">` +
-      `<span>${escapeHtml(sceneInfo)}</span>` +
-      `<span class="shot-count">${escapeHtml(shotCount)}</span>` +
-      `</div></td></tr>`
-    )
-
-    if (shots.length === 0) {
-      bodyRows.push(
-        `<tr><td colspan="${nCols}" style="padding:4px 8px;font-style:italic;color:#aaa;">No shots</td></tr>`
-      )
-    }
-
-    shots.forEach((shot, idx) => {
-      const rowCls = [
-        idx % 2 === 0 ? 'row-even' : 'row-odd',
-        shot.checked ? 'row-chk' : '',
-      ].filter(Boolean).join(' ')
-
-      const cells = visibleColumns.map(col => {
-        const val = getCellValue(col.key, shot, scene)
-        // Notes column wraps; all others truncate
-        const isNotes = col.key === 'notes'
-        const clsParts = []
-        if (col.key === 'checked') clsParts.push('col-c')
-        if (!isNotes) clsParts.push('no-wrap')
-        const cls = clsParts.length ? ` class="${clsParts.join(' ')}"` : ''
-        return `<td${cls}>${escapeHtml(String(val))}</td>`
-      }).join('')
-
-      bodyRows.push(`<tr class="${rowCls}">${cells}</tr>`)
+    scene.shots.forEach((shot, shotIdx) => {
+      shotMap.set(shot.id, {
+        shot,
+        scene,
+        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+      })
     })
   })
 
+  function fmtDate(iso) {
+    if (!iso) return ''
+    const [y, m, d] = iso.split('-')
+    return `${m}/${d}/${y}`
+  }
+
+  // Helper: render scene groups for a given set of shotIds, preserving scene order
+  function renderDayRows(dayShotIds) {
+    const rows = []
+    // Group shotIds by scene, preserving scene order
+    const sceneOrder = []
+    const shotsByScene = new Map()
+    scenes.forEach(scene => {
+      const shots = scene.shots
+        .map((shot, idx) => ({ ...shot, displayId: `${scenes.indexOf(scene) + 1}${getShotLetter(idx)}` }))
+        .filter(shot => dayShotIds.has(shot.id))
+      if (shots.length > 0) {
+        sceneOrder.push(scene)
+        shotsByScene.set(scene.id, shots)
+      }
+    })
+
+    sceneOrder.forEach(scene => {
+      const shots = shotsByScene.get(scene.id)
+      const sceneInfo = [scene.sceneLabel, scene.location, scene.intOrExt, scene.dayNight || 'DAY'].join(' | ')
+      const shotCount = `${shots.length} SHOT${shots.length !== 1 ? 'S' : ''}`
+
+      rows.push(
+        `<tr class="scene-hdr"><td colspan="${nCols}">` +
+        `<div class="scene-hdr-inner">` +
+        `<span>${escapeHtml(sceneInfo)}</span>` +
+        `<span class="shot-count">${escapeHtml(shotCount)}</span>` +
+        `</div></td></tr>`
+      )
+
+      shots.forEach((shot, idx) => {
+        const rowCls = [
+          idx % 2 === 0 ? 'row-even' : 'row-odd',
+          shot.checked ? 'row-chk' : '',
+        ].filter(Boolean).join(' ')
+
+        const cells = visibleColumns.map(col => {
+          const val = getCellValue(col.key, shot, scene)
+          const isNotes = col.key === 'notes'
+          const clsParts = []
+          if (col.key === 'checked') clsParts.push('col-c')
+          if (!isNotes) clsParts.push('no-wrap')
+          const cls = clsParts.length ? ` class="${clsParts.join(' ')}"` : ''
+          return `<td${cls}>${escapeHtml(String(val))}</td>`
+        }).join('')
+
+        rows.push(`<tr class="${rowCls}">${cells}</tr>`)
+      })
+    })
+
+    return rows
+  }
+
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  // Build body: if schedule has days, group by day; otherwise flat list of all shots
+  let bodyHtml = ''
+  if (schedule && schedule.length > 0) {
+    schedule.forEach((day, dayIdx) => {
+      const dayShotIds = new Set(
+        day.shotBlocks
+          .filter(b => b.type !== 'break' && b.shotId)
+          .map(b => b.shotId)
+      )
+      if (dayShotIds.size === 0) return
+
+      const dayLabel = `DAY ${dayIdx + 1}${day.date ? ` — ${fmtDate(day.date)}` : ''}`
+      const startTimeStr = day.startTime ? ` · Call: ${day.startTime}` : ''
+
+      const rows = renderDayRows(dayShotIds)
+      if (rows.length === 0) return
+
+      bodyHtml += `
+<tr class="day-hdr"><td colspan="${nCols}">
+  <div class="day-hdr-inner">
+    <span>${escapeHtml(dayLabel)}${escapeHtml(startTimeStr)}</span>
+    <span class="shot-count">${dayShotIds.size} SHOT${dayShotIds.size !== 1 ? 'S' : ''}</span>
+  </div>
+</td></tr>
+${rows.join('\n')}
+`
+    })
+    if (!bodyHtml) {
+      bodyHtml = `<tr><td colspan="${nCols}" style="padding:10px;font-style:italic;color:#aaa;text-align:center;">No shots scheduled.</td></tr>`
+    }
+  } else {
+    // Fallback: no schedule — show all scenes/shots flat
+    const allShotIds = new Set([...shotMap.keys()])
+    const rows = renderDayRows(allShotIds)
+    bodyHtml = rows.join('\n') || `<tr><td colspan="${nCols}" style="padding:10px;font-style:italic;color:#aaa;text-align:center;">No shots.</td></tr>`
+  }
 
   return `<!DOCTYPE html>
 <html>
@@ -1344,6 +1410,24 @@ tbody td.no-wrap {
 }
 tbody td:last-child { border-right: none; }
 tbody td.col-c { text-align: center; vertical-align: middle; }
+tr.day-hdr td {
+  background: #111;
+  color: #fff;
+  border: none;
+  padding: 0;
+  break-before: auto;
+}
+tr.day-hdr + tr { break-before: avoid; }
+.day-hdr-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 10px;
+  font-weight: 900;
+  font-size: 11pt;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 tr.scene-hdr td {
   background: #2a2a2a;
   color: #fff;
@@ -1384,7 +1468,7 @@ tr.row-chk  td { opacity: 0.45; text-decoration: line-through; }
   </colgroup>
   <thead><tr>${headerCells}</tr></thead>
   <tbody>
-${bodyRows.join('\n')}
+${bodyHtml}
   </tbody>
 </table>
 </body>

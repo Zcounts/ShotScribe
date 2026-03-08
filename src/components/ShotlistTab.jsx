@@ -905,9 +905,105 @@ function SortableShotRow({
   )
 }
 
+// ── Helper: format ISO date as MM/DD/YYYY ─────────────────────────────────────
+function fmtDate(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return iso
+  return `${m}/${d}/${y}`
+}
+
+// ── Day Subtab Bar ────────────────────────────────────────────────────────────
+function DaySubtabBar({ schedule, selectedDayIdx, onSelectDay, onAddDay, isDark }) {
+  const c = {
+    barBg:      isDark ? '#141414' : '#e8e4db',
+    activeBg:   isDark ? '#1e1e1e' : '#ffffff',
+    inactiveBg: isDark ? '#181818' : '#ddd9d0',
+    border:     isDark ? '#2e2e2e' : '#c4bfb5',
+    text:       isDark ? '#ccc'    : '#333',
+    mutedText:  isDark ? '#666'    : '#888',
+  }
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      padding: '6px 16px 0',
+      backgroundColor: c.barBg,
+      borderBottom: `2px solid ${c.border}`,
+      overflowX: 'auto',
+      flexShrink: 0,
+    }}>
+      {schedule.map((day, idx) => {
+        const isActive = idx === selectedDayIdx
+        const label = `Day ${idx + 1}${day.date ? ` — ${fmtDate(day.date)}` : ''}`
+        return (
+          <button
+            key={day.id}
+            onClick={() => onSelectDay(idx)}
+            style={{
+              flexShrink: 0,
+              padding: '5px 14px',
+              border: `1px solid ${isActive ? c.border : 'transparent'}`,
+              borderBottom: isActive ? `2px solid ${isDark ? '#1e1e1e' : '#ffffff'}` : '1px solid transparent',
+              borderRadius: '4px 4px 0 0',
+              marginBottom: isActive ? -2 : 0,
+              background: isActive ? c.activeBg : 'none',
+              color: isActive ? c.text : c.mutedText,
+              fontFamily: 'monospace',
+              fontSize: 11,
+              fontWeight: isActive ? 700 : 400,
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'color 0.1s',
+            }}
+          >
+            {label}
+          </button>
+        )
+      })}
+
+      {/* + Add Day */}
+      <button
+        onClick={onAddDay}
+        style={{
+          flexShrink: 0,
+          padding: '5px 10px',
+          border: '1px dashed transparent',
+          borderRadius: '4px 4px 0 0',
+          background: 'none',
+          color: c.mutedText,
+          fontFamily: 'monospace',
+          fontSize: 11,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          transition: 'color 0.1s',
+          whiteSpace: 'nowrap',
+          marginLeft: 4,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = isDark ? '#4ade80' : '#16a34a' }}
+        onMouseLeave={e => { e.currentTarget.style.color = c.mutedText }}
+        title="Add shooting day"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <line x1="5" y1="1" x2="5" y2="9" />
+          <line x1="1" y1="5" x2="9" y2="5" />
+        </svg>
+        Add Day
+      </button>
+    </div>
+  )
+}
+
 // ── Main ShotlistTab ──────────────────────────────────────────────────────────
 export default function ShotlistTab({ containerRef }) {
   const scenes                  = useStore(s => s.scenes)
+  const schedule                = useStore(s => s.schedule)
+  const addShootingDay          = useStore(s => s.addShootingDay)
   const getShotsForScene        = useStore(s => s.getShotsForScene)
   const updateShot              = useStore(s => s.updateShot)
   const updateShotSpec          = useStore(s => s.updateShotSpec)
@@ -915,7 +1011,6 @@ export default function ShotlistTab({ containerRef }) {
   const addShot                 = useStore(s => s.addShot)
   const deleteShot              = useStore(s => s.deleteShot)
   const reorderShots            = useStore(s => s.reorderShots)
-  const addScene                = useStore(s => s.addScene)
   const theme                   = useStore(s => s.theme)
   const shotlistColumnConfig    = useStore(s => s.shotlistColumnConfig)
   const setShotlistColumnConfig = useStore(s => s.setShotlistColumnConfig)
@@ -927,6 +1022,33 @@ export default function ShotlistTab({ containerRef }) {
   const isDark = theme === 'dark'
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
+  const [selectedDayIdx, setSelectedDayIdx] = useState(0)
+
+  // Clamp selectedDayIdx if schedule shrinks
+  const activeDayIdx = schedule.length === 0 ? -1 : Math.min(selectedDayIdx, schedule.length - 1)
+  const activeDay = activeDayIdx >= 0 ? schedule[activeDayIdx] : null
+
+  // Build a Set of shotIds scheduled for the active day
+  const activeDayShotIds = useMemo(() => {
+    if (!activeDay) return new Set()
+    return new Set(
+      activeDay.shotBlocks
+        .filter(b => b.type !== 'break' && b.shotId)
+        .map(b => b.shotId)
+    )
+  }, [activeDay])
+
+  // Filtered scenes: only scenes that have at least one shot in activeDayShotIds
+  // Each scene's shots are also filtered to only include those in activeDayShotIds
+  const filteredScenes = useMemo(() => {
+    if (!activeDay) return []
+    return scenes
+      .map(scene => {
+        const shots = getShotsForScene(scene.id).filter(s => activeDayShotIds.has(s.id))
+        return { ...scene, _filteredShots: shots }
+      })
+      .filter(scene => scene._filteredShots.length > 0)
+  }, [scenes, activeDay, activeDayShotIds, getShotsForScene])
 
   // ── Column resize state ────────────────────────────────────────────────────
   // Track active resize: { key, startX, startWidth }
@@ -1019,11 +1141,6 @@ export default function ShotlistTab({ containerRef }) {
     reorderShots(sceneId, active.id, over.id)
   }, [reorderShots])
 
-  // Add Scene — calls the store action directly with no prompts, matching the
-  // Storyboard tab's "Add Scene" button behaviour exactly.  window.prompt()
-  // was previously used here but is unreliable in Electron (can return null
-  // silently), which caused the button to appear to do nothing.
-
   // Close config panel when clicking outside
   useEffect(() => {
     if (!configPanelOpen) return
@@ -1043,6 +1160,15 @@ export default function ShotlistTab({ containerRef }) {
         backgroundColor: c.pageBg,
       }}
     >
+
+      {/* ── Day Subtab Bar ── */}
+      <DaySubtabBar
+        schedule={schedule}
+        selectedDayIdx={activeDayIdx}
+        onSelectDay={setSelectedDayIdx}
+        onAddDay={addShootingDay}
+        isDark={isDark}
+      />
 
       {/* ── Toolbar ── */}
       <div style={{
@@ -1099,7 +1225,54 @@ export default function ShotlistTab({ containerRef }) {
         )}
       </div>
 
-      {/* ── Table + Add Scene ── */}
+      {/* ── No days empty state ── */}
+      {schedule.length === 0 && (
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: isDark ? '#555' : '#bbb',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          gap: 10,
+          padding: 40,
+          textAlign: 'center',
+        }}>
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5">
+            <rect x="4" y="6" width="28" height="26" rx="2" />
+            <line x1="12" y1="2" x2="12" y2="10" />
+            <line x1="24" y1="2" x2="24" y2="10" />
+            <line x1="4" y1="14" x2="32" y2="14" />
+          </svg>
+          <div>No shooting days yet.</div>
+          <div style={{ opacity: 0.6 }}>Add days in the Schedule tab, or use + Add Day above.</div>
+        </div>
+      )}
+
+      {/* ── No shots for day empty state ── */}
+      {schedule.length > 0 && activeDay && filteredScenes.length === 0 && (
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: isDark ? '#555' : '#bbb',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          gap: 8,
+          padding: 40,
+          textAlign: 'center',
+        }}>
+          <div>No shots scheduled for this day.</div>
+          <div style={{ opacity: 0.6 }}>Add shots to this day in the Schedule tab.</div>
+        </div>
+      )}
+
+      {/* ── Table ── */}
+      {schedule.length > 0 && activeDay && filteredScenes.length > 0 && (
       <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
         <table style={{
           borderCollapse: 'collapse',
@@ -1170,8 +1343,8 @@ export default function ShotlistTab({ containerRef }) {
 
           {/* ── Body ── */}
           <tbody>
-            {scenes.map(scene => {
-              const shots = getShotsForScene(scene.id)
+            {filteredScenes.map(scene => {
+              const shots = scene._filteredShots
               const timeTotal = sumScriptTimes(shots)
               const totalCols = visibleColumns.length + 1 // +1 for drag/delete col
 
@@ -1396,46 +1569,8 @@ export default function ShotlistTab({ containerRef }) {
           </tbody>
         </table>
 
-        {/* ── Add Scene button ── */}
-        <div className="shotlist-add-scene" style={{ display: 'flex', justifyContent: 'center', padding: '20px 0 8px' }}>
-          <button
-            onClick={addScene}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 7,
-              padding: '8px 22px',
-              background: 'none',
-              border: `1.5px dashed ${isDark ? '#3a3a3a' : '#c4bfb5'}`,
-              borderRadius: 6,
-              cursor: 'pointer',
-              fontSize: 11,
-              fontFamily: 'monospace',
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: isDark ? '#444' : '#b0ada8',
-              transition: 'all 0.12s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.color = isDark ? '#4ade80' : '#16a34a'
-              e.currentTarget.style.borderColor = isDark ? '#4ade80' : '#16a34a'
-              e.currentTarget.style.background = isDark ? 'rgba(74,222,128,0.06)' : 'rgba(22,163,74,0.05)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.color = isDark ? '#444' : '#b0ada8'
-              e.currentTarget.style.borderColor = isDark ? '#3a3a3a' : '#c4bfb5'
-              e.currentTarget.style.background = 'none'
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="6" y1="1" x2="6" y2="11" />
-              <line x1="1" y1="6" x2="11" y2="6" />
-            </svg>
-            Add Scene
-          </button>
-        </div>
       </div>
+      )}
     </div>
   )
 }
