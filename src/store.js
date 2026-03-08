@@ -493,7 +493,7 @@ const useStore = create((set, get) => ({
   addShot: (sceneId) => {
     const { scenes, defaultFocalLength } = get()
     const scene = scenes.find(s => s.id === sceneId)
-    if (!scene) return
+    if (!scene) return null
     const newShot = createShot({
       cameraName: scene.cameras?.[0]?.name || 'Camera 1',
       focalLength: defaultFocalLength,
@@ -507,6 +507,7 @@ const useStore = create((set, get) => ({
       ),
     }))
     get()._scheduleAutoSave()
+    return newShot.id
   },
 
   deleteShot: (shotId) => {

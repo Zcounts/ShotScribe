@@ -1009,6 +1009,7 @@ export default function ShotlistTab({ containerRef }) {
   const updateShotSpec          = useStore(s => s.updateShotSpec)
   const updateScene             = useStore(s => s.updateScene)
   const addShot                 = useStore(s => s.addShot)
+  const addShotBlock            = useStore(s => s.addShotBlock)
   const deleteShot              = useStore(s => s.deleteShot)
   const reorderShots            = useStore(s => s.reorderShots)
   const theme                   = useStore(s => s.theme)
@@ -1135,6 +1136,14 @@ export default function ShotlistTab({ containerRef }) {
     }
   }, [updateShot, updateShotSpec])
 
+  // Add a shot to a scene AND schedule it for the active day
+  const handleAddShotForDay = useCallback((sceneId) => {
+    const shotId = addShot(sceneId)
+    if (shotId && activeDay) {
+      addShotBlock(activeDay.id, shotId)
+    }
+  }, [addShot, addShotBlock, activeDay])
+
   const handleRowDragEnd = useCallback((event, sceneId) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -1259,15 +1268,57 @@ export default function ShotlistTab({ containerRef }) {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          color: isDark ? '#555' : '#bbb',
+          color: isDark ? '#555' : '#aaa',
           fontFamily: 'monospace',
           fontSize: 12,
-          gap: 8,
+          gap: 16,
           padding: 40,
           textAlign: 'center',
         }}>
-          <div>No shots scheduled for this day.</div>
-          <div style={{ opacity: 0.6 }}>Add shots to this day in the Schedule tab.</div>
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4">
+            <rect x="4" y="6" width="28" height="26" rx="2" />
+            <line x1="12" y1="2" x2="12" y2="10" />
+            <line x1="24" y1="2" x2="24" y2="10" />
+            <line x1="4" y1="14" x2="32" y2="14" />
+          </svg>
+          <div style={{ color: isDark ? '#666' : '#999' }}>No shots scheduled for this day.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+            <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Add a shot to this day:</div>
+            {scenes.map(scene => (
+              <button
+                key={scene.id}
+                onClick={() => handleAddShotForDay(scene.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 14px',
+                  border: `1px dashed ${isDark ? '#333' : '#d0ccc5'}`,
+                  borderRadius: 4,
+                  background: 'none',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  color: isDark ? '#555' : '#aaa',
+                  transition: 'color 0.12s, border-color 0.12s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = isDark ? '#4ade80' : '#16a34a'
+                  e.currentTarget.style.borderColor = isDark ? '#4ade80' : '#16a34a'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = isDark ? '#555' : '#aaa'
+                  e.currentTarget.style.borderColor = isDark ? '#333' : '#d0ccc5'
+                }}
+              >
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <line x1="5" y1="1" x2="5" y2="9" />
+                  <line x1="1" y1="5" x2="9" y2="5" />
+                </svg>
+                Add Shot — {scene.sceneLabel}{scene.location ? ` · ${scene.location}` : ''}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1527,7 +1578,7 @@ export default function ShotlistTab({ containerRef }) {
                       }}
                     >
                       <button
-                        onClick={() => addShot(scene.id)}
+                        onClick={() => handleAddShotForDay(scene.id)}
                         style={{
                           width: '100%',
                           height: '100%',

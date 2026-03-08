@@ -377,7 +377,7 @@ function scheduleFormatDate(isoDate) {
   }
 }
 
-function buildSchedulePrintHtml() {
+function buildSchedulePrintHtml(dayIdxFilter = null) {
   const { schedule, scenes, projectName } = useStore.getState()
 
   // Build a fast shot lookup: shotId → { shot, scene, displayId }
@@ -395,6 +395,7 @@ function buildSchedulePrintHtml() {
   const dayDivs = []
 
   schedule.forEach((day, dayIdx) => {
+    if (dayIdxFilter !== null && !dayIdxFilter.includes(dayIdx)) return
     const formattedDate = scheduleFormatDate(day.date)
     const startMins = scheduleParseStartTime(day.startTime)
     const hasTimeline = startMins !== null
@@ -520,13 +521,13 @@ function buildSchedulePrintHtml() {
     ? '<p class="no-shots">No shots scheduled for this day.</p>'
     : `<table>
     <colgroup>
-      ${hasTimeline ? '<col style="width:90px">' : ''}
-      <col style="width:42px">
+      ${hasTimeline ? '<col style="width:80px">' : ''}
+      <col style="width:36px">
       <col style="width:auto">
-      <col style="width:80px">
-      <col style="width:52px">
-      <col style="width:52px">
-      <col style="width:130px">
+      <col style="width:70px">
+      <col style="width:44px">
+      <col style="width:44px">
+      <col style="width:110px">
     </colgroup>
     <thead><tr>${headerCols}</tr></thead>
     <tbody>
@@ -545,34 +546,34 @@ function buildSchedulePrintHtml() {
 <meta charset="utf-8">
 <title>Shooting Schedule — ${escapeHtml(projectName || 'Untitled')}</title>
 <style>
-@page { size: A4; margin: 12mm 12mm 14mm; }
+@page { size: A4; margin: 10mm 10mm 12mm; }
 @media print { html, body { margin: 0; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   background: #fff;
   color: #111;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 9pt;
+  font-size: 8pt;
 }
 .doc-title {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding-bottom: 6px;
+  padding-bottom: 5px;
   border-bottom: 2px solid #111;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 .doc-title-main {
-  font-size: 14pt;
+  font-size: 13pt;
   font-weight: 900;
   letter-spacing: -0.01em;
 }
 .doc-title-sub {
-  font-size: 8pt;
+  font-size: 7.5pt;
   color: #444;
 }
 .day-section {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 .day-header {
   display: flex;
@@ -580,7 +581,7 @@ html, body {
   align-items: center;
   background: #f5f3ee;
   color: #111;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border: 1px solid #bbb;
   border-radius: 2px 2px 0 0;
   margin-bottom: 0;
@@ -588,36 +589,36 @@ html, body {
 .day-title {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .day-num {
-  font-size: 11pt;
+  font-size: 10pt;
   font-weight: 900;
   letter-spacing: 0.04em;
 }
 .day-date {
-  font-size: 9pt;
+  font-size: 8pt;
   font-weight: 400;
   color: #444;
 }
 .no-date { color: #999; font-style: italic; }
 .call-time {
-  font-size: 9pt;
+  font-size: 8pt;
   font-weight: 700;
   background: rgba(0,0,0,0.07);
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 3px;
   letter-spacing: 0.04em;
   color: #111;
 }
 .shot-count {
-  font-size: 8pt;
+  font-size: 7.5pt;
   color: #555;
   letter-spacing: 0.06em;
 }
 .no-shots {
-  padding: 10px;
+  padding: 7px 8px;
   font-style: italic;
   color: #666;
   border: 1px solid #e5e5e5;
@@ -631,26 +632,27 @@ table {
   border-top: none;
 }
 thead th {
-  background: #f5f3ee;
-  color: #555;
-  font-size: 7pt;
+  background: #eceae4;
+  color: #444;
+  font-size: 6.5pt;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: left;
-  padding: 4px 6px;
-  border-bottom: 1.5px solid #bbb;
-  border-right: 1px solid #ddd;
+  padding: 3px 5px;
+  border-bottom: 1.5px solid #aaa;
+  border-right: 1px solid #ccc;
   white-space: nowrap;
   overflow: hidden;
 }
 thead th:last-child { border-right: none; }
 .tl-th { text-align: center; }
 tbody td {
-  padding: 4px 6px;
+  padding: 2px 5px;
   border-bottom: 1px solid #e8e5e0;
-  border-right: 1px solid #e8e5e0;
-  vertical-align: top;
+  border-right: 1px solid #ebe8e2;
+  vertical-align: middle;
+  line-height: 1.3;
 }
 tbody td:last-child { border-right: none; }
 tr.block-row:nth-child(even) td { background: #faf8f5; }
@@ -663,55 +665,56 @@ tr.deleted-row td { background: #fff5f5; color: #ddd; }
 }
 .est-badge {
   display: inline-block;
-  font-size: 9pt;
+  font-size: 8pt;
   font-weight: 700;
   color: #1d4ed8;
   letter-spacing: 0.02em;
 }
 .est-label {
-  font-size: 6pt;
+  font-size: 5.5pt;
   color: #777;
   letter-spacing: 0.1em;
   font-weight: 400;
 }
 .shot-id {
-  font-size: 10pt;
+  font-size: 9pt;
   font-weight: 900;
   vertical-align: middle;
   white-space: nowrap;
 }
-.subject-cell { font-size: 8.5pt; }
-.notes-txt { color: #555; font-style: italic; font-size: 7.5pt; }
-.scene-loc { color: #555; font-size: 7.5pt; }
+.subject-cell { font-size: 7.5pt; vertical-align: middle; }
+.notes-txt { color: #444; font-style: italic; font-size: 7pt; display: block; }
+.scene-loc { color: #666; font-size: 6.5pt; display: block; }
 .badge-cell { white-space: nowrap; vertical-align: middle; }
 .bdg {
   display: inline-block;
-  padding: 1px 4px;
-  font-size: 7pt;
+  padding: 0 3px;
+  font-size: 6.5pt;
   font-weight: 700;
   border: 1px solid #ccc;
   border-radius: 2px;
-  background: #f5f5f5;
+  background: #f0ede8;
 }
 .time-cell {
   text-align: center;
   vertical-align: middle;
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 8pt;
 }
-.cast-cell { font-size: 8pt; }
+.cast-cell { font-size: 7.5pt; vertical-align: middle; }
 .totals-row td {
-  background: #f0ede4 !important;
-  border-top: 1.5px solid #bbb;
-  padding: 5px 6px;
-  font-size: 8.5pt;
+  background: #ede9df !important;
+  border-top: 1.5px solid #aaa;
+  padding: 4px 5px;
+  font-size: 8pt;
 }
 .total-val { font-weight: 700; color: #1a1a1a; }
 .day-basecamp {
-  font-size: 8pt;
+  font-size: 7.5pt;
   font-weight: 600;
   background: rgba(0,0,0,0.07);
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 3px;
   letter-spacing: 0.02em;
   color: #111;
@@ -722,26 +725,26 @@ tr.break-row td {
   border-right: 1px solid #fde68a;
 }
 .break-name-cell {
-  padding: 5px 8px;
-  font-size: 8.5pt;
+  padding: 2px 5px;
+  font-size: 8pt;
 }
 .break-icon {
-  margin-right: 5px;
+  margin-right: 4px;
 }
 .break-dur {
   display: inline-block;
-  margin-left: 10px;
-  font-size: 8pt;
+  margin-left: 8px;
+  font-size: 7.5pt;
   color: #555;
   background: #fde68a;
-  padding: 1px 5px;
+  padding: 0 4px;
   border-radius: 3px;
   font-weight: 600;
 }
 .footer {
-  margin-top: 16px;
+  margin-top: 12px;
   border-top: 1px solid #ddd;
-  padding-top: 6px;
+  padding-top: 5px;
   font-size: 7pt;
   color: #aaa;
   display: flex;
@@ -782,7 +785,7 @@ ${dayDivs.join('\n')}
 // Each day starts on a new page.  Call time and basecamp come from the
 // schedule; all other fields come from the callsheets store map.
 
-function buildCallsheetPrintHtml() {
+function buildCallsheetPrintHtml(dayIdxFilter = null) {
   const { schedule, callsheets, projectName, scenes } = useStore.getState()
 
   if (schedule.length === 0) {
@@ -811,7 +814,10 @@ function buildCallsheetPrintHtml() {
     return `${mo}/${da}/${y}`
   }
 
-  const dayPages = schedule.map((day, dayIdx) => {
+  const dayPages = schedule
+    .map((day, dayIdx) => ({ day, dayIdx }))
+    .filter(({ dayIdx }) => dayIdxFilter === null || dayIdxFilter.includes(dayIdx))
+    .map(({ day, dayIdx }) => {
     const cs = callsheets[day.id] || {}
     const productionTitle = cs.productionTitle !== undefined ? cs.productionTitle : (projectName || 'Untitled Project')
 
@@ -829,13 +835,31 @@ function buildCallsheetPrintHtml() {
       `<tr><td class="info-label">${label}</td><td class="info-value">${value}</td></tr>`
     ).join('\n')
 
-    // ── Advanced Schedule: group shot blocks by scene
+    // ── Advanced Schedule: group shot blocks by scene + compute break start times
+    const startMins = scheduleParseStartTime(day.startTime)
+    let cumulativeAdvMins = 0
+
+    // First pass: compute projected start time for every block (in order)
+    const blockProjMap = {}
+    day.shotBlocks.forEach(block => {
+      const projStart = startMins !== null ? startMins + cumulativeAdvMins : null
+      blockProjMap[block.id] = projStart
+      if (block.type === 'break') {
+        cumulativeAdvMins += parseScheduleMinutes(block.breakDuration)
+      } else {
+        const found = shotMap.get(block.shotId)
+        if (found) {
+          cumulativeAdvMins += parseScheduleMinutes(found.shot.shootTime) + parseScheduleMinutes(found.shot.setupTime)
+        }
+      }
+    })
+
     const sceneGroups = []
     const seenScenes = new Map()
     const breaks = []
     day.shotBlocks.forEach(block => {
       if (block.type === 'break') {
-        breaks.push(block)
+        breaks.push({ ...block, projStart: blockProjMap[block.id] })
         return
       }
       const found = shotMap.get(block.shotId)
@@ -859,9 +883,13 @@ function buildCallsheetPrintHtml() {
       </tr>`
     ).join('\n')
 
-    const breakRows = breaks.map(b =>
-      `<tr class="break-adv-row"><td colspan="4" style="font-style:italic;color:#666">☕ ${escapeHtml(b.breakName || 'Break')}</td><td style="text-align:right;color:#999">${b.breakDuration ? b.breakDuration + ' min' : ''}</td></tr>`
-    ).join('\n')
+    const breakRows = breaks.map(b => {
+      const timeLabel = b.projStart !== null
+        ? `<span style="color:#1d4ed8;font-weight:700;font-style:normal">${escapeHtml(scheduleFormatTimeOfDay(b.projStart))}</span> — `
+        : ''
+      const durLabel = b.breakDuration ? `${b.breakDuration} min` : ''
+      return `<tr class="break-adv-row"><td colspan="4" style="color:#666">☕ ${timeLabel}${escapeHtml(b.breakName || 'Break')}</td><td style="text-align:right;color:#999">${durLabel}</td></tr>`
+    }).join('\n')
 
     // ── Cast List
     const cast = cs.cast || []
@@ -1185,7 +1213,7 @@ ${dayPages.join('\n')}
 // Font size is 9pt so all columns fit comfortably in landscape A4/Letter.
 // Always uses a hardcoded light theme.
 
-function buildShotlistPrintHtml() {
+function buildShotlistPrintHtml(dayIdxFilter = null) {
   const { scenes, schedule, shotlistColumnConfig, customColumns, projectName } = useStore.getState()
 
   // Build a unified column map (built-in + custom)
@@ -1296,6 +1324,8 @@ function buildShotlistPrintHtml() {
   let bodyHtml = ''
   if (schedule && schedule.length > 0) {
     schedule.forEach((day, dayIdx) => {
+      if (dayIdxFilter !== null && !dayIdxFilter.includes(dayIdx)) return
+
       const dayShotIds = new Set(
         day.shotBlocks
           .filter(b => b.type !== 'break' && b.shotId)
@@ -1828,6 +1858,92 @@ function _stripPageRules(css) {
   return result
 }
 
+// ── Per-day combined HTML builder ─────────────────────────────────────────────
+// options: { shotlist: bool, schedule: bool, callsheet: bool }
+function buildDayCombinedHtml(dayIdx, options = {}) {
+  const { projectName } = useStore.getState()
+
+  const parts = []
+  const cssBlocks = []
+  const styles = []
+
+  const extractStyle = (html) => { const m = html.match(/<style>([\s\S]*?)<\/style>/); return m ? m[1] : '' }
+  const extractBody  = (html) => { const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/); return m ? m[1].trim() : '' }
+
+  if (options.shotlist) {
+    const html = buildShotlistPrintHtml([dayIdx])
+    cssBlocks.push(_stripPageRules(extractStyle(html)))
+    parts.push({ cls: 'day-shotlist', body: extractBody(html), page: 'sl-page' })
+  }
+  if (options.schedule) {
+    const html = buildSchedulePrintHtml([dayIdx])
+    cssBlocks.push(_stripPageRules(extractStyle(html)))
+    parts.push({ cls: 'day-schedule', body: extractBody(html), page: 'sc-page' })
+  }
+  if (options.callsheet) {
+    const html = buildCallsheetPrintHtml([dayIdx])
+    cssBlocks.push(_stripPageRules(extractStyle(html)))
+    parts.push({ cls: 'day-callsheet', body: extractBody(html), page: 'cs-page' })
+  }
+
+  if (parts.length === 0) return null
+
+  const pageRules = `
+@page sl-page { size: A4 landscape; margin: 12mm 10mm 14mm; }
+@page sc-page { size: A4; margin: 10mm 10mm 12mm; }
+@page cs-page { size: A4; margin: 12mm 14mm 14mm; }
+`
+  const wrapperCss = parts.map((p, i) =>
+    `.${p.cls} { page: ${p.page}; ${i > 0 ? 'break-before: page; page-break-before: always;' : ''} }`
+  ).join('\n')
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Day ${dayIdx + 1} — ${escapeHtml(projectName || 'Untitled')}</title>
+<style>
+${pageRules}
+@media print { html, body { margin: 0; } }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #fff; color: #111; }
+${wrapperCss}
+${cssBlocks.join('\n')}
+</style>
+</head>
+<body>
+${parts.map(p => `<div class="${p.cls}">\n${p.body}\n</div>`).join('\n')}
+</body>
+</html>`
+}
+
+export async function exportDayPDF(dayIdx, options, projectName) {
+  try {
+    const html = buildDayCombinedHtml(dayIdx, options)
+    if (!html) { alert('No documents selected.'); return }
+    if (window.electronAPI?.printToPDF) {
+      await exportViaPrint(html, projectName, `day${dayIdx + 1}`)
+    } else {
+      const win = window.open('', '_blank', 'width=900,height=700')
+      if (!win) {
+        const blob = new Blob([html], { type: 'text/html' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${(projectName || 'export').replace(/[^a-z0-9]/gi, '_')}_day${dayIdx + 1}.html`
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        return
+      }
+      win.document.write(html); win.document.close()
+      setTimeout(() => { win.focus(); win.print() }, 500)
+    }
+  } catch (err) {
+    console.error('[PDF Export] Day export failed:', err)
+    _handleExportError(err)
+  }
+}
+
 function buildCombinedPrintHtml() {
   const { projectName } = useStore.getState()
 
@@ -1944,223 +2060,264 @@ function _handleExportError(err) {
 
 // ── ExportModal component ──────────────────────────────────────────────────────
 
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: '0.1em',
+      textTransform: 'uppercase',
+      color: '#999',
+      marginBottom: 8,
+      paddingBottom: 5,
+      borderBottom: '1px solid #e5e7eb',
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function ExportBtn({ label, sub, onClick, disabled, primary }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding: '9px 12px',
+        borderRadius: 6,
+        border: `1px solid ${primary ? '#2563eb' : '#e5e7eb'}`,
+        background: primary ? '#2563eb' : '#f9fafb',
+        color: primary ? '#fff' : '#111',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        transition: 'background 0.1s',
+        marginBottom: 6,
+        fontSize: 13,
+        fontWeight: 600,
+      }}
+      onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = primary ? '#1d4ed8' : '#f3f4f6' }}
+      onMouseLeave={e => { if (!disabled) e.currentTarget.style.background = primary ? '#2563eb' : '#f9fafb' }}
+    >
+      {label}
+      {sub && <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 1 }}>{sub}</div>}
+    </button>
+  )
+}
+
 export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, activeTab, projectName }) {
+  const schedule = useStore(s => s.schedule)
   const [exporting, setExporting] = useState(false)
-  const [exportType, setExportType] = useState(null)
+  const [exportingKey, setExportingKey] = useState(null)
+  // Per-day checkbox state: { [dayIdx]: { shotlist, schedule, callsheet } }
+  const [dayOptions, setDayOptions] = useState({})
 
   if (!isOpen) return null
 
-  const isAll        = activeTab === 'all'
-  const isSchedule   = activeTab === 'schedule'
-  const isShotlist   = activeTab === 'shotlist'
-  const isCallsheet  = activeTab === 'callsheet'
-  const isStoryboard = !isAll && !isSchedule && !isShotlist && !isCallsheet
+  const getDayOpts = (idx) => dayOptions[idx] || { shotlist: true, schedule: true, callsheet: true }
+  const setDayOpt = (idx, key, val) => setDayOptions(prev => ({
+    ...prev,
+    [idx]: { ...getDayOpts(idx), [key]: val },
+  }))
 
-  const tabLabel = isSchedule ? 'Schedule' : isShotlist ? 'Shotlist' : isAll ? 'All' : isCallsheet ? 'Callsheet' : 'Storyboard'
-
-  const handleExportPDF = async (forceTab) => {
-    const tab = forceTab ?? activeTab
+  const run = async (key, fn) => {
     setExporting(true)
-    setExportType('pdf-' + tab)
+    setExportingKey(key)
     try {
-      if (tab === 'shotlist') {
-        await exportShotlistPDF(shotlistRef, projectName)
-      } else if (tab === 'schedule') {
-        await exportSchedulePDF(projectName)
-      } else if (tab === 'callsheet') {
-        await exportCallsheetPDF(projectName)
-      } else if (tab === 'all-combined') {
-        await exportAllCombinedPDF(projectName)
-      } else if (tab === 'all-separate') {
-        await exportAllSeparatePDFs(pageRefs, shotlistRef, projectName)
-      } else {
-        await exportStoryboardPDF(pageRefs, projectName)
-      }
+      await fn()
+    } catch (err) {
+      _handleExportError(err)
     } finally {
       setExporting(false)
-      setExportType(null)
+      setExportingKey(null)
       onClose()
     }
   }
 
-  const handleExportPNG = async () => {
-    setExporting(true)
-    setExportType('png')
-    try {
-      await exportToPNG(pageRefs)
-    } finally {
-      setExporting(false)
-      setExportType(null)
-      onClose()
-    }
+  const busy = (key) => exporting && exportingKey === key
+
+  const overlayStyle = {
+    position: 'fixed', inset: 0, zIndex: 1000,
+    background: 'rgba(0,0,0,0.45)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
   }
-
-  const pageCount = (pageRefs?.current || []).filter(Boolean).length
-
-  // ── Export All dialog ──────────────────────────────────────────────────────
-  if (isAll) {
-    return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">Export All</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="5" y1="5" x2="15" y2="15" /><line x1="15" y1="5" x2="5" y2="15" />
-              </svg>
-            </button>
-          </div>
-          <p className="text-sm text-gray-600 mb-5">
-            Export the storyboard, shotlist, schedule, and callsheet as PDFs. Choose how you'd like to save them.
-          </p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => handleExportPDF('all-combined')}
-              disabled={exporting}
-              className="flex-1 py-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors text-left px-4"
-            >
-              <div style={{ fontSize: 15, marginBottom: 4 }}>
-                {exporting && exportType === 'pdf-all-combined' ? 'Exporting…' : 'One Combined PDF'}
-              </div>
-              <div className="text-xs font-normal opacity-75">All four documents in a single file</div>
-            </button>
-            <button
-              onClick={() => handleExportPDF('all-separate')}
-              disabled={exporting}
-              className="flex-1 py-4 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800 disabled:opacity-50 transition-colors text-left px-4"
-            >
-              <div style={{ fontSize: 15, marginBottom: 4 }}>
-                {exporting && exportType === 'pdf-all-separate' ? 'Exporting…' : 'Separate PDFs'}
-              </div>
-              <div className="text-xs font-normal opacity-75">Four individual PDF files, one per document</div>
-            </button>
-          </div>
-        </div>
-      </div>
-    )
+  const modalStyle = {
+    background: '#fff',
+    borderRadius: 10,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+    width: 520,
+    maxWidth: '95vw',
+    maxHeight: '88vh',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  }
+  const scrollStyle = {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '0 20px 20px',
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">Export</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="5" y1="5" x2="15" y2="15" />
-              <line x1="15" y1="5" x2="5" y2="15" />
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>Export</div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>Choose what to export as PDF</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 4 }}>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="5" y1="5" x2="15" y2="15" /><line x1="15" y1="5" x2="5" y2="15" />
             </svg>
           </button>
         </div>
 
-        <p className="text-sm text-gray-600 mb-4">
-          Export your {tabLabel.toLowerCase()} as a print-ready document.
-        </p>
+        <div style={scrollStyle}>
 
-        <div className="flex gap-3 mb-3">
-          <button
-            onClick={() => handleExportPDF()}
-            disabled={exporting}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {exporting && exportType === 'pdf-' + activeTab ? 'Exporting…' : `Export ${tabLabel} PDF`}
-            <div className="text-xs font-normal opacity-75">
-              {isSchedule
-                ? 'Day-by-day layout with timeline & totals'
-                : isCallsheet
-                  ? 'Professional callsheet, one page per shoot day'
-                  : isStoryboard
-                    ? 'Card grid layout, one page per scene'
-                    : 'Full table layout'}
+          {/* ── EXPORT ALL ── */}
+          <div style={{ marginTop: 16 }}>
+            <SectionLabel>Export All</SectionLabel>
+            <ExportBtn
+              label={busy('all-combined') ? 'Exporting…' : 'Everything — One Combined PDF'}
+              sub="All documents, all days, combined into a single file"
+              primary
+              disabled={exporting}
+              onClick={() => run('all-combined', () => exportAllCombinedPDF(projectName))}
+            />
+            <ExportBtn
+              label={busy('all-separate') ? 'Exporting…' : 'Everything — Separate PDF Files'}
+              sub="Storyboard, Shotlist, Schedule, and Callsheet as individual files"
+              disabled={exporting}
+              onClick={() => run('all-separate', () => exportAllSeparatePDFs(pageRefs, shotlistRef, projectName))}
+            />
+          </div>
+
+          {/* ── BY DOCUMENT TYPE ── */}
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>By Document Type — All Days</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {[
+                { key: 'storyboard', label: 'All Storyboards', sub: 'Card grid, one page per scene', fn: () => exportStoryboardPDF(pageRefs, projectName) },
+                { key: 'shotlist',   label: 'All Shotlists',   sub: 'Full table, grouped by day',   fn: () => exportShotlistPDF(shotlistRef, projectName) },
+                { key: 'schedule',   label: 'All Schedules',   sub: 'Day-by-day timeline layout',    fn: () => exportSchedulePDF(projectName) },
+                { key: 'callsheet',  label: 'All Callsheets',  sub: 'One page per shoot day',        fn: () => exportCallsheetPDF(projectName) },
+              ].map(({ key, label, sub, fn }) => (
+                <button
+                  key={key}
+                  disabled={exporting}
+                  onClick={() => run(key, fn)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #e5e7eb',
+                    background: busy(key) ? '#eff6ff' : '#f9fafb',
+                    color: '#111',
+                    cursor: exporting ? 'not-allowed' : 'pointer',
+                    opacity: exporting && !busy(key) ? 0.5 : 1,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { if (!exporting) e.currentTarget.style.background = '#eff6ff' }}
+                  onMouseLeave={e => { if (!exporting) e.currentTarget.style.background = '#f9fafb' }}
+                >
+                  {busy(key) ? 'Exporting…' : label}
+                  <div style={{ fontSize: 10, fontWeight: 400, color: '#888', marginTop: 2 }}>{sub}</div>
+                </button>
+              ))}
             </div>
-          </button>
+          </div>
 
-          {isStoryboard && (
-            <button
-              onClick={() => handleExportPNG()}
-              disabled={exporting}
-              className="flex-1 py-3 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800 disabled:opacity-50 transition-colors"
-            >
-              {exporting && exportType === 'png' ? 'Exporting…' : 'Export PNG'}
-              <div className="text-xs font-normal opacity-75">One PNG per page</div>
-            </button>
+          {/* ── BY DAY ── */}
+          {schedule.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <SectionLabel>By Shoot Day</SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {schedule.map((day, idx) => {
+                  const label = `Day ${idx + 1}${day.date ? ` — ${day.date.split('-').slice(1).join('/')}` : ''}`
+                  const opts = getDayOpts(idx)
+                  const key = `day-${idx}`
+                  return (
+                    <div key={day.id} style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 12px', background: '#fafafa' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#333' }}>{label}</span>
+                        <button
+                          disabled={exporting || (!opts.shotlist && !opts.schedule && !opts.callsheet)}
+                          onClick={() => run(key, () => exportDayPDF(idx, opts, projectName))}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            borderRadius: 4,
+                            border: '1px solid #2563eb',
+                            background: busy(key) ? '#dbeafe' : '#2563eb',
+                            color: busy(key) ? '#2563eb' : '#fff',
+                            cursor: (exporting || (!opts.shotlist && !opts.schedule && !opts.callsheet)) ? 'not-allowed' : 'pointer',
+                            opacity: (!opts.shotlist && !opts.schedule && !opts.callsheet) ? 0.4 : exporting && !busy(key) ? 0.5 : 1,
+                            transition: 'background 0.1s',
+                          }}
+                        >
+                          {busy(key) ? 'Exporting…' : 'Export Day →'}
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 14 }}>
+                        {[
+                          { key: 'shotlist', label: 'Shotlist' },
+                          { key: 'schedule', label: 'Schedule' },
+                          { key: 'callsheet', label: 'Callsheet' },
+                        ].map(({ key: ck, label: cl }) => (
+                          <label key={ck} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={opts[ck]}
+                              onChange={e => setDayOpt(idx, ck, e.target.checked)}
+                              style={{ margin: 0 }}
+                            />
+                            {cl}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
+
+          {/* ── QUICK EXPORTS ── */}
+          <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #f0f0f0' }}>
+            <SectionLabel>Quick Exports</SectionLabel>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <button disabled={exporting} onClick={() => run('storyboard-png', () => exportToPNG(pageRefs))}
+                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
+                Storyboard PNG
+              </button>
+              <button disabled={exporting} onClick={() => run('storyboard-pdf', () => exportStoryboardPDF(pageRefs, projectName))}
+                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
+                Storyboard PDF
+              </button>
+              <button disabled={exporting} onClick={() => run('shotlist-quick', () => exportShotlistPDF(shotlistRef, projectName))}
+                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
+                Shotlist PDF
+              </button>
+              <button disabled={exporting} onClick={() => run('schedule-quick', () => exportSchedulePDF(projectName))}
+                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
+                Schedule PDF
+              </button>
+              <button disabled={exporting} onClick={() => run('callsheet-quick', () => exportCallsheetPDF(projectName))}
+                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
+                Callsheet PDF
+              </button>
+            </div>
+          </div>
+
         </div>
-
-        {/* Cross-export links */}
-        <div style={{
-          borderTop: '1px solid #e5e7eb',
-          paddingTop: 12,
-          marginTop: 4,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          flexWrap: 'wrap',
-        }}>
-          <span className="text-xs text-gray-400">Also export:</span>
-
-          {activeTab !== 'storyboard' && (
-            <button
-              onClick={() => handleExportPDF('storyboard')}
-              disabled={exporting}
-              className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
-            >
-              Storyboard PDF →
-            </button>
-          )}
-          {activeTab !== 'shotlist' && (
-            <button
-              onClick={() => handleExportPDF('shotlist')}
-              disabled={exporting}
-              className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
-            >
-              Shotlist PDF →
-            </button>
-          )}
-          {activeTab !== 'schedule' && (
-            <button
-              onClick={() => handleExportPDF('schedule')}
-              disabled={exporting}
-              className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
-            >
-              Schedule PDF →
-            </button>
-          )}
-          {activeTab !== 'callsheet' && (
-            <button
-              onClick={() => handleExportPDF('callsheet')}
-              disabled={exporting}
-              className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
-            >
-              Callsheet PDF →
-            </button>
-          )}
-          {!isStoryboard && (
-            <button
-              onClick={() => handleExportPNG()}
-              disabled={exporting}
-              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
-            >
-              Storyboard PNG →
-            </button>
-          )}
-        </div>
-
-        {isStoryboard && (
-          <p className="text-xs text-gray-400 mt-3">
-            {pageCount} page{pageCount !== 1 ? 's' : ''} will be exported.
-          </p>
-        )}
-        {isSchedule && (
-          <p className="text-xs text-gray-400 mt-3">
-            Schedule PDF includes projected timeline (where call times are set) and day totals.
-          </p>
-        )}
-        {isCallsheet && (
-          <p className="text-xs text-gray-400 mt-3">
-            Callsheet PDF includes all shooting days, each on its own page with cast, crew, and location details.
-          </p>
-        )}
       </div>
     </div>
   )
