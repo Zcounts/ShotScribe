@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Build Installers
 
 on:
   push:
@@ -58,6 +58,53 @@ jobs:
             ### What's included
             - One-click Windows installer (no technical knowledge needed)
             - Creates Desktop and Start Menu shortcuts automatically
+          files: ${{ steps.installer.outputs.path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mac installer
+        run: npm run electron:build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from package.json
+        id: pkg
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Find DMG file
+        id: installer
+        shell: bash
+        run: |
+          INSTALLER=$(find dist-electron -name "*.dmg" | head -n 1)
+          echo "path=$INSTALLER" >> $GITHUB_OUTPUT
+          echo "name=$(basename $INSTALLER)" >> $GITHUB_OUTPUT
+
+      - name: Upload DMG to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}-${{ github.run_number }}
+          name: Storyboard v${{ steps.pkg.outputs.version }}
           files: ${{ steps.installer.outputs.path }}
           draft: false
           prerelease: false
