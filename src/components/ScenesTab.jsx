@@ -138,39 +138,39 @@ function SceneCardCollapsed({
       />
 
       {/* Scene label */}
-      <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#ddd', flexShrink: 0 }}>
+      <span style={{ fontSize: 12, fontFamily: 'Sora, sans-serif', fontWeight: 700, color: '#1A1A1A', flexShrink: 0 }}>
         {scene.sceneNumber ? `SC ${scene.sceneNumber}` : '—'}
       </span>
 
-      <span style={{ fontSize: 10, color: '#666', flexShrink: 0 }}>·</span>
+      <span style={{ fontSize: 10, color: 'rgba(74,85,104,0.4)', flexShrink: 0 }}>·</span>
 
       {scene.intExt && (
-        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#aaa', flexShrink: 0 }}>{scene.intExt}</span>
+        <span style={{ fontSize: 10, fontFamily: 'Sora, sans-serif', color: '#718096', flexShrink: 0 }}>{scene.intExt}</span>
       )}
       {scene.dayNight && (
-        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#aaa', flexShrink: 0 }}>{scene.dayNight}</span>
+        <span style={{ fontSize: 10, fontFamily: 'Sora, sans-serif', color: '#718096', flexShrink: 0 }}>{scene.dayNight}</span>
       )}
 
       {/* Location (truncated) */}
-      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#ccc', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 11, fontFamily: 'Sora, sans-serif', color: '#4A5568', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {scene.location || scene.slugline}
       </span>
 
       {/* Cast count */}
       {scene.characters.length > 0 && (
-        <span style={{ fontSize: 10, color: '#888', flexShrink: 0, whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 10, color: '#718096', flexShrink: 0, whiteSpace: 'nowrap' }}>
           {scene.characters.slice(0, 4).join(', ')}{scene.characters.length > 4 ? `…+${scene.characters.length - 4}` : ''}
         </span>
       )}
 
       {/* Shot count */}
-      <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#888', flexShrink: 0 }}>
+      <span style={{ fontSize: 10, fontFamily: 'Sora, sans-serif', color: '#718096', flexShrink: 0 }}>
         {linkedShotCount} shot{linkedShotCount !== 1 ? 's' : ''}
       </span>
 
       {/* Estimate */}
       {scene.estimatedMinutes && (
-        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#aaa', flexShrink: 0 }}>
+        <span style={{ fontSize: 10, fontFamily: 'Sora, sans-serif', color: '#718096', flexShrink: 0 }}>
           ~{scene.estimatedMinutes}m
         </span>
       )}
@@ -183,7 +183,7 @@ function SceneCardCollapsed({
       {/* Expand toggle */}
       <button
         onClick={onExpand}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', padding: '0 2px', flexShrink: 0 }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', padding: '0 2px', flexShrink: 0 }}
         title="Expand scene"
       >
         ▾
@@ -487,8 +487,9 @@ function SortableSceneCard({ scene, isDark, linkedShotCount, confidence, linkedS
     transition,
     opacity: isDragging ? 0.4 : 1,
     borderRadius: 6,
-    border: `1px solid ${isDark ? 'rgba(128,128,128,0.2)' : 'rgba(0,0,0,0.1)'}`,
-    background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.85)',
+    border: '1px solid rgba(74,85,104,0.15)',
+    background: '#FAF8F4',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
     marginBottom: 6,
     overflow: 'visible',
     position: 'relative',
@@ -562,15 +563,15 @@ function SortableSceneCard({ scene, isDark, linkedShotCount, confidence, linkedS
 
 // ── Left sidebar ──────────────────────────────────────────────────────────────
 
-function ScriptsSidebar({ scripts, activeScript, onSelect, onImport, onDelete, isDark }) {
+function ScriptsSidebar({ scripts, activeScript, onSelect, onImport, onDelete }) {
   return (
     <div style={{
       width: 200, flexShrink: 0,
-      borderRight: `1px solid ${isDark ? 'rgba(128,128,128,0.2)' : '#ddd'}`,
+      borderRight: '1px solid rgba(74,85,104,0.15)',
       display: 'flex', flexDirection: 'column',
-      background: isDark ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.03)',
+      background: '#EDE9E1',
     }}>
-      <div style={{ padding: '12px 14px 8px', fontSize: 10, fontFamily: 'monospace', color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <div style={{ padding: '12px 14px 8px', fontSize: 10, fontFamily: 'Sora, sans-serif', fontWeight: 700, color: '#718096', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         Imported Scripts
       </div>
 
@@ -581,12 +582,12 @@ function ScriptsSidebar({ scripts, activeScript, onSelect, onImport, onDelete, i
           style={{
             width: '100%', textAlign: 'left',
             padding: '7px 14px',
-            background: activeScript === null ? 'rgba(59,130,246,0.15)' : 'none',
+            background: activeScript === null ? 'rgba(232,64,64,0.08)' : 'none',
             border: 'none',
-            borderLeft: activeScript === null ? '3px solid #3b82f6' : '3px solid transparent',
+            borderLeft: activeScript === null ? '3px solid #E84040' : '3px solid transparent',
             cursor: 'pointer',
-            fontFamily: 'monospace', fontSize: 11,
-            color: activeScript === null ? '#93c5fd' : (isDark ? '#aaa' : '#666'),
+            fontFamily: 'Sora, sans-serif', fontSize: 11, fontWeight: 600,
+            color: activeScript === null ? '#E84040' : '#718096',
           }}
         >
           All Scenes
@@ -597,8 +598,8 @@ function ScriptsSidebar({ scripts, activeScript, onSelect, onImport, onDelete, i
             key={script.id}
             style={{
               position: 'relative',
-              borderLeft: activeScript === script.id ? '3px solid #3b82f6' : '3px solid transparent',
-              background: activeScript === script.id ? 'rgba(59,130,246,0.1)' : 'transparent',
+              borderLeft: activeScript === script.id ? '3px solid #E84040' : '3px solid transparent',
+              background: activeScript === script.id ? 'rgba(232,64,64,0.06)' : 'transparent',
             }}
           >
             <button
@@ -609,10 +610,10 @@ function ScriptsSidebar({ scripts, activeScript, onSelect, onImport, onDelete, i
                 background: 'none', border: 'none', cursor: 'pointer',
               }}
             >
-              <div style={{ fontSize: 11, fontFamily: 'monospace', color: isDark ? '#ccc' : '#333', marginBottom: 2, wordBreak: 'break-word' }}>
+              <div style={{ fontSize: 11, fontFamily: 'Sora, sans-serif', fontWeight: 600, color: '#2C2C2C', marginBottom: 2, wordBreak: 'break-word' }}>
                 {script.filename}
               </div>
-              <div style={{ fontSize: 9, color: '#666' }}>
+              <div style={{ fontSize: 9, color: '#718096', fontFamily: 'Sora, sans-serif' }}>
                 {script.sceneCount} scenes · {new Date(script.importedAt).toLocaleDateString()}
               </div>
             </button>
@@ -622,11 +623,11 @@ function ScriptsSidebar({ scripts, activeScript, onSelect, onImport, onDelete, i
               style={{
                 position: 'absolute', top: 6, right: 6,
                 background: 'none', border: 'none', cursor: 'pointer',
-                color: '#f87171', fontSize: 11, opacity: 0.5,
+                color: '#E84040', fontSize: 11, opacity: 0.4,
                 padding: '2px 4px',
               }}
               onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
             >
               ✕
             </button>
@@ -634,23 +635,26 @@ function ScriptsSidebar({ scripts, activeScript, onSelect, onImport, onDelete, i
         ))}
 
         {scripts.length === 0 && (
-          <div style={{ padding: '8px 14px', fontSize: 11, color: '#555', fontStyle: 'italic' }}>
+          <div style={{ padding: '8px 14px', fontSize: 11, color: '#718096', fontFamily: 'Sora, sans-serif', fontStyle: 'italic' }}>
             No scripts yet
           </div>
         )}
       </div>
 
       {/* Import button at bottom */}
-      <div style={{ padding: 12, borderTop: `1px solid ${isDark ? 'rgba(128,128,128,0.15)' : '#ddd'}` }}>
+      <div style={{ padding: 12, borderTop: '1px solid rgba(74,85,104,0.15)' }}>
         <button
           onClick={onImport}
           style={{
             width: '100%', padding: '7px 0',
-            background: '#3b82f6', color: '#fff',
+            background: '#E84040', color: '#fff',
             border: 'none', borderRadius: 5,
-            fontFamily: 'monospace', fontSize: 11, fontWeight: 700,
+            fontFamily: 'Sora, sans-serif', fontSize: 11, fontWeight: 700,
             cursor: 'pointer',
+            transition: 'background 0.15s',
           }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#d03838')}
+          onMouseLeave={e => (e.currentTarget.style.background = '#E84040')}
         >
           + Import Script
         </button>
@@ -716,19 +720,19 @@ export default function ScenesTab() {
     return (
       <div style={{
         height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 12, color: isDark ? '#555' : '#aaa',
+        gap: 12, color: '#718096',
       }}>
         <div style={{ fontSize: 40 }}>🎬</div>
-        <div style={{ fontSize: 14, fontFamily: 'monospace', fontWeight: 700 }}>No scripts imported yet</div>
-        <div style={{ fontSize: 12, color: isDark ? '#444' : '#bbb' }}>Import a .fountain, .fdx, .txt, or .pdf script file to get started</div>
+        <div style={{ fontSize: 14, fontFamily: 'Sora, sans-serif', fontWeight: 700, color: '#1A1A1A' }}>No scripts imported yet</div>
+        <div style={{ fontSize: 12, color: '#718096', fontFamily: 'Sora, sans-serif' }}>Import a .fountain, .fdx, .txt, or .pdf script file to get started</div>
         <button
           onClick={() => setImportModalOpen(true)}
           style={{
             marginTop: 8,
             padding: '9px 24px',
-            background: '#3b82f6', color: '#fff',
+            background: '#E84040', color: '#fff',
             border: 'none', borderRadius: 6,
-            fontFamily: 'monospace', fontSize: 12, fontWeight: 700,
+            fontFamily: 'Sora, sans-serif', fontSize: 12, fontWeight: 700,
             cursor: 'pointer',
           }}
         >
@@ -757,9 +761,9 @@ export default function ScenesTab() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12,
           marginBottom: 14, paddingBottom: 10,
-          borderBottom: `1px solid ${isDark ? 'rgba(128,128,128,0.15)' : '#ddd'}`,
+          borderBottom: '1px solid rgba(74,85,104,0.15)',
         }}>
-          <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: isDark ? '#ddd' : '#333' }}>
+          <span style={{ fontSize: 12, fontFamily: 'Sora, sans-serif', fontWeight: 700, color: '#1A1A1A' }}>
             {visibleScenes.length} scene{visibleScenes.length !== 1 ? 's' : ''}
           </span>
           {activeScript && (
@@ -818,10 +822,10 @@ export default function ScenesTab() {
               {activeId ? (
                 <div style={{
                   padding: '8px 14px',
-                  background: isDark ? '#222' : '#fff',
-                  border: '1px solid #3b82f6',
+                  background: '#FAF8F4',
+                  border: '1px solid #E84040',
                   borderRadius: 6,
-                  fontFamily: 'monospace', fontSize: 12, color: '#93c5fd',
+                  fontFamily: 'Sora, sans-serif', fontSize: 12, color: '#E84040',
                   opacity: 0.9,
                 }}>
                   {visibleScenes.find(s => s.id === activeId)?.location || 'Scene'}

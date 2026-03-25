@@ -110,7 +110,7 @@ export default function SettingsPanel() {
                 onClick={() => setColumnCount(n)}
                 className={`flex-1 py-1 text-sm rounded border transition-colors ${
                   columnCount === n
-                    ? 'bg-blue-500 border-blue-400 text-white'
+                    ? 'border-cherry text-white'
                     : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
                 }`}
               >
@@ -126,7 +126,7 @@ export default function SettingsPanel() {
               onClick={() => setUseDropdowns(true)}
               className={`flex-1 py-1 text-sm rounded border transition-colors ${
                 useDropdowns
-                  ? 'bg-blue-500 border-blue-400 text-white'
+                  ? 'bg-cherry border-cherry text-white'
                   : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
               }`}
             >
@@ -136,7 +136,7 @@ export default function SettingsPanel() {
               onClick={() => setUseDropdowns(false)}
               className={`flex-1 py-1 text-sm rounded border transition-colors ${
                 !useDropdowns
-                  ? 'bg-blue-500 border-blue-400 text-white'
+                  ? 'bg-cherry border-cherry text-white'
                   : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
               }`}
             >
@@ -151,7 +151,7 @@ export default function SettingsPanel() {
               onClick={() => setTheme('light')}
               className={`flex-1 py-1 text-sm rounded border transition-colors ${
                 theme === 'light'
-                  ? 'bg-blue-500 border-blue-400 text-white'
+                  ? 'bg-cherry border-cherry text-white'
                   : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
               }`}
             >
@@ -161,7 +161,7 @@ export default function SettingsPanel() {
               onClick={() => setTheme('dark')}
               className={`flex-1 py-1 text-sm rounded border transition-colors ${
                 theme === 'dark'
-                  ? 'bg-blue-500 border-blue-400 text-white'
+                  ? 'bg-cherry border-cherry text-white'
                   : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
               }`}
             >
@@ -175,7 +175,7 @@ export default function SettingsPanel() {
             <button
               onClick={() => setAutoSave(!autoSave)}
               className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${
-                autoSave ? 'bg-blue-500' : 'bg-gray-600'
+                autoSave ? 'bg-cherry' : 'bg-gray-600'
               }`}
             >
               <span

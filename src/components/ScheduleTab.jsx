@@ -842,13 +842,7 @@ function isColVisible(config, key) {
 
 // ── ScheduleColumnConfigPanel ─────────────────────────────────────────────────
 
-function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
-  const bg = isDark ? '#1a1a1a' : '#fff'
-  const borderColor = isDark ? '#3a3a3a' : '#d4d0c8'
-  const fg = isDark ? '#ddd' : '#222'
-  const mutedFg = isDark ? '#555' : '#888'
-  const hoverBg = isDark ? '#252525' : '#f5f3ee'
-
+function ScheduleColumnConfigPanel({ config, onChange, onClose }) {
   return (
     <div
       style={{
@@ -857,12 +851,10 @@ function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
         right: 0,
         zIndex: 200,
         width: 220,
-        background: bg,
-        border: `1px solid ${borderColor}`,
+        background: '#FAF8F4',
+        border: '1px solid rgba(74,85,104,0.2)',
         borderRadius: 6,
-        boxShadow: isDark
-          ? '0 8px 28px rgba(0,0,0,0.7)'
-          : '0 8px 28px rgba(0,0,0,0.18)',
+        boxShadow: '0 8px 28px rgba(0,0,0,0.12)',
         padding: '10px 8px 8px',
       }}
       onClick={e => e.stopPropagation()}
@@ -874,15 +866,15 @@ function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
         justifyContent: 'space-between',
         marginBottom: 8,
         paddingBottom: 7,
-        borderBottom: `1px solid ${isDark ? '#2e2e2e' : '#eee'}`,
+        borderBottom: '1px solid rgba(74,85,104,0.12)',
       }}>
         <span style={{
           fontSize: 9,
           fontWeight: 700,
-          fontFamily: 'monospace',
+          fontFamily: 'Sora, sans-serif',
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
-          color: mutedFg,
+          color: '#718096',
         }}>
           Configure Columns
         </span>
@@ -892,7 +884,7 @@ function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
             border: 'none',
             background: 'none',
             cursor: 'pointer',
-            color: mutedFg,
+            color: '#718096',
             fontSize: 16,
             lineHeight: 1,
             padding: '0 2px',
@@ -918,26 +910,26 @@ function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
             border: 'none',
             borderRadius: 3,
             background: 'none',
-            color: col.visible ? fg : mutedFg,
+            color: col.visible ? '#2C2C2C' : '#718096',
             cursor: 'pointer',
             textAlign: 'left',
-            fontFamily: 'monospace',
+            fontFamily: 'Sora, sans-serif',
             fontSize: 11,
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = hoverBg }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#EDE9E1' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
         >
           {/* Checkbox visual */}
           <span style={{
             width: 12,
             height: 12,
-            border: `1px solid ${col.visible ? (isDark ? '#4ade80' : '#16a34a') : borderColor}`,
+            border: `1px solid ${col.visible ? '#E84040' : 'rgba(74,85,104,0.3)'}`,
             borderRadius: 2,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            background: col.visible ? (isDark ? '#4ade80' : '#16a34a') : 'transparent',
+            background: col.visible ? '#E84040' : 'transparent',
           }}>
             {col.visible && (
               <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round">
@@ -3215,8 +3207,8 @@ export default function ScheduleTab() {
   const setScheduleColumnConfig = useStore(s => s.setScheduleColumnConfig)
 
   const isDark = theme === 'dark'
-  const fg = isDark ? '#ddd' : '#111'
-  const mutedFg = isDark ? '#666' : '#555'
+  const fg = '#1A1A1A'
+  const mutedFg = '#718096'
 
   // ── Sub-view state ───────────────────────────────────────────────────────────
   const [scheduleView, setScheduleView] = useState('list') // 'list' | 'stripboard' | 'calendar'
@@ -3412,19 +3404,22 @@ export default function ScheduleTab() {
 
   // ── View-toggle style helper ─────────────────────────────────────────────────
   const viewTabStyle = (active) => ({
+    flex: 1,
+    textAlign: 'center',
     padding: '5px 12px',
-    fontFamily: 'monospace',
+    fontFamily: 'Sora, sans-serif',
     fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '0.05em',
-    border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    border: 'none',
     borderRadius: 3,
     background: active
-      ? (isDark ? '#333' : '#e4e0d8')
-      : (isDark ? '#1e1e1e' : '#f0ede4'),
-    color: active ? fg : mutedFg,
+      ? '#FAF8F4'
+      : 'transparent',
+    color: active ? '#E84040' : '#718096',
     cursor: 'pointer',
     transition: 'background 0.1s, color 0.1s',
+    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
   })
 
   return (
@@ -3447,17 +3442,16 @@ export default function ScheduleTab() {
         <div>
           <h2 style={{
             margin: 0,
-            fontFamily: 'monospace',
-            fontSize: 14,
-            fontWeight: 700,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            color: fg,
+            fontFamily: 'Sora, sans-serif',
+            fontSize: 18,
+            fontWeight: 800,
+            letterSpacing: '-0.01em',
+            color: '#1A1A1A',
           }}>
             Schedule
           </h2>
           {schedule.length > 0 && (
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: mutedFg, fontFamily: 'monospace' }}>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#718096', fontFamily: 'Sora, sans-serif' }}>
               {schedule.length} shooting day{schedule.length !== 1 ? 's' : ''}&nbsp;&middot;&nbsp;
               {totalShots} shot{totalShots !== 1 ? 's' : ''} scheduled
               {scheduleView === 'list' && (
@@ -3472,7 +3466,7 @@ export default function ScheduleTab() {
         {/* Right-side controls */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
           {/* Sub-view toggle */}
-          <div style={{ display: 'flex', gap: 2, border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`, borderRadius: 4, padding: 2, background: isDark ? '#161616' : '#e8e4dc' }}>
+          <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1', minWidth: 240 }}>
             <button onClick={() => setScheduleView('list')} style={viewTabStyle(scheduleView === 'list')}>
               List
             </button>
@@ -3486,7 +3480,7 @@ export default function ScheduleTab() {
 
           {/* Density toggle — stripboard only */}
           {scheduleView === 'stripboard' && schedule.length > 0 && (
-            <div style={{ display: 'flex', gap: 2, border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`, borderRadius: 4, padding: 2, background: isDark ? '#161616' : '#e8e4dc' }}>
+            <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1' }}>
               <button
                 onClick={() => setStripDensity('compact')}
                 title="Compact strips (24px)"
@@ -3515,17 +3509,15 @@ export default function ScheduleTab() {
                     alignItems: 'center',
                     gap: 5,
                     padding: '7px 12px',
-                    border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
+                    border: '1px solid rgba(74,85,104,0.25)',
                     borderRadius: 4,
-                    background: configPanelOpen
-                      ? (isDark ? '#2a2a2a' : '#e4e0d8')
-                      : (isDark ? '#1e1e1e' : '#f0ede4'),
-                    color: mutedFg,
+                    background: configPanelOpen ? '#EDE9E1' : '#FAF8F4',
+                    color: '#4A5568',
                     cursor: 'pointer',
-                    fontFamily: 'monospace',
+                    fontFamily: 'Sora, sans-serif',
                     fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: '0.05em',
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
                     textTransform: 'uppercase',
                     transition: 'background 0.1s',
                   }}
@@ -3540,7 +3532,6 @@ export default function ScheduleTab() {
                 {configPanelOpen && (
                   <ScheduleColumnConfigPanel
                     config={scheduleColumnConfig}
-                    isDark={isDark}
                     onChange={setScheduleColumnConfig}
                     onClose={() => setConfigPanelOpen(false)}
                   />
@@ -3553,17 +3544,20 @@ export default function ScheduleTab() {
             onClick={() => addShootingDay()}
             style={{
               padding: '7px 16px',
-              fontFamily: 'monospace',
+              fontFamily: 'Sora, sans-serif',
               fontSize: 12,
               fontWeight: 700,
-              letterSpacing: '0.08em',
+              letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              border: `1px solid ${isDark ? '#555' : '#bbb'}`,
+              border: 'none',
               borderRadius: 4,
-              background: 'none',
-              color: fg,
+              background: '#E84040',
+              color: '#ffffff',
               cursor: 'pointer',
+              transition: 'background 0.15s',
             }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#d03838' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#E84040' }}
           >
             + Add Day
           </button>

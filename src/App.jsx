@@ -308,7 +308,7 @@ export default function App() {
   return (
     <div
       className="flex flex-col"
-      style={{ height: '100vh', overflow: 'hidden', backgroundColor: isDark ? '#1a1a1a' : '#e8e4db' }}
+      style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#F5F2EC' }}
       onClick={() => hideContextMenu()}
     >
       {/* Toolbar */}
@@ -327,8 +327,8 @@ export default function App() {
       <div className="tab-nav" style={{
         display: 'flex',
         flexShrink: 0,
-        borderBottom: isDark ? '1px solid #333' : '1px solid #ccc',
-        backgroundColor: isDark ? '#111' : '#d4cfc6',
+        borderBottom: '1px solid #3A3A3C',
+        backgroundColor: '#1C1C1E',
         paddingLeft: '16px',
       }}>
         {[
@@ -343,23 +343,23 @@ export default function App() {
             onClick={() => setActiveTab(id)}
             style={{
               padding: '8px 20px',
-              fontFamily: 'monospace',
+              fontFamily: 'Sora, sans-serif',
               fontSize: '12px',
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               border: 'none',
               borderBottom: activeTab === id
-                ? (isDark ? '2px solid #fff' : '2px solid #222')
+                ? '2px solid #E84040'
                 : '2px solid transparent',
               background: 'none',
-              color: activeTab === id
-                ? (isDark ? '#fff' : '#222')
-                : (isDark ? '#666' : '#888'),
+              color: activeTab === id ? '#FAF8F4' : '#718096',
               cursor: 'pointer',
               transition: 'color 0.15s, border-color 0.15s',
               marginBottom: '-1px',
             }}
+            onMouseEnter={e => { if (activeTab !== id) e.currentTarget.style.color = 'rgba(250,248,244,0.8)' }}
+            onMouseLeave={e => { if (activeTab !== id) e.currentTarget.style.color = '#718096' }}
           >
             {label}
           </button>
@@ -370,19 +370,19 @@ export default function App() {
             onClick={() => setImportScriptOpen(true)}
             style={{
               padding: '4px 12px',
-              fontFamily: 'monospace',
+              fontFamily: 'Sora, sans-serif',
               fontSize: 11,
               fontWeight: 600,
-              background: 'rgba(59,130,246,0.15)',
-              color: isDark ? '#93c5fd' : '#2563eb',
-              border: '1px solid rgba(59,130,246,0.3)',
+              background: 'rgba(242,194,80,0.12)',
+              color: '#F2C250',
+              border: '1px solid rgba(242,194,80,0.3)',
               borderRadius: 4,
               cursor: 'pointer',
               letterSpacing: '0.04em',
               transition: 'background 0.15s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.28)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.15)')}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(242,194,80,0.22)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(242,194,80,0.12)')}
             title="Import a script file to extract scenes"
           >
             + Import Script
@@ -392,7 +392,7 @@ export default function App() {
 
       {/* Main content */}
       {activeTab === 'storyboard' ? (
-        <div className="flex-1 py-6 px-4 overflow-auto">
+        <div className="flex-1 py-6 px-4 overflow-auto canvas-texture">
           <div className="pages-container">
             {scenes.map((scene, sceneIdx) => (
               <React.Fragment key={scene.id}>
@@ -435,11 +435,11 @@ export default function App() {
           <ShotlistTab containerRef={shotlistRef} />
         </div>
       ) : activeTab === 'scenes' ? (
-        <div className="flex-1 overflow-hidden" style={{ backgroundColor: isDark ? '#141420' : '#f0ede4' }}>
+        <div className="flex-1 overflow-hidden canvas-texture">
           <ScenesTab />
         </div>
       ) : activeTab === 'schedule' ? (
-        <div className="flex-1 overflow-y-auto" style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0ede4' }}>
+        <div className="flex-1 overflow-y-auto canvas-texture">
           <ScheduleTab />
         </div>
       ) : activeTab === 'callsheet' ? (
