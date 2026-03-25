@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
+import { exportMobilePackageFromProject } from '../services/mobile'
 
 export default function Toolbar({ onExportPDF, onExportPNG }) {
   const projectName = useStore(s => s.projectName)
@@ -27,6 +28,13 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const pdfMenuRef = useRef(null)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
+  const mobileMenuRef = useRef(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileExportMode, setMobileExportMode] = useState(null) // 'day' | 'snapshot' | null
+  const schedule = useStore(s => s.schedule)
+  const getProjectData = useStore(s => s.getProjectData)
+  const [selectedMobileDayId, setSelectedMobileDayId] = useState('')
+  const [snapshotDayIds, setSnapshotDayIds] = useState([])
 
   // Extract just the filename from the full path for display
   const fileName = projectPath ? projectPath.split(/[\\/]/).pop() : null
@@ -72,6 +80,31 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [openMenuOpen])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const handler = (e) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
+        setMobileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [mobileMenuOpen])
+
+  useEffect(() => {
+    if (!schedule.length) {
+      setSelectedMobileDayId('')
+      setSnapshotDayIds([])
+      return
+    }
+    if (!selectedMobileDayId || !schedule.some(day => day.id === selectedMobileDayId)) {
+      setSelectedMobileDayId(schedule[0].id)
+    }
+    if (!snapshotDayIds.length) {
+      setSnapshotDayIds(schedule.slice(0, 3).map(day => day.id))
+    }
+  }, [schedule, selectedMobileDayId, snapshotDayIds])
 
   // Guard that shows unsaved-changes dialog before running an action
   const guardUnsaved = (action) => {
@@ -489,6 +522,104 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
         <button className="toolbar-btn" onClick={onExportPNG} title="Export Storyboard to PNG">
           PNG
         </button>
+        <div ref={mobileMenuRef} style={{ position: 'relative', display: 'flex' }}>
+          <button
+            className="toolbar-btn"
+            onClick={() => {
+              setMobileMenuOpen(false)
+              if (!schedule.length) {
+                alert('Add at least one shooting day in the Schedule tab before exporting a mobile package.')
+                return
+              }
+              setMobileExportMode('day')
+            }}
+            title="Export mobile day package"
+            style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
+          >
+            Mobile
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={() => setMobileMenuOpen(o => !o)}
+            title="Choose mobile export type"
+            style={{
+              borderRadius: '0 4px 4px 0',
+              borderLeft: '1px solid rgba(255,255,255,0.15)',
+              padding: '4px 6px',
+              fontSize: 9,
+            }}
+          >
+            ▾
+          </button>
+          {mobileMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              right: 0,
+              zIndex: 500,
+              background: '#2a2a2a',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 4,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+              minWidth: 220,
+              overflow: 'hidden',
+            }}>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  if (!schedule.length) {
+                    alert('Add at least one shooting day in the Schedule tab before exporting.')
+                    return
+                  }
+                  setMobileExportMode('day')
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  color: '#e0e0e0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Export Shoot Day Package…
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  if (!schedule.length) {
+                    alert('Add at least one shooting day in the Schedule tab before exporting.')
+                    return
+                  }
+                  setMobileExportMode('snapshot')
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  borderTop: '1px solid rgba(255,255,255,0.08)',
+                  color: '#e0e0e0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Export Project Snapshot…
+              </button>
+            </div>
+          )}
+        </div>
         <button className="toolbar-btn" onClick={toggleSettings} title="Settings">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="10" cy="10" r="3" />
@@ -498,6 +629,109 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
       </div>
 
       {/* Unsaved changes dialog */}
+      {mobileExportMode && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 9000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => setMobileExportMode(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#1e1e1e',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 8,
+              padding: '18px 20px',
+              maxWidth: 460,
+              width: '100%',
+            }}
+          >
+            <h3 style={{ margin: 0, color: '#FAF8F4', fontSize: 16 }}>
+              {mobileExportMode === 'day' ? 'Export Mobile Day Package' : 'Export Mobile Snapshot'}
+            </h3>
+            <p style={{ marginTop: 8, marginBottom: 14, color: '#a0aec0', fontSize: 12 }}>
+              {mobileExportMode === 'day'
+                ? 'Choose one shoot day and export a valid mobile-day-package JSON file.'
+                : 'Choose one or more shoot days and export a valid mobile-snapshot JSON file.'}
+            </p>
+
+            {mobileExportMode === 'day' ? (
+              <select
+                value={selectedMobileDayId}
+                onChange={e => setSelectedMobileDayId(e.target.value)}
+                style={{ width: '100%', marginBottom: 12, padding: 8, borderRadius: 4, background: '#2a2a2a', color: '#e0e0e0', border: '1px solid #444' }}
+              >
+                {schedule.map((day, idx) => (
+                  <option key={day.id} value={day.id}>
+                    Day {idx + 1} · {day.date || 'No date'}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #333', borderRadius: 4, padding: 8, marginBottom: 12 }}>
+                {schedule.map((day, idx) => (
+                  <label key={day.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, color: '#e2e8f0', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={snapshotDayIds.includes(day.id)}
+                      onChange={e => {
+                        setSnapshotDayIds(prev => e.target.checked
+                          ? [...new Set([...prev, day.id])]
+                          : prev.filter(id => id !== day.id))
+                      }}
+                    />
+                    Day {idx + 1} · {day.date || 'No date'}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="toolbar-btn" onClick={() => setMobileExportMode(null)}>Cancel</button>
+              <button
+                className="toolbar-btn primary"
+                onClick={async () => {
+                  const projectData = getProjectData()
+                  try {
+                    if (mobileExportMode === 'day') {
+                      if (!selectedMobileDayId) {
+                        alert('Please select a shoot day to export.')
+                        return
+                      }
+                      await exportMobilePackageFromProject(projectData, {
+                        mode: 'day',
+                        dayId: selectedMobileDayId,
+                      })
+                    } else {
+                      if (!snapshotDayIds.length) {
+                        alert('Select at least one shoot day for the snapshot export.')
+                        return
+                      }
+                      await exportMobilePackageFromProject(projectData, {
+                        mode: 'snapshot',
+                        dayIds: snapshotDayIds,
+                      })
+                    }
+                    setMobileExportMode(null)
+                  } catch (err) {
+                    alert(`Mobile export failed: ${err?.message || err}`)
+                  }
+                }}
+              >
+                Export
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {unsavedDialog && (
         <div
           style={{

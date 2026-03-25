@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   savePNG: (defaultName, base64) =>
     ipcRenderer.invoke('dialog:save-png', { defaultName, base64 }),
 
+
+  /** Save generic JSON via native Save dialog */
+  saveJson: (defaultName, data, filters) =>
+    ipcRenderer.invoke('dialog:save-json', { defaultName, data, filters }),
+
   /**
    * Export PDF using Chromium's native print engine (webContents.printToPDF).
    * The renderer builds a single self-contained HTML document with all pages
