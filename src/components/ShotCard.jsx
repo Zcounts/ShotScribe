@@ -6,6 +6,112 @@ import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
 
+// Small scene link badge + picker for linking a shot to a script scene
+function SceneLinkBadge({ shot }) {
+  const scriptScenes = useStore(s => s.scriptScenes)
+  const linkShotToScene = useStore(s => s.linkShotToScene)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const linked = shot.linkedSceneId
+    ? scriptScenes.find(s => s.id === shot.linkedSceneId)
+    : null
+
+  const isStale = shot.linkedSceneId && !linked
+
+  if (scriptScenes.length === 0) return null
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <button
+        onPointerDown={e => e.stopPropagation()}
+        onClick={e => { e.stopPropagation(); setPickerOpen(!pickerOpen) }}
+        title={linked ? `Linked to SC ${linked.sceneNumber} — click to change` : 'Link to scene'}
+        style={{
+          background: linked
+            ? (linked.color ? linked.color + '30' : 'rgba(59,130,246,0.15)')
+            : 'transparent',
+          border: linked
+            ? `1px solid ${linked.color || 'rgba(59,130,246,0.4)'}`
+            : isStale
+              ? '1px dashed rgba(248,113,113,0.5)'
+              : '1px dashed rgba(128,128,128,0.3)',
+          borderRadius: 3,
+          padding: '1px 5px',
+          cursor: 'pointer',
+          fontSize: 9,
+          fontFamily: 'monospace',
+          fontWeight: 700,
+          color: linked
+            ? (linked.color || '#93c5fd')
+            : isStale ? '#f87171' : '#666',
+          lineHeight: 1.4,
+          display: 'inline-flex', alignItems: 'center', gap: 2,
+          flexShrink: 0,
+        }}
+      >
+        {linked
+          ? `SC ${linked.sceneNumber}`
+          : isStale ? '⚠' : '⛓'}
+      </button>
+
+      {pickerOpen && (
+        <div
+          onPointerDown={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: 18, right: 0, zIndex: 50,
+            background: '#1e1e2e', border: '1px solid #444', borderRadius: 6,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+            minWidth: 180, maxHeight: 220, overflowY: 'auto',
+            padding: 4,
+          }}
+        >
+          {/* Unlink option */}
+          {linked && (
+            <button
+              onClick={() => { linkShotToScene(shot.id, null); setPickerOpen(false) }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '5px 8px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 10, fontFamily: 'monospace', color: '#f87171',
+                borderRadius: 3,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              Unlink scene
+            </button>
+          )}
+
+          {/* Scene options */}
+          {scriptScenes.map(ss => (
+            <button
+              key={ss.id}
+              onClick={() => { linkShotToScene(shot.id, ss.id); setPickerOpen(false) }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '5px 8px',
+                background: ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none',
+                border: 'none', cursor: 'pointer',
+                fontSize: 10, fontFamily: 'monospace',
+                color: ss.id === shot.linkedSceneId ? '#93c5fd' : '#ccc',
+                borderRadius: 3,
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.3)' : 'rgba(128,128,128,0.1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none')}
+            >
+              {ss.color && (
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
+              )}
+              <span>SC {ss.sceneNumber}</span>
+              {ss.location && <span style={{ opacity: 0.5 }}>· {ss.location.slice(0, 20)}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
@@ -117,6 +223,9 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
           style={{ width: 46 }}
           placeholder="85mm"
         />
+
+        {/* Scene link badge — only when script scenes exist */}
+        <SceneLinkBadge shot={shot} />
       </div>
 
       {/* Image Area */}

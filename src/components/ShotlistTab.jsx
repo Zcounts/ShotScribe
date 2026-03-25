@@ -16,6 +16,68 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 
+// ── Scene link badge (chain icon + SC badge) for the SHOT# column ────────────
+function ShotlistSceneBadge({ shot }) {
+  const scriptScenes = useStore(s => s.scriptScenes)
+  const linkShotToScene = useStore(s => s.linkShotToScene)
+  const [open, setOpen] = React.useState(false)
+
+  if (scriptScenes.length === 0) return null
+
+  const linked = shot.linkedSceneId ? scriptScenes.find(s => s.id === shot.linkedSceneId) : null
+  const isStale = shot.linkedSceneId && !linked
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        title={linked ? `SC ${linked.sceneNumber} — click to change` : 'Link to scene'}
+        style={{
+          background: linked ? (linked.color ? linked.color + '25' : 'rgba(59,130,246,0.12)') : 'transparent',
+          border: linked ? `1px solid ${linked.color || 'rgba(59,130,246,0.4)'}` : isStale ? '1px dashed rgba(248,113,113,0.5)' : '1px dashed rgba(128,128,128,0.25)',
+          borderRadius: 3, padding: '1px 4px',
+          cursor: 'pointer', fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
+          color: linked ? (linked.color || '#93c5fd') : isStale ? '#f87171' : '#555',
+          lineHeight: 1.3, display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
+        }}
+      >
+        {linked ? `SC ${linked.sceneNumber}` : isStale ? '⚠' : '⛓'}
+      </button>
+      {open && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: 18, left: 0, zIndex: 100,
+            background: '#1e1e2e', border: '1px solid #444', borderRadius: 6,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.7)', minWidth: 170, maxHeight: 200, overflowY: 'auto', padding: 4,
+          }}
+        >
+          {linked && (
+            <button onClick={() => { linkShotToScene(shot.id, null); setOpen(false) }}
+              style={{ width: '100%', textAlign: 'left', padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace', color: '#f87171', borderRadius: 3 }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              Unlink scene
+            </button>
+          )}
+          {scriptScenes.map(ss => (
+            <button key={ss.id} onClick={() => { linkShotToScene(shot.id, ss.id); setOpen(false) }}
+              style={{ width: '100%', textAlign: 'left', padding: '4px 8px', background: ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace', color: ss.id === shot.linkedSceneId ? '#93c5fd' : '#ccc', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4 }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(128,128,128,0.1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none')}
+            >
+              {ss.color && <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />}
+              <span>SC {ss.sceneNumber}</span>
+              {ss.location && <span style={{ opacity: 0.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>· {ss.location}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Dropdown options (matching SpecsTable.jsx) ───────────────────────────────
 const SIZE_OPTIONS  = ['WIDE SHOT', 'MEDIUM', 'CLOSE UP', 'OTS', 'ECU', 'INSERT', 'ESTABLISHING']
 const TYPE_OPTIONS  = ['EYE LVL', 'SHOULDER LVL', 'CROWD LVL', 'HIGH ANGLE', 'LOW ANGLE', 'DUTCH']
@@ -830,13 +892,16 @@ function SortableShotRow({
 
         if (col.type === 'readonly') {
           return (
-            <td key={col.key} style={cellStyle}>
-              <EditableCell
-                type="readonly"
-                value={shot.displayId}
-                isDark={isDark}
-                onChange={() => {}}
-              />
+            <td key={col.key} style={{ ...cellStyle, overflow: 'visible' }}>
+              <div style={{ display: 'flex', alignItems: 'center', height: ROW_H, gap: 3, paddingRight: 2 }}>
+                <EditableCell
+                  type="readonly"
+                  value={shot.displayId}
+                  isDark={isDark}
+                  onChange={() => {}}
+                />
+                <ShotlistSceneBadge shot={shot} />
+              </div>
             </td>
           )
         }
