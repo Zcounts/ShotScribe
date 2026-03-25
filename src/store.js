@@ -135,6 +135,19 @@ const initialScene = createScene({
 // Reset counter after initial scene so user-added scenes don't conflict
 sceneIdCounter = 0
 
+function loadRecentProjects() {
+  try {
+    const raw = localStorage.getItem('recentProjects')
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    // Guard against malformed persisted data causing renderer startup crashes.
+    localStorage.removeItem('recentProjects')
+    return []
+  }
+}
+
 const useStore = create((set, get) => ({
   // Project metadata
   projectPath: null,
@@ -153,7 +166,7 @@ const useStore = create((set, get) => ({
   useDropdowns: true,
 
   // Recent projects
-  recentProjects: JSON.parse(localStorage.getItem('recentProjects') || '[]'),
+  recentProjects: loadRecentProjects(),
 
   // Schedule — array of shooting days, each with a list of shot blocks that
   // reference shots by ID so they stay linked to the storyboard/shotlist.
