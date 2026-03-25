@@ -24,6 +24,8 @@ function createParsedScene(overrides = {}) {
     customHeader: '',
     characters: [],
     actionText: '',
+    screenplayText: '',
+    screenplayElements: [],
     dialogueCount: 0,
     pageCount: null,
     complexityTags: [],
@@ -35,6 +37,13 @@ function createParsedScene(overrides = {}) {
     color: null,
     ...overrides,
   }
+}
+
+function appendScreenplayElement(scene, type, text) {
+  const clean = String(text || '').trim()
+  if (!clean) return
+  scene.screenplayElements.push({ type, text: clean })
+  scene.screenplayText += (scene.screenplayText ? '\n' : '') + clean
 }
 
 // ── Slugline parser ───────────────────────────────────────────────────────────
@@ -191,16 +200,24 @@ async function parseFountain(text, filename) {
         customHeader: slugline,
         importSource: filename,
       })
+      appendScreenplayElement(current, 'heading', slugline)
     } else if (current) {
       if (token.type === 'action') {
         current.actionText += (current.actionText ? '\n' : '') + (token.text || '')
+        appendScreenplayElement(current, 'action', token.text || '')
       } else if (token.type === 'character') {
         const charName = (token.text || '').replace(/\s*\([^)]*\)\s*$/, '').trim()
         if (charName && !current.characters.includes(charName)) {
           current.characters.push(charName)
         }
+        appendScreenplayElement(current, 'character', token.text || '')
+      } else if (token.type === 'parenthetical') {
+        appendScreenplayElement(current, 'parenthetical', token.text || '')
       } else if (token.type === 'dialogue') {
         current.dialogueCount++
+        appendScreenplayElement(current, 'dialogue', token.text || '')
+      } else if (token.type === 'transition') {
+        appendScreenplayElement(current, 'transition', token.text || '')
       }
     }
   }
@@ -262,15 +279,23 @@ function parseFdx(xmlText, filename) {
         customHeader: text,
         importSource: filename,
       })
+      appendScreenplayElement(current, 'heading', text)
     } else if (current && type === 'Action' && text) {
       current.actionText += (current.actionText ? '\n' : '') + text
+      appendScreenplayElement(current, 'action', text)
     } else if (current && type === 'Character' && text) {
       const charName = text.replace(/\s*\([^)]*\)\s*$/, '').trim()
       if (charName && !current.characters.includes(charName)) {
         current.characters.push(charName)
       }
+      appendScreenplayElement(current, 'character', text)
+    } else if (current && type === 'Parenthetical' && text) {
+      appendScreenplayElement(current, 'parenthetical', text)
     } else if (current && type === 'Dialogue') {
       current.dialogueCount++
+      appendScreenplayElement(current, 'dialogue', text)
+    } else if (current && type === 'Transition' && text) {
+      appendScreenplayElement(current, 'transition', text)
     }
   }
 
@@ -330,6 +355,7 @@ function parseTxt(text, filename) {
         customHeader: trimmed.toUpperCase(),
         importSource: filename,
       })
+      appendScreenplayElement(current, 'heading', trimmed.toUpperCase())
       prevLineWasCharacter = false
       prevTrimmed = trimmed
       continue
@@ -352,14 +378,17 @@ function parseTxt(text, filename) {
       if (!current.characters.includes(charName)) {
         current.characters.push(charName)
       }
+      appendScreenplayElement(current, 'character', trimmed)
       prevLineWasCharacter = true
     } else if (prevLineWasCharacter) {
       // This line is dialogue (follows a character cue)
       current.dialogueCount++
+      appendScreenplayElement(current, 'dialogue', trimmed)
       prevLineWasCharacter = false
     } else {
       // Action line
       current.actionText += (current.actionText ? '\n' : '') + trimmed
+      appendScreenplayElement(current, 'action', trimmed)
       prevLineWasCharacter = false
     }
 

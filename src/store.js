@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { arrayMove } from '@dnd-kit/sortable'
 import { computeEstimate, computeConfidence } from './utils/scriptParser'
+import { estimateScreenplayPagination } from './utils/screenplay'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -212,6 +213,7 @@ const useStore = create((set, get) => ({
   // blocks: { [blockId]: bool } true = collapsed
   scheduleCollapseState: { days: {}, blocks: {} },
   scriptFocusRequest: null, // { sceneId, shotId, at }
+  scenePropertiesDialog: null, // { source: 'storyboard'|'script', sceneId }
 
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
@@ -237,9 +239,17 @@ const useStore = create((set, get) => ({
       const settings = state.scriptSettings
 
       // Enrich scenes with estimated minutes and confidence
+      const pagination = estimateScreenplayPagination(parsedScenes)
       const enriched = parsedScenes.map(scene => {
         const estimated = computeEstimate(scene, settings.baseMinutesPerPage)
-        return { ...scene, sceneNumber: scene.sceneNumber != null ? String(scene.sceneNumber) : '', estimatedMinutes: estimated }
+        return {
+          ...scene,
+          sceneNumber: scene.sceneNumber != null ? String(scene.sceneNumber) : '',
+          pageCount: pagination.byScene[scene.id]?.pageCount ?? scene.pageCount ?? null,
+          pageStart: pagination.byScene[scene.id]?.startPage ?? null,
+          pageEnd: pagination.byScene[scene.id]?.endPage ?? null,
+          estimatedMinutes: estimated,
+        }
       })
 
       const newScript = {
@@ -278,8 +288,7 @@ const useStore = create((set, get) => ({
   updateScriptScene: (sceneId, updates) => {
     set(state => {
       const settings = state.scriptSettings
-      return {
-        scriptScenes: state.scriptScenes.map(s => {
+      const nextScenes = state.scriptScenes.map(s => {
           if (s.id !== sceneId) return s
           const normalizedUpdates = { ...updates }
           if ('sceneNumber' in normalizedUpdates) {
@@ -291,7 +300,15 @@ const useStore = create((set, get) => ({
             updated.estimatedMinutes = computeEstimate(updated, settings.baseMinutesPerPage)
           }
           return updated
-        }),
+        })
+      const pagination = estimateScreenplayPagination(nextScenes)
+      return {
+        scriptScenes: nextScenes.map(scene => ({
+          ...scene,
+          pageCount: pagination.byScene[scene.id]?.pageCount ?? scene.pageCount ?? null,
+          pageStart: pagination.byScene[scene.id]?.startPage ?? scene.pageStart ?? null,
+          pageEnd: pagination.byScene[scene.id]?.endPage ?? scene.pageEnd ?? null,
+        })),
       }
     })
     get()._scheduleAutoSave()
@@ -357,6 +374,11 @@ const useStore = create((set, get) => ({
     })
     get()._scheduleAutoSave()
   },
+
+  openScenePropertiesDialog: (source, sceneId) => {
+    set({ scenePropertiesDialog: { source, sceneId } })
+  },
+  closeScenePropertiesDialog: () => set({ scenePropertiesDialog: null }),
 
   // Link a shot to a script scene (or unlink with null)
   linkShotToScene: (shotId, sceneId, opts = {}) => {
@@ -1096,8 +1118,12 @@ const useStore = create((set, get) => ({
         customHeader: s.customHeader,
         characters: s.characters || [],
         actionText: s.actionText || '',
+        screenplayText: s.screenplayText || '',
+        screenplayElements: Array.isArray(s.screenplayElements) ? s.screenplayElements : [],
         dialogueCount: s.dialogueCount || 0,
         pageCount: s.pageCount ?? null,
+        pageStart: s.pageStart ?? null,
+        pageEnd: s.pageEnd ?? null,
         complexityTags: s.complexityTags || [],
         estimatedMinutes: s.estimatedMinutes ?? null,
         linkedShotIds: s.linkedShotIds || [],
