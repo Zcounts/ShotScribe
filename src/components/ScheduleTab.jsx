@@ -44,6 +44,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
+import { DayTabBar } from './DayTabBar'
+import { SubTabNav } from './SubTabNav'
 
 // ── Time Utilities ────────────────────────────────────────────────────────────
 
@@ -3244,6 +3246,7 @@ export default function ScheduleTab() {
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const configPanelRef = useRef(null)
+  const [listActiveDayId, setListActiveDayId] = useState(null)
 
   // Close config panel when clicking outside
   useEffect(() => {
@@ -3284,6 +3287,13 @@ export default function ScheduleTab() {
   }, [localBlocksByDay, schedule, blockMap])
 
   const dayIds = schedule.map(d => d.id)
+  const dayTabs = useMemo(
+    () => schedule.map((day, idx) => ({
+      id: day.id,
+      label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}`,
+    })),
+    [schedule]
+  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -3401,97 +3411,81 @@ export default function ScheduleTab() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const totalShots = schedule.reduce((n, d) => n + d.blocks.length, 0)
+  const subtitleText = schedule.length > 0
+    ? `${schedule.length} shooting day${schedule.length !== 1 ? 's' : ''} · ${totalShots} shot${totalShots !== 1 ? 's' : ''} scheduled`
+    : 'Build your shoot days and drag shots into place.'
+  const activeSubTab = scheduleView === 'list'
+    ? 'List'
+    : scheduleView === 'stripboard'
+      ? 'Stripboard'
+      : 'Calendar'
 
-  // ── View-toggle style helper ─────────────────────────────────────────────────
-  const viewTabStyle = (active) => ({
-    flex: 1,
-    textAlign: 'center',
-    padding: '5px 12px',
-    fontFamily: 'Sora, sans-serif',
-    fontSize: 11,
-    fontWeight: 600,
-    letterSpacing: '0.04em',
-    border: 'none',
-    borderRadius: 3,
-    background: active
-      ? '#FAF8F4'
-      : 'transparent',
-    color: active ? '#E84040' : '#718096',
-    cursor: 'pointer',
-    transition: 'background 0.1s, color 0.1s',
-    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-  })
+  useEffect(() => {
+    if (!schedule.length) {
+      setListActiveDayId(null)
+      return
+    }
+    if (!listActiveDayId || !schedule.some(day => day.id === listActiveDayId)) {
+      setListActiveDayId(schedule[0].id)
+    }
+  }, [schedule, listActiveDayId])
 
   return (
-    <div style={{
-      padding: '24px',
-      maxWidth: (scheduleView === 'stripboard' || scheduleView === 'calendar') ? 'none' : 920,
-      margin: '0 auto',
-      width: '100%',
-    }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        marginBottom: 24,
-        gap: 12,
-        flexWrap: 'wrap',
-      }}>
-        {/* Title + subtitle */}
-        <div>
-          <h2 style={{
-            margin: 0,
-            fontFamily: 'Sora, sans-serif',
-            fontSize: 18,
-            fontWeight: 800,
-            letterSpacing: '-0.01em',
-            color: '#1A1A1A',
-          }}>
-            Schedule
-          </h2>
-          {schedule.length > 0 && (
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#718096', fontFamily: 'Sora, sans-serif' }}>
-              {schedule.length} shooting day{schedule.length !== 1 ? 's' : ''}&nbsp;&middot;&nbsp;
-              {totalShots} shot{totalShots !== 1 ? 's' : ''} scheduled
-              {scheduleView === 'list' && (
-                <span style={{ marginLeft: 8, opacity: 0.65 }}>
-                  · Set a call time on each day to see the projected timeline
-                </span>
-              )}
-            </p>
-          )}
-        </div>
+    <div className="flex flex-col h-full overflow-hidden bg-canvas">
+      <div className="shrink-0 px-6 pt-5 pb-2">
+        <h2 className="text-xl font-bold text-ink">Schedule</h2>
+        <p className="text-sm text-slate">{subtitleText}</p>
+      </div>
 
-        {/* Right-side controls */}
+      <div className="shrink-0 px-6 pb-3 flex items-center justify-between gap-3 flex-wrap">
+        <SubTabNav
+          tabs={['List', 'Stripboard', 'Calendar']}
+          active={activeSubTab}
+          onChange={(tab) => {
+            if (tab === 'List') setScheduleView('list')
+            if (tab === 'Stripboard') setScheduleView('stripboard')
+            if (tab === 'Calendar') setScheduleView('calendar')
+          }}
+        />
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-          {/* Sub-view toggle */}
-          <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1', minWidth: 240 }}>
-            <button onClick={() => setScheduleView('list')} style={viewTabStyle(scheduleView === 'list')}>
-              List
-            </button>
-            <button onClick={() => setScheduleView('stripboard')} style={viewTabStyle(scheduleView === 'stripboard')}>
-              Stripboard
-            </button>
-            <button onClick={() => setScheduleView('calendar')} style={viewTabStyle(scheduleView === 'calendar')}>
-              Calendar
-            </button>
-          </div>
-
-          {/* Density toggle — stripboard only */}
           {scheduleView === 'stripboard' && schedule.length > 0 && (
             <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1' }}>
               <button
                 onClick={() => setStripDensity('compact')}
                 title="Compact strips (24px)"
-                style={viewTabStyle(stripDensity === 'compact')}
+                style={{
+                  textAlign: 'center',
+                  padding: '5px 12px',
+                  fontFamily: 'Sora, sans-serif',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  border: 'none',
+                  borderRadius: 3,
+                  background: stripDensity === 'compact' ? '#FAF8F4' : 'transparent',
+                  color: stripDensity === 'compact' ? '#E84040' : '#718096',
+                  cursor: 'pointer',
+                }}
               >
                 Compact
               </button>
               <button
                 onClick={() => setStripDensity('comfortable')}
                 title="Comfortable strips (36px)"
-                style={viewTabStyle(stripDensity === 'comfortable')}
+                style={{
+                  textAlign: 'center',
+                  padding: '5px 12px',
+                  fontFamily: 'Sora, sans-serif',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  border: 'none',
+                  borderRadius: 3,
+                  background: stripDensity === 'comfortable' ? '#FAF8F4' : 'transparent',
+                  color: stripDensity === 'comfortable' ? '#E84040' : '#718096',
+                  cursor: 'pointer',
+                }}
               >
                 Comfortable
               </button>
@@ -3564,7 +3558,7 @@ export default function ScheduleTab() {
         </div>
       </div>
 
-      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-6 pb-6">
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
       ) : scheduleView === 'calendar' ? (
@@ -3576,28 +3570,38 @@ export default function ScheduleTab() {
           onJumpToDay={handleJumpToDay}
         />
       ) : scheduleView === 'list' ? (
-        // ── List view ──────────────────────────────────────────────────────────
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          onDragCancel={handleDragCancel}
-        >
-          <SortableContext items={dayIds} strategy={verticalListSortingStrategy}>
-            {schedule.map((day, dayIndex) => (
-              <SortableShootingDay
-                key={day.id}
-                day={day}
-                dayIndex={dayIndex}
-                blocks={getBlocksForDay(day.id)}
-                enrichedBlockMap={enrichedBlockMap}
-                isDark={isDark}
-                columnConfig={scheduleColumnConfig}
-              />
-            ))}
-          </SortableContext>
+        <>
+          <DayTabBar
+            days={dayTabs}
+            activeDay={listActiveDayId}
+            onSelect={(dayId) => {
+              setListActiveDayId(dayId)
+              const el = document.getElementById(`sched-day-${dayId}`)
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }}
+            onAddDay={() => addShootingDay()}
+          />
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
+            <SortableContext items={dayIds} strategy={verticalListSortingStrategy}>
+              {schedule.map((day, dayIndex) => (
+                <SortableShootingDay
+                  key={day.id}
+                  day={day}
+                  dayIndex={dayIndex}
+                  blocks={getBlocksForDay(day.id)}
+                  enrichedBlockMap={enrichedBlockMap}
+                  isDark={isDark}
+                  columnConfig={scheduleColumnConfig}
+                />
+              ))}
+            </SortableContext>
 
           {/* DragOverlay only for shot blocks and break blocks.
               dropAnimation={null}: the store is committed synchronously in
@@ -3625,8 +3629,9 @@ export default function ScheduleTab() {
                 />
               )
             ) : null}
-          </DragOverlay>
-        </DndContext>
+            </DragOverlay>
+          </DndContext>
+        </>
       ) : (
         // ── Stripboard view ────────────────────────────────────────────────────
         <DndContext
@@ -3714,6 +3719,7 @@ export default function ScheduleTab() {
           </DragOverlay>
         </DndContext>
       )}
+      </div>
     </div>
   )
 }

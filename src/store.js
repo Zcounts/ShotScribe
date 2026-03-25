@@ -172,11 +172,12 @@ const useStore = create((set, get) => ({
   // Crew roster entry:  { id, name, department, role }
   castRoster: [],
   crewRoster: [],
+  castCrewNotes: '',
 
   // UI state
   settingsOpen: false,
   contextMenu: null, // { shotId, sceneId, x, y }
-  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'schedule' | 'callsheet'
+  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'scenes' | 'schedule' | 'callsheet' | 'castcrew'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
@@ -586,6 +587,10 @@ const useStore = create((set, get) => ({
     set({ callsheetSectionConfig: config })
     get()._scheduleAutoSave()
   },
+  setCastCrewNotes: (notes) => {
+    set({ castCrewNotes: notes })
+    get()._scheduleAutoSave()
+  },
 
   // ── Cast/Crew Roster actions ──────────────────────────────────────────
 
@@ -931,6 +936,7 @@ const useStore = create((set, get) => ({
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
       shotlistColumnWidths, callsheets, callsheetSectionConfig,
       castRoster, crewRoster,
+      castCrewNotes,
       scriptScenes, importedScripts, scriptSettings,
     } = get()
     return {
@@ -1028,6 +1034,7 @@ const useStore = create((set, get) => ({
       callsheetSectionConfig: callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG,
       castRoster: castRoster || [],
       crewRoster: crewRoster || [],
+      castCrewNotes: castCrewNotes || '',
       // Script import state
       scriptScenes: (scriptScenes || []).map(s => ({
         id: s.id,
@@ -1338,6 +1345,7 @@ const useStore = create((set, get) => ({
         : {},
       castRoster: Array.isArray(data.castRoster) ? data.castRoster : [],
       crewRoster: Array.isArray(data.crewRoster) ? data.crewRoster : [],
+      castCrewNotes: typeof data.castCrewNotes === 'string' ? data.castCrewNotes : '',
       callsheetSectionConfig: (() => {
         const saved = data.callsheetSectionConfig
         if (!saved || !Array.isArray(saved) || saved.length === 0) return DEFAULT_CALLSHEET_SECTION_CONFIG
@@ -1449,6 +1457,7 @@ const useStore = create((set, get) => ({
       callsheets: {},
       castRoster: [],
       crewRoster: [],
+      castCrewNotes: '',
       scriptScenes: [],
       importedScripts: [],
       projectPath: null,

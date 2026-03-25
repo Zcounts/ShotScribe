@@ -104,8 +104,6 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      {/* Clapper-board stripe — top 8px decorative band */}
-      <div className="chrome-stripe" />
       <div className="toolbar">
       {/* Left: Project name */}
       <div className="flex items-center gap-3 flex-1 min-w-0">

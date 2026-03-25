@@ -28,21 +28,6 @@
     background-size: 20px 20px;
   }
 
-  /* ── Clapper-board stripe band — top edge of chrome toolbar ─────────────── */
-  .chrome-stripe {
-    height: 8px;
-    flex-shrink: 0;
-    background: repeating-linear-gradient(
-      -45deg,
-      #000 0px,
-      #000 6px,
-      #F5F2EC 6px,
-      #F5F2EC 12px
-    );
-    opacity: 0.15;
-    pointer-events: none;
-  }
-
   /* Pages container — centres all page-document divs vertically */
   .pages-container {
     display: flex;

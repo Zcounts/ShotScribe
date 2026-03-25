@@ -15,6 +15,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
+import { DayTabBar } from './DayTabBar'
 
 // ── Scene link badge (chain icon + SC badge) for the SHOT# column ────────────
 function ShotlistSceneBadge({ shot }) {
@@ -138,6 +139,13 @@ function sumScriptTimes(shots) {
     if (secs !== null) { total += secs; anyParsed = true }
   }
   return anyParsed ? formatSeconds(total) : null
+}
+
+function fmtDate(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return iso
+  return `${m}/${d}/${y}`
 }
 
 // ── EditableCell ──────────────────────────────────────────────────────────────
@@ -970,100 +978,6 @@ function SortableShotRow({
   )
 }
 
-// ── Helper: format ISO date as MM/DD/YYYY ─────────────────────────────────────
-function fmtDate(iso) {
-  if (!iso) return ''
-  const [y, m, d] = iso.split('-')
-  if (!y || !m || !d) return iso
-  return `${m}/${d}/${y}`
-}
-
-// ── Day Subtab Bar ────────────────────────────────────────────────────────────
-function DaySubtabBar({ schedule, selectedDayIdx, onSelectDay, onAddDay, isDark }) {
-  const c = {
-    barBg:      '#EDE9E1',
-    activeBg:   '#FAF8F4',
-    inactiveBg: '#E5E1D9',
-    border:     'rgba(74,85,104,0.2)',
-    text:       '#2C2C2C',
-    mutedText:  '#718096',
-  }
-
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 2,
-      padding: '6px 16px 0',
-      backgroundColor: c.barBg,
-      borderBottom: `2px solid ${c.border}`,
-      overflowX: 'auto',
-      flexShrink: 0,
-    }}>
-      {schedule.map((day, idx) => {
-        const isActive = idx === selectedDayIdx
-        const label = `Day ${idx + 1}${day.date ? ` — ${fmtDate(day.date)}` : ''}`
-        return (
-          <button
-            key={day.id}
-            onClick={() => onSelectDay(idx)}
-            style={{
-              flexShrink: 0,
-              padding: '5px 14px',
-              border: `1px solid ${isActive ? c.border : 'transparent'}`,
-              borderBottom: isActive ? `2px solid #FAF8F4` : '1px solid transparent',
-              borderRadius: '4px 4px 0 0',
-              marginBottom: isActive ? -2 : 0,
-              background: isActive ? c.activeBg : 'none',
-              color: isActive ? '#E84040' : c.mutedText,
-              fontFamily: 'Sora, sans-serif',
-              fontSize: 11,
-              fontWeight: isActive ? 700 : 400,
-              letterSpacing: '0.04em',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'color 0.1s',
-            }}
-          >
-            {label}
-          </button>
-        )
-      })}
-
-      {/* + Add Day */}
-      <button
-        onClick={onAddDay}
-        style={{
-          flexShrink: 0,
-          padding: '5px 10px',
-          border: '1px dashed transparent',
-          borderRadius: '4px 4px 0 0',
-          background: 'none',
-          color: c.mutedText,
-          fontFamily: 'monospace',
-          fontSize: 11,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          transition: 'color 0.1s',
-          whiteSpace: 'nowrap',
-          marginLeft: 4,
-        }}
-        onMouseEnter={e => { e.currentTarget.style.color = isDark ? '#4ade80' : '#16a34a' }}
-        onMouseLeave={e => { e.currentTarget.style.color = c.mutedText }}
-        title="Add shooting day"
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-          <line x1="5" y1="1" x2="5" y2="9" />
-          <line x1="1" y1="5" x2="9" y2="5" />
-        </svg>
-        Add Day
-      </button>
-    </div>
-  )
-}
-
 // ── Main ShotlistTab ──────────────────────────────────────────────────────────
 export default function ShotlistTab({ containerRef }) {
   const scenes                  = useStore(s => s.scenes)
@@ -1089,6 +1003,13 @@ export default function ShotlistTab({ containerRef }) {
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const [selectedDayIdx, setSelectedDayIdx] = useState(0)
+  const dayTabs = useMemo(
+    () => schedule.map((day, idx) => ({
+      id: day.id,
+      label: `Day ${idx + 1}${day.date ? ` — ${fmtDate(day.date)}` : ''}`,
+    })),
+    [schedule]
+  )
 
   // Clamp selectedDayIdx if schedule shrinks
   const activeDayIdx = schedule.length === 0 ? -1 : Math.min(selectedDayIdx, schedule.length - 1)
@@ -1236,12 +1157,11 @@ export default function ShotlistTab({ containerRef }) {
     >
 
       {/* ── Day Subtab Bar ── */}
-      <DaySubtabBar
-        schedule={schedule}
-        selectedDayIdx={activeDayIdx}
-        onSelectDay={setSelectedDayIdx}
+      <DayTabBar
+        days={dayTabs}
+        activeDay={schedule[activeDayIdx]?.id}
+        onSelect={(dayId) => setSelectedDayIdx(schedule.findIndex(day => day.id === dayId))}
         onAddDay={addShootingDay}
-        isDark={isDark}
       />
 
       {/* ── Toolbar ── */}
