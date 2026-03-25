@@ -1,6 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
-import { exportMobilePackageFromProject } from '../services/mobile'
+
+let mobileExportServicePromise = null
+
+async function getMobileExportService() {
+  if (!mobileExportServicePromise) {
+    mobileExportServicePromise = import('../services/mobile/mobileExportService.js')
+  }
+  return mobileExportServicePromise
+}
 
 export default function Toolbar({ onExportPDF, onExportPNG }) {
   const projectName = useStore(s => s.projectName)
@@ -700,6 +708,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                 onClick={async () => {
                   const projectData = getProjectData()
                   try {
+                    const { exportMobilePackageFromProject } = await getMobileExportService()
                     if (mobileExportMode === 'day') {
                       if (!selectedMobileDayId) {
                         alert('Please select a shoot day to export.')
