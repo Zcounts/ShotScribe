@@ -10,13 +10,23 @@ import NotesArea from './NotesArea'
 function SceneLinkBadge({ shot }) {
   const scriptScenes = useStore(s => s.scriptScenes)
   const linkShotToScene = useStore(s => s.linkShotToScene)
+  const requestScriptFocus = useStore(s => s.requestScriptFocus)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [search, setSearch] = useState('')
 
   const linked = shot.linkedSceneId
     ? scriptScenes.find(s => s.id === shot.linkedSceneId)
     : null
 
   const isStale = shot.linkedSceneId && !linked
+  const isDialogueLinked = !!(linked && shot.linkedDialogueLine)
+  const filteredScenes = scriptScenes.filter(ss => {
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    return (`${ss.sceneNumber || ''}`.toLowerCase().includes(q)
+      || `${ss.location || ''}`.toLowerCase().includes(q)
+      || (ss.characters || []).join(' ').toLowerCase().includes(q))
+  })
 
   if (scriptScenes.length === 0) return null
 
@@ -24,8 +34,17 @@ function SceneLinkBadge({ shot }) {
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
       <button
         onPointerDown={e => e.stopPropagation()}
-        onClick={e => { e.stopPropagation(); setPickerOpen(!pickerOpen) }}
-        title={linked ? `Linked to SC ${linked.sceneNumber} — click to change` : 'Link to scene'}
+        onClick={e => {
+          e.stopPropagation()
+          if (isDialogueLinked) {
+            requestScriptFocus(linked.id, shot.id)
+            return
+          }
+          setPickerOpen(!pickerOpen)
+        }}
+        title={isDialogueLinked
+          ? (shot.linkedDialogueLine || '').slice(0, 60)
+          : linked ? `Linked to SC ${linked.sceneNumber} — click to change` : 'Link to scene'}
         style={{
           background: linked
             ? (linked.color ? linked.color + '30' : 'rgba(59,130,246,0.15)')
@@ -50,7 +69,7 @@ function SceneLinkBadge({ shot }) {
         }}
       >
         {linked
-          ? `SC ${linked.sceneNumber}`
+          ? `SC ${linked.sceneNumber}${shot.linkedDialogueLine ? ' 🔖' : ''}`
           : isStale ? '⚠' : '⛓'}
       </button>
 
@@ -65,6 +84,15 @@ function SceneLinkBadge({ shot }) {
             padding: 4,
           }}
         >
+          <div className="p-2 border-b border-slate/15">
+            <input
+              autoFocus
+              placeholder="Search by number, location, or cast..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-[#2C2C2E] text-white text-sm px-2 py-1.5 rounded outline-none placeholder-slate/50 focus:ring-1 focus:ring-[#E84040]/50"
+            />
+          </div>
           {/* Unlink option */}
           {linked && (
             <button
@@ -83,7 +111,7 @@ function SceneLinkBadge({ shot }) {
           )}
 
           {/* Scene options */}
-          {scriptScenes.map(ss => (
+          {filteredScenes.map(ss => (
             <button
               key={ss.id}
               onClick={() => { linkShotToScene(shot.id, ss.id); setPickerOpen(false) }}
@@ -102,10 +130,20 @@ function SceneLinkBadge({ shot }) {
               {ss.color && (
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
               )}
-              <span>SC {ss.sceneNumber}</span>
-              {ss.location && <span style={{ opacity: 0.5 }}>· {ss.location.slice(0, 20)}</span>}
+              <span style={{ fontWeight: 700 }}>SC {ss.sceneNumber}</span>
+              {ss.location && <span style={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>· {ss.location}</span>}
+              {(ss.characters || []).length > 0 && (
+                <span style={{ opacity: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
+                  · {(ss.characters || []).join(', ')}
+                </span>
+              )}
             </button>
           ))}
+          {filteredScenes.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#718096', padding: '10px 8px', fontSize: 11 }}>
+              No scenes match
+            </div>
+          )}
         </div>
       )}
     </div>

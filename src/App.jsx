@@ -20,6 +20,7 @@ import ShotlistTab from './components/ShotlistTab'
 import ScheduleTab from './components/ScheduleTab'
 import CallsheetTab from './components/CallsheetTab'
 import ScenesTab from './components/ScenesTab'
+import ScriptTab from './components/ScriptTab'
 import CastCrewTab from './components/CastCrewTab'
 
 // Cards per page based on column count (2 rows)
@@ -334,6 +335,7 @@ export default function App() {
           { id: 'storyboard', label: 'Storyboard' },
           { id: 'shotlist',   label: 'Shotlist' },
           { id: 'scenes',     label: 'Scenes' },
+          { id: 'script',     label: 'Script' },
           { id: 'schedule',   label: 'Schedule' },
           { id: 'callsheet',  label: 'Callsheet' },
           { id: 'castcrew',   label: 'Cast/Crew' },
@@ -413,6 +415,10 @@ export default function App() {
       ) : activeTab === 'scenes' ? (
         <div className="flex-1 overflow-hidden canvas-texture">
           <ScenesTab />
+        </div>
+      ) : activeTab === 'script' ? (
+        <div className="flex-1 overflow-hidden canvas-texture">
+          <ScriptTab />
         </div>
       ) : activeTab === 'schedule' ? (
         <div className="flex-1 overflow-y-auto canvas-texture">

@@ -91,6 +91,8 @@ function createShot(overrides = {}) {
     props: '',
     // Script scene link — references a scriptScene id (display-only, not enforced)
     linkedSceneId: null,
+    linkedDialogueLine: null,
+    linkedDialogueOffset: null,
     ...overrides,
   }
 }
@@ -177,7 +179,7 @@ const useStore = create((set, get) => ({
   // UI state
   settingsOpen: false,
   contextMenu: null, // { shotId, sceneId, x, y }
-  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'scenes' | 'schedule' | 'callsheet' | 'castcrew'
+  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
@@ -191,6 +193,7 @@ const useStore = create((set, get) => ({
   // days: { [dayId]: bool }   true = collapsed
   // blocks: { [blockId]: bool } true = collapsed
   scheduleCollapseState: { days: {}, blocks: {} },
+  scriptFocusRequest: null, // { sceneId, shotId, at }
 
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
@@ -218,7 +221,7 @@ const useStore = create((set, get) => ({
       // Enrich scenes with estimated minutes and confidence
       const enriched = parsedScenes.map(scene => {
         const estimated = computeEstimate(scene, settings.baseMinutesPerPage)
-        return { ...scene, estimatedMinutes: estimated }
+        return { ...scene, sceneNumber: scene.sceneNumber != null ? String(scene.sceneNumber) : '', estimatedMinutes: estimated }
       })
 
       const newScript = {
@@ -260,9 +263,13 @@ const useStore = create((set, get) => ({
       return {
         scriptScenes: state.scriptScenes.map(s => {
           if (s.id !== sceneId) return s
-          const updated = { ...s, ...updates }
+          const normalizedUpdates = { ...updates }
+          if ('sceneNumber' in normalizedUpdates) {
+            normalizedUpdates.sceneNumber = normalizedUpdates.sceneNumber != null ? String(normalizedUpdates.sceneNumber) : ''
+          }
+          const updated = { ...s, ...normalizedUpdates }
           // Recompute estimate when relevant fields change
-          if ('complexityTags' in updates || 'pageCount' in updates) {
+          if ('complexityTags' in normalizedUpdates || 'pageCount' in normalizedUpdates) {
             updated.estimatedMinutes = computeEstimate(updated, settings.baseMinutesPerPage)
           }
           return updated
@@ -334,12 +341,21 @@ const useStore = create((set, get) => ({
   },
 
   // Link a shot to a script scene (or unlink with null)
-  linkShotToScene: (shotId, sceneId) => {
+  linkShotToScene: (shotId, sceneId, opts = {}) => {
+    const nextDialogue = opts.linkedDialogueLine !== undefined ? opts.linkedDialogueLine : null
+    const nextOffset = opts.linkedDialogueOffset !== undefined ? opts.linkedDialogueOffset : null
     set(state => ({
       scenes: state.scenes.map(sc => ({
         ...sc,
         shots: sc.shots.map(sh =>
-          sh.id === shotId ? { ...sh, linkedSceneId: sceneId } : sh
+          sh.id === shotId
+            ? {
+                ...sh,
+                linkedSceneId: sceneId,
+                linkedDialogueLine: sceneId ? nextDialogue : null,
+                linkedDialogueOffset: sceneId ? nextOffset : null,
+              }
+            : sh
         ),
       })),
     }))
@@ -719,6 +735,15 @@ const useStore = create((set, get) => ({
     return newShot.id
   },
 
+  addShotWithOverrides: (sceneId, overrides = {}) => {
+    const shotId = get().addShot(sceneId)
+    if (!shotId) return null
+    if (overrides && Object.keys(overrides).length > 0) {
+      get().updateShot(shotId, overrides)
+    }
+    return shotId
+  },
+
   deleteShot: (shotId) => {
     set(state => ({
       scenes: state.scenes.map(s => ({
@@ -838,6 +863,11 @@ const useStore = create((set, get) => ({
   toggleSettings: () => set(state => ({ settingsOpen: !state.settingsOpen })),
   closeSettings: () => set({ settingsOpen: false }),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  requestScriptFocus: (sceneId, shotId = null) => set({
+    scriptFocusRequest: { sceneId, shotId, at: Date.now() },
+    activeTab: 'script',
+  }),
+  clearScriptFocusRequest: () => set({ scriptFocusRequest: null }),
   setShotlistColumnConfig: (config) => {
     set({ shotlistColumnConfig: config })
     get()._scheduleAutoSave()
@@ -982,6 +1012,8 @@ const useStore = create((set, get) => ({
             sound: s.sound || '',
             props: s.props || '',
             linkedSceneId: s.linkedSceneId || null,
+            linkedDialogueLine: s.linkedDialogueLine || null,
+            linkedDialogueOffset: s.linkedDialogueOffset ?? null,
           }
           for (const key of Object.keys(s)) {
             if (key.startsWith('custom_')) shot[key] = s[key]
@@ -1038,7 +1070,7 @@ const useStore = create((set, get) => ({
       // Script import state
       scriptScenes: (scriptScenes || []).map(s => ({
         id: s.id,
-        sceneNumber: s.sceneNumber,
+        sceneNumber: s.sceneNumber != null ? String(s.sceneNumber) : '',
         slugline: s.slugline,
         intExt: s.intExt,
         dayNight: s.dayNight,
@@ -1213,6 +1245,8 @@ const useStore = create((set, get) => ({
       sound: s.sound || '',
       props: s.props || '',
       linkedSceneId: s.linkedSceneId || null,
+      linkedDialogueLine: s.linkedDialogueLine || null,
+      linkedDialogueOffset: s.linkedDialogueOffset ?? null,
       // Preserve any extra fields (e.g. custom columns)
       ...Object.fromEntries(
         Object.entries(s).filter(([k]) => k.startsWith('custom_'))
@@ -1354,7 +1388,9 @@ const useStore = create((set, get) => ({
         return [...saved, ...newSections]
       })(),
       // Script import state — default to empty for older project files
-      scriptScenes: Array.isArray(data.scriptScenes) ? data.scriptScenes : [],
+      scriptScenes: Array.isArray(data.scriptScenes)
+        ? data.scriptScenes.map(s => ({ ...s, sceneNumber: s?.sceneNumber != null ? String(s.sceneNumber) : '' }))
+        : [],
       importedScripts: Array.isArray(data.importedScripts) ? data.importedScripts : [],
       scriptSettings: {
         baseMinutesPerPage: 5,
