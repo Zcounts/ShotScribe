@@ -1033,7 +1033,7 @@ export default function ShotlistTab({ containerRef }) {
   const activeDayShotIds = useMemo(() => {
     if (!activeDay) return new Set()
     return new Set(
-      activeDay.shotBlocks
+      activeDay.blocks
         .filter(b => b.type !== 'break' && b.shotId)
         .map(b => b.shotId)
     )
