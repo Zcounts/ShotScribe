@@ -54,20 +54,23 @@ function renderOverview(day: StoredDayEntry, doneShots: number, totalShots: numb
 
   return (
     <div className="stacked-list">
-      <article className="project-card">
-        <h3>Day at a glance</h3>
+      <article className="project-card overview-card">
+        <div className="section-heading">
+          <h3>Day at a glance</h3>
+          <span className="status-chip status-chip-quiet">{completionPct}% complete</span>
+        </div>
         <div className="stats-grid">
-          <p className="stat-tile">
+          <p className="stat-tile stat-tile-slate">
             <span>Schedule blocks</span>
             <strong>{totalBlocks}</strong>
           </p>
-          <p className="stat-tile">
+          <p className="stat-tile stat-tile-blue">
             <span>Shots done</span>
             <strong>
               {doneShots}/{totalShots}
             </strong>
           </p>
-          <p className="stat-tile stat-tile-wide">
+          <p className="stat-tile stat-tile-red stat-tile-wide">
             <span>Completion</span>
             <strong>{completionPct}%</strong>
           </p>
@@ -75,10 +78,25 @@ function renderOverview(day: StoredDayEntry, doneShots: number, totalShots: numb
       </article>
 
       {day.dayPackage.callsheet ? (
-        <article className="project-card">
-          <h3>Callsheet quick view</h3>
-          <p className="hint-text">Call time: {formatTime(day.dayPackage.callsheet.callTime)}</p>
-          <p className="hint-text">Location: {day.dayPackage.callsheet.shootLocation ?? 'TBD'}</p>
+        <article className="project-card quicksheet-card">
+          <div className="section-heading">
+            <h3>Callsheet quick view</h3>
+            <span className="status-chip status-chip-warm">Day {day.dayPackage.callsheet.dayId}</span>
+          </div>
+          <div className="quicksheet-grid">
+            <p>
+              <span>Call time</span>
+              <strong>{formatTime(day.dayPackage.callsheet.callTime)}</strong>
+            </p>
+            <p>
+              <span>Location</span>
+              <strong>{day.dayPackage.callsheet.shootLocation ?? 'TBD'}</strong>
+            </p>
+            <p>
+              <span>Weather</span>
+              <strong>{day.dayPackage.callsheet.weatherSummary ?? 'TBD'}</strong>
+            </p>
+          </div>
         </article>
       ) : null}
     </div>
@@ -290,14 +308,15 @@ export function ProjectHubScreen({
   }).length
 
   return (
-    <section className="screen">
+    <section className="screen project-hub-screen">
       <header className="project-header">
-        <div>
-          <p className="eyebrow">Project</p>
+        <div className="project-header-copy">
+          <p className="eyebrow">ShotScribe project</p>
           <h1>{project.projectName}</h1>
-          <p className="hint-text">
-            Day {day.dayId} • {day.shootDate}
-          </p>
+          <div className="header-meta-row">
+            <span className="status-chip status-chip-warm">Day {day.dayId}</span>
+            <p className="hint-text">{day.shootDate}</p>
+          </div>
         </div>
         <select
           className="day-select"
