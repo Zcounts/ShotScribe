@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "packageType": "mobile-day-package",
+  "packageId": "pkg_day_2026_04_12_v3",
+  "packageVersion": 3,
+  "generatedAt": "2026-04-10T19:00:00Z",
+  "updatedAt": "2026-04-10T19:00:00Z",
+  "project": {
+    "projectId": "proj_abc123",
+    "projectSlug": "pilot-ep101",
+    "projectName": "Pilot Episode 101",
+    "timezone": "America/Los_Angeles"
+  },
+  "dayId": "day_01",
+  "shootDate": "2026-04-12",
+  "scheduleItems": [
+    {
+      "scheduleItemId": "sched_001",
+      "dayId": "day_01",
+      "type": "shot",
+      "shotId": "shot_001A",
+      "sceneId": "scene_12",
+      "title": "Opening dolly in",
+      "plannedStartTime": "2026-04-12T15:00:00Z",
+      "plannedEndTime": "2026-04-12T15:20:00Z",
+      "status": "todo",
+      "sortOrder": 0
+    }
+  ],
+  "storyboardRefs": [
+    {
+      "shotId": "shot_001A",
+      "thumbnailUrl": "https://example.invalid/thumbs/shot_001A.jpg",
+      "thumbnailWidth": 640,
+      "thumbnailHeight": 360,
+      "updatedAt": "2026-04-10T18:59:50Z"
+    }
+  ],
+  "callsheet": {
+    "dayId": "day_01",
+    "callTime": "2026-04-12T13:30:00Z",
+    "shootLocation": "Warehouse Stage A",
+    "weatherSummary": "Clear, 72F",
+    "safetyNotes": "Hearing protection near practical effects",
+    "generalNotes": "Lunch at 12:30 PM local"
+  }
+}
