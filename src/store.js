@@ -232,6 +232,7 @@ const useStore = create((set, get) => ({
             // Shared time fields — source of truth lives on the shot
             shootTime: found.shot.shootTime || '',
             setupTime: found.shot.setupTime || '',
+            scriptTime: found.shot.scriptTime || '',
           } : null,
         }
       }),
@@ -262,6 +263,26 @@ const useStore = create((set, get) => ({
       type: 'break',
       breakName: name,
       breakDuration: durationMins,
+    }
+    set(state => ({
+      schedule: state.schedule.map(d =>
+        d.id === dayId ? { ...d, shotBlocks: [...d.shotBlocks, block] } : d
+      ),
+    }))
+    get()._scheduleAutoSave()
+    return block.id
+  },
+
+  // Add a special (non-shot) block: type = 'move' | 'meal' | 'travel'
+  addSpecialBlock: (dayId, type, overrides = {}) => {
+    blockIdCounter++
+    const defaultNames = { move: 'Company Move', meal: 'Meal', travel: 'Travel' }
+    const block = {
+      id: `block_${Date.now()}_${blockIdCounter}`,
+      type,
+      blockName: overrides.blockName || defaultNames[type] || type,
+      blockDuration: overrides.blockDuration || 0,
+      ...(type === 'move' ? { blockLocation: overrides.blockLocation || '' } : {}),
     }
     set(state => ({
       schedule: state.schedule.map(d =>
@@ -709,6 +730,15 @@ const useStore = create((set, get) => ({
     })
   },
 
+  // Batch-collapse or batch-expand all shooting days at once
+  setAllDaysCollapsed: (dayIds, collapsed) => {
+    set(state => {
+      const next = { ...state.scheduleCollapseState.days }
+      dayIds.forEach(id => { next[id] = collapsed })
+      return { scheduleCollapseState: { ...state.scheduleCollapseState, days: next } }
+    })
+  },
+
   // ── Save / Load ──────────────────────────────────────────────────────
 
   getProjectData: () => {
@@ -785,18 +815,28 @@ const useStore = create((set, get) => ({
         date: day.date,
         startTime: day.startTime,
         basecamp: day.basecamp,
-        shotBlocks: (day.shotBlocks || []).map(b =>
-          b.type === 'break'
-            ? { id: b.id, type: b.type, breakName: b.breakName, breakDuration: b.breakDuration }
-            : {
-                id: b.id,
-                shotId: b.shotId,
-                estimatedShootTime: b.estimatedShootTime,
-                estimatedSetupTime: b.estimatedSetupTime,
-                shootingLocation: b.shootingLocation,
-                castMembers: Array.isArray(b.castMembers) ? [...b.castMembers] : [],
-              }
-        ),
+        shotBlocks: (day.shotBlocks || []).map(b => {
+          if (b.type === 'break') {
+            return { id: b.id, type: b.type, breakName: b.breakName, breakDuration: b.breakDuration }
+          }
+          if (b.type === 'move' || b.type === 'meal' || b.type === 'travel') {
+            return {
+              id: b.id,
+              type: b.type,
+              blockName: b.blockName,
+              blockDuration: b.blockDuration,
+              ...(b.type === 'move' ? { blockLocation: b.blockLocation || '' } : {}),
+            }
+          }
+          return {
+            id: b.id,
+            shotId: b.shotId,
+            estimatedShootTime: b.estimatedShootTime,
+            estimatedSetupTime: b.estimatedSetupTime,
+            shootingLocation: b.shootingLocation,
+            castMembers: Array.isArray(b.castMembers) ? [...b.castMembers] : [],
+          }
+        }),
       })),
       callsheets: callsheets || {},
       callsheetSectionConfig: callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG,
@@ -1001,6 +1041,16 @@ const useStore = create((set, get) => ({
                 type: 'break',
                 breakName: b.breakName || 'Break',
                 breakDuration: b.breakDuration || 0,
+              }
+            }
+            if (b.type === 'move' || b.type === 'meal' || b.type === 'travel') {
+              const defaultNames = { move: 'Company Move', meal: 'Meal', travel: 'Travel' }
+              return {
+                id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
+                type: b.type,
+                blockName: b.blockName || defaultNames[b.type] || b.type,
+                blockDuration: b.blockDuration || 0,
+                ...(b.type === 'move' ? { blockLocation: b.blockLocation || '' } : {}),
               }
             }
             return {
