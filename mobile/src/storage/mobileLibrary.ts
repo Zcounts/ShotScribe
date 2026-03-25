@@ -1,32 +1,187 @@
 import type { MobileDayPackage } from '@shotscribe/shared'
-import type { ImportSummary, StoredDayEntry, StoredLibrary, StoredProjectEntry } from '../types'
+import type {
+  ImportSummary,
+  MobileTabKey,
+  StoredDayEntry,
+  StoredLastOpened,
+  StoredLibrary,
+  StoredProjectEntry,
+  StoredSession,
+} from '../types'
 
-const STORAGE_KEY = 'shotscribe.mobile.library.v1'
+const LIBRARY_STORAGE_KEY = 'shotscribe.mobile.library.v1'
+const SESSION_STORAGE_KEY = 'shotscribe.mobile.session.v1'
 
 const EMPTY_LIBRARY: StoredLibrary = {
   version: 1,
   projects: {},
+  shotStatusOverrides: {},
+}
+
+const EMPTY_SESSION: StoredSession = {
+  version: 1,
+  lastOpened: null,
 }
 
 export function loadLibrary(): StoredLibrary {
-  const raw = window.localStorage.getItem(STORAGE_KEY)
+  const raw = window.localStorage.getItem(LIBRARY_STORAGE_KEY)
   if (!raw) {
     return EMPTY_LIBRARY
   }
 
   try {
-    const parsed = JSON.parse(raw) as StoredLibrary
+    const parsed = JSON.parse(raw) as Partial<StoredLibrary>
     if (parsed.version !== 1 || typeof parsed.projects !== 'object' || !parsed.projects) {
       return EMPTY_LIBRARY
     }
-    return parsed
+
+    return {
+      version: 1,
+      projects: parsed.projects,
+      shotStatusOverrides:
+        typeof parsed.shotStatusOverrides === 'object' && parsed.shotStatusOverrides
+          ? (parsed.shotStatusOverrides as StoredLibrary['shotStatusOverrides'])
+          : {},
+    }
   } catch {
     return EMPTY_LIBRARY
   }
 }
 
 export function saveLibrary(library: StoredLibrary): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(library))
+  window.localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library))
+}
+
+export function loadSession(): StoredSession {
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+  if (!raw) {
+    return EMPTY_SESSION
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredSession>
+    if (parsed.version !== 1) {
+      return EMPTY_SESSION
+    }
+
+    const lastOpened = parsed.lastOpened
+    if (!lastOpened) {
+      return EMPTY_SESSION
+    }
+
+    if (
+      typeof lastOpened.projectId !== 'string' ||
+      typeof lastOpened.dayId !== 'string' ||
+      typeof lastOpened.tab !== 'string'
+    ) {
+      return EMPTY_SESSION
+    }
+
+    return {
+      version: 1,
+      lastOpened: {
+        projectId: lastOpened.projectId,
+        dayId: lastOpened.dayId,
+        tab: lastOpened.tab as MobileTabKey,
+      },
+    }
+  } catch {
+    return EMPTY_SESSION
+  }
+}
+
+export function saveSession(session: StoredSession): void {
+  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+}
+
+export function getLatestProject(library: StoredLibrary): StoredProjectEntry | null {
+  const projects = Object.values(library.projects)
+  if (projects.length === 0) {
+    return null
+  }
+
+  return projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+}
+
+export function getPreferredDayId(project: StoredProjectEntry, preferredDayId?: string): string | null {
+  if (preferredDayId && project.days[preferredDayId]) {
+    return preferredDayId
+  }
+
+  const days = Object.values(project.days)
+  if (days.length === 0) {
+    return null
+  }
+
+  days.sort((a, b) => b.shootDate.localeCompare(a.shootDate) || b.updatedAt.localeCompare(a.updatedAt))
+  return days[0].dayId
+}
+
+export function resolveLastOpened(library: StoredLibrary, session: StoredSession): StoredLastOpened | null {
+  const stored = session.lastOpened
+  if (stored) {
+    const project = library.projects[stored.projectId]
+    if (project && project.days[stored.dayId]) {
+      return stored
+    }
+  }
+
+  const latestProject = getLatestProject(library)
+  if (!latestProject) {
+    return null
+  }
+
+  const dayId = getPreferredDayId(latestProject)
+  if (!dayId) {
+    return null
+  }
+
+  return {
+    projectId: latestProject.projectId,
+    dayId,
+    tab: 'overview',
+  }
+}
+
+export function makeShotStatusOverrideKey(projectId: string, dayId: string, shotId: string): string {
+  return `${projectId}::${dayId}::${shotId}`
+}
+
+export function setShotStatusOverride(
+  library: StoredLibrary,
+  projectId: string,
+  dayId: string,
+  shotId: string,
+  status: 'todo' | 'in_progress' | 'done'
+): StoredLibrary {
+  const key = makeShotStatusOverrideKey(projectId, dayId, shotId)
+  return {
+    ...library,
+    shotStatusOverrides: {
+      ...library.shotStatusOverrides,
+      [key]: status,
+    },
+  }
+}
+
+export function removeProject(library: StoredLibrary, projectId: string): StoredLibrary {
+  const nextProjects = { ...library.projects }
+  delete nextProjects[projectId]
+
+  const nextOverrides: StoredLibrary['shotStatusOverrides'] = {}
+  const prefix = `${projectId}::`
+
+  for (const [key, value] of Object.entries(library.shotStatusOverrides)) {
+    if (!key.startsWith(prefix)) {
+      nextOverrides[key] = value
+    }
+  }
+
+  return {
+    ...library,
+    projects: nextProjects,
+    shotStatusOverrides: nextOverrides,
+  }
 }
 
 export function importDayPackages(
@@ -37,6 +192,7 @@ export function importDayPackages(
   const nextLibrary: StoredLibrary = {
     ...library,
     projects: { ...library.projects },
+    shotStatusOverrides: { ...library.shotStatusOverrides },
   }
 
   if (dayPackages.length === 0) {
