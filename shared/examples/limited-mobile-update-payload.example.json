@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "payloadType": "limited-mobile-update",
+  "projectId": "proj_abc123",
+  "snapshotId": "snap_2026_04_10_190000z",
+  "packageVersion": 3,
+  "createdAt": "2026-04-12T16:12:00Z",
+  "updates": [
+    {
+      "updateId": "upd_001",
+      "dayId": "day_01",
+      "scheduleItemId": "sched_001",
+      "shotId": "shot_001A",
+      "status": "in_progress",
+      "actualStartTime": "2026-04-12T16:10:00Z",
+      "quickNotes": "Need one extra take for focus.",
+      "omitOrDefer": false,
+      "dayOrderIndex": 0,
+      "updatedAt": "2026-04-12T16:11:40Z"
+    }
+  ]
+}

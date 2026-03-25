@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "snapshotType": "mobile-snapshot",
+  "snapshotId": "snap_2026_04_10_190000z",
+  "packageVersion": 3,
+  "createdAt": "2026-04-10T19:00:00Z",
+  "updatedAt": "2026-04-10T19:00:00Z",
+  "project": {
+    "projectId": "proj_abc123",
+    "projectSlug": "pilot-ep101",
+    "projectName": "Pilot Episode 101",
+    "timezone": "America/Los_Angeles"
+  },
+  "source": {
+    "sourceType": "imported"
+  },
+  "dayPackages": []
+}
