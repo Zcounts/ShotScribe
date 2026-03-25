@@ -8,16 +8,41 @@
   }
 
   body {
-    font-family: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-    background-color: #f0ede4;
+    font-family: 'Sora', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background-color: #F5F2EC;
     margin: 0;
     padding: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    color: #2C2C2C;
   }
 }
 
 @layer components {
+  /* ── Canvas texture — cutting mat / graph paper ─────────────────────────── */
+  .canvas-texture {
+    background-color: #F5F2EC;
+    background-image:
+      linear-gradient(rgba(74,85,104,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(74,85,104,0.06) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* ── Clapper-board stripe band — top edge of chrome toolbar ─────────────── */
+  .chrome-stripe {
+    height: 8px;
+    flex-shrink: 0;
+    background: repeating-linear-gradient(
+      -45deg,
+      #000 0px,
+      #000 6px,
+      #F5F2EC 6px,
+      #F5F2EC 12px
+    );
+    opacity: 0.15;
+    pointer-events: none;
+  }
+
   /* Pages container — centres all page-document divs vertically */
   .pages-container {
     display: flex;
@@ -27,28 +52,30 @@
   }
 
   /* Page document — looks like a discrete A4 sheet in print-preview */
-  /* Always white/dark regardless of app theme — dark mode only affects the surrounding UI */
   .page-document {
-    background: #ffffff;
-    color: #1a1a1a;
+    background: #FAF8F4;
+    color: #1A1A1A;
     width: 100%;
     max-width: 1400px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08);
     margin-bottom: 32px;
     position: relative;
+    border: 1px solid rgba(74,85,104,0.12);
+    border-radius: 2px;
   }
 
-  /* Page footer (page number + scene delete button) */
+  /* Page footer */
   .page-footer {
     position: relative;
     text-align: center;
     padding: 10px 0 8px;
     font-size: 12px;
-    color: #9ca3af;
-    border-top: 1px solid #e5e0d8;
+    color: #718096;
+    border-top: 1px solid rgba(74,85,104,0.12);
+    font-family: 'Sora', sans-serif;
   }
 
-  /* Scene separator — the gap between two scene's pages */
+  /* Scene separator */
   .scene-separator {
     width: 100%;
     max-width: 1400px;
@@ -65,8 +92,8 @@
     height: 2px;
     background: repeating-linear-gradient(
       90deg,
-      #6b7280 0,
-      #6b7280 6px,
+      rgba(74,85,104,0.35) 0,
+      rgba(74,85,104,0.35) 6px,
       transparent 6px,
       transparent 14px
     );
@@ -75,11 +102,12 @@
   .scene-separator-label {
     font-size: 10px;
     font-weight: 700;
+    font-family: 'Sora', sans-serif;
     letter-spacing: 0.12em;
-    color: #6b7280;
+    color: #718096;
     white-space: nowrap;
     padding: 2px 8px;
-    border: 1px solid #9ca3af;
+    border: 1px solid rgba(74,85,104,0.3);
     border-radius: 2px;
   }
 
@@ -98,9 +126,10 @@
     gap: 6px;
     font-size: 13px;
     font-weight: 600;
-    color: #6b7280;
+    font-family: 'Sora', sans-serif;
+    color: #718096;
     background: transparent;
-    border: 2px dashed #9ca3af;
+    border: 2px dashed rgba(74,85,104,0.35);
     border-radius: 6px;
     padding: 8px 20px;
     cursor: pointer;
@@ -109,39 +138,39 @@
   }
 
   .add-scene-btn:hover {
-    border-color: #4b5563;
-    color: #374151;
-    background: rgba(0,0,0,0.03);
+    border-color: #4A5568;
+    color: #2C2C2C;
+    background: rgba(74,85,104,0.05);
   }
 
   /* Shot card */
   .shot-card {
-    background: #ffffff;
-    border: 1px solid #e5e0d8;
+    background: #FAF8F4;
+    border: 1px solid rgba(74,85,104,0.15);
     position: relative;
     cursor: default;
     transition: box-shadow 0.15s ease;
   }
 
   .shot-card:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   }
 
   .shot-card.is-dragging {
-    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
     opacity: 0.9;
     z-index: 1000;
   }
 
-  /* Card left border accent */
+  /* Card left border accent — 3px, scene color */
   .shot-card::before {
     content: '';
     position: absolute;
     left: 0;
     top: 0;
     bottom: 0;
-    width: 4px;
-    background-color: var(--card-color, #9ca3af);
+    width: 3px;
+    background-color: var(--card-color, #718096);
     border-radius: 0;
   }
 
@@ -150,6 +179,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 10px;
+    font-family: 'Sora', sans-serif;
   }
 
   .specs-table th {
@@ -158,18 +188,20 @@
     padding: 3px 4px;
     text-align: center;
     vertical-align: middle;
-    border: 1px solid #d1ccc3;
-    background: #f7f5f0;
+    border: 1px solid rgba(74,85,104,0.12);
+    background: #EDE9E1;
     font-size: 10px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
+    color: #4A5568;
   }
 
   .specs-table td {
     padding: 2px 4px;
     text-align: center;
     vertical-align: middle;
-    border: 1px solid #d1ccc3;
+    border: 1px solid rgba(74,85,104,0.12);
     font-size: 10px;
+    color: #2C2C2C;
   }
 
   .specs-table td input,
@@ -199,21 +231,23 @@
     resize: none;
     font-size: 10px;
     line-height: 1.5;
-    font-family: inherit;
+    font-family: 'Sora', sans-serif;
     background: transparent;
     min-height: 40px;
     padding: 4px 6px 4px 10px;
+    color: #4A5568;
   }
 
-  /* Bold prefixes in notes */
   .notes-display {
     font-size: 10px;
     line-height: 1.5;
+    font-family: 'Sora', sans-serif;
     padding: 4px 6px 4px 10px;
     min-height: 40px;
     cursor: text;
     white-space: pre-wrap;
     word-break: break-word;
+    color: #4A5568;
   }
 
   .notes-display .bold-prefix {
@@ -237,7 +271,7 @@
 
   /* Image placeholder */
   .image-placeholder {
-    background: #d1ccc3;
+    background: #EDE9E1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -247,10 +281,12 @@
     aspect-ratio: 16/9;
     position: relative;
     overflow: hidden;
+    border: 1px solid rgba(74,85,104,0.2);
+    color: rgba(74,85,104,0.4);
   }
 
   .image-placeholder:hover {
-    background: #c4bfb5;
+    background: #DDD9D1;
   }
 
   .image-placeholder img {
@@ -268,14 +304,14 @@
     gap: 16px;
     align-items: start;
     padding: 12px 16px;
-    border-bottom: 2px solid #1a1a1a;
-    background: #ffffff;
+    border-bottom: 2px solid #1A1A1A;
+    background: #FAF8F4;
   }
 
-  /* Toolbar */
+  /* ── Toolbar (app chrome) ────────────────────────────────────────────────── */
   .toolbar {
-    background: #2a2a2a;
-    color: #ffffff;
+    background: #1C1C1E;
+    color: #FAF8F4;
     padding: 6px 16px;
     display: flex;
     align-items: center;
@@ -283,40 +319,45 @@
     position: sticky;
     top: 0;
     z-index: 100;
+    border-bottom: 1px solid #3A3A3C;
   }
 
   .toolbar-btn {
     padding: 4px 12px;
     border-radius: 4px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
+    font-family: 'Sora', sans-serif;
     cursor: pointer;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.1);
-    color: #ffffff;
-    transition: background 0.15s ease;
+    border: 1px solid rgba(74,85,104,0.4);
+    background: #2C2C2E;
+    color: #EDE9E1;
+    transition: background 0.15s ease, border-color 0.15s ease;
   }
 
   .toolbar-btn:hover {
-    background: rgba(255,255,255,0.2);
+    background: #3A3A3C;
+    border-color: rgba(74,85,104,0.6);
   }
 
   .toolbar-btn.primary {
-    background: #3b82f6;
-    border-color: #2563eb;
+    background: #E84040;
+    border-color: #c43030;
+    color: #ffffff;
   }
 
   .toolbar-btn.primary:hover {
-    background: #2563eb;
+    background: #d03838;
   }
 
   .toolbar-btn.danger {
-    background: rgba(239,68,68,0.2);
-    border-color: rgba(239,68,68,0.4);
+    background: rgba(232,64,64,0.15);
+    border-color: rgba(232,64,64,0.35);
+    color: #E84040;
   }
 
   .toolbar-btn.danger:hover {
-    background: rgba(239,68,68,0.4);
+    background: rgba(232,64,64,0.3);
   }
 
   /* Contenteditable */
@@ -331,14 +372,15 @@
     top: 0;
     bottom: 0;
     width: 280px;
-    background: #1e1e1e;
-    color: #e0e0e0;
+    background: #1C1C1E;
+    color: #EDE9E1;
     z-index: 200;
     overflow-y: auto;
     padding: 16px;
-    box-shadow: -4px 0 16px rgba(0,0,0,0.3);
+    box-shadow: -4px 0 16px rgba(0,0,0,0.4);
     transform: translateX(100%);
     transition: transform 0.25s ease;
+    border-left: 1px solid #3A3A3C;
   }
 
   .settings-panel.open {
@@ -355,8 +397,8 @@
   /* Context menu */
   .context-menu {
     position: fixed;
-    background: #ffffff;
-    border: 1px solid #d1ccc3;
+    background: #FAF8F4;
+    border: 1px solid rgba(74,85,104,0.2);
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.12);
     z-index: 300;
@@ -367,25 +409,27 @@
   .context-menu-item {
     padding: 8px 14px;
     font-size: 13px;
+    font-family: 'Sora', sans-serif;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 8px;
+    color: #2C2C2C;
   }
 
   .context-menu-item:hover {
-    background: #f7f5f0;
+    background: #EDE9E1;
   }
 
   .context-menu-item.danger {
-    color: #ef4444;
+    color: #E84040;
   }
 
   .context-menu-item.danger:hover {
-    background: #fef2f2;
+    background: rgba(232,64,64,0.08);
   }
 
-  /* Scene delete button — subtle trash icon at right end of scene header */
+  /* Scene delete button */
   .scene-delete-btn {
     display: flex;
     align-items: center;
@@ -396,7 +440,7 @@
     border: none;
     cursor: pointer;
     border-radius: 4px;
-    color: #9ca3af;
+    color: #718096;
     opacity: 0.35;
     transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
     padding: 3px;
@@ -405,20 +449,21 @@
 
   .scene-delete-btn:hover {
     opacity: 1;
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.08);
+    color: #E84040;
+    background: rgba(232,64,64,0.08);
   }
 
   /* Add shot button */
   .add-shot-btn {
-    border: 2px dashed #c4bfb5;
+    border: 2px dashed rgba(74,85,104,0.25);
     background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     font-size: 13px;
-    color: #9ca3af;
+    font-family: 'Sora', sans-serif;
+    color: #718096;
     cursor: pointer;
     transition: all 0.15s ease;
     aspect-ratio: auto;
@@ -427,15 +472,15 @@
   }
 
   .add-shot-btn:hover {
-    border-color: #6b7280;
-    color: #6b7280;
-    background: rgba(0,0,0,0.02);
+    border-color: #4A5568;
+    color: #4A5568;
+    background: rgba(74,85,104,0.04);
   }
 
   /* DnD drag overlay */
   .drag-overlay {
     opacity: 0.85;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.2);
     transform: rotate(1deg);
   }
 
@@ -451,12 +496,14 @@
   }
 
   .modal {
-    background: #ffffff;
+    background: #FAF8F4;
     border-radius: 8px;
     padding: 24px;
     min-width: 360px;
     max-width: 480px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    border: 1px solid rgba(74,85,104,0.15);
+    font-family: 'Sora', sans-serif;
   }
 
   /* Print styles */
@@ -502,10 +549,10 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #c4bfb5;
+    background: rgba(74,85,104,0.25);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #a09890;
+    background: rgba(74,85,104,0.45);
   }
 }

@@ -213,9 +213,9 @@ function EditableCell({ value, onChange, type, options, customOptions, onAddCust
         <div style={{
           width: 14,
           height: 14,
-          border: `1.5px solid ${isChecked ? (isDark ? '#4ade80' : '#16a34a') : (isDark ? '#555' : '#bbb')}`,
+          border: `1.5px solid ${isChecked ? '#E84040' : 'rgba(74,85,104,0.35)'}`,
           borderRadius: 2,
-          background: isChecked ? (isDark ? '#4ade80' : '#16a34a') : 'transparent',
+          background: isChecked ? '#E84040' : 'transparent',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -981,12 +981,12 @@ function fmtDate(iso) {
 // ── Day Subtab Bar ────────────────────────────────────────────────────────────
 function DaySubtabBar({ schedule, selectedDayIdx, onSelectDay, onAddDay, isDark }) {
   const c = {
-    barBg:      isDark ? '#141414' : '#e8e4db',
-    activeBg:   isDark ? '#1e1e1e' : '#ffffff',
-    inactiveBg: isDark ? '#181818' : '#ddd9d0',
-    border:     isDark ? '#2e2e2e' : '#c4bfb5',
-    text:       isDark ? '#ccc'    : '#333',
-    mutedText:  isDark ? '#666'    : '#888',
+    barBg:      '#EDE9E1',
+    activeBg:   '#FAF8F4',
+    inactiveBg: '#E5E1D9',
+    border:     'rgba(74,85,104,0.2)',
+    text:       '#2C2C2C',
+    mutedText:  '#718096',
   }
 
   return (
@@ -1011,12 +1011,12 @@ function DaySubtabBar({ schedule, selectedDayIdx, onSelectDay, onAddDay, isDark 
               flexShrink: 0,
               padding: '5px 14px',
               border: `1px solid ${isActive ? c.border : 'transparent'}`,
-              borderBottom: isActive ? `2px solid ${isDark ? '#1e1e1e' : '#ffffff'}` : '1px solid transparent',
+              borderBottom: isActive ? `2px solid #FAF8F4` : '1px solid transparent',
               borderRadius: '4px 4px 0 0',
               marginBottom: isActive ? -2 : 0,
               background: isActive ? c.activeBg : 'none',
-              color: isActive ? c.text : c.mutedText,
-              fontFamily: 'monospace',
+              color: isActive ? '#E84040' : c.mutedText,
+              fontFamily: 'Sora, sans-serif',
               fontSize: 11,
               fontWeight: isActive ? 700 : 400,
               letterSpacing: '0.04em',
@@ -1183,14 +1183,14 @@ export default function ShotlistTab({ containerRef }) {
   const totalTableWidth = DRAG_COL_WIDTH + visibleColumns.reduce((sum, col) => sum + col.width, 0)
 
   const c = {
-    pageBg:      isDark ? '#141414' : '#e8e4db',
-    tableBg:     isDark ? '#1e1e1e' : '#ffffff',
-    rowAlt:      isDark ? '#252525' : '#faf8f5',
-    headerBg:    isDark ? '#2a2a2a' : '#f0ede4',
-    border:      isDark ? '#2e2e2e' : '#e0dbd0',
-    thickBorder: isDark ? '#444'    : '#c4bfb5',
-    text:        isDark ? '#e0e0e0' : '#1a1a1a',
-    muted:       isDark ? '#555'    : '#aaa',
+    pageBg:      '#F5F2EC',
+    tableBg:     '#FAF8F4',
+    rowAlt:      'rgba(245,242,236,0.6)',
+    headerBg:    '#2C2C2E',
+    border:      'rgba(74,85,104,0.1)',
+    thickBorder: 'rgba(74,85,104,0.15)',
+    text:        '#2C2C2C',
+    muted:       '#718096',
   }
 
   const handleShotChange = useCallback((shotId, key, value) => {
@@ -1430,10 +1430,10 @@ export default function ShotlistTab({ containerRef }) {
                     top: 0,
                     zIndex: 10,
                     backgroundColor: c.headerBg,
-                    color: isDark ? '#888' : '#666',
+                    color: '#718096',
                     fontSize: 9,
                     fontWeight: 700,
-                    fontFamily: 'monospace',
+                    fontFamily: 'Sora, sans-serif',
                     letterSpacing: '0.07em',
                     textTransform: 'uppercase',
                     textAlign: col.type === 'checkbox' ? 'center' : 'left',
@@ -1473,15 +1473,16 @@ export default function ShotlistTab({ containerRef }) {
                       colSpan={totalCols}
                       style={{
                         height: 34,
-                        backgroundColor: '#2a2a2a',
-                        color: '#ffffff',
+                        backgroundColor: 'rgba(242,194,80,0.1)',
+                        color: '#2C2C2C',
                         fontWeight: 700,
                         fontSize: 11,
-                        fontFamily: 'monospace',
-                        letterSpacing: '0.08em',
+                        fontFamily: 'Sora, sans-serif',
+                        letterSpacing: '0.04em',
                         padding: '0 12px',
-                        borderTop: '3px solid #111',
-                        borderBottom: '1px solid #555',
+                        borderTop: '2px solid rgba(0,0,0,0.08)',
+                        borderBottom: '1px solid rgba(74,85,104,0.12)',
+                        borderLeft: '3px solid #F2C250',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

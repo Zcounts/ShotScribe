@@ -103,16 +103,22 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
         : 'Storyboard'
 
   return (
-    <div className="toolbar">
+    <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      {/* Clapper-board stripe — top 8px decorative band */}
+      <div className="chrome-stripe" />
+      <div className="toolbar">
       {/* Left: Project name */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        {/* App icon */}
+        {/* App icon — clapper board style */}
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="flex-shrink-0">
-          <rect x="2" y="2" width="16" height="16" rx="2" fill="#3b82f6" />
-          <rect x="4" y="5" width="5" height="4" rx="1" fill="white" />
-          <rect x="11" y="5" width="5" height="4" rx="1" fill="white" />
-          <rect x="4" y="11" width="5" height="4" rx="1" fill="white" />
-          <rect x="11" y="11" width="5" height="4" rx="1" fill="white" />
+          <rect x="1" y="5" width="18" height="13" rx="1.5" fill="#2C2C2E" stroke="#3A3A3C" strokeWidth="0.75"/>
+          <rect x="1" y="5" width="18" height="4" rx="1.5" fill="#E84040"/>
+          <rect x="3" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
+          <rect x="7" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
+          <rect x="11" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
+          <rect x="15" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
+          <rect x="3" y="2" width="2" height="4" rx="0.5" fill="#1A1A1A" transform="rotate(-15 4 4)"/>
+          <rect x="8" y="1.5" width="2" height="4" rx="0.5" fill="#1A1A1A" transform="rotate(-15 9 3.5)"/>
         </svg>
 
         {editingName ? (
@@ -122,33 +128,56 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
             onChange={e => setProjectName(e.target.value)}
             onBlur={() => setEditingName(false)}
             onKeyDown={e => { if (e.key === 'Enter') setEditingName(false) }}
-            className="bg-gray-700 border border-gray-500 rounded px-2 py-0.5 text-sm text-white outline-none"
+            style={{
+              background: '#2C2C2E',
+              border: '1px solid #3A3A3C',
+              borderRadius: 4,
+              padding: '2px 8px',
+              fontSize: 13,
+              fontFamily: 'Sora, sans-serif',
+              fontWeight: 800,
+              color: '#FAF8F4',
+              outline: 'none',
+            }}
             autoFocus
           />
         ) : (
           <button
             onClick={() => setEditingName(true)}
-            className="text-sm font-semibold text-white hover:text-gray-300 transition-colors truncate"
+            style={{
+              fontSize: 13,
+              fontFamily: 'Sora, sans-serif',
+              fontWeight: 800,
+              color: '#FAF8F4',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              letterSpacing: '0.01em',
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#EDE9E1' }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#FAF8F4' }}
           >
             {projectName}
           </button>
         )}
 
         {/* Shot / scene count */}
-        <span className="text-xs text-gray-400 flex-shrink-0">
+        <span style={{ fontSize: 11, color: '#718096', flexShrink: 0, fontFamily: 'Sora, sans-serif' }}>
           {shotCount} shot{shotCount !== 1 ? 's' : ''} · {sceneCount} scene{sceneCount !== 1 ? 's' : ''}
         </span>
 
         {/* Current file name */}
         {fileName && (
-          <span className="text-xs text-gray-500 flex-shrink-0" title={projectPath}>
+          <span style={{ fontSize: 11, color: '#4A5568', flexShrink: 0, fontFamily: 'monospace' }} title={projectPath}>
             {fileName}
           </span>
         )}
 
         {/* Save indicator */}
         {lastSaved && (
-          <span className="text-xs text-gray-500 flex-shrink-0">
+          <span style={{ fontSize: 11, color: '#4A5568', flexShrink: 0, fontFamily: 'Sora, sans-serif' }}>
             Saved {formatTime(lastSaved)}
           </span>
         )}
@@ -536,7 +565,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                 }}
                 style={{
                   padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
-                  background: '#3b82f6', border: 'none',
+                  background: '#E84040', border: 'none',
                   borderRadius: 4, color: '#fff', cursor: 'pointer', fontWeight: 600,
                 }}
               >
@@ -546,6 +575,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

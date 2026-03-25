@@ -89,7 +89,7 @@ function SortableSectionItem({ id, label, visible, onToggle, isDark }) {
     gap: 8,
     padding: '5px 4px',
     borderRadius: 4,
-    background: isDark ? '#2a2a2a' : '#f5f3ef',
+    background: '#EDE9E1',
     marginBottom: 2,
     cursor: 'default',
     userSelect: 'none',
@@ -100,7 +100,7 @@ function SortableSectionItem({ id, label, visible, onToggle, isDark }) {
       <span
         {...attributes}
         {...listeners}
-        style={{ cursor: 'grab', color: isDark ? '#666' : '#bbb', flexShrink: 0, lineHeight: 1 }}
+        style={{ cursor: 'grab', color: '#718096', flexShrink: 0, lineHeight: 1 }}
         title="Drag to reorder"
       >
         ⠿
@@ -111,7 +111,7 @@ function SortableSectionItem({ id, label, visible, onToggle, isDark }) {
         onChange={onToggle}
         style={{ cursor: 'pointer', flexShrink: 0 }}
       />
-      <span style={{ fontSize: 12, fontFamily: 'monospace', color: isDark ? '#ccc' : '#333' }}>
+      <span style={{ fontSize: 12, fontFamily: 'Sora, sans-serif', color: '#2C2C2C' }}>
         {label}
       </span>
     </div>
@@ -138,10 +138,10 @@ function ConfigureSectionsPanel({ config, isDark, onChange, onClose }) {
   return (
     <div style={{
       width: 260,
-      background: isDark ? '#1e1e1e' : '#fff',
-      border: `1px solid ${isDark ? '#444' : '#ccc'}`,
+      background: '#FAF8F4',
+      border: '1px solid rgba(74,85,104,0.2)',
       borderRadius: 6,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
       padding: '12px 10px',
     }}>
       <div style={{
@@ -150,12 +150,12 @@ function ConfigureSectionsPanel({ config, isDark, onChange, onClose }) {
         alignItems: 'center',
         marginBottom: 10,
       }}>
-        <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: isDark ? '#aaa' : '#555' }}>
+        <span style={{ fontSize: 11, fontFamily: 'Sora, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096' }}>
           Configure Sections
         </span>
         <button
           onClick={onClose}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: isDark ? '#666' : '#aaa', fontSize: 16, lineHeight: 1 }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718096', fontSize: 16, lineHeight: 1 }}
         >
           ×
         </button>
@@ -183,27 +183,27 @@ function ConfigureSectionsPanel({ config, isDark, onChange, onClose }) {
 
 // ── Section Wrapper ───────────────────────────────────────────────────────────
 
-function SectionBlock({ title, isDark, children }) {
+function SectionBlock({ title, children }) {
   return (
     <div style={{
       marginBottom: 20,
       borderRadius: 4,
-      border: `1px solid ${isDark ? '#333' : '#d4cfc6'}`,
+      border: '1px solid rgba(74,85,104,0.15)',
       overflow: 'hidden',
     }}>
       <div style={{
-        background: isDark ? '#222' : '#2a2a2a',
-        color: '#fff',
+        background: '#2C2C2E',
+        color: '#EDE9E1',
         padding: '6px 14px',
-        fontFamily: 'monospace',
-        fontSize: 11,
+        fontFamily: 'Sora, sans-serif',
+        fontSize: 10,
         fontWeight: 700,
         textTransform: 'uppercase',
         letterSpacing: '0.1em',
       }}>
         {title}
       </div>
-      <div style={{ background: isDark ? '#1a1a1a' : '#fff', padding: '12px 14px' }}>
+      <div style={{ background: '#FAF8F4', padding: '12px 14px' }}>
         {children}
       </div>
     </div>
@@ -222,11 +222,11 @@ function FieldRow({ label, children, compact }) {
     }}>
       <span style={{
         fontSize: 10,
-        fontFamily: 'monospace',
+        fontFamily: 'Sora, sans-serif',
         fontWeight: 700,
         textTransform: 'uppercase',
         letterSpacing: '0.06em',
-        color: '#888',
+        color: '#718096',
         flexShrink: 0,
         width: 130,
         paddingTop: compact ? 0 : 2,
@@ -240,7 +240,7 @@ function FieldRow({ label, children, compact }) {
   )
 }
 
-function TextInput({ value, onChange, isDark, placeholder, style: extraStyle }) {
+function TextInput({ value, onChange, placeholder, style: extraStyle }) {
   return (
     <input
       type="text"
@@ -249,13 +249,13 @@ function TextInput({ value, onChange, isDark, placeholder, style: extraStyle }) 
       placeholder={placeholder || ''}
       style={{
         width: '100%',
-        background: isDark ? '#2a2a2a' : '#f9f8f6',
-        border: `1px solid ${isDark ? '#444' : '#ddd'}`,
+        background: '#EDE9E1',
+        border: '1px solid rgba(74,85,104,0.2)',
         borderRadius: 3,
         padding: '3px 6px',
         fontSize: 12,
-        fontFamily: 'monospace',
-        color: isDark ? '#eee' : '#111',
+        fontFamily: 'Sora, sans-serif',
+        color: '#2C2C2C',
         outline: 'none',
         ...extraStyle,
       }}
@@ -263,7 +263,7 @@ function TextInput({ value, onChange, isDark, placeholder, style: extraStyle }) 
   )
 }
 
-function TextareaInput({ value, onChange, isDark, placeholder, rows }) {
+function TextareaInput({ value, onChange, placeholder, rows }) {
   return (
     <textarea
       value={value || ''}
@@ -272,13 +272,13 @@ function TextareaInput({ value, onChange, isDark, placeholder, rows }) {
       rows={rows || 3}
       style={{
         width: '100%',
-        background: isDark ? '#2a2a2a' : '#f9f8f6',
-        border: `1px solid ${isDark ? '#444' : '#ddd'}`,
+        background: '#EDE9E1',
+        border: '1px solid rgba(74,85,104,0.2)',
         borderRadius: 3,
         padding: '4px 6px',
         fontSize: 12,
-        fontFamily: 'monospace',
-        color: isDark ? '#eee' : '#111',
+        fontFamily: 'Sora, sans-serif',
+        color: '#2C2C2C',
         outline: 'none',
         resize: 'vertical',
         lineHeight: 1.5,
@@ -291,7 +291,7 @@ function TextareaInput({ value, onChange, isDark, placeholder, rows }) {
 
 function GeneralInfoSection({ day, callsheet, projectName, isDark, onUpdate }) {
   return (
-    <SectionBlock title="General Info" isDark={isDark}>
+    <SectionBlock title="General Info">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
         <FieldRow label="Production Title" compact>
           <TextInput
@@ -406,29 +406,30 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
 
   const thStyle = {
     padding: '4px 8px',
-    fontFamily: 'monospace',
+    fontFamily: 'Sora, sans-serif',
     fontSize: 10,
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '0.07em',
-    color: '#888',
-    borderBottom: `1px solid ${isDark ? '#333' : '#e0dbd0'}`,
+    color: '#718096',
+    borderBottom: '1px solid rgba(74,85,104,0.12)',
     textAlign: 'left',
     whiteSpace: 'nowrap',
   }
 
   const tdStyle = {
     padding: '5px 8px',
-    fontFamily: 'monospace',
+    fontFamily: 'Sora, sans-serif',
     fontSize: 11,
-    borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#f0ede4'}`,
+    borderBottom: '1px solid rgba(74,85,104,0.08)',
     verticalAlign: 'top',
+    color: '#2C2C2C',
   }
 
   const showTimes = startMins !== null
 
   return (
-    <SectionBlock title="Advanced Schedule" isDark={isDark}>
+    <SectionBlock title="Advanced Schedule">
       {sceneGroups.length === 0 && nonBreakBlocks.length === 0 ? (
         <p style={{ fontSize: 12, fontFamily: 'monospace', color: '#aaa', fontStyle: 'italic' }}>
           No shots scheduled for this day. Add shots on the Schedule tab.
@@ -469,18 +470,18 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
 
               const colSpan = showTimes ? 7 : 5
               return (
-                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)') }}>
+                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(74,85,104,0.04)' }}>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>{sg.sceneLabel}</td>
                   <td style={tdStyle}>{sg.location}</td>
                   <td style={{ ...tdStyle, color: '#888' }}>{sg.intOrExt}</td>
                   <td style={{ ...tdStyle, color: '#888' }}>{sg.dayNight}</td>
                   {showTimes && (
-                    <td style={{ ...tdStyle, color: isDark ? '#7dd3fc' : '#2563eb', whiteSpace: 'nowrap' }}>
+                    <td style={{ ...tdStyle, color: '#5265EA', whiteSpace: 'nowrap' }}>
                       {sceneStart !== null ? formatTimeOfDay(sceneStart) : '—'}
                     </td>
                   )}
                   {showTimes && (
-                    <td style={{ ...tdStyle, color: isDark ? '#7dd3fc' : '#2563eb', whiteSpace: 'nowrap' }}>
+                    <td style={{ ...tdStyle, color: '#5265EA', whiteSpace: 'nowrap' }}>
                       {sceneEnd !== null ? formatTimeOfDay(sceneEnd) : '—'}
                     </td>
                   )}
@@ -789,7 +790,7 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
   }
 
   return (
-    <SectionBlock title="Cast List" isDark={isDark}>
+    <SectionBlock title="Cast List">
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <colgroup>
           <col style={{ width: '22%' }} />
@@ -978,7 +979,7 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
   }
 
   return (
-    <SectionBlock title="Crew List" isDark={isDark}>
+    <SectionBlock title="Crew List">
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <colgroup>
           <col style={{ width: '35%' }} />
@@ -1076,7 +1077,7 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
 
 function LocationDetailsSection({ callsheet, isDark, onUpdate }) {
   return (
-    <SectionBlock title="Location Details" isDark={isDark}>
+    <SectionBlock title="Location Details">
       <FieldRow label="Address">
         <TextInput
           value={callsheet.locationAddress}
@@ -1119,7 +1120,7 @@ function LocationDetailsSection({ callsheet, isDark, onUpdate }) {
 
 function AdditionalNotesSection({ callsheet, isDark, onUpdate }) {
   return (
-    <SectionBlock title="Additional Notes / Special Instructions" isDark={isDark}>
+    <SectionBlock title="Additional Notes / Special Instructions">
       <TextareaInput
         value={callsheet.additionalNotes}
         onChange={v => onUpdate({ additionalNotes: v })}
@@ -1173,8 +1174,8 @@ export default function CallsheetTab() {
         justifyContent: 'center',
         flexDirection: 'column',
         gap: 12,
-        color: isDark ? '#555' : '#aaa',
-        fontFamily: 'monospace',
+        color: '#718096',
+        fontFamily: 'Sora, sans-serif',
         fontSize: 13,
       }}>
         <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={0.4}>
@@ -1195,7 +1196,7 @@ export default function CallsheetTab() {
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
-      backgroundColor: isDark ? '#1a1a1a' : '#f0ede4',
+      backgroundColor: '#F5F2EC',
     }}>
       {/* Day navigation bar — wrapped in a position:relative container so the
           Configure Sections panel can escape the overflow-x:auto scroll bar */}
@@ -1205,11 +1206,11 @@ export default function CallsheetTab() {
           alignItems: 'center',
           gap: 0,
           padding: '8px 16px',
-          borderBottom: `1px solid ${isDark ? '#333' : '#ccc'}`,
-          background: isDark ? '#111' : '#d4cfc6',
+          borderBottom: '1px solid #3A3A3C',
+          background: '#1C1C1E',
           overflowX: 'auto',
         }}>
-          <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: isDark ? '#666' : '#888', marginRight: 10, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontFamily: 'Sora, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginRight: 10, flexShrink: 0 }}>
             Day:
           </span>
           {schedule.map((day, idx) => {
@@ -1221,13 +1222,13 @@ export default function CallsheetTab() {
                 onClick={() => setSelectedDayIdx(idx)}
                 style={{
                   padding: '5px 12px',
-                  fontFamily: 'monospace',
+                  fontFamily: 'Sora, sans-serif',
                   fontSize: 11,
                   fontWeight: isActive ? 700 : 400,
                   border: 'none',
                   borderRadius: 3,
-                  background: isActive ? (isDark ? '#3b82f6' : '#2a2a2a') : 'transparent',
-                  color: isActive ? '#fff' : (isDark ? '#888' : '#666'),
+                  background: isActive ? '#E84040' : 'transparent',
+                  color: isActive ? '#fff' : '#718096',
                   cursor: 'pointer',
                   flexShrink: 0,
                   marginRight: 4,
@@ -1250,12 +1251,13 @@ export default function CallsheetTab() {
               alignItems: 'center',
               gap: 5,
               padding: '5px 10px',
-              fontFamily: 'monospace',
+              fontFamily: 'Sora, sans-serif',
               fontSize: 11,
-              border: `1px solid ${isDark ? '#444' : '#bbb'}`,
+              fontWeight: 600,
+              border: '1px solid rgba(74,85,104,0.35)',
               borderRadius: 3,
-              background: configOpen ? (isDark ? '#2a2a2a' : '#e8e4db') : 'transparent',
-              color: isDark ? '#aaa' : '#555',
+              background: configOpen ? '#2C2C2E' : 'transparent',
+              color: '#EDE9E1',
               cursor: 'pointer',
               flexShrink: 0,
               whiteSpace: 'nowrap',
@@ -1295,28 +1297,29 @@ export default function CallsheetTab() {
         }}>
           {/* Callsheet header */}
           <div style={{
-            background: isDark ? '#111' : '#1a1a1a',
-            color: '#fff',
+            background: '#1C1C1E',
+            color: '#FAF8F4',
             borderRadius: '4px 4px 0 0',
             padding: '16px 20px',
             marginBottom: 0,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
+            borderLeft: '4px solid #E84040',
           }}>
             <div>
-              <div style={{ fontSize: 18, fontFamily: 'monospace', fontWeight: 900, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              <div style={{ fontSize: 18, fontFamily: 'Sora, sans-serif', fontWeight: 800, letterSpacing: '0.02em', textTransform: 'uppercase' }}>
                 CALLSHEET
               </div>
-              <div style={{ fontSize: 12, fontFamily: 'monospace', color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>
+              <div style={{ fontSize: 12, fontFamily: 'Sora, sans-serif', color: 'rgba(250,248,244,0.55)', marginTop: 3 }}>
                 {callsheet?.productionTitle !== undefined ? callsheet.productionTitle : projectName}
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 14, fontFamily: 'monospace', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+              <div style={{ fontSize: 14, fontFamily: 'Sora, sans-serif', fontWeight: 700, color: 'rgba(250,248,244,0.9)' }}>
                 Day {activeDayIdx + 1}
                 {activeDay?.date && (
-                  <span style={{ marginLeft: 8, fontWeight: 400, color: 'rgba(255,255,255,0.6)' }}>
+                  <span style={{ marginLeft: 8, fontWeight: 400, color: 'rgba(250,248,244,0.55)' }}>
                     {formatDate(activeDay.date)}
                   </span>
                 )}
@@ -1331,8 +1334,8 @@ export default function CallsheetTab() {
 
           {/* Document area */}
           <div style={{
-            background: isDark ? '#1e1e1e' : '#fff',
-            border: `1px solid ${isDark ? '#333' : '#d4cfc6'}`,
+            background: '#FAF8F4',
+            border: '1px solid rgba(74,85,104,0.15)',
             borderTop: 'none',
             borderRadius: '0 0 4px 4px',
             padding: '20px',
