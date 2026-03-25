@@ -12,6 +12,7 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -1927,6 +1928,629 @@ function EmptyState({ isDark, onAddDay }) {
   )
 }
 
+// ── Stripboard utilities ──────────────────────────────────────────────────────
+
+function getCastInitials(cast) {
+  if (!cast) return ''
+  return cast
+    .split(',')
+    .map(name => {
+      const trimmed = name.trim()
+      if (!trimmed) return ''
+      const parts = trimmed.split(/\s+/)
+      return parts.map(p => p[0] || '').join('').toUpperCase()
+    })
+    .filter(Boolean)
+    .join(' ')
+}
+
+const STRIP_COLUMN_WIDTH = 210
+
+// ── StripDetailPopover ────────────────────────────────────────────────────────
+
+function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRect }) {
+  const updateShotBlock = useStore(s => s.updateShotBlock)
+  const updateShot = useStore(s => s.updateShot)
+  const removeShotBlock = useStore(s => s.removeShotBlock)
+  const popoverRef = useRef(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+
+  const bg = isDark ? '#1e1e1e' : '#fff'
+  const borderColor = isDark ? '#333' : '#d4cfc6'
+  const fg = isDark ? '#ddd' : '#1a1a1a'
+  const mutedFg = isDark ? '#666' : '#888'
+
+  useLayoutEffect(() => {
+    if (!anchorRect || !popoverRef.current) return
+    const pw = 280
+    const ph = popoverRef.current.offsetHeight || 320
+    let left = anchorRect.right + 10
+    if (left + pw > window.innerWidth - 12) left = anchorRect.left - pw - 10
+    left = Math.max(8, Math.min(left, window.innerWidth - pw - 8))
+    let top = anchorRect.top
+    if (top + ph > window.innerHeight - 12) top = window.innerHeight - ph - 12
+    top = Math.max(8, top)
+    setPos({ top, left })
+  }, [anchorRect])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={popoverRef}
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        zIndex: 1500,
+        width: 280,
+        background: bg,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 6,
+        boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.7)' : '0 8px 32px rgba(0,0,0,0.22)',
+        overflow: 'hidden',
+      }}
+      onMouseDown={e => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div style={{
+        padding: '9px 12px',
+        borderBottom: `1px solid ${borderColor}`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: isDark ? '#252525' : '#f7f5f0',
+      }}>
+        {shotData ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <span style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 800, color: fg }}>
+              {shotData.displayId}
+            </span>
+            <Badge label={shotData.intOrExt} />
+            <Badge label={shotData.dayNight} />
+          </div>
+        ) : (
+          <span style={{ fontSize: 12, color: '#f87171', fontFamily: 'monospace' }}>Shot deleted</span>
+        )}
+        <button
+          onClick={onClose}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedFg, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
+        >
+          ×
+        </button>
+      </div>
+
+      {shotData ? (
+        <>
+          {/* Body */}
+          <div style={{ padding: '10px 12px' }}>
+            <div style={{ marginBottom: 6, fontSize: 11, color: fg }}>
+              <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{shotData.sceneLabel}</span>
+              {shotData.location && (
+                <>
+                  <span style={{ color: mutedFg, margin: '0 4px' }}>·</span>
+                  <span style={{ color: mutedFg }}>{shotData.location}</span>
+                </>
+              )}
+            </div>
+            {shotData.notes && (
+              <div style={{
+                marginBottom: 6,
+                fontSize: 11,
+                color: mutedFg,
+                fontStyle: 'italic',
+                lineHeight: 1.5,
+                borderLeft: `2px solid ${isDark ? '#333' : '#e5e0d8'}`,
+                paddingLeft: 6,
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+              }}>
+                {shotData.notes}
+              </div>
+            )}
+            <InlineField
+              value={shotData.cast || ''}
+              onChange={(val) => updateShot(block.shotId, { cast: val })}
+              placeholder="Cast…"
+              isDark={isDark}
+              label="CAST"
+            />
+            <InlineField
+              value={block.shootingLocation || ''}
+              onChange={(val) => updateShotBlock(dayId, block.id, { shootingLocation: val })}
+              placeholder="Shooting location…"
+              isDark={isDark}
+              label="LOCATION"
+            />
+            <div style={{ display: 'flex', gap: 16 }}>
+              <InlineField
+                value={shotData.shootTime || ''}
+                onChange={(val) => updateShot(block.shotId, { shootTime: val })}
+                placeholder="—"
+                isDark={isDark}
+                label="SHOOT"
+                inputWidth={40}
+              />
+              <InlineField
+                value={shotData.setupTime || ''}
+                onChange={(val) => updateShot(block.shotId, { setupTime: val })}
+                placeholder="—"
+                isDark={isDark}
+                label="SETUP"
+                inputWidth={40}
+              />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{
+            padding: '7px 12px',
+            borderTop: `1px solid ${borderColor}`,
+            display: 'flex',
+            justifyContent: 'flex-end',
+          }}>
+            <button
+              onClick={() => { removeShotBlock(dayId, block.id); onClose() }}
+              style={{
+                padding: '4px 10px',
+                fontFamily: 'monospace',
+                fontSize: 11,
+                fontWeight: 700,
+                background: 'none',
+                border: '1px solid #f87171',
+                borderRadius: 3,
+                color: '#f87171',
+                cursor: 'pointer',
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ padding: '10px 12px' }}>
+          <button
+            onClick={onClose}
+            style={{ color: mutedFg, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}
+          >
+            Close
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── ShotStripContent ──────────────────────────────────────────────────────────
+
+function ShotStripContent({ block, shotData, color, isDark, height, dragHandleProps, onClick, isOverlay }) {
+  const fg = isDark ? '#ddd' : '#111'
+  const mutedFg = isDark ? '#777' : '#666'
+  const borderColor = isDark ? '#2a2a2a' : '#ede9df'
+  const bg = isDark ? '#1c1c1c' : '#fff'
+  const hoverBg = isDark ? '#252525' : '#f7f5f0'
+  const [hovered, setHovered] = useState(false)
+
+  if (!shotData) {
+    return (
+      <div style={{
+        height,
+        display: 'flex',
+        alignItems: 'center',
+        paddingLeft: 8,
+        background: isDark ? '#2a1f1f' : '#fff5f5',
+        borderBottom: `1px solid ${borderColor}`,
+      }}>
+        <span style={{ fontSize: 9, color: '#f87171', fontFamily: 'monospace' }}>Deleted</span>
+      </div>
+    )
+  }
+
+  const castStr = getCastInitials(shotData.cast)
+  const locationStr = block.shootingLocation || shotData.location || ''
+
+  return (
+    <div
+      {...(dragHandleProps || {})}
+      onClick={onClick}
+      onMouseEnter={() => !isOverlay && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={`${shotData.displayId} — ${shotData.sceneLabel}${locationStr ? ` · ${locationStr}` : ''}`}
+      style={{
+        height,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        paddingLeft: 7,
+        paddingRight: 6,
+        borderBottom: `1px solid ${borderColor}`,
+        background: hovered ? hoverBg : bg,
+        cursor: isOverlay ? 'grabbing' : dragHandleProps ? 'grab' : 'pointer',
+        userSelect: 'none',
+        overflow: 'hidden',
+        transition: isOverlay ? undefined : 'background 0.1s',
+      }}
+    >
+      {/* Color swatch */}
+      <div style={{
+        width: 4,
+        height: Math.max(8, height - 10),
+        borderRadius: 2,
+        background: color || '#9ca3af',
+        flexShrink: 0,
+      }} />
+
+      {/* Shot ID */}
+      <span style={{
+        fontFamily: 'monospace',
+        fontSize: 10,
+        fontWeight: 800,
+        color: fg,
+        flexShrink: 0,
+        letterSpacing: '-0.01em',
+        minWidth: 20,
+      }}>
+        {shotData.displayId}
+      </span>
+
+      {/* INT/EXT */}
+      {shotData.intOrExt && (
+        <span style={{ fontFamily: 'monospace', fontSize: 8, color: mutedFg, flexShrink: 0 }}>
+          {shotData.intOrExt}
+        </span>
+      )}
+
+      {/* D/N */}
+      {shotData.dayNight && height >= 28 && (
+        <span style={{ fontFamily: 'monospace', fontSize: 8, color: mutedFg, flexShrink: 0 }}>
+          {shotData.dayNight}
+        </span>
+      )}
+
+      {/* Location / scene */}
+      <span style={{
+        fontSize: 10,
+        color: mutedFg,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        flex: 1,
+        minWidth: 0,
+      }}>
+        {locationStr || shotData.sceneLabel}
+      </span>
+
+      {/* Cast initials */}
+      {castStr && height >= 28 && (
+        <span style={{ fontSize: 8, fontFamily: 'monospace', color: mutedFg, flexShrink: 0, opacity: 0.8 }}>
+          {castStr}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ── SpecialStripContent ───────────────────────────────────────────────────────
+
+function SpecialStripContent({ block, isDark, height, dragHandleProps, isOverlay }) {
+  const borderColor = isDark ? '#2a2a2a' : '#ede9df'
+
+  let bg, textColor, label, icon
+  if (block.type === 'break') {
+    bg = isDark ? '#2a1f00' : '#fff7e6'
+    textColor = isDark ? '#d4a820' : '#92580a'
+    label = block.breakName || 'Break'
+    icon = '⏸'
+  } else if (block.type === 'move') {
+    bg = isDark ? '#180f2e' : '#f3e8ff'
+    textColor = isDark ? '#c084fc' : '#7c3aed'
+    label = block.blockName || 'Company Move'
+    icon = '↗'
+  } else if (block.type === 'meal') {
+    bg = isDark ? '#1f1a00' : '#fefce8'
+    textColor = isDark ? '#facc15' : '#92730a'
+    label = block.blockName || 'Meal'
+    icon = '●'
+  } else {
+    bg = isDark ? '#1e1e1e' : '#f5f5f5'
+    textColor = isDark ? '#888' : '#666'
+    label = block.blockName || block.breakName || block.type
+    icon = '●'
+  }
+
+  const duration = block.breakDuration || block.blockDuration
+  const durationStr = duration ? ` ${duration}m` : ''
+
+  return (
+    <div
+      {...(dragHandleProps || {})}
+      style={{
+        height,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        paddingLeft: 8,
+        paddingRight: 6,
+        borderBottom: `1px solid ${borderColor}`,
+        background: bg,
+        cursor: isOverlay ? 'grabbing' : dragHandleProps ? 'grab' : 'default',
+        userSelect: 'none',
+        overflow: 'hidden',
+      }}
+    >
+      <span style={{ fontSize: 10, flexShrink: 0 }}>{icon}</span>
+      <span style={{
+        fontFamily: 'monospace',
+        fontSize: 10,
+        fontWeight: 700,
+        color: textColor,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        flex: 1,
+      }}>
+        {label}{durationStr}
+      </span>
+    </div>
+  )
+}
+
+// ── SortableStrip ─────────────────────────────────────────────────────────────
+
+function SortableStrip({ block, shotData, color, dayId, isDark, height, onStripClick }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id,
+    data: { type: 'block', dayId },
+  })
+
+  const isShotBlock = !!block.shotId
+
+  const handleClick = useCallback((e) => {
+    if (!isShotBlock) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    onStripClick(block, shotData, dayId, rect)
+  }, [block, shotData, dayId, onStripClick, isShotBlock])
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0 : 1,
+      }}
+    >
+      {isShotBlock ? (
+        <ShotStripContent
+          block={block}
+          shotData={shotData}
+          color={color}
+          isDark={isDark}
+          height={height}
+          dragHandleProps={{ ...attributes, ...listeners }}
+          onClick={handleClick}
+        />
+      ) : (
+        <SpecialStripContent
+          block={block}
+          isDark={isDark}
+          height={height}
+          dragHandleProps={{ ...attributes, ...listeners }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── StripboardColumnDropZone ──────────────────────────────────────────────────
+
+function StripboardColumnDropZone({ dayId, isDark }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `zone_${dayId}`,
+    data: { type: 'day-body', dayId },
+  })
+  const borderColor = isOver ? (isDark ? '#666' : '#aaa') : (isDark ? '#333' : '#ddd9d0')
+  const mutedFg = isDark ? '#444' : '#bbb'
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        margin: 6,
+        padding: '12px 8px',
+        border: `1.5px dashed ${borderColor}`,
+        borderRadius: 3,
+        textAlign: 'center',
+        transition: 'border-color 0.15s',
+      }}
+    >
+      <span style={{ fontSize: 9, fontFamily: 'monospace', color: mutedFg }}>
+        {isOver ? 'Drop here' : 'No shots'}
+      </span>
+    </div>
+  )
+}
+
+// ── SortableStripboardColumn ──────────────────────────────────────────────────
+
+function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, shotColorMap, isDark, height, onStripClick }) {
+  const updateShootingDay = useStore(s => s.updateShootingDay)
+  const [editingDate, setEditingDate] = useState(false)
+  const dateInputRef = useRef(null)
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: day.id,
+    data: { type: 'day' },
+  })
+
+  const bg = isDark ? '#1a1a1a' : '#fff'
+  const headerBg = isDark ? '#202020' : '#f5f3ee'
+  const borderColor = isDark ? '#2a2a2a' : '#d9d4cb'
+  const fg = isDark ? '#ddd' : '#111'
+  const mutedFg = isDark ? '#555' : '#777'
+
+  const shotCount = blocks.filter(b => !!b.shotId).length
+  const blockIds = blocks.map(b => b.id)
+  const formattedDate = formatDate(day.date)
+  const startMins = parseStartTime(day.startTime)
+  const callStr = startMins !== null ? formatTimeOfDay(startMins) : null
+
+  const handleHeaderDoubleClick = useCallback((e) => {
+    e.stopPropagation()
+    setEditingDate(true)
+    // Attempt to show native date picker after mount
+    setTimeout(() => {
+      if (dateInputRef.current) {
+        dateInputRef.current.focus()
+        dateInputRef.current.showPicker?.()
+      }
+    }, 50)
+  }, [])
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        width: STRIP_COLUMN_WIDTH,
+        flexShrink: 0,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 5,
+        overflow: 'hidden',
+        background: bg,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Column header — drag handle + double-click to edit date */}
+      <div
+        {...attributes}
+        {...listeners}
+        onDoubleClick={handleHeaderDoubleClick}
+        style={{
+          padding: '7px 9px',
+          background: headerBg,
+          borderBottom: `1px solid ${borderColor}`,
+          cursor: 'grab',
+          userSelect: 'none',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{
+          fontFamily: 'monospace',
+          fontSize: 10,
+          fontWeight: 800,
+          color: fg,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          marginBottom: 2,
+        }}>
+          Day {dayIndex + 1}
+        </div>
+
+        {/* Date row — inline editor on double-click */}
+        <div
+          onPointerDown={e => editingDate && e.stopPropagation()}
+          onClick={e => editingDate && e.stopPropagation()}
+        >
+          {editingDate ? (
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={day.date || ''}
+              onChange={e => updateShootingDay(day.id, { date: e.target.value })}
+              onBlur={() => setEditingDate(false)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingDate(false) }}
+              onPointerDown={e => e.stopPropagation()}
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 10,
+                border: `1px solid ${isDark ? '#444' : '#ccc'}`,
+                borderRadius: 3,
+                background: isDark ? '#252525' : '#fff',
+                color: fg,
+                outline: 'none',
+                padding: '1px 4px',
+                width: '100%',
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: formattedDate ? fg : mutedFg,
+                fontFamily: 'monospace',
+                minHeight: 15,
+                fontStyle: formattedDate ? undefined : 'italic',
+              }}
+              title="Double-click column header to edit date"
+            >
+              {formattedDate || 'No date set'}
+            </div>
+          )}
+        </div>
+
+        {/* Call time + shot count */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3 }}>
+          {callStr && (
+            <span style={{ fontFamily: 'monospace', fontSize: 9, color: mutedFg }}>
+              CALL {callStr}
+            </span>
+          )}
+          <span style={{ fontFamily: 'monospace', fontSize: 9, color: mutedFg }}>
+            {shotCount} shot{shotCount !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* Strips */}
+      <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+        {blocks.length === 0 ? (
+          <StripboardColumnDropZone dayId={day.id} isDark={isDark} />
+        ) : (
+          <>
+            {blocks.map(block => {
+              const isShotBlock = !!block.shotId
+              const shotData = isShotBlock ? enrichedBlockMap[block.id] : null
+              const color = isShotBlock ? (shotColorMap[block.shotId] || '#9ca3af') : null
+              return (
+                <SortableStrip
+                  key={block.id}
+                  block={block}
+                  shotData={shotData}
+                  color={color}
+                  dayId={day.id}
+                  isDark={isDark}
+                  height={height}
+                  onStripClick={onStripClick}
+                />
+              )
+            })}
+            <DayEndDropZone dayId={day.id} />
+          </>
+        )}
+      </SortableContext>
+    </div>
+  )
+}
+
 // ── ScheduleTab (main) ────────────────────────────────────────────────────────
 
 export default function ScheduleTab() {
@@ -1943,6 +2567,28 @@ export default function ScheduleTab() {
   const isDark = theme === 'dark'
   const fg = isDark ? '#ddd' : '#111'
   const mutedFg = isDark ? '#666' : '#555'
+
+  // ── Sub-view state ───────────────────────────────────────────────────────────
+  const [scheduleView, setScheduleView] = useState('list') // 'list' | 'stripboard'
+  const [stripDensity, setStripDensity] = useState('comfortable') // 'compact' | 'comfortable'
+  const [stripPopover, setStripPopover] = useState(null) // { block, shotData, dayId, rect }
+
+  // Map shotId → shot.color, derived fresh from scenes
+  const shotColorMap = useMemo(() => {
+    const map = {}
+    scenes.forEach(scene => {
+      scene.shots.forEach(shot => { map[shot.id] = shot.color })
+    })
+    return map
+  }, [scenes])
+
+  const stripHeight = stripDensity === 'compact' ? 24 : 36
+
+  const handleStripClick = useCallback((block, shotData, dayId, rect) => {
+    setStripPopover(prev =>
+      prev && prev.block.id === block.id ? null : { block, shotData, dayId, rect }
+    )
+  }, [])
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const configPanelRef = useRef(null)
@@ -2104,10 +2750,27 @@ export default function ScheduleTab() {
 
   const totalShots = schedule.reduce((n, d) => n + d.shotBlocks.length, 0)
 
+  // ── View-toggle style helper ─────────────────────────────────────────────────
+  const viewTabStyle = (active) => ({
+    padding: '5px 12px',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: '0.05em',
+    border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
+    borderRadius: 3,
+    background: active
+      ? (isDark ? '#333' : '#e4e0d8')
+      : (isDark ? '#1e1e1e' : '#f0ede4'),
+    color: active ? fg : mutedFg,
+    cursor: 'pointer',
+    transition: 'background 0.1s, color 0.1s',
+  })
+
   return (
     <div style={{
       padding: '24px',
-      maxWidth: 920,
+      maxWidth: scheduleView === 'stripboard' ? 'none' : 920,
       margin: '0 auto',
       width: '100%',
     }}>
@@ -2118,7 +2781,9 @@ export default function ScheduleTab() {
         justifyContent: 'space-between',
         marginBottom: 24,
         gap: 12,
+        flexWrap: 'wrap',
       }}>
+        {/* Title + subtitle */}
         <div>
           <h2 style={{
             margin: 0,
@@ -2135,82 +2800,118 @@ export default function ScheduleTab() {
             <p style={{ margin: '4px 0 0', fontSize: 12, color: mutedFg, fontFamily: 'monospace' }}>
               {schedule.length} shooting day{schedule.length !== 1 ? 's' : ''}&nbsp;&middot;&nbsp;
               {totalShots} shot{totalShots !== 1 ? 's' : ''} scheduled
-              <span style={{ marginLeft: 8, opacity: 0.65 }}>
-                · Set a call time on each day to see the projected timeline
-              </span>
+              {scheduleView === 'list' && (
+                <span style={{ marginLeft: 8, opacity: 0.65 }}>
+                  · Set a call time on each day to see the projected timeline
+                </span>
+              )}
             </p>
           )}
         </div>
 
-        {schedule.length > 0 && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-            {/* Configure Columns button */}
-            <div ref={configPanelRef} style={{ position: 'relative' }}>
-              <button
-                onClick={(e) => { e.stopPropagation(); setConfigPanelOpen(p => !p) }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '7px 12px',
-                  border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
-                  borderRadius: 4,
-                  background: configPanelOpen
-                    ? (isDark ? '#2a2a2a' : '#e4e0d8')
-                    : (isDark ? '#1e1e1e' : '#f0ede4'),
-                  color: mutedFg,
-                  cursor: 'pointer',
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                  textTransform: 'uppercase',
-                  transition: 'background 0.1s',
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <circle cx="8" cy="8" r="2.5" />
-                  <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
-                </svg>
-                Columns
-              </button>
-
-              {configPanelOpen && (
-                <ScheduleColumnConfigPanel
-                  config={scheduleColumnConfig}
-                  isDark={isDark}
-                  onChange={setScheduleColumnConfig}
-                  onClose={() => setConfigPanelOpen(false)}
-                />
-              )}
-            </div>
-
-            <button
-              onClick={() => addShootingDay()}
-              style={{
-                padding: '7px 16px',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                border: `1px solid ${isDark ? '#555' : '#bbb'}`,
-                borderRadius: 4,
-                background: 'none',
-                color: fg,
-                cursor: 'pointer',
-              }}
-            >
-              + Add Day
+        {/* Right-side controls */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+          {/* Sub-view toggle */}
+          <div style={{ display: 'flex', gap: 2, border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`, borderRadius: 4, padding: 2, background: isDark ? '#161616' : '#e8e4dc' }}>
+            <button onClick={() => setScheduleView('list')} style={viewTabStyle(scheduleView === 'list')}>
+              List
+            </button>
+            <button onClick={() => setScheduleView('stripboard')} style={viewTabStyle(scheduleView === 'stripboard')}>
+              Stripboard
             </button>
           </div>
-        )}
+
+          {/* Density toggle — stripboard only */}
+          {scheduleView === 'stripboard' && schedule.length > 0 && (
+            <div style={{ display: 'flex', gap: 2, border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`, borderRadius: 4, padding: 2, background: isDark ? '#161616' : '#e8e4dc' }}>
+              <button
+                onClick={() => setStripDensity('compact')}
+                title="Compact strips (24px)"
+                style={viewTabStyle(stripDensity === 'compact')}
+              >
+                Compact
+              </button>
+              <button
+                onClick={() => setStripDensity('comfortable')}
+                title="Comfortable strips (36px)"
+                style={viewTabStyle(stripDensity === 'comfortable')}
+              >
+                Comfortable
+              </button>
+            </div>
+          )}
+
+          {schedule.length > 0 && scheduleView === 'list' && (
+            <>
+              {/* Configure Columns button */}
+              <div ref={configPanelRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfigPanelOpen(p => !p) }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '7px 12px',
+                    border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
+                    borderRadius: 4,
+                    background: configPanelOpen
+                      ? (isDark ? '#2a2a2a' : '#e4e0d8')
+                      : (isDark ? '#1e1e1e' : '#f0ede4'),
+                    color: mutedFg,
+                    cursor: 'pointer',
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    transition: 'background 0.1s',
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <circle cx="8" cy="8" r="2.5" />
+                    <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
+                  </svg>
+                  Columns
+                </button>
+
+                {configPanelOpen && (
+                  <ScheduleColumnConfigPanel
+                    config={scheduleColumnConfig}
+                    isDark={isDark}
+                    onChange={setScheduleColumnConfig}
+                    onClose={() => setConfigPanelOpen(false)}
+                  />
+                )}
+              </div>
+            </>
+          )}
+
+          <button
+            onClick={() => addShootingDay()}
+            style={{
+              padding: '7px 16px',
+              fontFamily: 'monospace',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              border: `1px solid ${isDark ? '#555' : '#bbb'}`,
+              borderRadius: 4,
+              background: 'none',
+              color: fg,
+              cursor: 'pointer',
+            }}
+          >
+            + Add Day
+          </button>
+        </div>
       </div>
 
       {/* Content */}
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
-      ) : (
+      ) : scheduleView === 'list' ? (
+        // ── List view ──────────────────────────────────────────────────────────
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -2259,6 +2960,92 @@ export default function ScheduleTab() {
                 />
               )
             ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        // ── Stripboard view ────────────────────────────────────────────────────
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          {/* Strip detail popover */}
+          {stripPopover && (
+            <StripDetailPopover
+              block={stripPopover.block}
+              shotData={stripPopover.shotData}
+              dayId={stripPopover.dayId}
+              isDark={isDark}
+              onClose={() => setStripPopover(null)}
+              anchorRect={stripPopover.rect}
+            />
+          )}
+
+          {/* Horizontally scrolling board */}
+          <SortableContext items={dayIds} strategy={horizontalListSortingStrategy}>
+            <div style={{
+              display: 'flex',
+              gap: 8,
+              overflowX: 'auto',
+              paddingBottom: 16,
+              alignItems: 'flex-start',
+              // Extend past the padded container so columns reach the edge
+              marginLeft: -4,
+              marginRight: -4,
+              paddingLeft: 4,
+              paddingRight: 4,
+            }}>
+              {schedule.map((day, dayIndex) => (
+                <SortableStripboardColumn
+                  key={day.id}
+                  day={day}
+                  dayIndex={dayIndex}
+                  blocks={getBlocksForDay(day.id)}
+                  enrichedBlockMap={enrichedBlockMap}
+                  shotColorMap={shotColorMap}
+                  isDark={isDark}
+                  height={stripHeight}
+                  onStripClick={handleStripClick}
+                />
+              ))}
+            </div>
+          </SortableContext>
+
+          <DragOverlay dropAnimation={null}>
+            {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (() => {
+              const block = blockMap[activeDrag.id]
+              const isShotBlock = !!block.shotId
+              return (
+                <div style={{
+                  width: STRIP_COLUMN_WIDTH,
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                  opacity: 0.92,
+                }}>
+                  {isShotBlock ? (
+                    <ShotStripContent
+                      block={block}
+                      shotData={enrichedBlockMap[activeDrag.id]}
+                      color={shotColorMap[block.shotId] || '#9ca3af'}
+                      isDark={isDark}
+                      height={stripHeight}
+                      isOverlay
+                    />
+                  ) : (
+                    <SpecialStripContent
+                      block={block}
+                      isDark={isDark}
+                      height={stripHeight}
+                      isOverlay
+                    />
+                  )}
+                </div>
+              )
+            })() : null}
           </DragOverlay>
         </DndContext>
       )}
