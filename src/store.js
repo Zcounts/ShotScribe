@@ -215,7 +215,8 @@ const useStore = create((set, get) => ({
 
     return schedule.map(day => ({
       ...day,
-      shotBlocks: day.shotBlocks.map(block => {
+      blocks: day.blocks.map(block => {
+        if (block.type !== 'shot' && block.shotId === undefined) return block
         const found = shotMap.get(block.shotId)
         return {
           ...block,
@@ -248,7 +249,7 @@ const useStore = create((set, get) => ({
       date: '',
       startTime: '',
       basecamp: '',
-      shotBlocks: [],
+      blocks: [],
       ...overrides,
     }
     set(state => ({ schedule: [...state.schedule, day] }))
@@ -261,12 +262,12 @@ const useStore = create((set, get) => ({
     const block = {
       id: `block_${Date.now()}_${blockIdCounter}`,
       type: 'break',
-      breakName: name,
-      breakDuration: durationMins,
+      label: name,
+      duration: durationMins,
     }
     set(state => ({
       schedule: state.schedule.map(d =>
-        d.id === dayId ? { ...d, shotBlocks: [...d.shotBlocks, block] } : d
+        d.id === dayId ? { ...d, blocks: [...d.blocks, block] } : d
       ),
     }))
     get()._scheduleAutoSave()
@@ -280,13 +281,13 @@ const useStore = create((set, get) => ({
     const block = {
       id: `block_${Date.now()}_${blockIdCounter}`,
       type,
-      blockName: overrides.blockName || defaultNames[type] || type,
-      blockDuration: overrides.blockDuration || 0,
-      ...(type === 'move' ? { blockLocation: overrides.blockLocation || '' } : {}),
+      label: overrides.label || overrides.blockName || defaultNames[type] || type,
+      duration: overrides.duration ?? overrides.blockDuration ?? 0,
+      ...(type === 'move' ? { location: overrides.location || overrides.blockLocation || '' } : {}),
     }
     set(state => ({
       schedule: state.schedule.map(d =>
-        d.id === dayId ? { ...d, shotBlocks: [...d.shotBlocks, block] } : d
+        d.id === dayId ? { ...d, blocks: [...d.blocks, block] } : d
       ),
     }))
     get()._scheduleAutoSave()
@@ -309,6 +310,7 @@ const useStore = create((set, get) => ({
     blockIdCounter++
     const block = {
       id: `block_${Date.now()}_${blockIdCounter}`,
+      type: 'shot',
       shotId,
       estimatedShootTime: '',
       estimatedSetupTime: '',
@@ -317,7 +319,7 @@ const useStore = create((set, get) => ({
     }
     set(state => ({
       schedule: state.schedule.map(d =>
-        d.id === dayId ? { ...d, shotBlocks: [...d.shotBlocks, block] } : d
+        d.id === dayId ? { ...d, blocks: [...d.blocks, block] } : d
       ),
     }))
     get()._scheduleAutoSave()
@@ -328,7 +330,7 @@ const useStore = create((set, get) => ({
     set(state => ({
       schedule: state.schedule.map(d =>
         d.id === dayId
-          ? { ...d, shotBlocks: d.shotBlocks.filter(b => b.id !== blockId) }
+          ? { ...d, blocks: d.blocks.filter(b => b.id !== blockId) }
           : d
       ),
     }))
@@ -339,7 +341,7 @@ const useStore = create((set, get) => ({
     set(state => ({
       schedule: state.schedule.map(d =>
         d.id === dayId
-          ? { ...d, shotBlocks: d.shotBlocks.map(b => b.id === blockId ? { ...b, ...updates } : b) }
+          ? { ...d, blocks: d.blocks.map(b => b.id === blockId ? { ...b, ...updates } : b) }
           : d
       ),
     }))
@@ -357,12 +359,12 @@ const useStore = create((set, get) => ({
   },
 
   // Commits a multi-container DnD drag result in one atomic update.
-  // dayUpdates: [{ id: dayId, shotBlocks: block[] }]
+  // dayUpdates: [{ id: dayId, blocks: block[] }]
   applyScheduleDrag: (dayUpdates) => {
     set(state => ({
       schedule: state.schedule.map(d => {
         const update = dayUpdates.find(u => u.id === d.id)
-        return update ? { ...d, shotBlocks: update.shotBlocks } : d
+        return update ? { ...d, blocks: update.blocks } : d
       }),
     }))
     get()._scheduleAutoSave()
@@ -495,7 +497,7 @@ const useStore = create((set, get) => ({
         // Remove any schedule blocks that reference shots from the deleted scene
         schedule: state.schedule.map(day => ({
           ...day,
-          shotBlocks: day.shotBlocks.filter(b => !deletedShotIds.has(b.shotId)),
+          blocks: day.blocks.filter(b => !deletedShotIds.has(b.shotId)),
         })),
       }
     })
@@ -540,7 +542,7 @@ const useStore = create((set, get) => ({
       // Also remove any schedule blocks that reference the deleted shot
       schedule: state.schedule.map(day => ({
         ...day,
-        shotBlocks: day.shotBlocks.filter(b => b.shotId !== shotId),
+        blocks: day.blocks.filter(b => b.shotId !== shotId),
       })),
     }))
     get()._scheduleAutoSave()
@@ -815,21 +817,22 @@ const useStore = create((set, get) => ({
         date: day.date,
         startTime: day.startTime,
         basecamp: day.basecamp,
-        shotBlocks: (day.shotBlocks || []).map(b => {
+        blocks: (day.blocks || day.shotBlocks || []).map(b => {
           if (b.type === 'break') {
-            return { id: b.id, type: b.type, breakName: b.breakName, breakDuration: b.breakDuration }
+            return { id: b.id, type: b.type, label: b.label || b.breakName || 'Break', duration: b.duration ?? b.breakDuration ?? 0 }
           }
           if (b.type === 'move' || b.type === 'meal' || b.type === 'travel') {
             return {
               id: b.id,
               type: b.type,
-              blockName: b.blockName,
-              blockDuration: b.blockDuration,
-              ...(b.type === 'move' ? { blockLocation: b.blockLocation || '' } : {}),
+              label: b.label || b.blockName || b.type,
+              duration: b.duration ?? b.blockDuration ?? 0,
+              ...(b.type === 'move' ? { location: b.location || b.blockLocation || '' } : {}),
             }
           }
           return {
             id: b.id,
+            type: 'shot',
             shotId: b.shotId,
             estimatedShootTime: b.estimatedShootTime,
             estimatedSetupTime: b.estimatedSetupTime,
@@ -1034,13 +1037,15 @@ const useStore = create((set, get) => ({
           date: day.date || '',
           startTime: day.startTime || '',
           basecamp: day.basecamp || '',
-          shotBlocks: (day.shotBlocks || []).map(b => {
+          // Accept both new 'blocks' format and legacy 'shotBlocks' format
+          blocks: (day.blocks || day.shotBlocks || []).map(b => {
             if (b.type === 'break') {
               return {
                 id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
                 type: 'break',
-                breakName: b.breakName || 'Break',
-                breakDuration: b.breakDuration || 0,
+                // Accept new 'label'/'duration' or legacy 'breakName'/'breakDuration'
+                label: b.label || b.breakName || 'Break',
+                duration: b.duration ?? b.breakDuration ?? 0,
               }
             }
             if (b.type === 'move' || b.type === 'meal' || b.type === 'travel') {
@@ -1048,13 +1053,15 @@ const useStore = create((set, get) => ({
               return {
                 id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
                 type: b.type,
-                blockName: b.blockName || defaultNames[b.type] || b.type,
-                blockDuration: b.blockDuration || 0,
-                ...(b.type === 'move' ? { blockLocation: b.blockLocation || '' } : {}),
+                // Accept new 'label'/'duration'/'location' or legacy 'blockName'/'blockDuration'/'blockLocation'
+                label: b.label || b.blockName || defaultNames[b.type] || b.type,
+                duration: b.duration ?? b.blockDuration ?? 0,
+                ...(b.type === 'move' ? { location: b.location || b.blockLocation || '' } : {}),
               }
             }
             return {
               id: b.id || `block_${Date.now()}_${++blockIdCounter}`,
+              type: 'shot',
               shotId: b.shotId || '',
               estimatedShootTime: b.estimatedShootTime || '',
               estimatedSetupTime: b.estimatedSetupTime || '',

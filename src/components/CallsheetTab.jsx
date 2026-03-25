@@ -369,10 +369,10 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
   // Calculate projected start time for each block (mirrors ScheduleTab logic)
   const startMins = parseStartTime(day.startTime)
   let cumulativeMins = 0
-  const blockProjections = scheduledDay.shotBlocks.map(block => {
+  const blockProjections = scheduledDay.blocks.map(block => {
     const projectedStart = startMins !== null ? startMins + cumulativeMins : null
     if (block.type === 'break') {
-      cumulativeMins += parseMinutes(block.breakDuration)
+      cumulativeMins += parseMinutes(block.duration)
     } else {
       cumulativeMins += parseMinutes(block.shotData?.shootTime) + parseMinutes(block.shotData?.setupTime)
     }
@@ -390,7 +390,7 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
   const sceneGroups = []
   const seenScenes = new Map()
 
-  scheduledDay.shotBlocks.forEach(block => {
+  scheduledDay.blocks.forEach(block => {
     if (block.type === 'break') return
     if (!block.shotData) return
     const { sceneLabel, location, intOrExt, dayNight } = block.shotData
@@ -401,8 +401,8 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
     }
   })
 
-  const nonBreakBlocks = scheduledDay.shotBlocks.filter(b => b.type !== 'break' && b.shotData)
-  const breakBlocks = scheduledDay.shotBlocks.filter(b => b.type === 'break')
+  const nonBreakBlocks = scheduledDay.blocks.filter(b => b.type !== 'break' && b.shotData)
+  const breakBlocks = scheduledDay.blocks.filter(b => b.type === 'break')
 
   const thStyle = {
     padding: '4px 8px',
@@ -503,12 +503,12 @@ function AdvancedScheduleSection({ day, scheduleWithShots, isDark }) {
                       <td colSpan={showTimes ? 6 : 4} style={{ ...tdStyle, fontStyle: 'italic', color: '#888' }}>
                         ☕{' '}
                         {showTimes && projStart !== null
-                          ? <><span style={{ color: isDark ? '#7dd3fc' : '#2563eb', fontStyle: 'normal', fontWeight: 600, marginRight: 6 }}>{formatTimeOfDay(projStart)}</span>— {b.breakName}</>
-                          : b.breakName
+                          ? <><span style={{ color: isDark ? '#7dd3fc' : '#2563eb', fontStyle: 'normal', fontWeight: 600, marginRight: 6 }}>{formatTimeOfDay(projStart)}</span>— {b.label}</>
+                          : b.label
                         }
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'right', color: '#aaa', fontSize: 11 }}>
-                        {b.breakDuration ? `${b.breakDuration} min` : '—'}
+                        {b.duration ? `${b.duration} min` : '—'}
                       </td>
                     </tr>
                   )

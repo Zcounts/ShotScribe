@@ -928,7 +928,7 @@ function DayTotals({ blocks, enrichedBlockMap, isDark }) {
     const sd = enrichedBlockMap ? enrichedBlockMap[b.id] : null
     return sum + parseMinutes(sd?.setupTime)
   }, 0)
-  const totalBreakMins = breakBlocks.reduce((sum, b) => sum + parseMinutes(b.breakDuration), 0)
+  const totalBreakMins = breakBlocks.reduce((sum, b) => sum + parseMinutes(b.duration), 0)
   const totalMins = totalShootMins + totalSetupMins + totalBreakMins
 
   // Only show if any times have been entered
@@ -1214,20 +1214,20 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
   const bg = isDark ? '#2a2310' : '#fffbef'
 
   const [editingName, setEditingName] = useState(false)
-  const [localName, setLocalName] = useState(block.breakName || 'Break')
+  const [localName, setLocalName] = useState(block.label || 'Break')
 
   useEffect(() => {
-    if (!editingName) setLocalName(block.breakName || 'Break')
-  }, [block.breakName, editingName])
+    if (!editingName) setLocalName(block.label || 'Break')
+  }, [block.label, editingName])
 
   const commitName = useCallback((val) => {
     setEditingName(false)
     const newName = val.trim() || 'Break'
-    if (newName !== block.breakName && dayId) updateShotBlock(dayId, block.id, { breakName: newName })
-  }, [block.breakName, block.id, dayId, updateShotBlock])
+    if (newName !== block.label && dayId) updateShotBlock(dayId, block.id, { label: newName })
+  }, [block.label, block.id, dayId, updateShotBlock])
 
   const handleDurationChange = useCallback((val) => {
-    if (dayId) updateShotBlock(dayId, block.id, { breakDuration: val })
+    if (dayId) updateShotBlock(dayId, block.id, { duration: val })
   }, [block.id, dayId, updateShotBlock])
 
   return (
@@ -1272,7 +1272,7 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
           onBlur={e => commitName(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter') e.target.blur()
-            if (e.key === 'Escape') { setLocalName(block.breakName || 'Break'); setEditingName(false) }
+            if (e.key === 'Escape') { setLocalName(block.label || 'Break'); setEditingName(false) }
           }}
           onPointerDown={e => e.stopPropagation()}
           style={{
@@ -1294,7 +1294,7 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
         {/* Duration field */}
         {!isOverlay && (
           <InlineField
-            value={block.breakDuration !== undefined && block.breakDuration !== 0 ? String(block.breakDuration) : ''}
+            value={block.duration !== undefined && block.duration !== 0 ? String(block.duration) : ''}
             onChange={handleDurationChange}
             placeholder="—"
             isDark={isDark}
@@ -1628,7 +1628,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
   const blockProjections = blocks.map(block => {
     const projectedTime = startMins !== null ? startMins + cumulativeMins : null
     if (block.type === 'break') {
-      cumulativeMins += parseMinutes(block.breakDuration)
+      cumulativeMins += parseMinutes(block.duration)
     } else {
       // Feature 1: use the shot's own shootTime/setupTime (via enrichedBlockMap)
       const sd = enrichedBlockMap[block.id]
@@ -2254,26 +2254,26 @@ function SpecialStripContent({ block, isDark, height, dragHandleProps, isOverlay
   if (block.type === 'break') {
     bg = isDark ? '#2a1f00' : '#fff7e6'
     textColor = isDark ? '#d4a820' : '#92580a'
-    label = block.breakName || 'Break'
+    label = block.label || 'Break'
     icon = '⏸'
   } else if (block.type === 'move') {
     bg = isDark ? '#180f2e' : '#f3e8ff'
     textColor = isDark ? '#c084fc' : '#7c3aed'
-    label = block.blockName || 'Company Move'
+    label = block.label || 'Company Move'
     icon = '↗'
   } else if (block.type === 'meal') {
     bg = isDark ? '#1f1a00' : '#fefce8'
     textColor = isDark ? '#facc15' : '#92730a'
-    label = block.blockName || 'Meal'
+    label = block.label || 'Meal'
     icon = '●'
   } else {
     bg = isDark ? '#1e1e1e' : '#f5f5f5'
     textColor = isDark ? '#888' : '#666'
-    label = block.blockName || block.breakName || block.type
+    label = block.label || block.type
     icon = '●'
   }
 
-  const duration = block.breakDuration || block.blockDuration
+  const duration = block.duration
   const durationStr = duration ? ` ${duration}m` : ''
 
   return (
@@ -2635,7 +2635,7 @@ function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
   const getSceneColors = useCallback((day) => {
     const seen = new Set()
     const colors = []
-    day.shotBlocks.forEach(block => {
+    day.blocks.forEach(block => {
       if (block.shotId) {
         const c = shotColorMap[block.shotId]
         if (c && !seen.has(c)) { seen.add(c); colors.push(c) }
@@ -2886,7 +2886,7 @@ function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
               {/* Shoot day cards */}
               {daysOnDate.map(day => {
                 const dayNum_ = getDayNumber(day.id)
-                const shotCount = day.shotBlocks.filter(b => !!b.shotId).length
+                const shotCount = day.blocks.filter(b => !!b.shotId).length
                 const startMins = parseStartTime(day.startTime)
                 const callStr = startMins !== null ? formatTimeOfDay(startMins) : null
                 const sceneColors = getSceneColors(day)
@@ -3187,14 +3187,14 @@ export default function ScheduleTab() {
 
   const blockMap = useMemo(() => {
     const map = {}
-    schedule.forEach(d => d.shotBlocks.forEach(b => { map[b.id] = b }))
+    schedule.forEach(d => d.blocks.forEach(b => { map[b.id] = b }))
     return map
   }, [schedule])
 
   const enrichedBlockMap = useMemo(() => {
     const map = {}
     getScheduleWithShots().forEach(d => {
-      d.shotBlocks.forEach(b => { map[b.id] = b.shotData })
+      d.blocks.forEach(b => { map[b.id] = b.shotData })
     })
     return map
   }, [schedule, scenes]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -3202,7 +3202,7 @@ export default function ScheduleTab() {
   const getBlocksForDay = useCallback((dayId) => {
     const ids = localBlocksByDay
       ? (localBlocksByDay[dayId] || [])
-      : (schedule.find(d => d.id === dayId)?.shotBlocks.map(b => b.id) || [])
+      : (schedule.find(d => d.id === dayId)?.blocks.map(b => b.id) || [])
     return ids.map(id => blockMap[id]).filter(Boolean)
   }, [localBlocksByDay, schedule, blockMap])
 
@@ -3220,7 +3220,7 @@ export default function ScheduleTab() {
 
     if (type === 'block') {
       const order = {}
-      schedule.forEach(d => { order[d.id] = d.shotBlocks.map(b => b.id) })
+      schedule.forEach(d => { order[d.id] = d.blocks.map(b => b.id) })
       setLocalBlocksByDay(order)
     }
   }, [schedule])
@@ -3307,7 +3307,7 @@ export default function ScheduleTab() {
       applyScheduleDrag(
         schedule.map(d => ({
           id: d.id,
-          shotBlocks: (localBlocksByDay[d.id] || []).map(id => blockMap[id]).filter(Boolean),
+          blocks: (localBlocksByDay[d.id] || []).map(id => blockMap[id]).filter(Boolean),
         }))
       )
     }
@@ -3323,7 +3323,7 @@ export default function ScheduleTab() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  const totalShots = schedule.reduce((n, d) => n + d.shotBlocks.length, 0)
+  const totalShots = schedule.reduce((n, d) => n + d.blocks.length, 0)
 
   // ── View-toggle style helper ─────────────────────────────────────────────────
   const viewTabStyle = (active) => ({
