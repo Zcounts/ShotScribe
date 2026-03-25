@@ -276,9 +276,9 @@ export default function App() {
   useEffect(() => {
     const hasShots = useStore.getState().scenes.some(s => s.shots.length > 0)
     if (!hasShots) {
-      const saved = localStorage.getItem('autosave')
-      if (saved) {
-        try {
+      try {
+        const saved = localStorage.getItem('autosave')
+        if (saved) {
           const data = JSON.parse(saved)
           const totalShots = (data.scenes || [{ shots: data.shots || [] }])
             .reduce((a, s) => a + (s.shots || []).length, 0)
@@ -287,9 +287,9 @@ export default function App() {
             const timeStr = savedTime ? new Date(savedTime).toLocaleString() : 'recently'
             setRestorePrompt({ data, timeStr, totalShots })
           }
-        } catch {
-          // ignore
         }
+      } catch {
+        // Ignore malformed or unavailable localStorage (SecurityError/file://).
       }
     }
   }, []) // eslint-disable-line

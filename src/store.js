@@ -142,8 +142,13 @@ function loadRecentProjects() {
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : []
   } catch {
-    // Guard against malformed persisted data causing renderer startup crashes.
-    localStorage.removeItem('recentProjects')
+    // Guard against malformed/unavailable persisted storage causing renderer
+    // startup crashes (e.g. SecurityError in some file:// environments).
+    try {
+      localStorage.removeItem('recentProjects')
+    } catch {
+      // Ignore storage cleanup failures; renderer should still boot.
+    }
     return []
   }
 }

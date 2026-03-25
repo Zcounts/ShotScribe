@@ -7,6 +7,38 @@ const os = require('os')
 
 const isDev = !app.isPackaged
 
+function attachRendererDiagnostics(win) {
+  const wc = win.webContents
+
+  wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    console.error('[Renderer] did-fail-load', {
+      errorCode,
+      errorDescription,
+      validatedURL,
+      isMainFrame,
+    })
+  })
+
+  wc.on('render-process-gone', (_event, details) => {
+    console.error('[Renderer] render-process-gone', details)
+  })
+
+  wc.on('console-message', (_event, level, message, line, sourceId) => {
+    const levels = ['debug', 'info', 'warn', 'error']
+    const tag = levels[level] || 'log'
+    const printer = tag === 'error' ? console.error : tag === 'warn' ? console.warn : console.log
+    printer(`[Renderer console:${tag}] ${message} (${sourceId}:${line})`)
+  })
+
+  wc.on('preload-error', (_event, preloadPath, error) => {
+    console.error('[Renderer] preload-error', {
+      preloadPath,
+      message: error?.message,
+      stack: error?.stack,
+    })
+  })
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
@@ -42,6 +74,8 @@ function createWindow() {
     win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'))
   }
 
+  attachRendererDiagnostics(win)
+
   // Remove default menu bar in production
   if (!isDev) {
     Menu.setApplicationMenu(null)
@@ -49,6 +83,14 @@ function createWindow() {
 
   return win
 }
+
+process.on('uncaughtException', (error) => {
+  console.error('[Main] uncaughtException', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Main] unhandledRejection', reason)
+})
 
 app.whenReady().then(() => {
   createWindow()

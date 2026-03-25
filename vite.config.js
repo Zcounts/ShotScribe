@@ -19,6 +19,11 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    // Limit dependency crawling to the desktop entrypoint.
+    // Without this, Vite scans /mobile/index.html too, which imports the
+    // local @shotscribe/shared package and can crash desktop dev startup
+    // before Electron loads the renderer.
+    entries: ['index.html', 'src/main.jsx'],
     exclude: ['pdfreader'],
   },
 })
