@@ -1640,6 +1640,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
   return (
     <div
       ref={setNodeRef}
+      id={`sched-day-${day.id}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -2551,6 +2552,570 @@ function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, sho
   )
 }
 
+// ── CalendarView ──────────────────────────────────────────────────────────────
+// A month-view calendar where each shoot day with a date appears as a draggable
+// card inside the corresponding cell. Drag a card to a new cell to reschedule.
+// Click a card to jump to that day in the List view.
+
+const CAL_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
+  const addShootingDay = useStore(s => s.addShootingDay)
+  const updateShootingDay = useStore(s => s.updateShootingDay)
+
+  // ── Month navigation ───────────────────────────────────────────────────────
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const first = schedule.find(d => d.date)
+    if (first) {
+      const d = new Date(first.date + 'T12:00:00')
+      return { year: d.getFullYear(), month: d.getMonth() }
+    }
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() }
+  })
+
+  const prevMonth = useCallback(() => {
+    setCurrentMonth(({ year, month }) =>
+      month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 }
+    )
+  }, [])
+  const nextMonth = useCallback(() => {
+    setCurrentMonth(({ year, month }) =>
+      month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 }
+    )
+  }, [])
+
+  // ── Add Shoot Day popover ─────────────────────────────────────────────────
+  const [addPickerDate, setAddPickerDate] = useState('')
+  const [showAddPicker, setShowAddPicker] = useState(false)
+  const addPickerRef = useRef(null)
+  const addBtnRef = useRef(null)
+
+  const handleAddDay = useCallback(() => {
+    const dateToUse = addPickerDate || ''
+    addShootingDay({ date: dateToUse })
+    setShowAddPicker(false)
+    setAddPickerDate('')
+  }, [addShootingDay, addPickerDate])
+
+  useEffect(() => {
+    if (!showAddPicker) return
+    const handler = (e) => {
+      if (
+        addPickerRef.current && !addPickerRef.current.contains(e.target) &&
+        addBtnRef.current && !addBtnRef.current.contains(e.target)
+      ) {
+        setShowAddPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showAddPicker])
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const shotColorMap = useMemo(() => {
+    const map = {}
+    scenes.forEach(sc => sc.shots.forEach(sh => { map[sh.id] = sh.color }))
+    return map
+  }, [scenes])
+
+  // isoDate → array of schedule days
+  const daysByDate = useMemo(() => {
+    const m = {}
+    schedule.forEach(day => {
+      if (day.date) {
+        if (!m[day.date]) m[day.date] = []
+        m[day.date].push(day)
+      }
+    })
+    return m
+  }, [schedule])
+
+  // Up to 6 unique scene colors for a day's shots
+  const getSceneColors = useCallback((day) => {
+    const seen = new Set()
+    const colors = []
+    day.shotBlocks.forEach(block => {
+      if (block.shotId) {
+        const c = shotColorMap[block.shotId]
+        if (c && !seen.has(c)) { seen.add(c); colors.push(c) }
+      }
+    })
+    return colors.slice(0, 6)
+  }, [shotColorMap])
+
+  // 1-based position in the schedule array
+  const getDayNumber = useCallback((dayId) => {
+    return schedule.findIndex(d => d.id === dayId) + 1
+  }, [schedule])
+
+  // ── Calendar grid ─────────────────────────────────────────────────────────
+  const { year, month } = currentMonth
+  const firstDay = new Date(year, month, 1)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const startDow = firstDay.getDay() // 0 = Sunday
+
+  const toIso = useCallback((dayNum) => {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
+  }, [year, month])
+
+  // Cells: null for padding, number for actual days
+  const cells = useMemo(() => {
+    const c = []
+    for (let i = 0; i < startDow; i++) c.push(null)
+    for (let d = 1; d <= daysInMonth; d++) c.push(d)
+    while (c.length % 7 !== 0) c.push(null)
+    return c
+  }, [startDow, daysInMonth])
+
+  const today = useMemo(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  }, [])
+
+  const monthLabel = firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  // ── Native HTML5 drag-and-drop for calendar ───────────────────────────────
+  const [draggingId, setDraggingId] = useState(null)
+  const [dragOverDate, setDragOverDate] = useState(null)
+
+  const handleCardDragStart = useCallback((e, dayId) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', dayId)
+    // Small delay so the ghost image renders before we reduce opacity
+    requestAnimationFrame(() => setDraggingId(dayId))
+  }, [])
+
+  const handleCardDragEnd = useCallback(() => {
+    setDraggingId(null)
+    setDragOverDate(null)
+  }, [])
+
+  const handleCellDragOver = useCallback((e, isoDate) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverDate(isoDate)
+  }, [])
+
+  const handleCellDragLeave = useCallback((e) => {
+    // Only clear if actually leaving the cell (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverDate(null)
+    }
+  }, [])
+
+  const handleCellDrop = useCallback((e, isoDate) => {
+    e.preventDefault()
+    const dayId = e.dataTransfer.getData('text/plain')
+    if (dayId && isoDate) {
+      updateShootingDay(dayId, { date: isoDate })
+    }
+    setDraggingId(null)
+    setDragOverDate(null)
+  }, [updateShootingDay])
+
+  // ── Colours ───────────────────────────────────────────────────────────────
+  const bg = isDark ? '#111' : '#faf9f6'
+  const cellBg = isDark ? '#1a1a1a' : '#fff'
+  const emptyBg = isDark ? '#141414' : '#f5f3ee'
+  const headerBg = isDark ? '#202020' : '#f0ede4'
+  const borderColor = isDark ? '#2a2a2a' : '#e0dbd2'
+  const fg = isDark ? '#ddd' : '#111'
+  const mutedFg = isDark ? '#555' : '#999'
+  const todayAccent = isDark ? '#3b82f6' : '#2563eb'
+  const dropBg = isDark ? 'rgba(96,165,250,0.12)' : 'rgba(59,130,246,0.07)'
+  const dropBorder = isDark ? 'rgba(96,165,250,0.4)' : 'rgba(59,130,246,0.35)'
+
+  const navBtnStyle = {
+    width: 28,
+    height: 28,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
+    borderRadius: 4,
+    background: 'none',
+    color: fg,
+    cursor: 'pointer',
+    fontFamily: 'monospace',
+    fontSize: 14,
+    lineHeight: 1,
+    flexShrink: 0,
+  }
+
+  return (
+    <div style={{
+      background: bg,
+      borderRadius: 6,
+      border: `1px solid ${borderColor}`,
+      overflow: 'hidden',
+    }}>
+      {/* ── Month nav header ────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 16px',
+        borderBottom: `1px solid ${borderColor}`,
+        background: headerBg,
+      }}>
+        <button
+          onClick={prevMonth}
+          style={navBtnStyle}
+          onMouseEnter={e => { e.currentTarget.style.background = isDark ? '#2a2a2a' : '#e4e0d8' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+          title="Previous month"
+        >
+          ‹
+        </button>
+
+        <span style={{
+          fontFamily: 'monospace',
+          fontSize: 13,
+          fontWeight: 700,
+          color: fg,
+          letterSpacing: '0.04em',
+        }}>
+          {monthLabel}
+        </span>
+
+        <button
+          onClick={nextMonth}
+          style={navBtnStyle}
+          onMouseEnter={e => { e.currentTarget.style.background = isDark ? '#2a2a2a' : '#e4e0d8' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+          title="Next month"
+        >
+          ›
+        </button>
+      </div>
+
+      {/* ── Day-of-week header row ──────────────────────────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(7, 1fr)',
+        borderBottom: `1px solid ${borderColor}`,
+        background: headerBg,
+      }}>
+        {CAL_DOW.map((dow, i) => (
+          <div key={dow} style={{
+            padding: '5px 8px',
+            fontFamily: 'monospace',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: (i === 0 || i === 6) ? (isDark ? '#666' : '#aaa') : mutedFg,
+            textAlign: 'center',
+            borderRight: i < 6 ? `1px solid ${borderColor}` : 'none',
+          }}>
+            {dow}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Calendar grid ──────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        {cells.map((dayNum, cellIdx) => {
+          const col = cellIdx % 7
+          const isoDate = dayNum ? toIso(dayNum) : null
+          const isToday = isoDate === today
+          const isWeekend = col === 0 || col === 6
+          const daysOnDate = isoDate ? (daysByDate[isoDate] || []) : []
+          const isDropTarget = isoDate && dragOverDate === isoDate && draggingId
+
+          let cellBackground = cellBg
+          if (!dayNum) cellBackground = emptyBg
+          if (isDropTarget) cellBackground = dropBg
+
+          const isLastRow = cellIdx >= cells.length - 7
+
+          return (
+            <div
+              key={cellIdx}
+              onDragOver={isoDate ? (e) => handleCellDragOver(e, isoDate) : undefined}
+              onDragLeave={isoDate ? handleCellDragLeave : undefined}
+              onDrop={isoDate ? (e) => handleCellDrop(e, isoDate) : undefined}
+              style={{
+                minHeight: 90,
+                padding: '6px 5px 5px',
+                borderRight: col < 6 ? `1px solid ${borderColor}` : 'none',
+                borderBottom: !isLastRow ? `1px solid ${borderColor}` : 'none',
+                background: cellBackground,
+                outline: isDropTarget ? `1.5px solid ${dropBorder}` : 'none',
+                outlineOffset: -1.5,
+                transition: 'background 0.1s, outline 0.1s',
+                position: 'relative',
+                // Subtle weekend tint
+                ...(isWeekend && dayNum && !isDropTarget ? {
+                  background: isDark ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.016)',
+                } : {}),
+              }}
+            >
+              {/* Date number */}
+              {dayNum && (
+                <div style={{
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  fontWeight: isToday ? 800 : 400,
+                  color: isToday
+                    ? todayAccent
+                    : isWeekend
+                    ? (isDark ? '#555' : '#bbb')
+                    : mutedFg,
+                  lineHeight: 1,
+                  marginBottom: 5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}>
+                  {dayNum}
+                  {isToday && (
+                    <span style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: '50%',
+                      background: todayAccent,
+                      display: 'inline-block',
+                      flexShrink: 0,
+                    }} />
+                  )}
+                </div>
+              )}
+
+              {/* Shoot day cards */}
+              {daysOnDate.map(day => {
+                const dayNum_ = getDayNumber(day.id)
+                const shotCount = day.shotBlocks.filter(b => !!b.shotId).length
+                const startMins = parseStartTime(day.startTime)
+                const callStr = startMins !== null ? formatTimeOfDay(startMins) : null
+                const sceneColors = getSceneColors(day)
+                const isDraggingThis = draggingId === day.id
+
+                return (
+                  <div
+                    key={day.id}
+                    draggable
+                    onDragStart={(e) => handleCardDragStart(e, day.id)}
+                    onDragEnd={handleCardDragEnd}
+                    onClick={(e) => { e.stopPropagation(); onJumpToDay(day.id) }}
+                    title={`Day ${dayNum_} — click to jump to list view`}
+                    style={{
+                      marginBottom: 3,
+                      padding: '5px 6px',
+                      borderRadius: 4,
+                      background: isDark ? '#252525' : '#ede9df',
+                      border: `1px solid ${isDark ? '#333' : '#ccc8be'}`,
+                      cursor: 'grab',
+                      opacity: isDraggingThis ? 0.35 : 1,
+                      transition: 'opacity 0.1s, box-shadow 0.12s',
+                      userSelect: 'none',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.boxShadow = isDark
+                        ? '0 2px 8px rgba(0,0,0,0.5)'
+                        : '0 2px 8px rgba(0,0,0,0.14)'
+                    }}
+                    onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
+                  >
+                    {/* DAY N · X shots · CALL Hpm */}
+                    <div style={{
+                      fontFamily: 'monospace',
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      color: isDark ? '#bbb' : '#333',
+                      lineHeight: 1.3,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      <span style={{ color: isDark ? '#ddd' : '#111' }}>DAY {dayNum_}</span>
+                      <span style={{ opacity: 0.5, margin: '0 3px' }}>·</span>
+                      {shotCount} shot{shotCount !== 1 ? 's' : ''}
+                      {callStr && (
+                        <>
+                          <span style={{ opacity: 0.5, margin: '0 3px' }}>·</span>
+                          <span>CALL {callStr}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Scene color dots */}
+                    {sceneColors.length > 0 && (
+                      <div style={{
+                        display: 'flex',
+                        gap: 3,
+                        marginTop: 4,
+                        flexWrap: 'wrap',
+                      }}>
+                        {sceneColors.map((color, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              background: color,
+                              flexShrink: 0,
+                              boxShadow: `0 0 0 1px ${isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.6)'}`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Footer: Add Shoot Day ──────────────────────────────────────── */}
+      <div style={{
+        padding: '10px 14px',
+        borderTop: `1px solid ${borderColor}`,
+        background: headerBg,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        position: 'relative',
+      }}>
+        <button
+          ref={addBtnRef}
+          onClick={() => setShowAddPicker(p => !p)}
+          style={{
+            padding: '5px 14px',
+            fontFamily: 'monospace',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.07em',
+            textTransform: 'uppercase',
+            border: `1px solid ${isDark ? '#555' : '#bbb'}`,
+            borderRadius: 4,
+            background: 'none',
+            color: fg,
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = isDark ? '#252525' : '#e4e0d8' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+        >
+          + Add Shoot Day
+        </button>
+
+        {showAddPicker && (
+          <div
+            ref={addPickerRef}
+            style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 14,
+              marginBottom: 6,
+              background: isDark ? '#1e1e1e' : '#fff',
+              border: `1px solid ${isDark ? '#333' : '#d4cfc6'}`,
+              borderRadius: 6,
+              boxShadow: isDark ? '0 8px 28px rgba(0,0,0,0.6)' : '0 8px 28px rgba(0,0,0,0.16)',
+              padding: 14,
+              zIndex: 200,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              minWidth: 220,
+            }}
+          >
+            <span style={{
+              fontFamily: 'monospace',
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: mutedFg,
+            }}>
+              New Shoot Day
+            </span>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{
+                fontFamily: 'monospace',
+                fontSize: 9,
+                color: mutedFg,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}>
+                Date (optional)
+              </span>
+              <input
+                type="date"
+                value={addPickerDate}
+                onChange={e => setAddPickerDate(e.target.value)}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleAddDay()
+                  if (e.key === 'Escape') setShowAddPicker(false)
+                }}
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  padding: '4px 8px',
+                  border: `1px solid ${isDark ? '#3a3a3a' : '#d0cbc2'}`,
+                  borderRadius: 4,
+                  background: isDark ? '#252525' : '#fff',
+                  color: fg,
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowAddPicker(false)}
+                style={{
+                  padding: '4px 12px',
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  border: `1px solid ${isDark ? '#444' : '#ccc'}`,
+                  borderRadius: 3,
+                  background: 'none',
+                  color: mutedFg,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddDay}
+                style={{
+                  padding: '4px 14px',
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  border: `1px solid ${isDark ? '#555' : '#bbb'}`,
+                  borderRadius: 3,
+                  background: isDark ? '#2a2a2a' : '#e4e0d8',
+                  color: fg,
+                  cursor: 'pointer',
+                }}
+              >
+                Add Day
+              </button>
+            </div>
+          </div>
+        )}
+
+        <span style={{
+          fontFamily: 'monospace',
+          fontSize: 10,
+          color: mutedFg,
+        }}>
+          Drag a day card to a new date to reschedule · Click to jump to list
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ── ScheduleTab (main) ────────────────────────────────────────────────────────
 
 export default function ScheduleTab() {
@@ -2569,9 +3134,19 @@ export default function ScheduleTab() {
   const mutedFg = isDark ? '#666' : '#555'
 
   // ── Sub-view state ───────────────────────────────────────────────────────────
-  const [scheduleView, setScheduleView] = useState('list') // 'list' | 'stripboard'
+  const [scheduleView, setScheduleView] = useState('list') // 'list' | 'stripboard' | 'calendar'
   const [stripDensity, setStripDensity] = useState('comfortable') // 'compact' | 'comfortable'
   const [stripPopover, setStripPopover] = useState(null) // { block, shotData, dayId, rect }
+
+  // Jump to a specific day in the List view (used by CalendarView cards)
+  const handleJumpToDay = useCallback((dayId) => {
+    setScheduleView('list')
+    // Allow React to re-render the list view before scrolling
+    setTimeout(() => {
+      const el = document.getElementById(`sched-day-${dayId}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+  }, [])
 
   // Map shotId → shot.color, derived fresh from scenes
   const shotColorMap = useMemo(() => {
@@ -2770,7 +3345,7 @@ export default function ScheduleTab() {
   return (
     <div style={{
       padding: '24px',
-      maxWidth: scheduleView === 'stripboard' ? 'none' : 920,
+      maxWidth: (scheduleView === 'stripboard' || scheduleView === 'calendar') ? 'none' : 920,
       margin: '0 auto',
       width: '100%',
     }}>
@@ -2818,6 +3393,9 @@ export default function ScheduleTab() {
             </button>
             <button onClick={() => setScheduleView('stripboard')} style={viewTabStyle(scheduleView === 'stripboard')}>
               Stripboard
+            </button>
+            <button onClick={() => setScheduleView('calendar')} style={viewTabStyle(scheduleView === 'calendar')}>
+              Calendar
             </button>
           </div>
 
@@ -2910,6 +3488,14 @@ export default function ScheduleTab() {
       {/* Content */}
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
+      ) : scheduleView === 'calendar' ? (
+        // ── Calendar view ──────────────────────────────────────────────────
+        <CalendarView
+          schedule={schedule}
+          scenes={scenes}
+          isDark={isDark}
+          onJumpToDay={handleJumpToDay}
+        />
       ) : scheduleView === 'list' ? (
         // ── List view ──────────────────────────────────────────────────────────
         <DndContext
