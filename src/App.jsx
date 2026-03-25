@@ -108,6 +108,7 @@ function SceneSection({
           return (
             <div
               key={`${scene.id}_page_${pageIdx}`}
+              id={`${scene.id}__page_${pageIdx}`}
               ref={el => { if (el) pageRefs.current[globalPageNum - 1] = el }}
               className="page-document"
             >
@@ -233,6 +234,8 @@ export default function App() {
   const [forcedExportTab, setForcedExportTab] = useState(null)
   const [showStoryboardOutline, setShowStoryboardOutline] = useState(true)
   const [storyboardConfigOpen, setStoryboardConfigOpen] = useState(false)
+  const [storyboardOutlineTab, setStoryboardOutlineTab] = useState('Scenes')
+  const [activeOutlineItem, setActiveOutlineItem] = useState(null)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
   const storyboardSceneRefs = useRef({})
@@ -327,8 +330,22 @@ export default function App() {
 
   const jumpToStoryboardScene = (sceneId) => {
     const node = storyboardSceneRefs.current[sceneId]
-    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setActiveOutlineItem(sceneId)
+    }
   }
+
+  const storyboardPageItems = scenes.flatMap((scene, sceneIdx) => {
+    const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
+    const count = Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
+    return Array.from({ length: count }).map((_, pageIdx) => ({
+      id: `${scene.id}__page_${pageIdx}`,
+      label: `Page ${scenePageOffsets[sceneIdx] + pageIdx + 1}`,
+      subtitle: `${scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${scene.location || ''}`,
+      sceneColor: scriptScenes[sceneIdx]?.color || '#94a3b8',
+    }))
+  })
 
   return (
     <div
@@ -412,7 +429,7 @@ export default function App() {
                       checked={showStoryboardOutline}
                       onChange={(e) => setShowStoryboardOutline(e.target.checked)}
                     />
-                    Show Pages Outline
+                    Show Storyboard Outline
                   </label>
                 </div>
               )}
@@ -420,11 +437,25 @@ export default function App() {
           </div>
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
-              <aside style={{ width: 240, position: 'sticky', top: 42, alignSelf: 'flex-start', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
-                <div style={{ padding: '8px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', borderBottom: '1px solid rgba(74,85,104,0.12)' }}>Pages Outline</div>
-                {sceneNavItems.map(item => (
-                  <button key={item.id} onDoubleClick={() => item.id.startsWith('script-') ? openScenePropertiesDialog('script', item.id.replace('script-', '')) : openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: 'none', padding: '8px 10px', cursor: 'pointer' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div>
+              <aside style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
+                <div style={{ padding: 10, borderBottom: '1px solid rgba(74,85,104,0.12)' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {['Scenes', 'Pages'].map(tab => (
+                      <button key={tab} onClick={() => setStoryboardOutlineTab(tab)} style={{ border: '1px solid rgba(74,85,104,0.2)', borderRadius: 999, padding: '3px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', background: storyboardOutlineTab === tab ? '#2C2C2E' : 'transparent', color: storyboardOutlineTab === tab ? '#FAF8F4' : '#4A5568' }}>{tab}</button>
+                    ))}
+                  </div>
+                </div>
+                {storyboardOutlineTab === 'Scenes' ? sceneNavItems.map(item => {
+                  const color = scriptScenes.find(s => `script-${s.id}` === item.id)?.color || '#94a3b8'
+                  return (
+                    <button key={item.id} onDoubleClick={() => item.id.startsWith('script-') ? openScenePropertiesDialog('script', item.id.replace('script-', '')) : openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 10px', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 999, background: color, border: '1px solid rgba(0,0,0,0.1)' }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
+                      <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
+                    </button>
+                  )
+                }) : storyboardPageItems.map(item => (
+                  <button key={item.id} onClick={() => { const el = document.getElementById(item.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveOutlineItem(item.id) } }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? 'rgba(45,90,61,0.12)' : 'none', padding: '8px 10px', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
                     <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                   </button>
                 ))}

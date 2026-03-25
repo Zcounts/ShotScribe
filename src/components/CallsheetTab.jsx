@@ -703,10 +703,11 @@ function UpdateRosterPrompt({ isDark, memberName, onConfirm, onDismiss }) {
 
 let castIdCounter = 0
 
-function CastListSection({ callsheet, isDark, onUpdate }) {
+function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
   const cast = callsheet.cast || []
   const castRoster = useStore(s => s.castRoster)
   const upsertCastRosterEntry = useStore(s => s.upsertCastRosterEntry)
+  const getCastSceneMetrics = useStore(s => s.getCastSceneMetrics)
 
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -794,17 +795,21 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
     <SectionBlock title="Cast List">
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <colgroup>
-          <col style={{ width: '22%' }} />
-          <col style={{ width: '20%' }} />
-          <col style={{ width: '16%' }} />
-          <col style={{ width: '16%' }} />
+          <col style={{ width: '18%' }} />
           <col style={{ width: '16%' }} />
           <col style={{ width: '10%' }} />
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '14%' }} />
+          <col style={{ width: '14%' }} />
+          <col style={{ width: '14%' }} />
+          <col style={{ width: '4%' }} />
         </colgroup>
         <thead>
           <tr>
             <th style={thStyle}>Name</th>
             <th style={thStyle}>Character</th>
+            <th style={thStyle}>Sc(Day)</th>
+            <th style={thStyle}>Pg(Day)</th>
             <th style={thStyle}>Pickup Time</th>
             <th style={thStyle}>Makeup Call</th>
             <th style={thStyle}>Set Call</th>
@@ -814,12 +819,14 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
         <tbody>
           {cast.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ ...cellStyle, padding: '8px 6px', color: '#aaa', fontFamily: 'monospace', fontSize: 12, fontStyle: 'italic' }}>
+              <td colSpan={8} style={{ ...cellStyle, padding: '8px 6px', color: '#aaa', fontFamily: 'monospace', fontSize: 12, fontStyle: 'italic' }}>
                 No cast added yet
               </td>
             </tr>
           )}
-          {cast.map((row, idx) => (
+          {cast.map((row, idx) => {
+            const metrics = row.rosterId ? getCastSceneMetrics(row.rosterId, dayId || null) : { sceneCount: 0, pageCount: 0 }
+            return (
             <tr key={row.id} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
               <td style={cellStyle}>
                 <input
@@ -839,6 +846,8 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
                   placeholder="Character"
                 />
               </td>
+              <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 11, color: '#666' }}>{metrics.sceneCount}</td>
+              <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 11, color: '#666' }}>{Number(metrics.pageCount || 0).toFixed(2)}</td>
               <td style={cellStyle}><input style={inputStyle} value={row.pickupTime} onChange={e => updateRow(row.id, 'pickupTime', e.target.value)} placeholder="7:00 AM" /></td>
               <td style={cellStyle}><input style={inputStyle} value={row.makeupCall} onChange={e => updateRow(row.id, 'makeupCall', e.target.value)} placeholder="7:30 AM" /></td>
               <td style={cellStyle}><input style={inputStyle} value={row.setCall} onChange={e => updateRow(row.id, 'setCall', e.target.value)} placeholder="9:00 AM" /></td>
@@ -852,7 +861,7 @@ function CastListSection({ callsheet, isDark, onUpdate }) {
                 </button>
               </td>
             </tr>
-          ))}
+          )})}
         </tbody>
       </table>
       <button
@@ -1343,6 +1352,7 @@ export default function CallsheetTab() {
                     <CastListSection
                       key="castList"
                       callsheet={callsheet}
+                      dayId={activeDay.id}
                       isDark={isDark}
                       onUpdate={handleUpdate}
                     />
