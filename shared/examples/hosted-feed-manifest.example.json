@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "manifestType": "hosted-feed-manifest",
+  "projectId": "proj_abc123",
+  "projectSlug": "pilot-ep101",
+  "latestFeedVersion": 12,
+  "generatedAt": "2026-04-10T19:05:00Z",
+  "latestSnapshotId": "snap_2026_04_10_190000z",
+  "packages": [
+    {
+      "packageId": "pkg_day_2026_04_12_v3",
+      "dayId": "day_01",
+      "packageVersion": 3,
+      "updatedAt": "2026-04-10T19:00:00Z",
+      "downloadUrl": "https://example.invalid/feed/pilot-ep101/day_01/v3.json",
+      "checksumSha256": "3a65f4426f4f4d322f1f8fbebf5ce89bd0dcd212d5df31f942fb5bd6c0f8ea4f",
+      "sizeBytes": 14221
+    }
+  ]
+}
