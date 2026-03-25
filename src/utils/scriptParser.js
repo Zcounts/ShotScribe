@@ -321,18 +321,45 @@ function parseTxt(text, filename) {
   const scenes = []
   let current = null
 
-  // A character line is all-caps (with optional parenthetical), ≤ 40 chars
-  const isCharacterLine = (line) => {
+  const isTransitionLine = (line) => {
     const trimmed = line.trim()
-    if (!trimmed) return false
-    if (trimmed.length > 50) return false
-    // Strip parenthetical
-    const stripped = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim()
-    return stripped === stripped.toUpperCase() && /^[A-Z][A-Z\s'-]+$/.test(stripped) && stripped.length >= 2
+    return (
+      /^(FADE IN|FADE OUT|CUT TO|DISSOLVE TO|SMASH CUT TO|MATCH CUT TO|WIPE TO|BACK TO)\b/i.test(trimmed) ||
+      (trimmed.endsWith('TO:') && trimmed === trimmed.toUpperCase())
+    )
   }
 
-  let prevLineWasCharacter = false
-  let prevTrimmed = ''
+  const isParentheticalLine = (line) => /^\([^()]{1,60}\)$/.test(line.trim())
+
+  const nextNonEmptyLine = (index) => {
+    for (let j = index + 1; j < lines.length; j++) {
+      const t = lines[j].trim()
+      if (t) return t
+    }
+    return ''
+  }
+
+  // A character line is all-caps (with optional parenthetical), ≤ 42 chars, and followed by likely dialogue
+  const isCharacterLine = (line, lineIndex) => {
+    const trimmed = line.trim()
+    if (!trimmed) return false
+    if (trimmed.length > 42) return false
+    // Strip parenthetical
+    const stripped = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim()
+    if (!(stripped === stripped.toUpperCase() && /^[A-Z][A-Z0-9\s'.-]+$/.test(stripped) && stripped.length >= 2)) return false
+    if (SCENE_HEADING_REGEX.test(trimmed) || isTransitionLine(trimmed)) return false
+    const next = nextNonEmptyLine(lineIndex)
+    return !!next && !SCENE_HEADING_REGEX.test(next) && !isCharacterLineShallow(next) && !isTransitionLine(next)
+  }
+
+  const isCharacterLineShallow = (line) => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.length > 42) return false
+    const stripped = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim()
+    return stripped === stripped.toUpperCase() && /^[A-Z][A-Z0-9\s'.-]+$/.test(stripped)
+  }
+
+  let dialogueMode = false
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -356,43 +383,56 @@ function parseTxt(text, filename) {
         importSource: filename,
       })
       appendScreenplayElement(current, 'heading', trimmed.toUpperCase())
-      prevLineWasCharacter = false
-      prevTrimmed = trimmed
+      dialogueMode = false
       continue
     }
 
     if (!current) {
-      prevTrimmed = trimmed
       continue
     }
 
     if (!trimmed) {
-      prevLineWasCharacter = false
-      prevTrimmed = trimmed
+      dialogueMode = false
+      appendScreenplayElement(current, 'blank', '')
       continue
     }
 
-    // Character detection: all-caps line that is NOT a scene heading
-    if (isCharacterLine(trimmed) && !prevLineWasCharacter) {
+    if (isTransitionLine(trimmed)) {
+      appendScreenplayElement(current, 'transition', trimmed.toUpperCase())
+      dialogueMode = false
+      continue
+    }
+
+    if (isCharacterLineShallow(trimmed) && isCharacterLine(trimmed, i)) {
       const charName = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim()
       if (!current.characters.includes(charName)) {
         current.characters.push(charName)
       }
-      appendScreenplayElement(current, 'character', trimmed)
-      prevLineWasCharacter = true
-    } else if (prevLineWasCharacter) {
-      // This line is dialogue (follows a character cue)
-      current.dialogueCount++
-      appendScreenplayElement(current, 'dialogue', trimmed)
-      prevLineWasCharacter = false
-    } else {
-      // Action line
-      current.actionText += (current.actionText ? '\n' : '') + trimmed
-      appendScreenplayElement(current, 'action', trimmed)
-      prevLineWasCharacter = false
+      appendScreenplayElement(current, 'character', charName)
+      dialogueMode = true
+      continue
     }
 
-    prevTrimmed = trimmed
+    if (dialogueMode && isParentheticalLine(trimmed)) {
+      appendScreenplayElement(current, 'parenthetical', trimmed)
+      continue
+    }
+
+    if (dialogueMode) {
+      current.dialogueCount++
+      appendScreenplayElement(current, 'dialogue', trimmed)
+      continue
+    }
+
+    if (/^[A-Z][A-Z0-9 '.-]+$/.test(trimmed) && trimmed.length <= 60 && i + 1 < lines.length && isParentheticalLine(lines[i + 1])) {
+      appendScreenplayElement(current, 'character', trimmed)
+      if (!current.characters.includes(trimmed)) current.characters.push(trimmed)
+      dialogueMode = true
+    } else {
+      current.actionText += (current.actionText ? '\n' : '') + trimmed
+      appendScreenplayElement(current, 'action', trimmed)
+      dialogueMode = false
+    }
   }
 
   if (current) {

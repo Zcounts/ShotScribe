@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import useStore from '../store'
 import { SubTabNav } from './SubTabNav'
+import PersonProfileDialog from './PersonProfileDialog'
 
 function splitPeople(value) {
   return String(value || '')
@@ -53,26 +54,31 @@ export default function CastCrewTab() {
   const castRoster = useStore(s => s.castRoster)
   const crewRoster = useStore(s => s.crewRoster)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
+  const getCastSceneMetrics = useStore(s => s.getCastSceneMetrics)
   const callsheets = useStore(s => s.callsheets)
   const castCrewNotes = useStore(s => s.castCrewNotes)
   const setCastCrewNotes = useStore(s => s.setCastCrewNotes)
   const [activeSubTab, setActiveSubTab] = useState('Quick Reference')
+  const [editor, setEditor] = useState(null)
 
   const scheduleDays = getScheduleWithShots()
 
-  const castNames = useMemo(() => {
-    const names = new Set(castRoster.map(entry => entry.name).filter(Boolean))
-    scenes.forEach(scene => {
-      scene.shots.forEach(shot => splitPeople(shot.cast).forEach(name => names.add(name)))
-    })
-    return Array.from(names).sort((a, b) => a.localeCompare(b))
-  }, [scenes, castRoster])
+  const castNames = useMemo(() => castRoster.filter(entry => entry.name?.trim()).map(entry => entry.name.trim()), [castRoster])
 
-  const crewNames = useMemo(() => {
-    const names = new Set(crewRoster.map(entry => entry.name).filter(Boolean))
-    ;['Director', '1st AD', 'DP', 'Gaffer', 'Sound Mixer'].forEach(name => names.add(name))
-    return Array.from(names).sort((a, b) => a.localeCompare(b))
-  }, [crewRoster])
+  const crewRows = useMemo(() => {
+    return crewRoster
+      .filter(member => member.name?.trim())
+      .map(member => {
+        const callsheetAppearances = Object.values(callsheets || {}).reduce((count, callsheet) => {
+          const hasMember = (callsheet?.crew || []).some(row => row.name?.toLowerCase() === member.name?.toLowerCase())
+          return count + (hasMember ? 1 : 0)
+        }, 0)
+        return {
+          ...member,
+          daysBooked: callsheetAppearances,
+        }
+      })
+  }, [crewRoster, callsheets])
 
   const castMatrix = useMemo(() => {
     return castNames.map(actor => {
@@ -93,42 +99,30 @@ export default function CastCrewTab() {
   }, [castNames, scheduleDays])
 
   const castListRows = useMemo(() => {
-    return castNames.map(name => {
-      const rosterEntry = castRoster.find(entry => entry.name?.toLowerCase() === name.toLowerCase())
-      const scenesUsed = new Set()
-      let shotCount = 0
-      scenes.forEach(scene => {
-        scene.shots.forEach(shot => {
-          if (splitPeople(shot.cast).some(person => person.toLowerCase() === name.toLowerCase())) {
-            shotCount += 1
-            scenesUsed.add(scene.sceneLabel || scene.location || 'Unlabeled')
-          }
+    return castRoster
+      .filter(entry => entry.name?.trim())
+      .map(entry => {
+        const shotScenesUsed = new Set()
+        let shotCount = 0
+        scenes.forEach(scene => {
+          scene.shots.forEach(shot => {
+            if (splitPeople(shot.cast).some(person => person.toLowerCase() === entry.name.toLowerCase())) {
+              shotCount += 1
+              shotScenesUsed.add(scene.sceneLabel || scene.location || 'Unlabeled')
+            }
+          })
         })
+        const totalMetrics = getCastSceneMetrics(entry.id)
+        return {
+          ...entry,
+          characterDisplay: (entry.characterIds && entry.characterIds.length > 0) ? entry.characterIds.join(', ') : (entry.character || '—'),
+          shotScenesCount: shotScenesUsed.size,
+          shotCount,
+          scriptSceneCount: totalMetrics.sceneCount,
+          scriptPageCount: totalMetrics.pageCount,
+        }
       })
-      return {
-        name,
-        character: rosterEntry?.character || '—',
-        scenesCount: scenesUsed.size,
-        shotCount,
-      }
-    })
-  }, [castNames, castRoster, scenes])
-
-  const crewListRows = useMemo(() => {
-    return crewNames.map(name => {
-      const rosterEntry = crewRoster.find(entry => entry.name?.toLowerCase() === name.toLowerCase())
-      const callsheetAppearances = Object.values(callsheets || {}).reduce((count, callsheet) => {
-        const hasMember = (callsheet?.crew || []).some(member => member.name?.toLowerCase() === name.toLowerCase())
-        return count + (hasMember ? 1 : 0)
-      }, 0)
-      return {
-        name,
-        role: rosterEntry?.role || '—',
-        department: rosterEntry?.department || 'Production',
-        daysBooked: callsheetAppearances,
-      }
-    })
-  }, [crewNames, crewRoster, callsheets])
+  }, [castRoster, scenes, getCastSceneMetrics])
 
   return (
     <div className="h-full bg-canvas px-6 py-5 overflow-auto space-y-4">
@@ -146,11 +140,11 @@ export default function CastCrewTab() {
       {activeSubTab === 'Quick Reference' ? (
         <>
           <SectionShell title="Cast" subtitle="Fast day-by-day availability matrix for on-set lookup.">
-            <div className="overflow-auto max-h-[50vh]">
+            <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead className="sticky top-0 z-20">
                   <tr>
-                    <th className="sticky left-0 z-30 min-w-[140px] bg-canvas-dark text-left text-xs text-ink font-semibold px-3 py-2 border-r border-slate/10">Actor</th>
+                    <th className="sticky left-0 z-30 min-w-[160px] bg-canvas-dark text-left text-xs text-ink font-semibold px-3 py-2 border-r border-slate/10">Actor</th>
                     {scheduleDays.map(day => (
                       <th key={day.id} className="bg-[#2D5A3D] text-white font-semibold text-xs text-center px-3 py-2 border-r border-slate/10 whitespace-nowrap">
                         {formatDayHeader(day)}
@@ -161,7 +155,7 @@ export default function CastCrewTab() {
                 <tbody>
                   {castMatrix.map((row, rowIndex) => (
                     <tr key={row.actor} className={rowIndex % 2 === 0 ? 'bg-canvas' : 'bg-canvas-dark/40'}>
-                      <td className="sticky left-0 z-10 min-w-[140px] px-3 py-2 text-ink font-medium border-b border-r border-slate/10 bg-inherit">{row.actor}</td>
+                      <td className="sticky left-0 z-10 min-w-[160px] px-3 py-2 text-ink font-medium border-b border-r border-slate/10 bg-inherit">{row.actor}</td>
                       {row.perDay.map((status, i) => (
                         <td key={`${row.actor}-${scheduleDays[i]?.id || i}`} className="px-3 py-2 border-b border-r border-slate/10">
                           <Circle status={status} />
@@ -174,12 +168,12 @@ export default function CastCrewTab() {
             </div>
           </SectionShell>
 
-          <SectionShell title="Crew" subtitle="Core departments snapshot for quick daily briefing.">
+          <SectionShell title="Crew" subtitle="Assigned crew only.">
             <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {crewListRows.map(member => (
-                <div key={member.name} className="border border-slate/15 rounded p-2 bg-canvas/50">
+              {crewRows.map(member => (
+                <div key={member.id} className="border border-slate/15 rounded p-2 bg-canvas/50" onDoubleClick={() => setEditor({ type: 'crew', id: member.id })}>
                   <div className="text-sm font-semibold text-ink">{member.name}</div>
-                  <div className="text-xs text-slate">{member.department} · {member.role}</div>
+                  <div className="text-xs text-slate">{member.department} · {member.role || '—'}</div>
                   <div className="text-[11px] text-slate-light mt-1">Callsheet days: {member.daysBooked}</div>
                 </div>
               ))}
@@ -188,22 +182,24 @@ export default function CastCrewTab() {
         </>
       ) : (
         <>
-          <SectionShell title="Cast" subtitle="Detailed cast roster with character and script coverage.">
+          <SectionShell title="Cast" subtitle="Actual performer profiles linked to characters.">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="text-xs uppercase tracking-[0.08em] text-slate border-b border-slate/15">
                   <th className="text-left p-2">Name</th>
-                  <th className="text-left p-2">Character</th>
+                  <th className="text-left p-2">Character Played</th>
                   <th className="text-right p-2">Scenes</th>
+                  <th className="text-right p-2">Pages</th>
                   <th className="text-right p-2">Shots</th>
                 </tr>
               </thead>
               <tbody>
                 {castListRows.map(row => (
-                  <tr key={row.name} className="border-b border-slate/10">
+                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => setEditor({ type: 'cast', id: row.id })}>
                     <td className="p-2 font-medium text-ink">{row.name}</td>
-                    <td className="p-2 text-slate">{row.character}</td>
-                    <td className="p-2 text-right text-slate">{row.scenesCount}</td>
+                    <td className="p-2 text-slate">{row.characterDisplay}</td>
+                    <td className="p-2 text-right text-slate">{row.scriptSceneCount}</td>
+                    <td className="p-2 text-right text-slate">{row.scriptPageCount.toFixed(2)}</td>
                     <td className="p-2 text-right text-slate">{row.shotCount}</td>
                   </tr>
                 ))}
@@ -211,7 +207,7 @@ export default function CastCrewTab() {
             </table>
           </SectionShell>
 
-          <SectionShell title="Crew" subtitle="Detailed crew roster with department and callsheet usage.">
+          <SectionShell title="Crew" subtitle="Only real assigned crew profiles.">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="text-xs uppercase tracking-[0.08em] text-slate border-b border-slate/15">
@@ -222,11 +218,11 @@ export default function CastCrewTab() {
                 </tr>
               </thead>
               <tbody>
-                {crewListRows.map(row => (
-                  <tr key={row.name} className="border-b border-slate/10">
+                {crewRows.map(row => (
+                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => setEditor({ type: 'crew', id: row.id })}>
                     <td className="p-2 font-medium text-ink">{row.name}</td>
-                    <td className="p-2 text-slate">{row.department}</td>
-                    <td className="p-2 text-slate">{row.role}</td>
+                    <td className="p-2 text-slate">{row.department || '—'}</td>
+                    <td className="p-2 text-slate">{row.role || '—'}</td>
                     <td className="p-2 text-right text-slate">{row.daysBooked}</td>
                   </tr>
                 ))}
@@ -249,6 +245,14 @@ export default function CastCrewTab() {
         placeholder="Add production notes about cast and crew availability..."
         className="w-full min-h-[110px] bg-paper border border-slate/20 rounded-md p-3 text-sm text-slate outline-none"
       />
+
+      {editor && (
+        <PersonProfileDialog
+          personType={editor.type}
+          person={(editor.type === 'cast' ? castRoster : crewRoster).find(entry => entry.id === editor.id)}
+          onClose={() => setEditor(null)}
+        />
+      )}
     </div>
   )
 }

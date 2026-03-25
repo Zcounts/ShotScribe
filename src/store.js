@@ -61,6 +61,37 @@ let sceneIdCounter = 0
 let dayIdCounter = 0
 let blockIdCounter = 0
 
+function normalizeCastEntry(entry = {}) {
+  const characterIds = Array.isArray(entry.characterIds)
+    ? entry.characterIds.filter(Boolean)
+    : (entry.character ? [String(entry.character).trim()] : [])
+  return {
+    id: entry.id || `cast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name: entry.name || '',
+    email: entry.email || '',
+    phone: entry.phone || '',
+    role: entry.role || 'Cast',
+    department: entry.department || 'Cast',
+    character: entry.character || characterIds[0] || '',
+    characterIds,
+    notes: entry.notes || '',
+    metadata: entry.metadata || {},
+  }
+}
+
+function normalizeCrewEntry(entry = {}) {
+  return {
+    id: entry.id || `crew_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name: entry.name || '',
+    email: entry.email || '',
+    phone: entry.phone || '',
+    role: entry.role || '',
+    department: entry.department || 'Production',
+    notes: entry.notes || '',
+    metadata: entry.metadata || {},
+  }
+}
+
 function createShot(overrides = {}) {
   shotCounter++
   return {
@@ -653,22 +684,23 @@ const useStore = create((set, get) => ({
   // Upsert a cast member into the global roster (matched by id or name+character).
   upsertCastRosterEntry: (entry) => {
     set(state => {
-      const existing = state.castRoster.findIndex(r => r.id === entry.id)
+      const normalized = normalizeCastEntry(entry)
+      const existing = state.castRoster.findIndex(r => r.id === normalized.id)
       if (existing !== -1) {
         const next = [...state.castRoster]
-        next[existing] = { ...next[existing], ...entry }
+        next[existing] = normalizeCastEntry({ ...next[existing], ...normalized })
         return { castRoster: next }
       }
       // Check for same name+character to avoid duplicates when re-adding
       const byName = state.castRoster.findIndex(
-        r => r.name && r.name === entry.name && r.character === entry.character
+        r => r.name && r.name === normalized.name && r.character === normalized.character
       )
       if (byName !== -1) {
         const next = [...state.castRoster]
-        next[byName] = { ...next[byName], ...entry }
+        next[byName] = normalizeCastEntry({ ...next[byName], ...normalized })
         return { castRoster: next }
       }
-      return { castRoster: [...state.castRoster, entry] }
+      return { castRoster: [...state.castRoster, normalized] }
     })
     get()._scheduleAutoSave()
   },
@@ -676,23 +708,76 @@ const useStore = create((set, get) => ({
   // Upsert a crew member into the global roster (matched by id or name+role).
   upsertCrewRosterEntry: (entry) => {
     set(state => {
-      const existing = state.crewRoster.findIndex(r => r.id === entry.id)
+      const normalized = normalizeCrewEntry(entry)
+      const existing = state.crewRoster.findIndex(r => r.id === normalized.id)
       if (existing !== -1) {
         const next = [...state.crewRoster]
-        next[existing] = { ...next[existing], ...entry }
+        next[existing] = normalizeCrewEntry({ ...next[existing], ...normalized })
         return { crewRoster: next }
       }
       const byName = state.crewRoster.findIndex(
-        r => r.name && r.name === entry.name && r.role === entry.role
+        r => r.name && r.name === normalized.name && r.role === normalized.role
       )
       if (byName !== -1) {
         const next = [...state.crewRoster]
-        next[byName] = { ...next[byName], ...entry }
+        next[byName] = normalizeCrewEntry({ ...next[byName], ...normalized })
         return { crewRoster: next }
       }
-      return { crewRoster: [...state.crewRoster, entry] }
+      return { crewRoster: [...state.crewRoster, normalized] }
     })
     get()._scheduleAutoSave()
+  },
+
+  removeCastRosterEntry: (id) => {
+    set(state => ({ castRoster: state.castRoster.filter(entry => entry.id !== id) }))
+    get()._scheduleAutoSave()
+  },
+
+  removeCrewRosterEntry: (id) => {
+    set(state => ({ crewRoster: state.crewRoster.filter(entry => entry.id !== id) }))
+    get()._scheduleAutoSave()
+  },
+
+  getScriptCharacterCatalog: () => {
+    const characters = new Map()
+    get().scriptScenes.forEach(scene => {
+      ;(scene.characters || []).forEach(name => {
+        const key = String(name || '').trim()
+        if (!key) return
+        const existing = characters.get(key) || { id: key, name: key, sceneIds: new Set() }
+        existing.sceneIds.add(scene.id)
+        characters.set(key, existing)
+      })
+    })
+    return Array.from(characters.values()).map(item => ({ ...item, sceneIds: Array.from(item.sceneIds) }))
+  },
+
+  getCastSceneMetrics: (castId, dayId = null) => {
+    const { castRoster, scriptScenes, schedule, getScheduleWithShots } = get()
+    const cast = castRoster.find(entry => entry.id === castId)
+    if (!cast) return { sceneCount: 0, pageCount: 0, sceneIds: [] }
+    const linkedChars = new Set([...(cast.characterIds || []), cast.character].map(v => String(v || '').trim()).filter(Boolean))
+    if (linkedChars.size === 0) return { sceneCount: 0, pageCount: 0, sceneIds: [] }
+
+    const allSceneIds = new Set(
+      scriptScenes
+        .filter(scene => (scene.characters || []).some(char => linkedChars.has(String(char || '').trim())))
+        .map(scene => scene.id)
+    )
+
+    let filteredSceneIds = allSceneIds
+    if (dayId) {
+      const day = getScheduleWithShots().find(d => d.id === dayId) || schedule.find(d => d.id === dayId)
+      const daySceneIds = new Set(
+        (day?.blocks || [])
+          .map(block => block?.shotData?.linkedSceneId || null)
+          .filter(Boolean)
+      )
+      filteredSceneIds = new Set([...allSceneIds].filter(id => daySceneIds.has(id)))
+    }
+    const selectedScenes = scriptScenes.filter(scene => filteredSceneIds.has(scene.id))
+    const pageCount = selectedScenes.reduce((sum, scene) => sum + Number(scene.pageCount || 0), 0)
+    return { sceneCount: selectedScenes.length, pageCount, sceneIds: Array.from(filteredSceneIds) }
   },
 
   // ── Scene helpers ────────────────────────────────────────────────────
@@ -1104,8 +1189,8 @@ const useStore = create((set, get) => ({
       })),
       callsheets: callsheets || {},
       callsheetSectionConfig: callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG,
-      castRoster: castRoster || [],
-      crewRoster: crewRoster || [],
+      castRoster: (castRoster || []).map(normalizeCastEntry),
+      crewRoster: (crewRoster || []).map(normalizeCrewEntry),
       castCrewNotes: castCrewNotes || '',
       // Script import state
       scriptScenes: (scriptScenes || []).map(s => ({
@@ -1421,8 +1506,8 @@ const useStore = create((set, get) => ({
       callsheets: (typeof data.callsheets === 'object' && data.callsheets !== null)
         ? data.callsheets
         : {},
-      castRoster: Array.isArray(data.castRoster) ? data.castRoster : [],
-      crewRoster: Array.isArray(data.crewRoster) ? data.crewRoster : [],
+      castRoster: Array.isArray(data.castRoster) ? data.castRoster.map(normalizeCastEntry) : [],
+      crewRoster: Array.isArray(data.crewRoster) ? data.crewRoster.map(normalizeCrewEntry) : [],
       castCrewNotes: typeof data.castCrewNotes === 'string' ? data.castCrewNotes : '',
       callsheetSectionConfig: (() => {
         const saved = data.callsheetSectionConfig

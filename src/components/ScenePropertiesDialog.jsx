@@ -29,9 +29,9 @@ export default function ScenePropertiesDialog() {
 
   return (
     <div className="modal-overlay" style={{ zIndex: 700 }} onClick={close}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 12 }}>Scene Properties</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', rowGap: 8, columnGap: 10, alignItems: 'center' }}>
+      <div className="modal" style={{ width: 'min(860px, 92vw)', maxWidth: 860, maxHeight: '84vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ marginBottom: 16, fontSize: 22 }}>Scene Properties</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', rowGap: 12, columnGap: 14, alignItems: 'center' }}>
           <label>Scene Number</label>
           <input value={isScript ? (scene.sceneNumber || '') : (scene.sceneLabel || '')} onChange={(e) => update(isScript ? { sceneNumber: e.target.value } : { sceneLabel: e.target.value })} />
 
@@ -53,7 +53,7 @@ export default function ScenePropertiesDialog() {
           {isScript && (
             <>
               <label>Estimated Pages</label>
-              <div style={{ fontSize: 12, color: '#4A5568' }}>
+              <div style={{ fontSize: 13, color: '#4A5568' }}>
                 {pagination ? `${pagination.pageCount.toFixed(2)} pp · p${pagination.startPage}–${pagination.endPage}` : '—'}
               </div>
             </>
