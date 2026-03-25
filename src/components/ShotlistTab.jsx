@@ -70,6 +70,15 @@ function ShotlistSceneBadge({ shot }) {
             boxShadow: '0 4px 16px rgba(0,0,0,0.7)', minWidth: 170, maxHeight: 200, overflowY: 'auto', padding: 4,
           }}
         >
+          <div className="p-2 border-b border-slate/15">
+            <input
+              autoFocus
+              placeholder="Search by number, location, or cast..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-[#2C2C2E] text-white text-sm px-2 py-1.5 rounded outline-none placeholder-slate/50 focus:ring-1 focus:ring-[#E84040]/50"
+            />
+          </div>
           {linked && (
             <button onClick={() => { linkShotToScene(shot.id, null); setOpen(false) }}
               style={{ width: '100%', textAlign: 'left', padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace', color: '#f87171', borderRadius: 3 }}
@@ -1634,12 +1643,3 @@ export default function ShotlistTab({ containerRef }) {
     </div>
   )
 }
-          <div className="p-2 border-b border-slate/15">
-            <input
-              autoFocus
-              placeholder="Search by number, location, or cast..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full bg-[#2C2C2E] text-white text-sm px-2 py-1.5 rounded outline-none placeholder-slate/50 focus:ring-1 focus:ring-[#E84040]/50"
-            />
-          </div>
