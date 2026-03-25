@@ -2,14 +2,52 @@ import React, { useMemo, useRef, useState, useEffect } from 'react'
 import useStore from '../store'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 
-function detectLineType(line) {
-  const t = (line || '').trim()
-  if (!t) return 'blank'
-  if (/^(INT\.?|EXT\.?|INT\/EXT\.?)/.test(t) || /^\d+[A-Z\.]?\s+/.test(t)) return 'heading'
-  if (/^[A-Z0-9 '\-()]+$/.test(t) && t.length <= 30 && !t.includes('.')) return 'character'
-  if (/^\(.+\)$/.test(t)) return 'parenthetical'
-  if (/:$/.test(t) || /TO:$/.test(t)) return 'transition'
-  return 'action'
+function buildScreenplayElements(text) {
+  const lines = String(text || '').split(/\r?\n/)
+  const elements = []
+  let expectingDialogue = false
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\t/g, '  ')
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      expectingDialogue = false
+      elements.push({ type: 'blank', text: '' })
+      continue
+    }
+
+    if (/^(INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?)/i.test(trimmed) || /^\d+[A-Z]?\s+/.test(trimmed)) {
+      expectingDialogue = false
+      elements.push({ type: 'heading', text: trimmed.toUpperCase() })
+      continue
+    }
+
+    if (/^[A-Z0-9 '\-.()]+$/.test(trimmed) && trimmed.length <= 38 && !trimmed.includes(':')) {
+      expectingDialogue = true
+      elements.push({ type: 'character', text: trimmed.toUpperCase() })
+      continue
+    }
+
+    if (/^\(.+\)$/.test(trimmed) && expectingDialogue) {
+      elements.push({ type: 'parenthetical', text: trimmed })
+      continue
+    }
+
+    if (trimmed.endsWith('TO:') || trimmed.endsWith(':')) {
+      expectingDialogue = false
+      elements.push({ type: 'transition', text: trimmed.toUpperCase() })
+      continue
+    }
+
+    if (expectingDialogue) {
+      elements.push({ type: 'dialogue', text: line.trim() })
+    } else {
+      elements.push({ type: 'action', text: line.trim() })
+    }
+  }
+
+  return elements
 }
 
 export default function ScriptTab() {
@@ -27,6 +65,7 @@ export default function ScriptTab() {
   const [selectionBar, setSelectionBar] = useState(null)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
+
   const shotCounts = useMemo(() => {
     const map = {}
     scenes.forEach(sc => sc.shots.forEach(sh => {
@@ -35,11 +74,22 @@ export default function ScriptTab() {
     return map
   }, [scenes])
 
+  const screenplayBySceneId = useMemo(() => {
+    const result = {}
+    orderedScenes.forEach(sc => {
+      result[sc.id] = buildScreenplayElements(sc.actionText || '')
+    })
+    return result
+  }, [orderedScenes])
+
   useEffect(() => {
     const io = new IntersectionObserver((entries) => {
-      const visible = entries.filter(e => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+      const visible = entries
+        .filter(e => e.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
       if (visible?.target?.dataset?.sceneid) setActiveSceneId(visible.target.dataset.sceneid)
     }, { root: rightRef.current, threshold: [0.25, 0.5, 0.75] })
+
     Object.values(headingRefs.current).forEach(el => el && io.observe(el))
     return () => io.disconnect()
   }, [orderedScenes])
@@ -59,17 +109,60 @@ export default function ScriptTab() {
         setSelectionBar(null)
         return
       }
+
       const range = sel.getRangeAt(0)
       const rect = range.getBoundingClientRect()
       const sceneEl = range.startContainer.parentElement?.closest('[data-sceneid]')
       const sceneId = sceneEl?.getAttribute('data-sceneid')
       if (!sceneId) return
+
       const scene = scriptScenes.find(s => s.id === sceneId)
-      setSelectionBar({ x: rect.left + window.scrollX, y: rect.top + window.scrollY - 40, text: text.slice(0, 200), sceneId, sceneNumber: scene?.sceneNumber || '' })
+      setSelectionBar({
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY - 40,
+        text: text.slice(0, 260),
+        sceneId,
+        sceneNumber: scene?.sceneNumber || '',
+      })
     }
+
     document.addEventListener('mouseup', onMouseUp)
     return () => document.removeEventListener('mouseup', onMouseUp)
   }, [scriptScenes])
+
+  const findStoryboardSceneForScriptScene = (scriptScene) => {
+    if (!scriptScene) return null
+
+    for (const storyboardScene of scenes) {
+      if (storyboardScene.shots.some(shot => shot.linkedSceneId === scriptScene.id)) return storyboardScene
+    }
+
+    const sceneNum = String(scriptScene.sceneNumber || '').toUpperCase()
+    if (sceneNum) {
+      const foundByLabel = scenes.find(scene => String(scene.sceneLabel || '').toUpperCase().includes(sceneNum))
+      if (foundByLabel) return foundByLabel
+    }
+
+    return scenes[0] || null
+  }
+
+  const handleAddShotToScriptScene = (sceneId, selectedText = '') => {
+    const scriptScene = scriptScenes.find(scene => scene.id === sceneId)
+    const targetStoryboardScene = findStoryboardSceneForScriptScene(scriptScene)
+    if (!targetStoryboardScene || !scriptScene) return
+
+    addShotWithOverrides(targetStoryboardScene.id, {
+      linkedSceneId: scriptScene.id,
+      linkedDialogueLine: selectedText || null,
+      linkedDialogueOffset: selectedText
+        ? (scriptScene.actionText || '').indexOf(selectedText)
+        : null,
+      notes: selectedText || '',
+    })
+
+    setActiveTab('shotlist')
+    setSelectionBar(null)
+  }
 
   if (orderedScenes.length === 0) {
     return <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><div style={{ textAlign: 'center' }}><p>No script imported yet.</p><button onClick={() => setActiveTab('scenes')}>Go to Scenes tab</button></div></div>
@@ -93,42 +186,43 @@ export default function ScriptTab() {
         </div>
       </div>
 
-      <div ref={rightRef} style={{ flex: 1, overflowY: 'auto', padding: 16, position: 'relative' }}>
-        {orderedScenes.map(sc => {
-          const linkedShots = scenes.flatMap(s => s.shots).filter(sh => sh.linkedSceneId === sc.id && sh.linkedDialogueLine)
-          return (
-            <section key={sc.id} data-sceneid={sc.id} style={{ padding: '16px 0', borderBottom: '1px solid rgba(74,85,104,0.15)' }}>
-              <div ref={el => { headingRefs.current[sc.id] = el }} data-sceneid={sc.id} style={{ fontWeight: 700, borderLeft: `4px solid ${sc.color || '#9ca3af'}`, padding: '6px 10px', marginBottom: 8, background: sc.color ? `${sc.color}0d` : 'rgba(148,163,184,0.08)', position: 'relative' }}>
+      <div ref={rightRef} style={{ flex: 1, overflowY: 'auto', padding: 18, position: 'relative' }}>
+        <div style={{ maxWidth: 860, margin: '0 auto', background: '#fffdf8', border: '1px solid rgba(74,85,104,0.18)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', padding: '28px 58px', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: 16, lineHeight: 1.5 }}>
+          {orderedScenes.map(sc => (
+            <section key={sc.id} data-sceneid={sc.id} style={{ padding: '20px 0', borderBottom: '1px solid rgba(74,85,104,0.12)' }}>
+              <div ref={el => { headingRefs.current[sc.id] = el }} data-sceneid={sc.id} style={{ fontWeight: 700, borderLeft: `4px solid ${sc.color || '#9ca3af'}`, padding: '6px 10px', marginBottom: 14, background: sc.color ? `${sc.color}0d` : 'rgba(148,163,184,0.08)', position: 'relative', fontFamily: 'Sora, sans-serif', fontSize: 13 }}>
                 {sc.slugline || `${sc.intExt || ''}. ${sc.location || ''} - ${sc.dayNight || ''}`}
-                <span style={{ position: 'absolute', right: 8, top: 6, fontSize: 10, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 10, padding: '1px 6px' }}>SC {sc.sceneNumber}</span>
+                <span style={{ position: 'absolute', right: 8, top: 6, fontSize: 10, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 10, padding: '1px 6px', fontFamily: 'monospace' }}>SC {sc.sceneNumber}</span>
               </div>
-              {(sc.actionText || '').split('\n').map((line, idx) => {
-                const type = detectLineType(line)
-                const base = { fontSize: 14, color: '#1f2937', marginBottom: 4, whiteSpace: 'pre-wrap' }
-                if (type === 'character') Object.assign(base, { textTransform: 'uppercase', textAlign: 'center', fontWeight: 600 })
-                if (type === 'parenthetical') Object.assign(base, { textAlign: 'center', fontStyle: 'italic', maxWidth: '40%', margin: '0 auto 4px', color: '#64748b' })
-                if (type === 'transition') Object.assign(base, { textAlign: 'right', textTransform: 'uppercase', fontWeight: 600, color: '#64748b' })
-                if (type === 'action') Object.assign(base, { maxWidth: '100%' })
-                const linked = linkedShots.find(sh => line.includes(sh.linkedDialogueLine || ''))
-                return <div key={idx} style={base}>{line}{linked && <mark style={{ textDecoration: 'underline', textDecorationColor: '#E84040', background: 'transparent' }}> </mark>}</div>
+
+              {screenplayBySceneId[sc.id].map((line, idx) => {
+                const shared = { whiteSpace: 'pre-wrap', marginBottom: 4 }
+                if (line.type === 'blank') return <div key={`${sc.id}-${idx}`} style={{ height: 10 }} />
+                if (line.type === 'heading') return <div key={`${sc.id}-${idx}`} style={{ ...shared, textTransform: 'uppercase', fontWeight: 700 }}>{line.text}</div>
+                if (line.type === 'action') return <div key={`${sc.id}-${idx}`} style={{ ...shared, marginRight: '10%' }}>{line.text}</div>
+                if (line.type === 'character') return <div key={`${sc.id}-${idx}`} style={{ ...shared, marginLeft: '38%', textTransform: 'uppercase' }}>{line.text}</div>
+                if (line.type === 'parenthetical') return <div key={`${sc.id}-${idx}`} style={{ ...shared, marginLeft: '33%', color: '#374151' }}>{line.text}</div>
+                if (line.type === 'dialogue') return <div key={`${sc.id}-${idx}`} style={{ ...shared, marginLeft: '28%', width: '48%' }}>{line.text}</div>
+                if (line.type === 'transition') return <div key={`${sc.id}-${idx}`} style={{ ...shared, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 }}>{line.text}</div>
+                return null
               })}
+
+              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => handleAddShotToScriptScene(sc.id)}
+                  style={{ border: '1px solid rgba(74,85,104,0.25)', background: '#FAF8F4', borderRadius: 4, padding: '6px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em' }}
+                >
+                  + Add Shot to SC {sc.sceneNumber}
+                </button>
+              </div>
             </section>
-          )
-        })}
+          ))}
+        </div>
       </div>
 
       {selectionBar && (
         <div style={{ position: 'fixed', left: selectionBar.x, top: selectionBar.y, zIndex: 120, background: '#1c1c1e', color: '#fff', borderRadius: 8, padding: '6px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => {
-            const boardScene = scenes[0]
-            addShotWithOverrides(boardScene?.id, {
-              linkedSceneId: selectionBar.sceneId,
-              linkedDialogueLine: selectionBar.text,
-              linkedDialogueOffset: (scriptScenes.find(s => s.id === selectionBar.sceneId)?.actionText || '').indexOf(selectionBar.text),
-              notes: selectionBar.text,
-            })
-            setSelectionBar(null)
-          }} style={{ border: 'none', background: 'none', color: '#fff', cursor: 'pointer' }}>+ Add Shot to SC {selectionBar.sceneNumber}</button>
+          <button onClick={() => handleAddShotToScriptScene(selectionBar.sceneId, selectionBar.text)} style={{ border: 'none', background: 'none', color: '#fff', cursor: 'pointer' }}>+ Add Shot to SC {selectionBar.sceneNumber}</button>
           <button onClick={() => {
             const scene = scriptScenes.find(s => s.id === selectionBar.sceneId)
             if (scene) updateScriptScene(scene.id, { notes: `${scene.notes || ''}\n${selectionBar.text}`.trim() })

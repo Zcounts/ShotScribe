@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
+import ClapperIcon from './ClapperIcon'
 
 let mobileExportServicePromise = null
 
@@ -148,17 +149,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
       <div className="toolbar">
       {/* Left: Project name */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        {/* App icon — clapper board style */}
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="flex-shrink-0">
-          <rect x="1" y="5" width="18" height="13" rx="1.5" fill="#2C2C2E" stroke="#3A3A3C" strokeWidth="0.75"/>
-          <rect x="1" y="5" width="18" height="4" rx="1.5" fill="#E84040"/>
-          <rect x="3" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
-          <rect x="7" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
-          <rect x="11" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
-          <rect x="15" y="5.5" width="2" height="3" rx="0.5" fill="#FAF8F4" opacity="0.8"/>
-          <rect x="3" y="2" width="2" height="4" rx="0.5" fill="#1A1A1A" transform="rotate(-15 4 4)"/>
-          <rect x="8" y="1.5" width="2" height="4" rx="0.5" fill="#1A1A1A" transform="rotate(-15 9 3.5)"/>
-        </svg>
+        <ClapperIcon size={20} className="flex-shrink-0" />
 
         {editingName ? (
           <input

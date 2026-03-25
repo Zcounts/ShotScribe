@@ -3431,24 +3431,24 @@ export default function ScheduleTab() {
   }, [schedule, listActiveDayId])
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-canvas">
-      <div className="shrink-0 px-6 pt-5 pb-2">
-        <h2 className="text-xl font-bold text-ink">Schedule</h2>
-        <p className="text-sm text-slate">{subtitleText}</p>
-      </div>
+    <div className="flex flex-col h-full overflow-y-auto bg-canvas">
+      <div className="sticky top-0 z-40 px-6 py-3 border-b border-slate/10 bg-canvas/95 backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-4">
 
-      <div className="shrink-0 px-6 pb-3 flex items-center justify-between gap-3 flex-wrap">
-        <SubTabNav
-          tabs={['List', 'Stripboard', 'Calendar']}
-          active={activeSubTab}
-          onChange={(tab) => {
-            if (tab === 'List') setScheduleView('list')
-            if (tab === 'Stripboard') setScheduleView('stripboard')
-            if (tab === 'Calendar') setScheduleView('calendar')
-          }}
-        />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+            <SubTabNav
+              tabs={['List', 'Stripboard', 'Calendar']}
+              active={activeSubTab}
+              onChange={(tab) => {
+                if (tab === 'List') setScheduleView('list')
+                if (tab === 'Stripboard') setScheduleView('stripboard')
+                if (tab === 'Calendar') setScheduleView('calendar')
+              }}
+            />
+            <p className="text-sm text-slate whitespace-nowrap">{subtitleText}</p>
+          </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {scheduleView === 'stripboard' && schedule.length > 0 && (
             <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1' }}>
               <button
@@ -3558,7 +3558,9 @@ export default function ScheduleTab() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+      </div>
+
+      <div className="px-6 pb-6">
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
       ) : scheduleView === 'calendar' ? (
@@ -3571,16 +3573,18 @@ export default function ScheduleTab() {
         />
       ) : scheduleView === 'list' ? (
         <>
-          <DayTabBar
-            days={dayTabs}
-            activeDay={listActiveDayId}
-            onSelect={(dayId) => {
-              setListActiveDayId(dayId)
-              const el = document.getElementById(`sched-day-${dayId}`)
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }}
-            onAddDay={() => addShootingDay()}
-          />
+          <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
+            <DayTabBar
+              days={dayTabs}
+              activeDay={listActiveDayId}
+              onSelect={(dayId) => {
+                setListActiveDayId(dayId)
+                const el = document.getElementById(`sched-day-${dayId}`)
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+              onAddDay={() => addShootingDay()}
+            />
+          </div>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}

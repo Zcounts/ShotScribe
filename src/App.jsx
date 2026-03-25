@@ -183,7 +183,7 @@ function SceneSection({
                 Delete Scene
               </button>
             </div>
-          </div>
+            </div>
         </div>
       )}
 
@@ -214,6 +214,7 @@ export default function App() {
   const addScene = useStore(s => s.addScene)
   const activeTab = useStore(s => s.activeTab)
   const setActiveTab = useStore(s => s.setActiveTab)
+  const scriptScenes = useStore(s => s.scriptScenes)
 
   const projectName = useStore(s => s.projectName)
   const saveProject = useStore(s => s.saveProject)
@@ -226,8 +227,11 @@ export default function App() {
   const [restorePrompt, setRestorePrompt] = useState(null) // { data, timeStr, totalShots }
   // When set, overrides activeTab in the export modal (e.g. explicit pick from toolbar dropdown).
   const [forcedExportTab, setForcedExportTab] = useState(null)
+  const [showStoryboardOutline, setShowStoryboardOutline] = useState(true)
+  const [storyboardConfigOpen, setStoryboardConfigOpen] = useState(false)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
+  const storyboardSceneRefs = useRef({})
   // shotlistRef points to the ShotlistTab root container for PDF export
   const shotlistRef = useRef(null)
 
@@ -305,6 +309,23 @@ export default function App() {
     runningOffset += Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }
 
+  const sceneNavItems = scriptScenes.length > 0
+    ? scriptScenes.map(sc => ({
+        id: `script-${sc.id}`,
+        label: `SC ${sc.sceneNumber || '—'}`,
+        subtitle: sc.location || sc.slugline || 'Script scene',
+      }))
+    : scenes.map(scene => ({
+        id: scene.id,
+        label: scene.sceneLabel || 'SCENE',
+        subtitle: scene.location || `${scene.intOrExt || ''} ${scene.dayNight || ''}`,
+      }))
+
+  const jumpToStoryboardScene = (sceneId) => {
+    const node = storyboardSceneRefs.current[sceneId]
+    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div
       className="flex flex-col"
@@ -370,26 +391,71 @@ export default function App() {
 
       {/* Main content */}
       {activeTab === 'storyboard' ? (
-        <div className="flex-1 py-6 px-4 overflow-auto canvas-texture">
-          <div className="pages-container">
-            {scenes.map((scene, sceneIdx) => (
-              <React.Fragment key={scene.id}>
-                {/* Scene separator (between scenes) */}
-                {sceneIdx > 0 && (
-                  <div className="scene-separator">
-                    <span className="scene-separator-label">NEW SCENE</span>
-                  </div>
-                )}
+        <div className="flex-1 py-4 px-4 overflow-auto canvas-texture">
+          <div style={{ position: 'sticky', top: 0, zIndex: 35, display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="toolbar-btn"
+                onClick={() => setStoryboardConfigOpen(o => !o)}
+              >
+                Configure
+              </button>
+              {storyboardConfigOpen && (
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, padding: 10, minWidth: 220, boxShadow: '0 6px 20px rgba(0,0,0,0.15)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#4A5568' }}>
+                    <input
+                      type="checkbox"
+                      checked={showStoryboardOutline}
+                      onChange={(e) => setShowStoryboardOutline(e.target.checked)}
+                    />
+                    Show Scene Outline
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            {showStoryboardOutline && (
+              <aside style={{ width: 240, position: 'sticky', top: 42, alignSelf: 'flex-start', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
+                <div style={{ padding: '8px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', borderBottom: '1px solid rgba(74,85,104,0.12)' }}>Scene Outline</div>
+                {sceneNavItems.map(item => (
+                  <button key={item.id} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: 'none', padding: '8px 10px', cursor: 'pointer' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div>
+                    <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
+                  </button>
+                ))}
+              </aside>
+            )}
+            <div className="pages-container" style={{ flex: 1 }}>
+              {scenes.map((scene, sceneIdx) => (
+                <div
+                  key={scene.id}
+                  ref={el => {
+                    if (el) {
+                      storyboardSceneRefs.current[scene.id] = el
+                      if (scriptScenes[sceneIdx]) {
+                        storyboardSceneRefs.current[`script-${scriptScenes[sceneIdx].id}`] = el
+                      }
+                    }
+                  }}
+                  id={scene.id}
+                >
+                  {/* Scene separator (between scenes) */}
+                  {sceneIdx > 0 && (
+                    <div className="scene-separator">
+                      <span className="scene-separator-label">NEW SCENE</span>
+                    </div>
+                  )}
 
-                <SceneSection
-                  scene={scene}
-                  columnCount={columnCount}
-                  useDropdowns={useDropdowns}
-                  pageIndexOffset={scenePageOffsets[sceneIdx]}
-                  pageRefs={pageRefs}
-                />
-              </React.Fragment>
-            ))}
+                  <SceneSection
+                    scene={scene}
+                    columnCount={columnCount}
+                    useDropdowns={useDropdowns}
+                    pageIndexOffset={scenePageOffsets[sceneIdx]}
+                    pageRefs={pageRefs}
+                  />
+                </div>
+              ))}
 
             {/* Add Scene button */}
             <div className="add-scene-row">
@@ -405,6 +471,7 @@ export default function App() {
                 </svg>
                 Add Scene
               </button>
+            </div>
             </div>
           </div>
         </div>
