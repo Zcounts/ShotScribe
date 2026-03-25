@@ -69,6 +69,8 @@ export default function SettingsPanel() {
   const setTheme = useStore(s => s.setTheme)
   const setAutoSave = useStore(s => s.setAutoSave)
   const setUseDropdowns = useStore(s => s.setUseDropdowns)
+  const scriptSettings = useStore(s => s.scriptSettings)
+  const setScriptSettings = useStore(s => s.setScriptSettings)
 
   const shortcuts = useMemo(() => SHORTCUTS[activeTab] || SHORTCUTS.storyboard, [activeTab])
   const tabLabel = { storyboard: 'Storyboard', shotlist: 'Shotlist', schedule: 'Schedule', callsheet: 'Callsheet' }[activeTab] || activeTab
@@ -187,6 +189,73 @@ export default function SettingsPanel() {
             </span>
           </div>
         </SettingsRow>
+
+        {/* Script & Estimation section */}
+        <div style={{ borderTop: '1px solid #374151', paddingTop: 14, marginTop: 4, marginBottom: 14 }}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            Script & Estimation
+          </p>
+
+          <SettingsRow label="Base Minutes Per Page">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="range"
+                min={3}
+                max={10}
+                step={0.5}
+                value={scriptSettings?.baseMinutesPerPage ?? 5}
+                onChange={e => setScriptSettings({ baseMinutesPerPage: parseFloat(e.target.value) })}
+                style={{ flex: 1, accentColor: '#3b82f6' }}
+              />
+              <span style={{ fontSize: 12, color: '#ddd', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
+                {scriptSettings?.baseMinutesPerPage ?? 5}
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: '#555', marginTop: 2 }}>
+              1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
+            </div>
+          </SettingsRow>
+
+          <SettingsRow label="Auto-Suggest Tags">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setScriptSettings({ autoSuggestTags: !(scriptSettings?.autoSuggestTags ?? true) })}
+                className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${
+                  (scriptSettings?.autoSuggestTags ?? true) ? 'bg-blue-500' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                    (scriptSettings?.autoSuggestTags ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+              <span className="text-sm text-gray-300">
+                {(scriptSettings?.autoSuggestTags ?? true) ? 'On' : 'Off'}
+              </span>
+            </div>
+          </SettingsRow>
+
+          <SettingsRow label="Show Confidence Indicators">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setScriptSettings({ showConfidenceIndicators: !(scriptSettings?.showConfidenceIndicators ?? true) })}
+                className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${
+                  (scriptSettings?.showConfidenceIndicators ?? true) ? 'bg-blue-500' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                    (scriptSettings?.showConfidenceIndicators ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+              <span className="text-sm text-gray-300">
+                {(scriptSettings?.showConfidenceIndicators ?? true) ? 'Enabled' : 'Hidden'}
+              </span>
+            </div>
+          </SettingsRow>
+        </div>
 
         {/* Keyboard Shortcuts — context-aware: shows shortcuts for active tab */}
         <div style={{ borderTop: '1px solid #374151', paddingTop: 16, marginTop: 4 }}>

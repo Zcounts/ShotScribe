@@ -1,4 +1,31 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect, useLayoutEffect } from 'react'
+// ── Scene badge for schedule shot blocks ─────────────────────────────────────
+// Displays a colored SC badge when a shot is linked to a script scene.
+function SceneScheduleBadge({ linkedSceneData, onNavigate }) {
+  if (!linkedSceneData) return null
+  const color = linkedSceneData.color
+  return (
+    <span
+      title={`Script scene: ${linkedSceneData.intExt || ''} ${linkedSceneData.dayNight || ''} · ${linkedSceneData.location || ''}`}
+      onClick={onNavigate}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+        padding: '1px 6px',
+        borderRadius: 3,
+        background: color ? color + '28' : 'rgba(59,130,246,0.12)',
+        border: `1px solid ${color || 'rgba(59,130,246,0.35)'}`,
+        fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
+        color: color || '#93c5fd',
+        cursor: onNavigate ? 'pointer' : 'default',
+        flexShrink: 0,
+        letterSpacing: '0.04em',
+        lineHeight: 1.4,
+      }}
+    >
+      SC {linkedSceneData.sceneNumber}
+    </span>
+  )
+}
 import {
   DndContext,
   DragOverlay,
@@ -275,6 +302,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
   const updateShot = useStore(s => s.updateShot)
+  const setActiveTab = useStore(s => s.setActiveTab)
 
   // Feature 4: confirmation before removing from schedule
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
@@ -344,6 +372,12 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
           <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 800, color: fg, flexShrink: 0 }}>
             {shotData.displayId}
           </span>
+          {shotData.linkedSceneData && (
+            <SceneScheduleBadge
+              linkedSceneData={{ ...shotData.linkedSceneData, sceneNumber: shotData.linkedSceneData.sceneNumber }}
+              onNavigate={() => setActiveTab('scenes')}
+            />
+          )}
           <span style={{ fontSize: 12, fontWeight: 600, color: fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {shotData.sceneLabel}
           </span>
@@ -494,6 +528,12 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
                 </span>
                 <Badge label={shotData.intOrExt} />
                 <Badge label={shotData.dayNight} />
+                {shotData.linkedSceneData && (
+                  <SceneScheduleBadge
+                    linkedSceneData={shotData.linkedSceneData}
+                    onNavigate={() => setActiveTab('scenes')}
+                  />
+                )}
               </div>
 
               {/* Scene label + location — secondary info (Feature 3 typography) */}
@@ -915,6 +955,9 @@ function ScheduleColumnConfigPanel({ config, isDark, onChange, onClose }) {
 // ── DayTotals ─────────────────────────────────────────────────────────────────
 
 function DayTotals({ blocks, enrichedBlockMap, isDark }) {
+  const scriptScenes = useStore(s => s.scriptScenes)
+  const scriptSettings = useStore(s => s.scriptSettings)
+
   if (blocks.length === 0) return null
 
   const shotBlocks = blocks.filter(b => b.type !== 'break')
@@ -933,6 +976,34 @@ function DayTotals({ blocks, enrichedBlockMap, isDark }) {
 
   // Only show if any times have been entered
   if (totalMins === 0) return null
+
+  // Compute low-confidence scene count for this day's shot blocks
+  const lowConfidenceScenes = scriptSettings?.showConfidenceIndicators
+    ? (() => {
+        const sceneIds = new Set()
+        const lowIds = []
+        shotBlocks.forEach(b => {
+          const sd = enrichedBlockMap ? enrichedBlockMap[b.id] : null
+          if (sd?.linkedSceneId && !sceneIds.has(sd.linkedSceneId)) {
+            sceneIds.add(sd.linkedSceneId)
+            const ss = scriptScenes.find(s => s.id === sd.linkedSceneId)
+            if (ss) {
+              // Count shots linked to this scene across all blocks in this day
+              const linkedCount = shotBlocks.filter(bb => {
+                const ssd = enrichedBlockMap ? enrichedBlockMap[bb.id] : null
+                return ssd?.linkedSceneId === ss.id
+              }).length
+              const tags = ss.complexityTags || []
+              const hasStuntVfx = tags.includes('stunt') || tags.includes('vfx')
+              if (linkedCount === 0 || hasStuntVfx || tags.length >= 5) {
+                lowIds.push(ss)
+              }
+            }
+          }
+        })
+        return lowIds
+      })()
+    : []
 
   const borderColor = isDark ? '#2a2a2a' : '#e5e0d8'
   const fg = isDark ? '#ccc' : '#222'
@@ -992,6 +1063,20 @@ function DayTotals({ blocks, enrichedBlockMap, isDark }) {
           {formatMins(totalMins)}
         </span>
       </div>
+
+      {/* Risk summary — low confidence scenes */}
+      {lowConfidenceScenes.length > 0 && (
+        <span
+          title={`Low-confidence scenes: ${lowConfidenceScenes.map(s => `SC ${s.sceneNumber} (${s.location})`).join(', ')}`}
+          style={{
+            fontSize: 10, fontFamily: 'monospace', color: '#f87171',
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            cursor: 'help', flexShrink: 0,
+          }}
+        >
+          ⚠ {lowConfidenceScenes.length} LOW confidence
+        </span>
+      )}
     </div>
   )
 }

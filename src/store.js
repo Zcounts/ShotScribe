@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { arrayMove } from '@dnd-kit/sortable'
+import { computeEstimate, computeConfidence } from './utils/scriptParser'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -88,6 +89,8 @@ function createShot(overrides = {}) {
     takeNumber: '',
     sound: '',
     props: '',
+    // Script scene link — references a scriptScene id (display-only, not enforced)
+    linkedSceneId: null,
     ...overrides,
   }
 }
@@ -192,6 +195,170 @@ const useStore = create((set, get) => ({
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
   customDropdownOptions: {}, // { fieldKey: ['option1', 'option2', ...] }
 
+  // ── Script import state ───────────────────────────────────────────────
+  // Script-imported scenes (separate from storyboard scenes)
+  scriptScenes: [],  // ScriptScene[] — see utils/scriptParser.js for shape
+  importedScripts: [], // { id, filename, importedAt, sceneCount }[]
+  scriptSettings: {
+    baseMinutesPerPage: 5,    // 1 page ≈ N minutes (user-configurable)
+    autoSuggestTags: true,    // suggest complexity tags based on heuristics
+    showConfidenceIndicators: true, // show ●●● indicators
+    defaultSceneColor: null,  // default color for new scenes (null = no color)
+  },
+
+  // ── Script scene actions ──────────────────────────────────────────────
+
+  importScriptScenes: (parsedScenes, scriptMeta, mode = 'replace') => {
+    set(state => {
+      const scriptId = scriptMeta.id || `script_${Date.now()}`
+      const timestamp = new Date().toISOString()
+      const settings = state.scriptSettings
+
+      // Enrich scenes with estimated minutes and confidence
+      const enriched = parsedScenes.map(scene => {
+        const estimated = computeEstimate(scene, settings.baseMinutesPerPage)
+        return { ...scene, estimatedMinutes: estimated }
+      })
+
+      const newScript = {
+        id: scriptId,
+        filename: scriptMeta.filename || 'Unknown',
+        importedAt: timestamp,
+        sceneCount: parsedScenes.length,
+      }
+
+      if (mode === 'replace') {
+        // Replace all scenes that came from this script
+        const otherScenes = state.scriptScenes.filter(s => s.importSource !== scriptMeta.filename)
+        const otherScripts = state.importedScripts.filter(s => s.filename !== scriptMeta.filename)
+        return {
+          scriptScenes: [...otherScenes, ...enriched],
+          importedScripts: [...otherScripts, newScript],
+        }
+      } else {
+        // Merge — add new scenes, keep existing
+        // Deduplicate by slugline to avoid exact duplicates
+        const existingSlugs = new Set(state.scriptScenes.map(s => s.slugline))
+        const newScenes = enriched.filter(s => !existingSlugs.has(s.slugline))
+        const scriptExists = state.importedScripts.find(s => s.filename === scriptMeta.filename)
+        const updatedScripts = scriptExists
+          ? state.importedScripts.map(s => s.filename === scriptMeta.filename ? newScript : s)
+          : [...state.importedScripts, newScript]
+        return {
+          scriptScenes: [...state.scriptScenes, ...newScenes],
+          importedScripts: updatedScripts,
+        }
+      }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  updateScriptScene: (sceneId, updates) => {
+    set(state => {
+      const settings = state.scriptSettings
+      return {
+        scriptScenes: state.scriptScenes.map(s => {
+          if (s.id !== sceneId) return s
+          const updated = { ...s, ...updates }
+          // Recompute estimate when relevant fields change
+          if ('complexityTags' in updates || 'pageCount' in updates) {
+            updated.estimatedMinutes = computeEstimate(updated, settings.baseMinutesPerPage)
+          }
+          return updated
+        }),
+      }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  deleteScriptScene: (sceneId) => {
+    set(state => ({
+      scriptScenes: state.scriptScenes.filter(s => s.id !== sceneId),
+      // Clear linkedSceneId from any shots that linked to this scene
+      scenes: state.scenes.map(sc => ({
+        ...sc,
+        shots: sc.shots.map(sh =>
+          sh.linkedSceneId === sceneId ? { ...sh, linkedSceneId: null } : sh
+        ),
+      })),
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  reorderScriptScenes: (activeId, overId) => {
+    set(state => {
+      const oldIdx = state.scriptScenes.findIndex(s => s.id === activeId)
+      const newIdx = state.scriptScenes.findIndex(s => s.id === overId)
+      if (oldIdx === -1 || newIdx === -1) return state
+      return { scriptScenes: arrayMove(state.scriptScenes, oldIdx, newIdx) }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  deleteImportedScript: (scriptId) => {
+    set(state => {
+      const script = state.importedScripts.find(s => s.id === scriptId)
+      if (!script) return state
+      return {
+        importedScripts: state.importedScripts.filter(s => s.id !== scriptId),
+        scriptScenes: state.scriptScenes.filter(s => s.importSource !== script.filename),
+        // Clear broken links from shots
+        scenes: state.scenes.map(sc => ({
+          ...sc,
+          shots: sc.shots.map(sh =>
+            state.scriptScenes.find(ss => ss.id === sh.linkedSceneId && ss.importSource === script.filename)
+              ? { ...sh, linkedSceneId: null }
+              : sh
+          ),
+        })),
+      }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  setScriptSettings: (updates) => {
+    set(state => {
+      const newSettings = { ...state.scriptSettings, ...updates }
+      // Recompute all estimates if baseMinutesPerPage changed
+      if ('baseMinutesPerPage' in updates) {
+        const enriched = state.scriptScenes.map(scene => ({
+          ...scene,
+          estimatedMinutes: computeEstimate(scene, newSettings.baseMinutesPerPage),
+        }))
+        return { scriptSettings: newSettings, scriptScenes: enriched }
+      }
+      return { scriptSettings: newSettings }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  // Link a shot to a script scene (or unlink with null)
+  linkShotToScene: (shotId, sceneId) => {
+    set(state => ({
+      scenes: state.scenes.map(sc => ({
+        ...sc,
+        shots: sc.shots.map(sh =>
+          sh.id === shotId ? { ...sh, linkedSceneId: sceneId } : sh
+        ),
+      })),
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  // Returns a map of sceneId → count of linked shots (across all storyboard scenes)
+  getSceneLinkCounts: () => {
+    const { scenes } = get()
+    const counts = {}
+    scenes.forEach(sc => {
+      sc.shots.forEach(sh => {
+        if (sh.linkedSceneId) {
+          counts[sh.linkedSceneId] = (counts[sh.linkedSceneId] || 0) + 1
+        }
+      })
+    })
+    return counts
+  },
+
   // ── Schedule helpers ─────────────────────────────────────────────────
 
   // Returns the full schedule with each shot block enriched by live data
@@ -218,7 +385,12 @@ const useStore = create((set, get) => ({
       blocks: day.blocks.map(block => {
         if (block.type !== 'shot' && block.shotId === undefined) return block
         const found = shotMap.get(block.shotId)
-        return {
+        // Look up linked script scene (if any)
+          const scriptScene = found && found.shot.linkedSceneId
+            ? get().scriptScenes.find(ss => ss.id === found.shot.linkedSceneId)
+            : null
+
+          return {
           ...block,
           // Null when the referenced shot has been deleted
           shotData: found ? {
@@ -234,6 +406,15 @@ const useStore = create((set, get) => ({
             shootTime: found.shot.shootTime || '',
             setupTime: found.shot.setupTime || '',
             scriptTime: found.shot.scriptTime || '',
+            // Script scene link (display only)
+            linkedSceneId: found.shot.linkedSceneId || null,
+            linkedSceneData: scriptScene ? {
+              sceneNumber: scriptScene.sceneNumber,
+              location: scriptScene.location,
+              intExt: scriptScene.intExt,
+              dayNight: scriptScene.dayNight,
+              color: scriptScene.color,
+            } : null,
           } : null,
         }
       }),
@@ -750,6 +931,7 @@ const useStore = create((set, get) => ({
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
       shotlistColumnWidths, callsheets, callsheetSectionConfig,
       castRoster, crewRoster,
+      scriptScenes, importedScripts, scriptSettings,
     } = get()
     return {
       version: 2,
@@ -793,6 +975,7 @@ const useStore = create((set, get) => ({
             takeNumber: s.takeNumber,
             sound: s.sound || '',
             props: s.props || '',
+            linkedSceneId: s.linkedSceneId || null,
           }
           for (const key of Object.keys(s)) {
             if (key.startsWith('custom_')) shot[key] = s[key]
@@ -845,6 +1028,33 @@ const useStore = create((set, get) => ({
       callsheetSectionConfig: callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG,
       castRoster: castRoster || [],
       crewRoster: crewRoster || [],
+      // Script import state
+      scriptScenes: (scriptScenes || []).map(s => ({
+        id: s.id,
+        sceneNumber: s.sceneNumber,
+        slugline: s.slugline,
+        intExt: s.intExt,
+        dayNight: s.dayNight,
+        location: s.location,
+        customHeader: s.customHeader,
+        characters: s.characters || [],
+        actionText: s.actionText || '',
+        dialogueCount: s.dialogueCount || 0,
+        pageCount: s.pageCount ?? null,
+        complexityTags: s.complexityTags || [],
+        estimatedMinutes: s.estimatedMinutes ?? null,
+        linkedShotIds: s.linkedShotIds || [],
+        notes: s.notes || '',
+        importSource: s.importSource || '',
+        color: s.color || null,
+      })),
+      importedScripts: importedScripts || [],
+      scriptSettings: scriptSettings || {
+        baseMinutesPerPage: 5,
+        autoSuggestTags: true,
+        showConfidenceIndicators: true,
+        defaultSceneColor: null,
+      },
       exportedAt: new Date().toISOString(),
     }
   },
@@ -995,6 +1205,7 @@ const useStore = create((set, get) => ({
       takeNumber: s.takeNumber || '',
       sound: s.sound || '',
       props: s.props || '',
+      linkedSceneId: s.linkedSceneId || null,
       // Preserve any extra fields (e.g. custom columns)
       ...Object.fromEntries(
         Object.entries(s).filter(([k]) => k.startsWith('custom_'))
@@ -1134,6 +1345,16 @@ const useStore = create((set, get) => ({
         const newSections = DEFAULT_CALLSHEET_SECTION_CONFIG.filter(c => !savedKeys.has(c.key))
         return [...saved, ...newSections]
       })(),
+      // Script import state — default to empty for older project files
+      scriptScenes: Array.isArray(data.scriptScenes) ? data.scriptScenes : [],
+      importedScripts: Array.isArray(data.importedScripts) ? data.importedScripts : [],
+      scriptSettings: {
+        baseMinutesPerPage: 5,
+        autoSuggestTags: true,
+        showConfidenceIndicators: true,
+        defaultSceneColor: null,
+        ...(data.scriptSettings || {}),
+      },
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
     })
@@ -1228,6 +1449,8 @@ const useStore = create((set, get) => ({
       callsheets: {},
       castRoster: [],
       crewRoster: [],
+      scriptScenes: [],
+      importedScripts: [],
       projectPath: null,
       lastSaved: null,
     })

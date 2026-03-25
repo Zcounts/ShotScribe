@@ -19,6 +19,8 @@ import ExportModal from './components/ExportModal'
 import ShotlistTab from './components/ShotlistTab'
 import ScheduleTab from './components/ScheduleTab'
 import CallsheetTab from './components/CallsheetTab'
+import ScenesTab from './components/ScenesTab'
+import ImportScriptModal from './components/ImportScriptModal'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -223,6 +225,7 @@ export default function App() {
   const [restorePrompt, setRestorePrompt] = useState(null) // { data, timeStr, totalShots }
   // When set, overrides activeTab in the export modal (e.g. explicit pick from toolbar dropdown).
   const [forcedExportTab, setForcedExportTab] = useState(null)
+  const [importScriptOpen, setImportScriptOpen] = useState(false)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
   // shotlistRef points to the ShotlistTab root container for PDF export
@@ -331,6 +334,7 @@ export default function App() {
         {[
           { id: 'storyboard', label: 'Storyboard' },
           { id: 'shotlist',   label: 'Shotlist' },
+          { id: 'scenes',     label: 'Scenes' },
           { id: 'schedule',   label: 'Schedule' },
           { id: 'callsheet',  label: 'Callsheet' },
         ].map(({ id, label }) => (
@@ -360,6 +364,30 @@ export default function App() {
             {label}
           </button>
         ))}
+        {/* Import Script button — right side of tab nav */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', paddingRight: 12 }}>
+          <button
+            onClick={() => setImportScriptOpen(true)}
+            style={{
+              padding: '4px 12px',
+              fontFamily: 'monospace',
+              fontSize: 11,
+              fontWeight: 600,
+              background: 'rgba(59,130,246,0.15)',
+              color: isDark ? '#93c5fd' : '#2563eb',
+              border: '1px solid rgba(59,130,246,0.3)',
+              borderRadius: 4,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.28)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.15)')}
+            title="Import a script file to extract scenes"
+          >
+            + Import Script
+          </button>
+        </div>
       </div>
 
       {/* Main content */}
@@ -406,6 +434,10 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-auto">
           <ShotlistTab containerRef={shotlistRef} />
         </div>
+      ) : activeTab === 'scenes' ? (
+        <div className="flex-1 overflow-hidden" style={{ backgroundColor: isDark ? '#141420' : '#f0ede4' }}>
+          <ScenesTab />
+        </div>
       ) : activeTab === 'schedule' ? (
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0ede4' }}>
           <ScheduleTab />
@@ -430,6 +462,12 @@ export default function App() {
         shotlistRef={shotlistRef}
         activeTab={forcedExportTab ?? activeTab}
         projectName={projectName}
+      />
+
+      {/* Import Script Modal — accessible from top nav button */}
+      <ImportScriptModal
+        isOpen={importScriptOpen}
+        onClose={() => setImportScriptOpen(false)}
       />
 
       {/* Autosave restore prompt — in-app dialog so focus never leaves the webContents */}
