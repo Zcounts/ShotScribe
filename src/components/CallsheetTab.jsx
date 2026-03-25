@@ -14,6 +14,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore, { DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
+import { DayTabBar } from './DayTabBar'
 
 // ── Time Utilities (mirrored from ScheduleTab) ────────────────────────────────
 
@@ -1154,6 +1155,13 @@ export default function CallsheetTab() {
   const activeDay = schedule[activeDayIdx] || null
 
   const callsheet = activeDay ? getCallsheet(activeDay.id) : null
+  const dayTabs = useMemo(
+    () => schedule.map((day, idx) => ({
+      id: day.id,
+      label: `Day ${idx + 1}${day.date ? ' — ' + formatDate(day.date) : ''}`,
+    })),
+    [schedule]
+  )
 
   const handleUpdate = useCallback((updates) => {
     if (!activeDay) return
@@ -1198,52 +1206,19 @@ export default function CallsheetTab() {
       overflow: 'hidden',
       backgroundColor: '#F5F2EC',
     }}>
-      {/* Day navigation bar — wrapped in a position:relative container so the
-          Configure Sections panel can escape the overflow-x:auto scroll bar */}
       <div style={{ position: 'relative', flexShrink: 0 }}>
+        <DayTabBar
+          days={dayTabs}
+          activeDay={schedule[activeDayIdx]?.id}
+          onSelect={(dayId) => setSelectedDayIdx(schedule.findIndex(day => day.id === dayId))}
+        />
         <div style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: 0,
-          padding: '8px 16px',
+          justifyContent: 'flex-end',
+          padding: '6px 16px',
           borderBottom: '1px solid #3A3A3C',
           background: '#1C1C1E',
-          overflowX: 'auto',
         }}>
-          <span style={{ fontSize: 10, fontFamily: 'Sora, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginRight: 10, flexShrink: 0 }}>
-            Day:
-          </span>
-          {schedule.map((day, idx) => {
-            const isActive = idx === activeDayIdx
-            const label = `Day ${idx + 1}${day.date ? ' — ' + formatDate(day.date) : ''}`
-            return (
-              <button
-                key={day.id}
-                onClick={() => setSelectedDayIdx(idx)}
-                style={{
-                  padding: '5px 12px',
-                  fontFamily: 'Sora, sans-serif',
-                  fontSize: 11,
-                  fontWeight: isActive ? 700 : 400,
-                  border: 'none',
-                  borderRadius: 3,
-                  background: isActive ? '#E84040' : 'transparent',
-                  color: isActive ? '#fff' : '#718096',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  marginRight: 4,
-                  transition: 'background 0.1s, color 0.1s',
-                }}
-              >
-                {label}
-              </button>
-            )
-          })}
-
-          {/* Spacer */}
-          <div style={{ flex: 1, minWidth: 8 }} />
-
-          {/* Configure Sections button */}
           <button
             onClick={() => setConfigOpen(o => !o)}
             style={{
