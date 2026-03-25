@@ -129,6 +129,24 @@ ipcMain.handle('dialog:save-pdf', async (_event, { defaultName, buffer }) => {
   }
 })
 
+// ─── IPC: Save generic JSON ───────────────────────────────────────────────────
+ipcMain.handle('dialog:save-json', async (_event, { defaultName, data, filters }) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Export JSON',
+    defaultPath: defaultName,
+    filters: Array.isArray(filters) && filters.length > 0
+      ? filters
+      : [{ name: 'JSON', extensions: ['json'] }],
+  })
+  if (canceled || !filePath) return { success: false }
+  try {
+    fs.writeFileSync(filePath, data, 'utf8')
+    return { success: true, filePath }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
 // ─── IPC: Save PNG ────────────────────────────────────────────────────────────
 ipcMain.handle('dialog:save-png', async (_event, { defaultName, base64 }) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
