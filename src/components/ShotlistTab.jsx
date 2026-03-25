@@ -914,6 +914,8 @@ function SortableShotRow({
           borderRight: !isLastCol ? `1px solid ${c.border}` : 'none',
           padding: 0,
           ...(isNotes ? { minHeight: ROW_H, overflow: 'visible', verticalAlign: 'top' } : { height: ROW_H, overflow: 'hidden', verticalAlign: 'middle' }),
+          textOverflow: 'ellipsis',
+          whiteSpace: isNotes ? 'normal' : 'nowrap',
           userSelect: 'none',
         }
 
@@ -932,8 +934,8 @@ function SortableShotRow({
 
         if (col.type === 'readonly') {
           return (
-            <td key={col.key} style={{ ...cellStyle, overflow: 'visible' }}>
-              <div style={{ display: 'flex', alignItems: 'center', height: ROW_H, gap: 3, paddingRight: 2 }}>
+            <td key={col.key} style={cellStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', height: ROW_H, gap: 3, paddingRight: 2, overflow: 'hidden' }}>
                 <EditableCell
                   type="readonly"
                   value={shot.displayId}
@@ -1031,6 +1033,7 @@ export default function ShotlistTab({ containerRef }) {
   const removeCustomColumn      = useStore(s => s.removeCustomColumn)
   const shotlistColumnWidths    = useStore(s => s.shotlistColumnWidths)
   const setShotlistColumnWidth  = useStore(s => s.setShotlistColumnWidth)
+  const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
   const isDark = theme === 'dark'
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
@@ -1395,6 +1398,7 @@ export default function ShotlistTab({ containerRef }) {
                     whiteSpace: 'nowrap',
                     userSelect: 'none',
                     overflow: 'hidden',
+                    boxSizing: 'border-box',
                     // Make room for the resize handle
                     paddingRight: col.type === 'checkbox' ? 0 : 14,
                   }}
@@ -1420,7 +1424,7 @@ export default function ShotlistTab({ containerRef }) {
                 <React.Fragment key={scene.id}>
 
                   {/* Scene header row — inline editable, syncs bidirectionally with storyboard */}
-                  <tr>
+                  <tr onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)}>
                     <td
                       colSpan={totalCols}
                       style={{

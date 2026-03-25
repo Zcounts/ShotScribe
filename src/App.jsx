@@ -22,6 +22,7 @@ import CallsheetTab from './components/CallsheetTab'
 import ScenesTab from './components/ScenesTab'
 import ScriptTab from './components/ScriptTab'
 import CastCrewTab from './components/CastCrewTab'
+import ScenePropertiesDialog from './components/ScenePropertiesDialog'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -42,6 +43,7 @@ function SceneSection({
   useDropdowns,
   pageIndexOffset,
   pageRefs,
+  onOpenSceneProperties,
 }) {
   const getShotsForScene = useStore(s => s.getShotsForScene)
   const addShot = useStore(s => s.addShot)
@@ -114,6 +116,7 @@ function SceneSection({
                 isContinuation={isContinuation}
                 pageNum={pageIdx + 1}
                 pageIndex={pageIdx}
+                onDoubleClick={() => onOpenSceneProperties(scene.id)}
               />
 
               <ShotGrid
@@ -215,6 +218,7 @@ export default function App() {
   const activeTab = useStore(s => s.activeTab)
   const setActiveTab = useStore(s => s.setActiveTab)
   const scriptScenes = useStore(s => s.scriptScenes)
+  const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
 
   const projectName = useStore(s => s.projectName)
   const saveProject = useStore(s => s.saveProject)
@@ -408,7 +412,7 @@ export default function App() {
                       checked={showStoryboardOutline}
                       onChange={(e) => setShowStoryboardOutline(e.target.checked)}
                     />
-                    Show Scene Outline
+                    Show Pages Outline
                   </label>
                 </div>
               )}
@@ -417,9 +421,9 @@ export default function App() {
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
               <aside style={{ width: 240, position: 'sticky', top: 42, alignSelf: 'flex-start', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
-                <div style={{ padding: '8px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', borderBottom: '1px solid rgba(74,85,104,0.12)' }}>Scene Outline</div>
+                <div style={{ padding: '8px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', borderBottom: '1px solid rgba(74,85,104,0.12)' }}>Pages Outline</div>
                 {sceneNavItems.map(item => (
-                  <button key={item.id} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: 'none', padding: '8px 10px', cursor: 'pointer' }}>
+                  <button key={item.id} onDoubleClick={() => item.id.startsWith('script-') ? openScenePropertiesDialog('script', item.id.replace('script-', '')) : openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: 'none', padding: '8px 10px', cursor: 'pointer' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div>
                     <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                   </button>
@@ -443,7 +447,7 @@ export default function App() {
                   {/* Scene separator (between scenes) */}
                   {sceneIdx > 0 && (
                     <div className="scene-separator">
-                      <span className="scene-separator-label">NEW SCENE</span>
+                      <span className="scene-separator-label">NEW PAGE</span>
                     </div>
                   )}
 
@@ -453,23 +457,24 @@ export default function App() {
                     useDropdowns={useDropdowns}
                     pageIndexOffset={scenePageOffsets[sceneIdx]}
                     pageRefs={pageRefs}
+                    onOpenSceneProperties={(sceneId) => openScenePropertiesDialog('storyboard', sceneId)}
                   />
                 </div>
               ))}
 
-            {/* Add Scene button */}
+            {/* Add Page button */}
             <div className="add-scene-row">
               <button
                 className="add-scene-btn"
                 onClick={() => addScene()}
-                title="Add a new scene (new page)"
+                title="Add a new page"
               >
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="10" cy="10" r="8" />
                   <line x1="10" y1="6" x2="10" y2="14" />
                   <line x1="6" y1="10" x2="14" y2="10" />
                 </svg>
-                Add Scene
+                Add Page
               </button>
             </div>
             </div>
@@ -506,6 +511,7 @@ export default function App() {
 
       {/* Context Menu */}
       <ContextMenu />
+      <ScenePropertiesDialog />
 
       {/* Export Modal */}
       <ExportModal

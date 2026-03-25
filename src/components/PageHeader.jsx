@@ -97,7 +97,7 @@ function CameraColorSwatch({ color, onChange }) {
   )
 }
 
-export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0 }) {
+export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0, onDoubleClick }) {
   const updateScene = useStore(s => s.updateScene)
 
   const set = (updates) => updateScene(scene.id, updates)
@@ -162,7 +162,7 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
   // that have its drag listeners explicitly attached, which these inputs do not.
 
   return (
-    <div className="page-header">
+    <div className="page-header" onDoubleClick={onDoubleClick}>
       {/* Left: Scene Label */}
       <div className="flex flex-col gap-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">

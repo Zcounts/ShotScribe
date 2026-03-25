@@ -3,6 +3,8 @@ import useStore from '../store'
 import { computeConfidence } from '../utils/scriptParser'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 import ImportScriptModal from './ImportScriptModal'
+import SceneColorPicker from './SceneColorPicker'
+import { estimateScreenplayPagination } from '../utils/screenplay'
 
 function CharacterTagInput({ scene, allCharacters, onChange }) {
   const [input, setInput] = useState('')
@@ -66,6 +68,7 @@ export default function ScenesTab() {
   const importScriptScenes = useStore(s => s.importScriptScenes)
   const deleteImportedScript = useStore(s => s.deleteImportedScript)
   const linkShotToScene = useStore(s => s.linkShotToScene)
+  const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
 
   const [activeScript, setActiveScript] = useState(null)
   const [importModalOpen, setImportModalOpen] = useState(false)
@@ -102,6 +105,7 @@ export default function ScenesTab() {
     scriptScenes.forEach(s => (s.characters || []).forEach(c => set.add(c)))
     return [...set]
   }, [scriptScenes])
+  const pagination = useMemo(() => estimateScreenplayPagination(visibleScenes), [visibleScenes])
 
   const openEditor = (scene) => {
     setEditingSceneNumberId(scene.id)
@@ -127,6 +131,7 @@ export default function ScenesTab() {
       id: `sc_${Date.now()}`,
       sceneNumber: '', slugline: '', intExt: null, dayNight: null, location: '', customHeader: '',
       characters: [], actionText: '', dialogueCount: 0, pageCount: null, complexityTags: [], estimatedMinutes: null,
+      screenplayText: '', screenplayElements: [],
       confidence: 'medium', linkedShotIds: [], notes: '', importSource: targetScene.importSource || '', color: null,
     }
     const next = [...scriptScenes]
@@ -147,6 +152,7 @@ export default function ScenesTab() {
         id: `sc_${Date.now()}`,
         sceneNumber: `${base}.${n}`,
         slugline: '', intExt: null, dayNight: null, location: '', customHeader: '', characters: [], actionText: '', dialogueCount: 0,
+        screenplayText: '', screenplayElements: [],
         pageCount: null, complexityTags: [], estimatedMinutes: null, confidence: 'medium', linkedShotIds: [], notes: '', importSource: targetScene.importSource || '', color: targetScene.color || null,
       },
     ], { id: 'manual', filename: targetScene.importSource || 'manual' }, 'replace')
@@ -219,10 +225,10 @@ export default function ScenesTab() {
           const expanded = !!expandedIds[scene.id]
           const selected = selectedSceneIds.includes(scene.id)
           return (
-            <div key={scene.id} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, marginBottom: 8, background: '#FAF8F4' }}>
+            <div key={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, marginBottom: 8, background: '#FAF8F4' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
                 <input type="checkbox" checked={selected} onChange={(e) => setSelectedSceneIds(prev => e.target.checked ? [...new Set([...prev, scene.id])] : prev.filter(id => id !== scene.id))} style={{ opacity: selectedSceneIds.length > 0 || selected ? 1 : 0.2 }} />
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: scene.color || 'rgba(128,128,128,0.2)' }} />
+                <SceneColorPicker value={scene.color || null} onChange={(color) => updateScriptScene(scene.id, { color })} />
                 {editingSceneNumberId === scene.id ? (
                   <input
                     autoFocus
@@ -237,6 +243,7 @@ export default function ScenesTab() {
                 )}
                 <span style={{ color: '#4A5568', flex: 1, fontSize: 11 }}>{scene.location || scene.slugline}</span>
                 <span style={{ color: '#718096', fontSize: 10 }}>{linkedShots.length} shots</span>
+                <span style={{ color: '#718096', fontSize: 10 }}>{pagination.byScene[scene.id]?.pageCount?.toFixed(2) || '0.00'} pp</span>
                 <span style={{ fontSize: 10, color: confidence === 'low' ? '#f87171' : confidence === 'medium' ? '#f59e0b' : '#22c55e' }}>● {confidence}</span>
                 <button onClick={() => setExpandedIds(p => ({ ...p, [scene.id]: !p[scene.id] }))} style={{ border: 'none', background: 'none' }}>{expanded ? '▴' : '▾'}</button>
               </div>
