@@ -1034,10 +1034,13 @@ export default function ShotlistTab({ containerRef }) {
   const shotlistColumnWidths    = useStore(s => s.shotlistColumnWidths)
   const setShotlistColumnWidth  = useStore(s => s.setShotlistColumnWidth)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
+  const shotlistViewState = useStore(s => s.tabViewState?.shotlist || {})
+  const setTabViewState = useStore(s => s.setTabViewState)
   const isDark = theme === 'dark'
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
-  const [selectedDayIdx, setSelectedDayIdx] = useState(0)
+  const [selectedDayId, setSelectedDayId] = useState(shotlistViewState.selectedDayId || null)
+  const scrollerRef = useRef(null)
   const dayTabs = useMemo(
     () => schedule.map((day, idx) => ({
       id: day.id,
@@ -1047,8 +1050,26 @@ export default function ShotlistTab({ containerRef }) {
   )
 
   // Clamp selectedDayIdx if schedule shrinks
-  const activeDayIdx = schedule.length === 0 ? -1 : Math.min(selectedDayIdx, schedule.length - 1)
+  const resolvedDayIdx = selectedDayId
+    ? schedule.findIndex(day => day.id === selectedDayId)
+    : 0
+  const activeDayIdx = schedule.length === 0 ? -1 : Math.max(0, resolvedDayIdx)
   const activeDay = activeDayIdx >= 0 ? schedule[activeDayIdx] : null
+
+  useEffect(() => {
+    setTabViewState('shotlist', { selectedDayId: activeDay?.id || null })
+  }, [activeDay, setTabViewState])
+
+  useEffect(() => {
+    const node = scrollerRef.current
+    if (!node) return
+    const savedTop = shotlistViewState.scrollTop
+    if (typeof savedTop === 'number') {
+      requestAnimationFrame(() => {
+        node.scrollTop = savedTop
+      })
+    }
+  }, [shotlistViewState.scrollTop])
 
   // Build a Set of shotIds scheduled for the active day
   const activeDayShotIds = useMemo(() => {
@@ -1181,7 +1202,11 @@ export default function ShotlistTab({ containerRef }) {
 
   return (
     <div
-      ref={containerRef}
+      ref={el => {
+        scrollerRef.current = el
+        if (containerRef) containerRef.current = el
+      }}
+      onScroll={(e) => setTabViewState('shotlist', { scrollTop: e.currentTarget.scrollTop })}
       style={{
         flex: 1,
         display: 'flex',
@@ -1195,7 +1220,7 @@ export default function ShotlistTab({ containerRef }) {
       <DayTabBar
         days={dayTabs}
         activeDay={schedule[activeDayIdx]?.id}
-        onSelect={(dayId) => setSelectedDayIdx(schedule.findIndex(day => day.id === dayId))}
+        onSelect={(dayId) => setSelectedDayId(dayId)}
         onAddDay={addShootingDay}
       />
 

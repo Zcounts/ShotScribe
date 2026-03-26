@@ -3207,14 +3207,16 @@ export default function ScheduleTab() {
   const applyScheduleDrag = useStore(s => s.applyScheduleDrag)
   const scheduleColumnConfig = useStore(s => s.scheduleColumnConfig)
   const setScheduleColumnConfig = useStore(s => s.setScheduleColumnConfig)
+  const scheduleViewState = useStore(s => s.tabViewState?.schedule || {})
+  const setTabViewState = useStore(s => s.setTabViewState)
 
   const isDark = theme === 'dark'
   const fg = '#1A1A1A'
   const mutedFg = '#718096'
 
   // ── Sub-view state ───────────────────────────────────────────────────────────
-  const [scheduleView, setScheduleView] = useState('list') // 'list' | 'stripboard' | 'calendar'
-  const [stripDensity, setStripDensity] = useState('comfortable') // 'compact' | 'comfortable'
+  const [scheduleView, setScheduleView] = useState(scheduleViewState.scheduleView || 'list') // 'list' | 'stripboard' | 'calendar'
+  const [stripDensity, setStripDensity] = useState(scheduleViewState.stripDensity || 'comfortable') // 'compact' | 'comfortable'
   const [stripPopover, setStripPopover] = useState(null) // { block, shotData, dayId, rect }
 
   // Jump to a specific day in the List view (used by CalendarView cards)
@@ -3246,7 +3248,8 @@ export default function ScheduleTab() {
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const configPanelRef = useRef(null)
-  const [listActiveDayId, setListActiveDayId] = useState(null)
+  const [listActiveDayId, setListActiveDayId] = useState(scheduleViewState.listActiveDayId || null)
+  const containerRef = useRef(null)
 
   // Close config panel when clicking outside
   useEffect(() => {
@@ -3430,8 +3433,27 @@ export default function ScheduleTab() {
     }
   }, [schedule, listActiveDayId])
 
+  useEffect(() => {
+    setTabViewState('schedule', { scheduleView, stripDensity, listActiveDayId })
+  }, [scheduleView, stripDensity, listActiveDayId, setTabViewState])
+
+  useEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+    const savedTop = scheduleViewState.scrollTop
+    if (typeof savedTop === 'number') {
+      requestAnimationFrame(() => {
+        node.scrollTop = savedTop
+      })
+    }
+  }, [scheduleViewState.scrollTop])
+
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-canvas">
+    <div
+      ref={containerRef}
+      className="flex flex-col h-full overflow-y-auto bg-canvas"
+      onScroll={(e) => setTabViewState('schedule', { scrollTop: e.currentTarget.scrollTop })}
+    >
       <div className="sticky top-0 z-40 px-6 py-3 border-b border-slate/10 bg-canvas/95 backdrop-blur-sm">
         <div className="flex items-center justify-between gap-4">
 

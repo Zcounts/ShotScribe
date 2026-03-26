@@ -69,8 +69,10 @@ export default function ScenesTab() {
   const deleteImportedScript = useStore(s => s.deleteImportedScript)
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
+  const scenesViewState = useStore(s => s.tabViewState?.scenes || {})
+  const setTabViewState = useStore(s => s.setTabViewState)
 
-  const [activeScript, setActiveScript] = useState(null)
+  const [activeScript, setActiveScript] = useState(scenesViewState.activeScript ?? null)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [expandedIds, setExpandedIds] = useState({})
   const [editingSceneNumberId, setEditingSceneNumberId] = useState(null)
@@ -79,6 +81,7 @@ export default function ScenesTab() {
   const [selectedSceneIds, setSelectedSceneIds] = useState([])
   const [combineOpen, setCombineOpen] = useState(false)
   const [ctxMenu, setCtxMenu] = useState(null)
+  const listRef = useRef(null)
 
   const linkedShotsMap = useMemo(() => {
     const map = {}
@@ -173,6 +176,21 @@ export default function ScenesTab() {
   const [combineForm, setCombineForm] = useState(null)
   useEffect(() => { if (combineOpen && combineInit) setCombineForm(combineInit) }, [combineOpen, combineInit])
 
+  useEffect(() => {
+    setTabViewState('scenes', { activeScript })
+  }, [activeScript, setTabViewState])
+
+  useEffect(() => {
+    const node = listRef.current
+    if (!node) return
+    const savedTop = scenesViewState.scrollTop
+    if (typeof savedTop === 'number') {
+      requestAnimationFrame(() => {
+        node.scrollTop = savedTop
+      })
+    }
+  }, [scenesViewState.scrollTop])
+
   const doCombine = () => {
     if (!combineForm || !combineForm.sceneNumber.trim()) return
     const selected = combineForm.selected
@@ -218,7 +236,11 @@ export default function ScenesTab() {
         <div style={{ padding: 10 }}><button onClick={() => setImportModalOpen(true)} style={{ width: '100%', background: '#E84040', color: '#fff', border: 'none', borderRadius: 5, padding: 7 }}>+ Import Script</button></div>
       </div>
 
-      <div style={{ flex: 1, padding: 14, overflowY: 'auto', position: 'relative' }}>
+      <div
+        ref={listRef}
+        onScroll={(e) => setTabViewState('scenes', { scrollTop: e.currentTarget.scrollTop })}
+        style={{ flex: 1, padding: 14, overflowY: 'auto', position: 'relative' }}
+      >
         {visibleScenes.map(scene => {
           const linkedShots = linkedShotsMap[scene.id] || []
           const confidence = computeConfidence(scene, linkedShots.length)
