@@ -71,6 +71,7 @@ export default function ScenesTab() {
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
   const scenesViewState = useStore(s => s.tabViewState?.scenes || {})
   const setTabViewState = useStore(s => s.setTabViewState)
+  const setActiveTab = useStore(s => s.setActiveTab)
 
   const [activeScript, setActiveScript] = useState(scenesViewState.activeScript ?? null)
   const [importModalOpen, setImportModalOpen] = useState(false)
@@ -81,6 +82,8 @@ export default function ScenesTab() {
   const [selectedSceneIds, setSelectedSceneIds] = useState([])
   const [combineOpen, setCombineOpen] = useState(false)
   const [ctxMenu, setCtxMenu] = useState(null)
+  const [scriptCtxMenu, setScriptCtxMenu] = useState(null)
+  const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const listRef = useRef(null)
 
   const linkedShotsMap = useMemo(() => {
@@ -213,23 +216,29 @@ export default function ScenesTab() {
   if (scriptScenes.length === 0 && !importModalOpen) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
-        <div style={{ fontWeight: 700 }}>No scripts imported yet</div>
-        <button onClick={() => setImportModalOpen(true)} style={{ background: '#E84040', color: '#fff', border: 'none', borderRadius: 5, padding: '8px 14px' }}>Import Script</button>
+        <div style={{ fontWeight: 700 }}>No script scenes available yet</div>
+        <div style={{ color: '#4A5568', fontSize: 13 }}>Import your script from the Script tab to begin scene breakdown.</div>
+        <button onClick={() => setActiveTab('script')} style={{ background: '#2C3E57', color: '#fff', border: 'none', borderRadius: 5, padding: '8px 14px' }}>Go to Script tab</button>
         <ImportScriptModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }} onClick={() => setCtxMenu(null)}>
+    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setCtxMenu(null); setScriptCtxMenu(null) }}>
       <div style={{ width: 220, borderRight: '1px solid rgba(74,85,104,0.15)', background: '#EDE9E1', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '10px 12px', fontSize: 10, textTransform: 'uppercase', color: '#718096', fontWeight: 700 }}>Imported Scripts</div>
         <button onClick={() => setActiveScript(null)} style={{ textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 12px' }}>All Scenes</button>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {importedScripts.map(sc => (
-            <div key={sc.id} style={{ position: 'relative' }}>
+            <div
+              key={sc.id}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setScriptCtxMenu({ x: e.clientX, y: e.clientY, script: sc })
+              }}
+            >
               <button onClick={() => setActiveScript(sc.id)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript === sc.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 12px' }}>{sc.filename}</button>
-              <button onClick={() => deleteImportedScript(sc.id)} style={{ position: 'absolute', right: 8, top: 6, border: 'none', background: 'none', color: '#E84040' }}>✕</button>
             </div>
           ))}
         </div>
@@ -298,19 +307,57 @@ export default function ScenesTab() {
         </div>
       )}
 
+      {scriptCtxMenu && (
+        <div style={{ position: 'fixed', left: scriptCtxMenu.x, top: scriptCtxMenu.y, zIndex: 95, background: '#1e1e2e', border: '1px solid #444', borderRadius: 6, overflow: 'hidden' }}>
+          <button
+            onClick={() => {
+              setScriptDeleteConfirm(scriptCtxMenu.script)
+              setScriptCtxMenu(null)
+            }}
+            style={{ display: 'block', width: '100%', border: 'none', background: 'none', color: '#fca5a5', padding: '7px 10px', textAlign: 'left' }}
+          >
+            Remove imported script…
+          </button>
+        </div>
+      )}
+
       {combineOpen && combineForm && (
         <div className="modal-overlay" onClick={() => setCombineOpen(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
-            <h3 style={{ marginBottom: 12 }}>Combine {combineForm.selected.length} Scenes</h3>
-            <label>New scene number</label>
-            <input value={combineForm.sceneNumber} onChange={e => setCombineForm(f => ({ ...f, sceneNumber: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
-            <label>New slugline</label>
-            <input value={combineForm.slugline} onChange={e => setCombineForm(f => ({ ...f, slugline: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
-            <label>Merged characters</label>
+          <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <h3 className="dialog-title">Combine {combineForm.selected.length} Scenes</h3>
+            <label className="dialog-label">New scene number</label>
+            <input className="dialog-input" value={combineForm.sceneNumber} onChange={e => setCombineForm(f => ({ ...f, sceneNumber: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
+            <label className="dialog-label">New slugline</label>
+            <input className="dialog-input" value={combineForm.slugline} onChange={e => setCombineForm(f => ({ ...f, slugline: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
+            <label className="dialog-label">Merged characters</label>
             <CharacterTagInput scene={{ characters: combineForm.characters }} allCharacters={allCharacters} onChange={(chars) => setCombineForm(f => ({ ...f, characters: chars }))} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button onClick={() => setCombineOpen(false)}>Cancel</button>
-              <button onClick={doCombine}>Combine Scenes</button>
+            <div className="dialog-actions">
+              <button className="dialog-button-secondary" onClick={() => setCombineOpen(false)}>Cancel</button>
+              <button className="dialog-button-primary" onClick={doCombine}>Combine Scenes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scriptDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => setScriptDeleteConfirm(null)}>
+          <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <h3 className="dialog-title">Remove imported script?</h3>
+            <p className="dialog-description">
+              <strong>{scriptDeleteConfirm.filename}</strong> will be removed, including its imported scenes and derived script data in this project.
+            </p>
+            <p className="dialog-description" style={{ marginBottom: 18 }}>This action cannot be undone.</p>
+            <div className="dialog-actions">
+              <button className="dialog-button-secondary" onClick={() => setScriptDeleteConfirm(null)}>Cancel</button>
+              <button
+                className="dialog-button-danger"
+                onClick={() => {
+                  deleteImportedScript(scriptDeleteConfirm.id)
+                  setScriptDeleteConfirm(null)
+                }}
+              >
+                Remove Script
+              </button>
             </div>
           </div>
         </div>

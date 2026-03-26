@@ -172,8 +172,8 @@ function SceneSection({
       {/* Confirmation dialog — shown when deleting a scene that has shots */}
       {showDeleteConfirm && (
         <div className="modal-overlay" style={{ zIndex: 500 }} onClick={() => setShowDeleteConfirm(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <p style={{ marginBottom: 8, fontFamily: 'monospace', fontSize: 14, fontWeight: 700 }}>
+          <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <p className="dialog-title" style={{ marginBottom: 8, fontSize: 20 }}>
               Delete scene?
             </p>
             <p style={{ marginBottom: 6, fontSize: 13, color: '#333' }}>
@@ -189,16 +189,16 @@ function SceneSection({
                 {shotCount} shot{shotCount !== 1 ? 's' : ''} will be lost, including any schedule blocks referencing {shotCount !== 1 ? 'them' : 'it'}.
               </p>
             )}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="dialog-actions">
               <button
+                className="dialog-button-secondary"
                 onClick={() => setShowDeleteConfirm(false)}
-                style={{ padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, border: '1px solid #ccc', borderRadius: 4, background: '#fff' }}
               >
                 Cancel
               </button>
               <button
+                className="dialog-button-danger"
                 onClick={handleConfirmDelete}
-                style={{ padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4 }}
               >
                 Delete Scene
               </button>
@@ -611,26 +611,26 @@ export default function App() {
       {/* Autosave restore prompt — in-app dialog so focus never leaves the webContents */}
       {restorePrompt && (
         <div className="modal-overlay" style={{ zIndex: 500 }} onClick={() => setRestorePrompt(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+          <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <p style={{ marginBottom: 8, fontFamily: 'monospace', fontSize: 13 }}>
               Restore auto-saved project?
             </p>
             <p style={{ marginBottom: 16, fontSize: 12, color: '#666' }}>
               Saved {restorePrompt.timeStr} &mdash; {restorePrompt.totalShots} shot{restorePrompt.totalShots !== 1 ? 's' : ''}
             </p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="dialog-actions">
               <button
+                className="dialog-button-secondary"
                 onClick={() => setRestorePrompt(null)}
-                style={{ padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}
               >
                 Discard
               </button>
               <button
+                className="dialog-button-primary"
                 onClick={() => {
                   useStore.getState().loadProject(restorePrompt.data)
                   setRestorePrompt(null)
                 }}
-                style={{ padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}
               >
                 Restore
               </button>

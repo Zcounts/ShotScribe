@@ -446,56 +446,63 @@ function parseTxt(text, filename) {
 // ── PDF parser ────────────────────────────────────────────────────────────────
 
 /**
- * Extract text from PDF using pdfreader, then run heuristic parser.
+ * Extract text from PDF using pdfjs-dist, then run heuristic parser.
  * Returns ParsedScene[].
  * NOTE: Only works for text-based PDFs. Scanned PDFs are not supported.
  */
 async function parsePdf(arrayBuffer, filename) {
-  let PdfReader
+  let pdfjsLib
   try {
-    const mod = await import('pdfreader')
-    PdfReader = mod.PdfReader
+    pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
   } catch {
-    throw new Error('pdfreader is not installed. Run: npm install pdfreader')
+    throw new Error('PDF parser dependency failed to load.')
   }
 
-  return new Promise((resolve, reject) => {
-    const reader = new PdfReader()
-    const textLines = []
-    let currentLine = ''
-    let lastY = null
-
-    reader.parseBuffer(Buffer.from(arrayBuffer), (err, item) => {
-      if (err) {
-        reject(new Error('PDF parse error: ' + err.message))
-        return
-      }
-
-      if (!item) {
-        // End of document
-        if (currentLine.trim()) textLines.push(currentLine.trim())
-        const fullText = textLines.join('\n')
-        try {
-          const scenes = parseTxt(fullText, filename)
-          resolve(scenes)
-        } catch (e) {
-          reject(e)
-        }
-        return
-      }
-
-      if (item.text !== undefined) {
-        // Group text items by Y position to reconstruct lines
-        if (lastY !== null && Math.abs(item.y - lastY) > 0.5) {
-          if (currentLine.trim()) textLines.push(currentLine.trim())
-          currentLine = item.text
-        } else {
-          currentLine += (currentLine && item.x > 0 ? ' ' : '') + item.text
-        }
-        lastY = item.y
-      }
+  let pdfDoc
+  try {
+    const loadingTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      disableWorker: true,
+      useWorkerFetch: false,
+      isEvalSupported: false,
     })
-  })
+    pdfDoc = await loadingTask.promise
+  } catch (err) {
+    throw new Error(`PDF parse error: ${err?.message || 'Unable to read PDF'}`)
+  }
+
+  const lines = []
+
+  for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+    const page = await pdfDoc.getPage(pageNumber)
+    const content = await page.getTextContent()
+    const groupedByY = new Map()
+
+    for (const item of content.items || []) {
+      if (!item || typeof item.str !== 'string') continue
+      const y = Math.round((item.transform?.[5] || 0) * 10) / 10
+      const bucket = groupedByY.get(y) || []
+      bucket.push({
+        x: item.transform?.[4] || 0,
+        text: item.str,
+      })
+      groupedByY.set(y, bucket)
+    }
+
+    const pageLines = Array.from(groupedByY.entries())
+      .sort((a, b) => b[0] - a[0])
+      .map(([, items]) => items
+        .sort((a, b) => a.x - b.x)
+        .map(i => i.text)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim())
+      .filter(Boolean)
+
+    lines.push(...pageLines, '')
+  }
+
+  return parseTxt(lines.join('\n'), filename)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
