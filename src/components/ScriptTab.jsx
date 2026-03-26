@@ -1,8 +1,11 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react'
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import useStore from '../store'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 import SceneColorPicker from './SceneColorPicker'
 import { estimateScreenplayPagination, getSceneScreenplayElements, SCREENPLAY_FORMAT } from '../utils/screenplay'
+
+const PAGE_SIZE = { width: 816, height: 1056 }
+const PAGE_MARGIN = { top: 96, right: 96, bottom: 96, left: 144 }
 
 function AddShotModal({ scene, shots, onClose, onConfirm }) {
   const [mode, setMode] = useState('new')
@@ -38,6 +41,86 @@ function AddShotModal({ scene, shots, onClose, onConfirm }) {
   )
 }
 
+function ShotLinkDialog({ data, onClose, onUpdateShot, onJumpToStoryboard }) {
+  const [activeShotId, setActiveShotId] = useState(data.shotIds[0] || null)
+  const activeShot = data.shotMap[activeShotId] || null
+
+  if (!activeShot) return null
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 700 }} onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>Linked Shot</h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        </div>
+
+        {data.shotIds.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {data.shotIds.map(id => {
+              const shot = data.shotMap[id]
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveShotId(id)}
+                  style={{
+                    border: id === activeShotId ? '1px solid #E84040' : '1px solid rgba(74,85,104,0.25)',
+                    background: id === activeShotId ? 'rgba(232,64,64,0.08)' : '#fff',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    padding: '2px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {shot?.displayId || id}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div style={{ fontSize: 12, color: '#4A5568', marginBottom: 12 }}>
+          <strong>{activeShot.displayId}</strong> · {activeShot.cameraName || 'Camera'} · {activeShot.focalLength || 'Lens TBD'}
+        </div>
+
+        <label style={{ display: 'block', fontSize: 11, marginBottom: 4 }}>Notes</label>
+        <textarea
+          value={activeShot.notes || ''}
+          onChange={e => onUpdateShot(activeShot.id, { notes: e.target.value })}
+          style={{ width: '100%', minHeight: 88, marginBottom: 10 }}
+        />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <label style={{ fontSize: 11 }}>
+            Cast
+            <input
+              value={activeShot.cast || ''}
+              onChange={e => onUpdateShot(activeShot.id, { cast: e.target.value })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ fontSize: 11 }}>
+            Script Time
+            <input
+              value={activeShot.scriptTime || ''}
+              onChange={e => onUpdateShot(activeShot.id, { scriptTime: e.target.value })}
+              style={{ width: '100%' }}
+            />
+          </label>
+        </div>
+
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: '#718096' }}>Stay on Script by default. Use jump only when needed.</span>
+          <button className="toolbar-btn" onClick={() => onJumpToStoryboard(activeShot)}>
+            Open in Storyboard
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function paginateScenes(orderedScenes, screenplayBySceneId) {
   const pages = []
   let currentPage = []
@@ -66,7 +149,13 @@ function paginateScenes(orderedScenes, screenplayBySceneId) {
         used = 0
         pageNumber += 1
       }
-      currentPage.push({ ...line, sceneId: scene.id, rowKey: `${scene.id}-${idx}`, sceneCharStart: sceneCharOffset, sceneCharEnd: nextOffset })
+      currentPage.push({
+        ...line,
+        sceneId: scene.id,
+        rowKey: `${scene.id}-${idx}`,
+        sceneCharStart: sceneCharOffset,
+        sceneCharEnd: nextOffset,
+      })
       used += units
       sceneCharOffset = nextOffset
     })
@@ -93,6 +182,7 @@ export default function ScriptTab() {
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectionBar, setSelectionBar] = useState(null)
   const [addShotDialog, setAddShotDialog] = useState(null)
+  const [shotLinkDialog, setShotLinkDialog] = useState(null)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
   const pagination = useMemo(() => estimateScreenplayPagination(orderedScenes), [orderedScenes])
@@ -103,17 +193,17 @@ export default function ScriptTab() {
     return map
   }, [scenes])
 
-  const linkedSnippetsByScene = useMemo(() => {
+  const linkedShotsByScene = useMemo(() => {
     const map = {}
-    scenes.forEach(storyScene => {
-      storyScene.shots.forEach(shot => {
+    scenes.forEach((storyScene, sceneIdx) => {
+      storyScene.shots.forEach((shot, shotIdx) => {
         if (!shot.linkedSceneId) return
         if (!map[shot.linkedSceneId]) map[shot.linkedSceneId] = []
-        if (Number.isFinite(shot.linkedScriptRangeStart) && Number.isFinite(shot.linkedScriptRangeEnd)) {
-          map[shot.linkedSceneId].push({ start: shot.linkedScriptRangeStart, end: shot.linkedScriptRangeEnd })
-        } else if (shot.linkedDialogueLine) {
-          map[shot.linkedSceneId].push({ text: shot.linkedDialogueLine.trim().toLowerCase() })
-        }
+        map[shot.linkedSceneId].push({
+          ...shot,
+          parentSceneId: storyScene.id,
+          displayId: `${sceneIdx + 1}${String.fromCharCode(65 + shotIdx)}`,
+        })
       })
     })
     return map
@@ -124,6 +214,15 @@ export default function ScriptTab() {
     orderedScenes.forEach(sc => { result[sc.id] = getSceneScreenplayElements(sc) })
     return result
   }, [orderedScenes])
+
+  const sceneFullTextById = useMemo(() => {
+    const out = {}
+    orderedScenes.forEach(scene => {
+      const elements = screenplayBySceneId[scene.id] || []
+      out[scene.id] = elements.map(el => String(el.text || '')).join('\n')
+    })
+    return out
+  }, [orderedScenes, screenplayBySceneId])
 
   const pagedScript = useMemo(() => paginateScenes(orderedScenes, screenplayBySceneId), [orderedScenes, screenplayBySceneId])
 
@@ -143,30 +242,77 @@ export default function ScriptTab() {
     clearScriptFocusRequest()
   }, [scriptFocusRequest, clearScriptFocusRequest])
 
+  const allLinkedShotsForScriptScene = useCallback((scriptSceneId) => linkedShotsByScene[scriptSceneId] || [], [linkedShotsByScene])
+
+  const getClosestLineEl = (node) => {
+    if (!node) return null
+    if (node.nodeType === Node.ELEMENT_NODE) return node.closest('[data-line-start]')
+    return node.parentElement?.closest('[data-line-start]') || null
+  }
+
+  const getLocalOffset = (lineEl, container, offset) => {
+    const r = document.createRange()
+    r.selectNodeContents(lineEl)
+    r.setEnd(container, offset)
+    return r.toString().length
+  }
+
   useEffect(() => {
     const onMouseUp = () => {
       const sel = window.getSelection()
-      const text = sel?.toString()?.trim()
-      if (!text || !rightRef.current?.contains(sel.anchorNode)) return setSelectionBar(null)
-      const range = sel.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
-      const sceneEl = range.startContainer.parentElement?.closest('[data-sceneid]')
-      const sceneId = sceneEl?.getAttribute('data-sceneid')
-      if (!sceneId) return
-      const scene = scriptScenes.find(s => s.id === sceneId)
-      let rangeStart = null
-      let rangeEnd = null
-      const fullText = String(scene?.screenplayText || scene?.actionText || '')
-      const idx = fullText.toLowerCase().indexOf(text.toLowerCase())
-      if (idx >= 0) {
-        rangeStart = idx
-        rangeEnd = idx + text.length
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        setSelectionBar(null)
+        return
       }
-      setSelectionBar({ x: rect.left + window.scrollX, y: rect.top + window.scrollY - 40, text: text.slice(0, 260), sceneId, sceneNumber: scene?.sceneNumber || '', rangeStart, rangeEnd })
+      const range = sel.getRangeAt(0)
+      if (!rightRef.current?.contains(range.commonAncestorContainer)) {
+        setSelectionBar(null)
+        return
+      }
+
+      const startLine = getClosestLineEl(range.startContainer)
+      const endLine = getClosestLineEl(range.endContainer)
+      const sceneEl = (startLine || endLine)?.closest('[data-sceneid]')
+      const sceneId = sceneEl?.getAttribute('data-sceneid')
+      if (!sceneId || !startLine || !endLine) {
+        setSelectionBar(null)
+        return
+      }
+
+      const startBase = Number(startLine.dataset.lineStart || 0)
+      const endBase = Number(endLine.dataset.lineStart || 0)
+      const absA = startBase + getLocalOffset(startLine, range.startContainer, range.startOffset)
+      const absB = endBase + getLocalOffset(endLine, range.endContainer, range.endOffset)
+      const rangeStart = Math.min(absA, absB)
+      const rangeEnd = Math.max(absA, absB)
+      if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) {
+        setSelectionBar(null)
+        return
+      }
+
+      const fullText = sceneFullTextById[sceneId] || ''
+      const text = fullText.slice(rangeStart, rangeEnd).trim()
+      if (!text) {
+        setSelectionBar(null)
+        return
+      }
+
+      const rect = range.getBoundingClientRect()
+      const scene = scriptScenes.find(s => s.id === sceneId)
+      setSelectionBar({
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY - 40,
+        text: text.slice(0, 260),
+        sceneId,
+        sceneNumber: scene?.sceneNumber || '',
+        rangeStart,
+        rangeEnd,
+      })
     }
+
     document.addEventListener('mouseup', onMouseUp)
     return () => document.removeEventListener('mouseup', onMouseUp)
-  }, [scriptScenes])
+  }, [scriptScenes, sceneFullTextById])
 
   const findStoryboardSceneForScriptScene = (scriptScene) => {
     if (!scriptScene) return null
@@ -174,16 +320,6 @@ export default function ScriptTab() {
       if (storyboardScene.shots.some(shot => shot.linkedSceneId === scriptScene.id)) return storyboardScene
     }
     return scenes[0] || null
-  }
-
-  const allLinkedShotsForScriptScene = (scriptSceneId) => {
-    const items = []
-    scenes.forEach((storyScene, sceneIdx) => {
-      storyScene.shots.forEach((shot, shotIdx) => {
-        if (shot.linkedSceneId === scriptSceneId) items.push({ ...shot, parentSceneId: storyScene.id, displayId: `${sceneIdx + 1}${String.fromCharCode(65 + shotIdx)}` })
-      })
-    })
-    return items
   }
 
   const openAddShotDialog = (sceneId, selectedText = '') => {
@@ -205,7 +341,7 @@ export default function ScriptTab() {
     if (mode === 'existing' && selectedShotId) {
       linkShotToScene(selectedShotId, scriptScene.id, {
         linkedDialogueLine: selectedText || null,
-        linkedDialogueOffset: selectedText ? (scriptScene.actionText || '').indexOf(selectedText) : null,
+        linkedDialogueOffset: Number.isFinite(rangeStart) ? rangeStart : null,
         linkedScriptRangeStart: rangeStart,
         linkedScriptRangeEnd: rangeEnd,
       })
@@ -218,7 +354,7 @@ export default function ScriptTab() {
     addShotWithOverrides(targetStoryboardScene.id, {
       linkedSceneId: scriptScene.id,
       linkedDialogueLine: selectedText || null,
-      linkedDialogueOffset: selectedText ? (scriptScene.actionText || '').indexOf(selectedText) : null,
+      linkedDialogueOffset: Number.isFinite(rangeStart) ? rangeStart : null,
       linkedScriptRangeStart: rangeStart,
       linkedScriptRangeEnd: rangeEnd,
       notes: selectedText || '',
@@ -226,28 +362,139 @@ export default function ScriptTab() {
     setAddShotDialog(null)
   }
 
+  const openShotLinkDialog = (sceneId, shotIds) => {
+    if (!shotIds?.length) return
+    const shots = allLinkedShotsForScriptScene(sceneId)
+    const shotMap = Object.fromEntries(shots.map(sh => [sh.id, sh]))
+    setShotLinkDialog({ sceneId, shotIds, shotMap })
+  }
+
+  const jumpToStoryboardShot = (shot) => {
+    if (!shot?.id) return
+    setActiveTab('storyboard')
+    requestAnimationFrame(() => {
+      const node = document.getElementById(`storyboard-shot-${shot.id}`)
+      if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    })
+  }
+
   if (orderedScenes.length === 0) return <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><div style={{ textAlign: 'center' }}><p>No script imported yet.</p><button onClick={() => setActiveTab('scenes')}>Go to Scenes tab</button></div></div>
 
-  const renderLine = (line) => {
-    const linkedMatches = linkedSnippetsByScene[line.sceneId] || []
-    const fallback = String(line.text || '').trim().toLowerCase()
-    const isAnnotated = linkedMatches.some(match => {
-      if (match?.start != null && match?.end != null) {
-        return match.start < (line.sceneCharEnd ?? 0) && match.end > (line.sceneCharStart ?? 0)
-      }
-      return match?.text && match.text === fallback
-    })
-    const shared = { whiteSpace: 'pre-wrap', marginBottom: 4, position: 'relative', background: isAnnotated ? 'rgba(232,64,64,0.10)' : 'transparent', borderLeft: isAnnotated ? '3px solid rgba(220,38,38,0.75)' : '3px solid transparent', borderRadius: isAnnotated ? 4 : 0, paddingLeft: 8, paddingRight: isAnnotated ? 50 : 0 }
-    const badge = isAnnotated ? <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 9, color: '#991b1b', border: '1px solid rgba(153,27,27,0.35)', borderRadius: 999, padding: '0 6px', fontFamily: 'Sora, sans-serif', background: '#fff1f2' }}>SHOT LINK</span> : null
+  const getLineBaseStyle = (lineType) => {
+    const style = {
+      whiteSpace: 'pre-wrap',
+      marginBottom: 4,
+      position: 'relative',
+      lineHeight: '1.5',
+      color: '#111827',
+    }
 
-    if (line.type === 'blank') return <div key={line.rowKey} style={{ height: 8 }} />
-    if (line.type === 'heading') return <div key={line.rowKey} style={{ ...shared, textTransform: 'uppercase', fontWeight: 700 }}>{line.text}{badge}</div>
-    if (line.type === 'action') return <div key={line.rowKey} style={{ ...shared, marginRight: '12%' }}>{line.text}{badge}</div>
-    if (line.type === 'character') return <div key={line.rowKey} style={{ ...shared, width: '42%', marginLeft: '29%', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{line.text}{badge}</div>
-    if (line.type === 'parenthetical') return <div key={line.rowKey} style={{ ...shared, marginLeft: '34%', width: '32%', color: '#374151' }}>{line.text}{badge}</div>
-    if (line.type === 'dialogue') return <div key={line.rowKey} style={{ ...shared, marginLeft: '28%', width: '46%' }}>{line.text}{badge}</div>
-    if (line.type === 'transition') return <div key={line.rowKey} style={{ ...shared, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 }}>{line.text}{badge}</div>
-    return null
+    if (lineType === 'heading') {
+      return { ...style, textTransform: 'uppercase', fontWeight: 700 }
+    }
+    if (lineType === 'action') {
+      return { ...style, width: '100%' }
+    }
+    if (lineType === 'character') {
+      return { ...style, marginLeft: '211px', width: '192px', textAlign: 'center', textTransform: 'uppercase' }
+    }
+    if (lineType === 'parenthetical') {
+      return { ...style, marginLeft: '144px', width: '240px', color: '#374151' }
+    }
+    if (lineType === 'dialogue') {
+      return { ...style, marginLeft: '96px', width: '336px' }
+    }
+    if (lineType === 'transition') {
+      return { ...style, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 }
+    }
+    return style
+  }
+
+  const renderLine = (line) => {
+    const lineText = String(line.text || '')
+    const linkedShots = allLinkedShotsForScriptScene(line.sceneId).filter(shot => (
+      Number.isFinite(shot.linkedScriptRangeStart)
+      && Number.isFinite(shot.linkedScriptRangeEnd)
+      && shot.linkedScriptRangeStart < (line.sceneCharEnd ?? 0)
+      && shot.linkedScriptRangeEnd > (line.sceneCharStart ?? 0)
+    ))
+
+    if (line.type === 'blank') {
+      return <div key={line.rowKey} data-line-start={line.sceneCharStart} data-line-end={line.sceneCharEnd} style={{ height: 8 }} />
+    }
+
+    const localRanges = linkedShots.map(shot => ({
+      shotId: shot.id,
+      start: Math.max(0, shot.linkedScriptRangeStart - line.sceneCharStart),
+      end: Math.min(lineText.length, shot.linkedScriptRangeEnd - line.sceneCharStart),
+    })).filter(r => r.end > r.start)
+
+    const markers = Array.from(new Set([0, lineText.length, ...localRanges.flatMap(r => [r.start, r.end])]))
+      .sort((a, b) => a - b)
+
+    const segments = []
+    for (let i = 0; i < markers.length - 1; i += 1) {
+      const segStart = markers[i]
+      const segEnd = markers[i + 1]
+      const text = lineText.slice(segStart, segEnd)
+      const matching = localRanges.filter(r => r.start < segEnd && r.end > segStart)
+      segments.push({ key: `${line.rowKey}-${segStart}-${segEnd}`, text, matching })
+    }
+
+    const hasAnnotation = localRanges.length > 0
+    const lineStyle = getLineBaseStyle(line.type)
+
+    return (
+      <div
+        key={line.rowKey}
+        data-line-start={line.sceneCharStart}
+        data-line-end={line.sceneCharEnd}
+        style={lineStyle}
+      >
+        {segments.map(seg => {
+          if (!seg.matching.length) return <span key={seg.key}>{seg.text}</span>
+          const shotIds = [...new Set(seg.matching.map(m => m.shotId))]
+          return (
+            <span
+              key={seg.key}
+              onClick={(e) => {
+                e.stopPropagation()
+                openShotLinkDialog(line.sceneId, shotIds)
+              }}
+              title="View linked shot"
+              style={{
+                background: 'rgba(239,68,68,0.18)',
+                boxShadow: 'inset 0 -1px 0 rgba(220,38,38,0.55)',
+                cursor: 'pointer',
+                borderRadius: 2,
+              }}
+            >
+              {seg.text}
+            </span>
+          )
+        })}
+        {hasAnnotation && (
+          <span
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: -12,
+              fontSize: 9,
+              color: '#991b1b',
+              border: '1px solid rgba(153,27,27,0.35)',
+              borderRadius: 999,
+              padding: '0 6px',
+              fontFamily: 'Sora, sans-serif',
+              background: '#fff1f2',
+              pointerEvents: 'none',
+              lineHeight: 1.4,
+            }}
+          >
+            SHOT LINK
+          </span>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -272,8 +519,8 @@ export default function ScriptTab() {
       <div ref={rightRef} style={{ flex: 1, overflowY: 'auto', padding: 18, position: 'relative' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
           {pagedScript.map(page => (
-            <div key={page.id} style={{ width: '816px', height: '1056px', background: '#fffdf8', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', padding: '56px 72px', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: 16, lineHeight: 1.5, position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 12, right: 16, fontSize: 10, color: '#64748b', fontFamily: 'Sora, sans-serif' }}>Page {page.number}</div>
+            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', padding: `${PAGE_MARGIN.top}px ${PAGE_MARGIN.right}px ${PAGE_MARGIN.bottom}px ${PAGE_MARGIN.left}px`, fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: 16, lineHeight: 1.5, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 16, right: 16, fontSize: 10, color: '#64748b', fontFamily: 'Sora, sans-serif' }}>Page {page.number}</div>
               {page.lines.map(line => {
                 const scene = orderedScenes.find(sc => sc.id === line.sceneId)
                 const showSceneHeader = line.type === 'heading'
@@ -311,6 +558,14 @@ export default function ScriptTab() {
       )}
 
       {addShotDialog && <AddShotModal scene={addShotDialog.scene} shots={addShotDialog.existingShots} onClose={() => setAddShotDialog(null)} onConfirm={confirmAddShotDialog} />}
+      {shotLinkDialog && (
+        <ShotLinkDialog
+          data={shotLinkDialog}
+          onClose={() => setShotLinkDialog(null)}
+          onUpdateShot={(shotId, updates) => updateShot(shotId, updates)}
+          onJumpToStoryboard={jumpToStoryboardShot}
+        />
+      )}
     </div>
   )
 }
