@@ -3,6 +3,7 @@ import useStore from '../store'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 import SceneColorPicker from './SceneColorPicker'
 import SpecsTable from './SpecsTable'
+import ImportScriptModal from './ImportScriptModal'
 import { estimateScreenplayPagination, getSceneScreenplayElements, SCREENPLAY_FORMAT } from '../utils/screenplay'
 
 const PAGE_SIZE = { width: 816, height: 1056 }
@@ -18,9 +19,9 @@ function AddShotModal({ scene, shots, onClose, onConfirm }) {
 
   return (
     <div className="modal-overlay" style={{ zIndex: 650 }} onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 4 }}>Add Shot to SC {scene.sceneNumber}</h3>
-        <p style={{ marginBottom: 12, fontSize: 12, color: '#4A5568' }}>{scene.slugline || scene.location || 'Script scene'}</p>
+      <div className="modal app-dialog" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+        <h3 className="dialog-title" style={{ marginBottom: 4 }}>Add Shot to SC {scene.sceneNumber}</h3>
+        <p className="dialog-description" style={{ marginBottom: 12 }}>{scene.slugline || scene.location || 'Script scene'}</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="radio" checked={mode === 'existing'} onChange={() => setMode('existing')} />Link existing shot</label>
           {mode === 'existing' && (
@@ -37,9 +38,9 @@ function AddShotModal({ scene, shots, onClose, onConfirm }) {
           )}
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="radio" checked={mode === 'new'} onChange={() => setMode('new')} />Create brand new shot</label>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-          <button onClick={onClose}>Cancel</button>
-          <button onClick={() => onConfirm({ mode, selectedShotId })} disabled={mode === 'existing' && !selectedShotId}>Confirm</button>
+        <div className="dialog-actions">
+          <button className="dialog-button-secondary" onClick={onClose}>Cancel</button>
+          <button className="dialog-button-primary" onClick={() => onConfirm({ mode, selectedShotId })} disabled={mode === 'existing' && !selectedShotId}>Confirm</button>
         </div>
       </div>
     </div>
@@ -63,7 +64,7 @@ function ShotLinkDialog({ data, onClose, onUpdateShot, onUpdateShotImage, useDro
 
   return (
     <div className="modal-overlay" style={{ zIndex: 700 }} onClick={onClose}>
-      <div className="modal" style={{ width: 760, maxWidth: '95vw' }} onClick={e => e.stopPropagation()}>
+      <div className="modal app-dialog" style={{ width: 760, maxWidth: '95vw' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <h3 style={{ margin: 0, fontSize: 18 }}>Linked Shot</h3>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18 }}>✕</button>
@@ -99,14 +100,16 @@ function ShotLinkDialog({ data, onClose, onUpdateShot, onUpdateShotImage, useDro
             <div style={{ width: 12, height: 12, borderRadius: 2, background: activeShot.color || '#9ca3af', border: '1px solid rgba(0,0,0,0.15)' }} />
             <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12 }}>{activeShot.displayId || activeShot.id} -</span>
             <input
+              className="dialog-input"
               value={activeShot.cameraName || ''}
               onChange={(e) => onUpdateShot(activeShot.id, { cameraName: e.target.value })}
-              style={{ border: 'none', background: 'transparent', fontSize: 12, flex: 1, minWidth: 120 }}
+              style={{ border: 'none', background: 'transparent', boxShadow: 'none', fontSize: 12, flex: 1, minWidth: 120 }}
             />
             <input
+              className="dialog-input"
               value={activeShot.focalLength || ''}
               onChange={(e) => onUpdateShot(activeShot.id, { focalLength: e.target.value })}
-              style={{ border: 'none', background: 'transparent', fontSize: 12, width: 80, textAlign: 'right' }}
+              style={{ border: 'none', background: 'transparent', boxShadow: 'none', fontSize: 12, width: 80, textAlign: 'right' }}
             />
           </div>
 
@@ -253,6 +256,7 @@ export default function ScriptTab() {
   const [selectionBar, setSelectionBar] = useState(null)
   const [addShotDialog, setAddShotDialog] = useState(null)
   const [shotLinkDialog, setShotLinkDialog] = useState(null)
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
   const pagination = useMemo(() => estimateScreenplayPagination(orderedScenes), [orderedScenes])
@@ -464,7 +468,18 @@ export default function ScriptTab() {
     })
   }
 
-  if (orderedScenes.length === 0) return <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><div style={{ textAlign: 'center' }}><p>No script imported yet.</p><button onClick={() => setActiveTab('scenes')}>Go to Scenes tab</button></div></div>
+  if (orderedScenes.length === 0) {
+    return (
+      <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+          <p style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>No script imported yet</p>
+          <p style={{ margin: 0, color: '#4A5568' }}>Import a screenplay to generate scenes and start linking shots.</p>
+          <button className="dialog-button-primary" onClick={() => setImportModalOpen(true)}>Import Script</button>
+        </div>
+        <ImportScriptModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
+      </div>
+    )
+  }
 
   const getRowStyle = (lineType) => {
     const style = {

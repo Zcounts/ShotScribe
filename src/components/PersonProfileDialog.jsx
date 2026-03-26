@@ -17,30 +17,30 @@ export default function PersonProfileDialog({ personType, person, onClose }) {
 
   return (
     <div className="modal-overlay" style={{ zIndex: 760 }} onClick={onClose}>
-      <div className="modal" style={{ width: 'min(840px, 92vw)', maxWidth: 840, maxHeight: '84vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 14, fontSize: 20 }}>Edit {personType === 'cast' ? 'Cast Profile' : 'Crew Profile'}</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', rowGap: 12, columnGap: 16, alignItems: 'center' }}>
-          <label>Name</label>
+      <div className="modal app-dialog" style={{ width: 'min(840px, 92vw)', maxWidth: 840, maxHeight: '84vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <h3 className="dialog-title">Edit {personType === 'cast' ? 'Cast Profile' : 'Crew Profile'}</h3>
+        <div className="dialog-form-grid" style={{ gridTemplateColumns: '170px 1fr', columnGap: 16 }}>
+          <label className="dialog-label">Name</label>
           <input value={person.name || ''} onChange={e => update({ name: e.target.value })} />
 
-          <label>Email</label>
+          <label className="dialog-label">Email</label>
           <input value={person.email || ''} onChange={e => update({ email: e.target.value })} />
 
-          <label>Phone</label>
+          <label className="dialog-label">Phone</label>
           <input value={person.phone || ''} onChange={e => update({ phone: e.target.value })} />
 
-          <label>Role</label>
+          <label className="dialog-label">Role</label>
           <input value={person.role || ''} onChange={e => update({ role: e.target.value })} />
 
-          <label>Department</label>
+          <label className="dialog-label">Department</label>
           <input value={person.department || ''} onChange={e => update({ department: e.target.value })} />
 
           {personType === 'cast' && (
             <>
-              <label>Primary Character</label>
+              <label className="dialog-label">Primary Character</label>
               <input value={person.character || ''} onChange={e => update({ character: e.target.value })} placeholder="Character played" />
 
-              <label>Linked Characters</label>
+              <label className="dialog-label">Linked Characters</label>
               <div>
                 <input
                   value={(person.characterIds || []).join(', ')}
@@ -56,7 +56,7 @@ export default function PersonProfileDialog({ personType, person, onClose }) {
             </>
           )}
 
-          <label>Notes</label>
+          <label className="dialog-label">Notes</label>
           <textarea
             rows={4}
             value={person.notes || ''}
@@ -65,8 +65,8 @@ export default function PersonProfileDialog({ personType, person, onClose }) {
           />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
-          <button onClick={onClose}>Close</button>
+        <div className="dialog-actions" style={{ marginTop: 18 }}>
+          <button className="dialog-button-secondary" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

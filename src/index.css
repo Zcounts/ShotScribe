@@ -508,13 +508,106 @@
 
   .modal {
     background: #FAF8F4;
-    border-radius: 8px;
-    padding: 24px;
+    border-radius: 12px;
+    padding: 22px 24px;
     min-width: 360px;
     max-width: 480px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    border: 1px solid rgba(74,85,104,0.15);
+    box-shadow: 0 16px 42px rgba(0,0,0,0.26);
+    border: 1px solid rgba(74,85,104,0.2);
     font-family: 'Sora', sans-serif;
+  }
+
+  .app-dialog .dialog-title {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.2;
+  }
+
+  .app-dialog .dialog-description {
+    margin: 0 0 10px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #4b5563;
+  }
+
+  .app-dialog .dialog-label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .app-dialog .dialog-input,
+  .app-dialog input,
+  .app-dialog textarea,
+  .app-dialog select {
+    border: 1px solid rgba(55,65,81,0.28);
+    background: #fff;
+    color: #111827;
+    border-radius: 7px;
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 13px;
+    width: 100%;
+  }
+
+  .app-dialog textarea {
+    min-height: 90px;
+    resize: vertical;
+  }
+
+  .app-dialog .dialog-input:focus,
+  .app-dialog input:focus,
+  .app-dialog textarea:focus,
+  .app-dialog select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.18);
+    outline: none;
+  }
+
+  .app-dialog .dialog-form-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    row-gap: 12px;
+    column-gap: 14px;
+    align-items: center;
+  }
+
+  .app-dialog .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  button.dialog-button-secondary,
+  button.dialog-button-primary,
+  button.dialog-button-danger {
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  button.dialog-button-secondary {
+    background: #fff;
+    border-color: rgba(55,65,81,0.25);
+    color: #374151;
+  }
+
+  button.dialog-button-primary {
+    background: #E84040;
+    color: #fff;
+  }
+
+  button.dialog-button-danger {
+    background: #dc2626;
+    color: #fff;
   }
 
   /* Print styles */

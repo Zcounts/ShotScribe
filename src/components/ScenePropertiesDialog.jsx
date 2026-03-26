@@ -29,38 +29,38 @@ export default function ScenePropertiesDialog() {
 
   return (
     <div className="modal-overlay" style={{ zIndex: 700 }} onClick={close}>
-      <div className="modal" style={{ width: 'min(860px, 92vw)', maxWidth: 860, maxHeight: '84vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 16, fontSize: 22 }}>Scene Properties</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', rowGap: 12, columnGap: 14, alignItems: 'center' }}>
-          <label>Scene Number</label>
+      <div className="modal app-dialog" style={{ width: 'min(860px, 92vw)', maxWidth: 860, maxHeight: '84vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <h3 className="dialog-title">Scene Properties</h3>
+        <div className="dialog-form-grid">
+          <label className="dialog-label">Scene Number</label>
           <input value={isScript ? (scene.sceneNumber || '') : (scene.sceneLabel || '')} onChange={(e) => update(isScript ? { sceneNumber: e.target.value } : { sceneLabel: e.target.value })} />
 
-          <label>Title / Slugline</label>
+          <label className="dialog-label">Title / Slugline</label>
           <input value={isScript ? (scene.slugline || '') : ''} onChange={(e) => isScript && update({ slugline: e.target.value })} disabled={!isScript} />
 
-          <label>Location</label>
+          <label className="dialog-label">Location</label>
           <input value={scene.location || ''} onChange={(e) => update({ location: e.target.value })} />
 
-          <label>INT / EXT</label>
+          <label className="dialog-label">INT / EXT</label>
           <input value={(isScript ? scene.intExt : scene.intOrExt) || ''} onChange={(e) => update(isScript ? { intExt: e.target.value } : { intOrExt: e.target.value })} />
 
-          <label>DAY / NIGHT</label>
+          <label className="dialog-label">DAY / NIGHT</label>
           <input value={scene.dayNight || ''} onChange={(e) => update({ dayNight: e.target.value })} />
 
-          <label>Color</label>
+          <label className="dialog-label">Color</label>
           <SceneColorPicker value={scene.color || null} onChange={(color) => update({ color })} size={16} />
 
           {isScript && (
             <>
-              <label>Estimated Pages</label>
+              <label className="dialog-label">Estimated Pages</label>
               <div style={{ fontSize: 13, color: '#4A5568' }}>
                 {pagination ? `${pagination.pageCount.toFixed(2)} pp · p${pagination.startPage}–${pagination.endPage}` : '—'}
               </div>
             </>
           )}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={close}>Close</button>
+        <div className="dialog-actions">
+          <button className="dialog-button-secondary" onClick={close}>Close</button>
         </div>
       </div>
     </div>
