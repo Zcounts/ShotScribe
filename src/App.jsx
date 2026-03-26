@@ -338,17 +338,24 @@ export default function App() {
     runningOffset += Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }
 
-  const sceneNavItems = scriptScenes.length > 0
-    ? scriptScenes.map(sc => ({
-        id: `script-${sc.id}`,
-        label: `SC ${sc.sceneNumber || '—'}`,
-        subtitle: sc.location || sc.slugline || 'Script scene',
-      }))
-    : scenes.map(scene => ({
-        id: scene.id,
-        label: scene.sceneLabel || 'SCENE',
-        subtitle: scene.location || `${scene.intOrExt || ''} ${scene.dayNight || ''}`,
-      }))
+  const sceneNavItems = scenes.map(scene => {
+    const linkedScene = scene.linkedScriptSceneId
+      ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
+      : null
+    const label = linkedScene?.sceneNumber
+      ? `SC ${linkedScene.sceneNumber}`
+      : (scene.sceneLabel || 'SCENE')
+    const subtitle = linkedScene?.location
+      || scene.location
+      || `${scene.intOrExt || ''} ${scene.dayNight || ''}`
+    return {
+      id: scene.id,
+      label,
+      subtitle,
+      linkedSceneId: linkedScene?.id || null,
+      color: linkedScene?.color || '#94a3b8',
+    }
+  })
 
   const jumpToStoryboardScene = (sceneId) => {
     const node = storyboardSceneRefs.current[sceneId]
@@ -491,10 +498,9 @@ export default function App() {
         >
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
-              <div style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', height: 'calc(100vh - 170px)', maxHeight: 'calc(100vh - 170px)' }}>
+              <div style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', height: 'calc(100vh - 170px)', maxHeight: 'calc(100vh - 170px)', display: 'flex' }}>
                 <SidebarPane
                   width={260}
-                  title="Scenes / Pages"
                   controls={(
                     <div style={{ display: 'flex', gap: 6 }}>
                       {['Scenes', 'Pages'].map(tab => (
@@ -504,10 +510,9 @@ export default function App() {
                   )}
                 >
                   {storyboardOutlineTab === 'Scenes' ? sceneNavItems.map(item => {
-                  const color = scriptScenes.find(s => `script-${s.id}` === item.id)?.color || '#94a3b8'
                   return (
-                    <button key={item.id} onDoubleClick={() => item.id.startsWith('script-') ? openScenePropertiesDialog('script', item.id.replace('script-', '')) : openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 10px', cursor: 'pointer' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 999, background: color, border: '1px solid rgba(0,0,0,0.1)' }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
+                    <button key={item.id} onDoubleClick={() => openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 10px', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 999, background: item.color, border: '1px solid rgba(0,0,0,0.1)' }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
                       <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                     </button>
                   )
@@ -527,8 +532,8 @@ export default function App() {
                   ref={el => {
                     if (el) {
                       storyboardSceneRefs.current[scene.id] = el
-                      if (scriptScenes[sceneIdx]) {
-                        storyboardSceneRefs.current[`script-${scriptScenes[sceneIdx].id}`] = el
+                      if (scene.linkedScriptSceneId) {
+                        storyboardSceneRefs.current[`script-${scene.linkedScriptSceneId}`] = el
                       }
                     }
                   }}

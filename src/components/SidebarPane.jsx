@@ -16,6 +16,7 @@ export default function SidebarPane({
         display: 'flex',
         flexDirection: 'column',
         minWidth: width,
+        height: '100%',
       }}
     >
       <div

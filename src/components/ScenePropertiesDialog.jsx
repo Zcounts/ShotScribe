@@ -11,6 +11,7 @@ export default function ScenePropertiesDialog() {
   const scriptSettings = useStore(s => s.scriptSettings)
   const updateScene = useStore(s => s.updateScene)
   const updateScriptScene = useStore(s => s.updateScriptScene)
+  const linkStoryboardSceneToScriptScene = useStore(s => s.linkStoryboardSceneToScriptScene)
 
   if (!dialog) return null
 
@@ -54,6 +55,24 @@ export default function ScenePropertiesDialog() {
 
           <label className="dialog-label">Color</label>
           <SceneColorPicker value={scene.color || null} onChange={(color) => update({ color })} size={16} />
+
+          {!isScript && (
+            <>
+              <label className="dialog-label">Linked Script Scene</label>
+              <select
+                value={scene.linkedScriptSceneId || ''}
+                onChange={(e) => linkStoryboardSceneToScriptScene(scene.id, e.target.value || null)}
+                disabled={scriptScenes.length === 0}
+              >
+                <option value="">No linked script scene</option>
+                {scriptScenes.map(scriptScene => (
+                  <option key={scriptScene.id} value={scriptScene.id}>
+                    SC {scriptScene.sceneNumber || '—'} · {scriptScene.location || scriptScene.slugline || 'Untitled'}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
 
           {isScript && (
             <>

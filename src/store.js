@@ -153,6 +153,7 @@ function createScene(overrides = {}) {
     cameras: [{ name: 'Camera 1', body: 'fx30' }],
     pageNotes: ['*NOTE: \n*SHOOT ORDER: '],
     pageColors: [],
+    linkedScriptSceneId: null,
     shots: [],
     ...overrides,
   }
@@ -320,9 +321,23 @@ const useStore = create((set, get) => ({
         // Replace all scenes that came from this script
         const otherScenes = state.scriptScenes.filter(s => s.importSource !== scriptMeta.filename)
         const otherScripts = state.importedScripts.filter(s => s.filename !== scriptMeta.filename)
+        const mergedScriptScenes = [...otherScenes, ...enriched]
         return {
-          scriptScenes: [...otherScenes, ...enriched],
+          scriptScenes: mergedScriptScenes,
           importedScripts: [...otherScripts, newScript],
+          scenes: state.scenes.map((storyScene, idx) => {
+            if (storyScene.linkedScriptSceneId) return storyScene
+            const fallback = mergedScriptScenes[idx]
+            if (!fallback?.id) return storyScene
+            return {
+              ...storyScene,
+              linkedScriptSceneId: fallback.id,
+              sceneLabel: fallback.sceneNumber ? `SCENE ${fallback.sceneNumber}` : storyScene.sceneLabel,
+              location: fallback.location || storyScene.location,
+              intOrExt: fallback.intExt || storyScene.intOrExt,
+              dayNight: fallback.dayNight || storyScene.dayNight,
+            }
+          }),
         }
       } else {
         // Merge — add new scenes, keep existing
@@ -333,9 +348,23 @@ const useStore = create((set, get) => ({
         const updatedScripts = scriptExists
           ? state.importedScripts.map(s => s.filename === scriptMeta.filename ? newScript : s)
           : [...state.importedScripts, newScript]
+        const mergedScriptScenes = [...state.scriptScenes, ...newScenes]
         return {
-          scriptScenes: [...state.scriptScenes, ...newScenes],
+          scriptScenes: mergedScriptScenes,
           importedScripts: updatedScripts,
+          scenes: state.scenes.map((storyScene, idx) => {
+            if (storyScene.linkedScriptSceneId) return storyScene
+            const fallback = mergedScriptScenes[idx]
+            if (!fallback?.id) return storyScene
+            return {
+              ...storyScene,
+              linkedScriptSceneId: fallback.id,
+              sceneLabel: fallback.sceneNumber ? `SCENE ${fallback.sceneNumber}` : storyScene.sceneLabel,
+              location: fallback.location || storyScene.location,
+              intOrExt: fallback.intExt || storyScene.intOrExt,
+              dayNight: fallback.dayNight || storyScene.dayNight,
+            }
+          }),
         }
       }
     })
@@ -359,6 +388,7 @@ const useStore = create((set, get) => ({
           return updated
         })
       const pagination = estimateScreenplayPagination(nextScenes)
+      const updatedScriptScene = nextScenes.find(s => s.id === sceneId)
       return {
         scriptScenes: nextScenes.map(scene => ({
           ...scene,
@@ -366,6 +396,18 @@ const useStore = create((set, get) => ({
           pageStart: pagination.byScene[scene.id]?.startPage ?? scene.pageStart ?? null,
           pageEnd: pagination.byScene[scene.id]?.endPage ?? scene.pageEnd ?? null,
         })),
+        scenes: !updatedScriptScene
+          ? state.scenes
+          : state.scenes.map(storyScene => {
+            if (storyScene.linkedScriptSceneId !== sceneId) return storyScene
+            return {
+              ...storyScene,
+              sceneLabel: updatedScriptScene.sceneNumber ? `SCENE ${updatedScriptScene.sceneNumber}` : storyScene.sceneLabel,
+              location: updatedScriptScene.location || storyScene.location,
+              intOrExt: updatedScriptScene.intExt || storyScene.intOrExt,
+              dayNight: updatedScriptScene.dayNight || storyScene.dayNight,
+            }
+          }),
       }
     })
     get()._scheduleAutoSave()
@@ -374,13 +416,14 @@ const useStore = create((set, get) => ({
   deleteScriptScene: (sceneId) => {
     set(state => ({
       scriptScenes: state.scriptScenes.filter(s => s.id !== sceneId),
-      // Clear linkedSceneId from any shots that linked to this scene
       scenes: state.scenes.map(sc => ({
         ...sc,
+        linkedScriptSceneId: sc.linkedScriptSceneId === sceneId ? null : sc.linkedScriptSceneId,
         shots: sc.shots.map(sh =>
           sh.linkedSceneId === sceneId ? { ...sh, linkedSceneId: null } : sh
         ),
       })),
+      // Clear linkedSceneId from any shots that linked to this scene
     }))
     get()._scheduleAutoSave()
   },
@@ -402,9 +445,13 @@ const useStore = create((set, get) => ({
       return {
         importedScripts: state.importedScripts.filter(s => s.id !== scriptId),
         scriptScenes: state.scriptScenes.filter(s => s.importSource !== script.filename),
-        // Clear broken links from shots
+        // Clear broken links from storyboard scenes and shots
         scenes: state.scenes.map(sc => ({
           ...sc,
+          linkedScriptSceneId: (
+            sc.linkedScriptSceneId
+            && state.scriptScenes.find(ss => ss.id === sc.linkedScriptSceneId && ss.importSource === script.filename)
+          ) ? null : sc.linkedScriptSceneId,
           shots: sc.shots.map(sh =>
             state.scriptScenes.find(ss => ss.id === sh.linkedSceneId && ss.importSource === script.filename)
               ? { ...sh, linkedSceneId: null }
@@ -942,7 +989,17 @@ const useStore = create((set, get) => ({
   addScene: (overrides = {}) => {
     const currentScenes = get().scenes
     const sceneNum = currentScenes.length + 1
-    const scene = createScene({ sceneLabel: `SCENE ${sceneNum}`, ...overrides })
+    const scriptScenes = get().scriptScenes
+    const usedScriptSceneIds = new Set(currentScenes.map(s => s.linkedScriptSceneId).filter(Boolean))
+    const nextSuggestedScriptScene = scriptScenes.find(s => !usedScriptSceneIds.has(s.id)) || scriptScenes[0] || null
+    const scene = createScene({
+      sceneLabel: `SCENE ${sceneNum}`,
+      linkedScriptSceneId: nextSuggestedScriptScene?.id || null,
+      location: nextSuggestedScriptScene?.location || undefined,
+      intOrExt: nextSuggestedScriptScene?.intExt || undefined,
+      dayNight: nextSuggestedScriptScene?.dayNight || undefined,
+      ...overrides,
+    })
     set(state => ({ scenes: [...state.scenes, scene] }))
     get()._scheduleAutoSave()
     return scene.id
@@ -969,6 +1026,29 @@ const useStore = create((set, get) => ({
     set(state => ({
       scenes: state.scenes.map(s => s.id === sceneId ? { ...s, ...updates } : s),
     }))
+    get()._scheduleAutoSave()
+  },
+
+  linkStoryboardSceneToScriptScene: (storyboardSceneId, scriptSceneId) => {
+    set(state => {
+      const scriptScene = scriptSceneId
+        ? state.scriptScenes.find(s => s.id === scriptSceneId)
+        : null
+      return {
+        scenes: state.scenes.map(scene => {
+          if (scene.id !== storyboardSceneId) return scene
+          if (!scriptSceneId) return { ...scene, linkedScriptSceneId: null }
+          return {
+            ...scene,
+            linkedScriptSceneId: scriptSceneId,
+            sceneLabel: scriptScene?.sceneNumber ? `SCENE ${scriptScene.sceneNumber}` : scene.sceneLabel,
+            location: scriptScene?.location || scene.location,
+            intOrExt: scriptScene?.intExt || scene.intOrExt,
+            dayNight: scriptScene?.dayNight || scene.dayNight,
+          }
+        }),
+      }
+    })
     get()._scheduleAutoSave()
   },
 
@@ -1315,6 +1395,7 @@ const useStore = create((set, get) => ({
           intOrExt: scene.intOrExt,
           dayNight: scene.dayNight,
           cameras: scene.cameras,
+          linkedScriptSceneId: scene.linkedScriptSceneId || null,
           // pageNotes is stored as an array (one entry per storyboard page)
           pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes : [scene.pageNotes || ''],
           pageColors: Array.isArray(scene.pageColors) ? scene.pageColors : [],
@@ -1558,6 +1639,7 @@ const useStore = create((set, get) => ({
         intOrExt: scene.intOrExt || 'INT',
         dayNight: scene.dayNight || 'DAY',
         cameras: scene.cameras || [{ name: scene.cameraName || 'Camera 1', body: scene.cameraBody || 'fx30' }],
+        linkedScriptSceneId: scene.linkedScriptSceneId || null,
         // Migrate string pageNotes (legacy) to array format
         pageNotes: Array.isArray(scene.pageNotes)
           ? scene.pageNotes
@@ -1665,7 +1747,19 @@ const useStore = create((set, get) => ({
       })(),
       customColumns: loadedCustomColumns,
       customDropdownOptions: loadedCustomDropdownOptions,
-      scenes,
+      scenes: scenes.map((scene, idx) => {
+        if (scene.linkedScriptSceneId) return scene
+        const fallbackScriptScene = Array.isArray(data.scriptScenes) ? data.scriptScenes[idx] : null
+        if (!fallbackScriptScene?.id) return scene
+        return {
+          ...scene,
+          linkedScriptSceneId: fallbackScriptScene.id,
+          location: fallbackScriptScene.location || scene.location,
+          intOrExt: fallbackScriptScene.intExt || scene.intOrExt,
+          dayNight: fallbackScriptScene.dayNight || scene.dayNight,
+          sceneLabel: fallbackScriptScene.sceneNumber ? `SCENE ${fallbackScriptScene.sceneNumber}` : scene.sceneLabel,
+        }
+      }),
       schedule: loadedSchedule,
       scheduleCollapseState: loadedCollapseState,
       scheduleColumnConfig: (() => {
