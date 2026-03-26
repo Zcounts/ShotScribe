@@ -26,7 +26,7 @@ export interface StoredProjectEntry {
 export interface StoredLibrary {
   version: 1
   projects: Record<string, StoredProjectEntry>
-  shotStatusOverrides: Record<string, 'todo' | 'in_progress' | 'done'>
+  shotStatusOverrides: Record<string, 'todo' | 'in_progress' | 'done' | 'skipped'>
 }
 
 export interface StoredLastOpened {

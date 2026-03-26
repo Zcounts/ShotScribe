@@ -211,7 +211,7 @@ export function setShotStatusOverride(
   projectId: string,
   dayId: string,
   shotId: string,
-  status: 'todo' | 'in_progress' | 'done'
+  status: 'todo' | 'in_progress' | 'done' | 'skipped'
 ): StoredLibrary {
   const key = makeShotStatusOverrideKey(projectId, dayId, shotId)
   return {
