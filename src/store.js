@@ -272,6 +272,7 @@ const useStore = create((set, get) => ({
     autoSuggestTags: true,    // suggest complexity tags based on heuristics
     showConfidenceIndicators: true, // show ●●● indicators
     defaultSceneColor: null,  // default color for new scenes (null = no color)
+    scenePaginationMode: 'natural', // natural | newPagePerScene
   },
 
   // ── Script scene actions ──────────────────────────────────────────────
@@ -406,12 +407,24 @@ const useStore = create((set, get) => ({
   setScriptSettings: (updates) => {
     set(state => {
       const newSettings = { ...state.scriptSettings, ...updates }
-      // Recompute all estimates if baseMinutesPerPage changed
-      if ('baseMinutesPerPage' in updates) {
-        const enriched = state.scriptScenes.map(scene => ({
-          ...scene,
-          estimatedMinutes: computeEstimate(scene, newSettings.baseMinutesPerPage),
-        }))
+      const shouldRecomputeEstimates = 'baseMinutesPerPage' in updates
+      const shouldRecomputePagination = 'scenePaginationMode' in updates
+      if (shouldRecomputeEstimates || shouldRecomputePagination) {
+        const pagination = estimateScreenplayPagination(state.scriptScenes, {
+          scenePaginationMode: newSettings.scenePaginationMode,
+        })
+        const enriched = state.scriptScenes.map(scene => {
+          const next = { ...scene }
+          if (shouldRecomputeEstimates) {
+            next.estimatedMinutes = computeEstimate(scene, newSettings.baseMinutesPerPage)
+          }
+          if (shouldRecomputePagination) {
+            next.pageCount = pagination.byScene[scene.id]?.pageCount ?? scene.pageCount ?? null
+            next.pageStart = pagination.byScene[scene.id]?.startPage ?? scene.pageStart ?? null
+            next.pageEnd = pagination.byScene[scene.id]?.endPage ?? scene.pageEnd ?? null
+          }
+          return next
+        })
         return { scriptSettings: newSettings, scriptScenes: enriched }
       }
       return { scriptSettings: newSettings }
@@ -1597,6 +1610,7 @@ const useStore = create((set, get) => ({
         autoSuggestTags: true,
         showConfidenceIndicators: true,
         defaultSceneColor: null,
+        scenePaginationMode: 'natural',
         ...(data.scriptSettings || {}),
       },
       lastSaved: new Date().toISOString(),

@@ -8,6 +8,7 @@ export default function ScenePropertiesDialog() {
   const close = useStore(s => s.closeScenePropertiesDialog)
   const scenes = useStore(s => s.scenes)
   const scriptScenes = useStore(s => s.scriptScenes)
+  const scriptSettings = useStore(s => s.scriptSettings)
   const updateScene = useStore(s => s.updateScene)
   const updateScriptScene = useStore(s => s.updateScriptScene)
 
@@ -20,7 +21,11 @@ export default function ScenePropertiesDialog() {
 
   if (!scene) return null
 
-  const pagination = isScript ? estimateScreenplayPagination(scriptScenes).byScene[scene.id] : null
+  const pagination = isScript
+    ? estimateScreenplayPagination(scriptScenes, {
+      scenePaginationMode: scriptSettings?.scenePaginationMode || 'natural',
+    }).byScene[scene.id]
+    : null
 
   const update = (updates) => {
     if (isScript) updateScriptScene(scene.id, updates)

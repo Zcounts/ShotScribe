@@ -216,6 +216,31 @@ export default function SettingsPanel() {
             </div>
           </SettingsRow>
 
+          <SettingsRow label="Scene Pagination">
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setScriptSettings({ scenePaginationMode: 'natural' })}
+                className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
+                  (scriptSettings?.scenePaginationMode || 'natural') === 'natural'
+                    ? 'bg-blue-600/20 border-blue-400 text-white'
+                    : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
+                }`}
+              >
+                Continue naturally <span className="text-xs text-gray-400">· Standard screenplay flow</span>
+              </button>
+              <button
+                onClick={() => setScriptSettings({ scenePaginationMode: 'newPagePerScene' })}
+                className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
+                  (scriptSettings?.scenePaginationMode || 'natural') === 'newPagePerScene'
+                    ? 'bg-blue-600/20 border-blue-400 text-white'
+                    : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
+                }`}
+              >
+                Start each scene on a new page <span className="text-xs text-gray-400">· Planning view mode</span>
+              </button>
+            </div>
+          </SettingsRow>
+
           <SettingsRow label="Auto-Suggest Tags">
             <div className="flex items-center gap-2">
               <button
