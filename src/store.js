@@ -79,6 +79,17 @@ function normalizeCastEntry(entry = {}) {
   }
 }
 
+function normalizePersonKey(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function splitPeople(value) {
+  return String(value || '')
+    .split(/[,&/]/)
+    .map(name => name.trim())
+    .filter(Boolean)
+}
+
 function normalizeCrewEntry(entry = {}) {
   return {
     id: entry.id || `crew_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -508,6 +519,7 @@ const useStore = create((set, get) => ({
             ? get().scriptScenes.find(ss => ss.id === found.shot.linkedSceneId)
             : null
 
+          const castRosterEntries = found ? get().getCastRosterByShot(found.shot) : []
           return {
           ...block,
           // Null when the referenced shot has been deleted
@@ -533,6 +545,7 @@ const useStore = create((set, get) => ({
               dayNight: scriptScene.dayNight,
               color: scriptScene.color,
             } : null,
+            castRosterEntries,
           } : null,
         }
       }),
@@ -740,8 +753,11 @@ const useStore = create((set, get) => ({
         return { castRoster: next }
       }
       // Check for same name+character to avoid duplicates when re-adding
-      const byName = state.castRoster.findIndex(
-        r => r.name && r.name === normalized.name && r.character === normalized.character
+      const normalizedNameKey = normalizePersonKey(normalized.name)
+      const normalizedCharacterKey = normalizePersonKey(normalized.character)
+      const byName = state.castRoster.findIndex(r =>
+        normalizePersonKey(r.name) === normalizedNameKey &&
+        normalizePersonKey(r.character) === normalizedCharacterKey
       )
       if (byName !== -1) {
         const next = [...state.castRoster]
@@ -763,8 +779,11 @@ const useStore = create((set, get) => ({
         next[existing] = normalizeCrewEntry({ ...next[existing], ...normalized })
         return { crewRoster: next }
       }
-      const byName = state.crewRoster.findIndex(
-        r => r.name && r.name === normalized.name && r.role === normalized.role
+      const normalizedNameKey = normalizePersonKey(normalized.name)
+      const normalizedRoleKey = normalizePersonKey(normalized.role)
+      const byName = state.crewRoster.findIndex(r =>
+        normalizePersonKey(r.name) === normalizedNameKey &&
+        normalizePersonKey(r.role) === normalizedRoleKey
       )
       if (byName !== -1) {
         const next = [...state.crewRoster]
@@ -800,16 +819,82 @@ const useStore = create((set, get) => ({
     return Array.from(characters.values()).map(item => ({ ...item, sceneIds: Array.from(item.sceneIds) }))
   },
 
+  getCastRosterByCharacterNames: (characterNames = []) => {
+    const roster = get().castRoster || []
+    const linkedCharKeys = new Set(
+      (characterNames || [])
+        .map(normalizePersonKey)
+        .filter(Boolean)
+    )
+    if (linkedCharKeys.size === 0) return []
+
+    return roster.filter(entry => {
+      const keys = [entry.character, ...(entry.characterIds || [])]
+        .map(normalizePersonKey)
+        .filter(Boolean)
+      return keys.some(key => linkedCharKeys.has(key))
+    })
+  },
+
+  getCastRosterByShot: (shot) => {
+    if (!shot) return []
+    const { scriptScenes, getCastRosterByCharacterNames } = get()
+    const scriptScene = shot.linkedSceneId
+      ? scriptScenes.find(scene => scene.id === shot.linkedSceneId)
+      : null
+
+    const characterNames = new Set()
+    ;(scriptScene?.characters || []).forEach(name => {
+      const trimmed = String(name || '').trim()
+      if (trimmed) characterNames.add(trimmed)
+    })
+
+    splitPeople(shot.cast).forEach(name => {
+      const trimmed = String(name || '').trim()
+      if (trimmed) characterNames.add(trimmed)
+    })
+
+    return getCastRosterByCharacterNames(Array.from(characterNames))
+  },
+
+  getDayCastRosterEntries: (dayId) => {
+    const { schedule, scenes, getCastRosterByShot } = get()
+    const day = schedule.find(d => d.id === dayId)
+    if (!day) return []
+
+    const shotMap = new Map()
+    scenes.forEach(scene => {
+      scene.shots.forEach(shot => {
+        shotMap.set(shot.id, shot)
+      })
+    })
+
+    const byId = new Map()
+    ;(day.blocks || []).forEach(block => {
+      if (!block?.shotId) return
+      const shot = shotMap.get(block.shotId)
+      const rosterEntries = getCastRosterByShot(shot)
+      rosterEntries.forEach(entry => {
+        if (!byId.has(entry.id)) byId.set(entry.id, entry)
+      })
+    })
+    return Array.from(byId.values())
+  },
+
   getCastSceneMetrics: (castId, dayId = null) => {
     const { castRoster, scriptScenes, schedule, getScheduleWithShots } = get()
     const cast = castRoster.find(entry => entry.id === castId)
     if (!cast) return { sceneCount: 0, pageCount: 0, sceneIds: [] }
-    const linkedChars = new Set([...(cast.characterIds || []), cast.character].map(v => String(v || '').trim()).filter(Boolean))
+    const linkedChars = new Set(
+      [...(cast.characterIds || []), cast.character]
+        .map(normalizePersonKey)
+        .filter(Boolean)
+    )
     if (linkedChars.size === 0) return { sceneCount: 0, pageCount: 0, sceneIds: [] }
 
     const allSceneIds = new Set(
       scriptScenes
-        .filter(scene => (scene.characters || []).some(char => linkedChars.has(String(char || '').trim())))
+        .filter(scene => (scene.characters || []).some(char => linkedChars.has(normalizePersonKey(char))))
         .map(scene => scene.id)
     )
 

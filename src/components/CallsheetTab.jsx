@@ -708,6 +708,7 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
   const cast = callsheet.cast || []
   const castRoster = useStore(s => s.castRoster)
   const getCastSceneMetrics = useStore(s => s.getCastSceneMetrics)
+  const getDayCastRosterEntries = useStore(s => s.getDayCastRosterEntries)
   const upsertCastRosterEntry = useStore(s => s.upsertCastRosterEntry)
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -742,16 +743,37 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
     onUpdate({ cast: cast.filter(r => r.id !== id) })
   }
 
-  useEffect(() => {
-    if (!castRoster.length || !cast.length) return
-    const synced = cast.map(row => {
+  const resolvedCast = useMemo(() => {
+    const derivedRows = (dayId ? getDayCastRosterEntries(dayId) : []).map(entry => ({
+      id: `derived_${entry.id}`,
+      rosterId: entry.id,
+      name: entry.name || '',
+      character: entry.character || entry.characterIds?.[0] || '',
+      pickupTime: '',
+      makeupCall: '',
+      setCall: '',
+      isDerived: true,
+    }))
+    const byRosterId = new Map(derivedRows.map(row => [row.rosterId, row]))
+    const manualRows = cast.map(row => {
+      if (!row.rosterId || !byRosterId.has(row.rosterId)) return row
+      const base = byRosterId.get(row.rosterId)
+      return { ...base, ...row, isDerived: true }
+    })
+    const manualRosterIds = new Set(manualRows.map(row => row.rosterId).filter(Boolean))
+    const missingDerived = derivedRows.filter(row => !manualRosterIds.has(row.rosterId))
+    return [...manualRows, ...missingDerived]
+  }, [cast, dayId, getDayCastRosterEntries])
+
+  const displayCast = useMemo(() => {
+    return resolvedCast.map(row => {
       if (!row.rosterId) return row
       const roster = castRoster.find(entry => entry.id === row.rosterId)
-      return roster ? { ...row, name: roster.name || row.name, character: roster.character || row.character } : row
+      return roster
+        ? { ...row, name: roster.name || row.name, character: roster.character || row.character || roster.characterIds?.[0] || '' }
+        : row
     })
-    onUpdate({ cast: synced })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [castRoster])
+  }, [resolvedCast, castRoster])
 
   const thStyle = {
     padding: '4px 6px',
@@ -798,14 +820,14 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
           </tr>
         </thead>
         <tbody>
-          {cast.length === 0 && (
+          {displayCast.length === 0 && (
             <tr>
               <td colSpan={8} style={{ ...cellStyle, padding: '8px 6px', color: '#aaa', fontFamily: 'monospace', fontSize: 12, fontStyle: 'italic' }}>
                 No cast added yet
               </td>
             </tr>
           )}
-          {cast.map((row, idx) => {
+          {displayCast.map((row, idx) => {
             const metrics = row.rosterId ? getCastSceneMetrics(row.rosterId, dayId || null) : { sceneCount: 0, pageCount: 0 }
             return (
             <tr key={row.id} onDoubleClick={() => setEditorId(row.rosterId)} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
@@ -819,8 +841,9 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
               <td style={cellStyle}>
                 <button
                   onClick={() => removeRow(row.id)}
+                  disabled={row.isDerived && !cast.some(saved => saved.id === row.id)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 14, padding: '0 4px', lineHeight: 1 }}
-                  title="Remove"
+                  title={row.isDerived ? 'Linked to schedule day scenes' : 'Remove'}
                 >
                   ×
                 </button>

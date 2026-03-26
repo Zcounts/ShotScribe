@@ -3,13 +3,6 @@ import useStore from '../store'
 import { SubTabNav } from './SubTabNav'
 import PersonProfileDialog from './PersonProfileDialog'
 
-function splitPeople(value) {
-  return String(value || '')
-    .split(/[,&/]/)
-    .map(name => name.trim())
-    .filter(Boolean)
-}
-
 function formatDayHeader(day) {
   const location = (day.blocks.find(b => b.shotData?.location)?.shotData?.location || 'SET')
     .toUpperCase()
@@ -50,11 +43,11 @@ function SectionShell({ title, subtitle, children }) {
 }
 
 export default function CastCrewTab() {
-  const scenes = useStore(s => s.scenes)
   const castRoster = useStore(s => s.castRoster)
   const crewRoster = useStore(s => s.crewRoster)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const getCastSceneMetrics = useStore(s => s.getCastSceneMetrics)
+  const getDayCastRosterEntries = useStore(s => s.getDayCastRosterEntries)
   const callsheets = useStore(s => s.callsheets)
   const castCrewNotes = useStore(s => s.castCrewNotes)
   const setCastCrewNotes = useStore(s => s.setCastCrewNotes)
@@ -64,16 +57,9 @@ export default function CastCrewTab() {
   const [editor, setEditor] = useState(null)
   const scrollRef = useRef(null)
 
-  const openProfile = (type, id) => {
-    const roster = type === 'cast' ? castRoster : crewRoster
-    const person = roster.find(entry => entry.id === id)
-    if (!person) return
-    setEditor({ type, id: person.id })
-  }
+  const openProfile = (type, id) => setEditor({ type, id: id || null })
 
   const scheduleDays = getScheduleWithShots()
-
-  const castNames = useMemo(() => castRoster.filter(entry => entry.name?.trim()).map(entry => entry.name.trim()), [castRoster])
 
   const crewRows = useMemo(() => {
     return crewRoster
@@ -91,48 +77,39 @@ export default function CastCrewTab() {
   }, [crewRoster, callsheets])
 
   const castMatrix = useMemo(() => {
-    return castNames.map(actor => {
+    return castRoster.filter(entry => entry.name?.trim()).map(entry => {
       const perDay = scheduleDays.map(day => {
+        const dayCast = getDayCastRosterEntries(day.id)
+        const includesCast = dayCast.some(member => member.id === entry.id)
+
+        if (!includesCast) return 'none'
         const actorShots = day.blocks
           .filter(block => block.shotData)
-          .filter(block => splitPeople(block.shotData.cast).includes(actor))
-
-        if (actorShots.length === 0) return 'none'
-        const uniqueScenes = new Set(actorShots.map(block => block.shotData.sceneLabel || block.shotData.location || ''))
-        const nightOnly = actorShots.every(block => isNightShot(block.shotData))
+          .filter(block => (block.shotData.castRosterEntries || []).some(member => member.id === entry.id))
+        const uniqueScenes = new Set(actorShots.map(block => block.shotData?.linkedSceneId || block.shotData.sceneLabel || block.shotData.location || ''))
+        const nightOnly = actorShots.length > 0 && actorShots.every(block => isNightShot(block.shotData))
         if (nightOnly) return 'night'
         if (actorShots.length >= 2 || uniqueScenes.size > 1) return 'full'
         return 'brief'
       })
-      return { actor, perDay }
+      return { actor: entry.name.trim(), castId: entry.id, perDay }
     })
-  }, [castNames, scheduleDays])
+  }, [castRoster, scheduleDays, getDayCastRosterEntries])
 
   const castListRows = useMemo(() => {
     return castRoster
       .filter(entry => entry.name?.trim())
       .map(entry => {
-        const shotScenesUsed = new Set()
-        let shotCount = 0
-        scenes.forEach(scene => {
-          scene.shots.forEach(shot => {
-            if (splitPeople(shot.cast).some(person => person.toLowerCase() === entry.name.toLowerCase())) {
-              shotCount += 1
-              shotScenesUsed.add(scene.sceneLabel || scene.location || 'Unlabeled')
-            }
-          })
-        })
         const totalMetrics = getCastSceneMetrics(entry.id)
         return {
           ...entry,
           characterDisplay: (entry.characterIds && entry.characterIds.length > 0) ? entry.characterIds.join(', ') : (entry.character || '—'),
-          shotScenesCount: shotScenesUsed.size,
-          shotCount,
+          shotCount: totalMetrics.sceneIds.length,
           scriptSceneCount: totalMetrics.sceneCount,
           scriptPageCount: totalMetrics.pageCount,
         }
       })
-  }, [castRoster, scenes, getCastSceneMetrics])
+  }, [castRoster, getCastSceneMetrics])
 
   useEffect(() => {
     setTabViewState('castcrew', { activeSubTab })
@@ -161,9 +138,14 @@ export default function CastCrewTab() {
           active={activeSubTab}
           onChange={setActiveSubTab}
         />
-        <p className="text-xs uppercase tracking-[0.12em] text-slate-light">
-          Cast & Crew Planning
-        </p>
+        <div className="flex items-center gap-2">
+          <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#2D6A4F]/50 text-[#1B4332] bg-[#74C69D]/25 hover:bg-[#74C69D]/35" onClick={() => openProfile('cast', null)}>
+            + Add Cast
+          </button>
+          <button className="px-3 py-1.5 text-xs font-semibold rounded border border-slate/30 text-ink bg-canvas-dark/50 hover:bg-canvas-dark" onClick={() => openProfile('crew', null)}>
+            + Add Crew
+          </button>
+        </div>
       </div>
 
       {activeSubTab === 'Quick Reference' ? (
@@ -183,10 +165,10 @@ export default function CastCrewTab() {
                 </thead>
                 <tbody>
                   {castMatrix.map((row, rowIndex) => (
-                    <tr key={row.actor} className={rowIndex % 2 === 0 ? 'bg-canvas' : 'bg-canvas-dark/40'}>
+                    <tr key={row.castId} className={rowIndex % 2 === 0 ? 'bg-canvas' : 'bg-canvas-dark/40'} onDoubleClick={() => openProfile('cast', row.castId)}>
                       <td className="sticky left-0 z-10 min-w-[160px] px-3 py-2 text-ink font-medium border-b border-r border-slate/10 bg-inherit">{row.actor}</td>
                       {row.perDay.map((status, i) => (
-                        <td key={`${row.actor}-${scheduleDays[i]?.id || i}`} className="px-3 py-2 border-b border-r border-slate/10">
+                        <td key={`${row.castId}-${scheduleDays[i]?.id || i}`} className="px-3 py-2 border-b border-r border-slate/10">
                           <Circle status={status} />
                         </td>
                       ))}
@@ -278,7 +260,7 @@ export default function CastCrewTab() {
       {editor && (
         <PersonProfileDialog
           personType={editor.type}
-          person={(editor.type === 'cast' ? castRoster : crewRoster).find(entry => entry.id === editor.id)}
+          person={editor.id ? (editor.type === 'cast' ? castRoster : crewRoster).find(entry => entry.id === editor.id) : null}
           onClose={() => setEditor(null)}
         />
       )}
