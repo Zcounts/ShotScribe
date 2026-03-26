@@ -24,6 +24,7 @@ import ScriptTab from './components/ScriptTab'
 import CastCrewTab from './components/CastCrewTab'
 import ScenePropertiesDialog from './components/ScenePropertiesDialog'
 import SceneColorPicker from './components/SceneColorPicker'
+import SidebarPane from './components/SidebarPane'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -491,15 +492,19 @@ export default function App() {
         >
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
-              <aside style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
-                <div style={{ padding: 10, borderBottom: '1px solid rgba(74,85,104,0.12)' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {['Scenes', 'Pages'].map(tab => (
-                      <button key={tab} onClick={() => setStoryboardOutlineTab(tab)} style={{ border: '1px solid rgba(74,85,104,0.2)', borderRadius: 999, padding: '3px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', background: storyboardOutlineTab === tab ? '#2C2C2E' : 'transparent', color: storyboardOutlineTab === tab ? '#FAF8F4' : '#4A5568' }}>{tab}</button>
-                    ))}
-                  </div>
-                </div>
-                {storyboardOutlineTab === 'Scenes' ? sceneNavItems.map(item => {
+              <div style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', height: 'calc(100vh - 170px)', maxHeight: 'calc(100vh - 170px)' }}>
+                <SidebarPane
+                  width={260}
+                  title="Scenes / Pages"
+                  controls={(
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {['Scenes', 'Pages'].map(tab => (
+                        <button key={tab} onClick={() => setStoryboardOutlineTab(tab)} style={{ border: '1px solid rgba(74,85,104,0.2)', borderRadius: 999, padding: '3px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', background: storyboardOutlineTab === tab ? '#2C2C2E' : 'transparent', color: storyboardOutlineTab === tab ? '#FAF8F4' : '#4A5568' }}>{tab}</button>
+                      ))}
+                    </div>
+                  )}
+                >
+                  {storyboardOutlineTab === 'Scenes' ? sceneNavItems.map(item => {
                   const color = scriptScenes.find(s => `script-${s.id}` === item.id)?.color || '#94a3b8'
                   return (
                     <button key={item.id} onDoubleClick={() => item.id.startsWith('script-') ? openScenePropertiesDialog('script', item.id.replace('script-', '')) : openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 10px', cursor: 'pointer' }}>
@@ -513,7 +518,8 @@ export default function App() {
                     <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                   </button>
                 ))}
-              </aside>
+                </SidebarPane>
+              </div>
             )}
             <div className="pages-container" style={{ flex: 1 }}>
               {scenes.map((scene, sceneIdx) => (
