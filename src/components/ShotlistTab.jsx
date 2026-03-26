@@ -16,14 +16,29 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
+import ConfigureButton from './ConfigureButton'
 
 // ── Scene link badge (chain icon + SC badge) for the SHOT# column ────────────
 function ShotlistSceneBadge({ shot }) {
   const scriptScenes = useStore(s => s.scriptScenes)
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const requestScriptFocus = useStore(s => s.requestScriptFocus)
+  const theme = useStore(s => s.theme)
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
+  const rootRef = React.useRef(null)
+  const isDark = theme === 'dark'
+
+  React.useEffect(() => {
+    if (!open) return
+    const handleOutside = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [open])
 
   if (scriptScenes.length === 0) return null
 
@@ -39,7 +54,7 @@ function ShotlistSceneBadge({ shot }) {
   })
 
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+    <div ref={rootRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
       <button
         onClick={e => {
           e.stopPropagation()
@@ -66,22 +81,34 @@ function ShotlistSceneBadge({ shot }) {
           onClick={e => e.stopPropagation()}
           style={{
             position: 'absolute', top: 18, left: 0, zIndex: 100,
-            background: '#1e1e2e', border: '1px solid #444', borderRadius: 6,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.7)', minWidth: 170, maxHeight: 200, overflowY: 'auto', padding: 4,
+            background: isDark ? '#1f1f20' : '#FAF8F4',
+            border: isDark ? '1px solid #3A3A3C' : '1px solid rgba(74,85,104,0.2)',
+            borderRadius: 6,
+            boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.55)' : '0 8px 24px rgba(0,0,0,0.15)',
+            minWidth: 170, maxHeight: 220, overflowY: 'auto', padding: 4,
           }}
         >
-          <div className="p-2 border-b border-slate/15">
+          <div style={{ padding: 8, borderBottom: isDark ? '1px solid #2d2d2f' : '1px solid rgba(74,85,104,0.12)' }}>
             <input
               autoFocus
               placeholder="Search by number, location, or cast..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-[#2C2C2E] text-white text-sm px-2 py-1.5 rounded outline-none placeholder-slate/50 focus:ring-1 focus:ring-[#E84040]/50"
+              style={{
+                width: '100%',
+                background: isDark ? '#2C2C2E' : '#F1EEE6',
+                color: isDark ? '#EDE9E1' : '#2C2C2C',
+                fontSize: 11,
+                padding: '6px 8px',
+                borderRadius: 4,
+                border: isDark ? '1px solid #3A3A3C' : '1px solid rgba(74,85,104,0.2)',
+                outline: 'none',
+              }}
             />
           </div>
           {linked && (
             <button onClick={() => { linkShotToScene(shot.id, null); setOpen(false) }}
-              style={{ width: '100%', textAlign: 'left', padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace', color: '#f87171', borderRadius: 3 }}
+              style={{ width: '100%', textAlign: 'left', padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace', color: '#E84040', borderRadius: 3 }}
               onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.1)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'none')}
             >
@@ -90,9 +117,15 @@ function ShotlistSceneBadge({ shot }) {
           )}
           {filteredScenes.map(ss => (
             <button key={ss.id} onClick={() => { linkShotToScene(shot.id, ss.id); setOpen(false) }}
-              style={{ width: '100%', textAlign: 'left', padding: '4px 8px', background: ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace', color: ss.id === shot.linkedSceneId ? '#93c5fd' : '#ccc', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4 }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(128,128,128,0.1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none')}
+              style={{
+                width: '100%', textAlign: 'left', padding: '4px 8px',
+                background: ss.id === shot.linkedSceneId ? 'rgba(82,101,224,0.18)' : 'none',
+                border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace',
+                color: ss.id === shot.linkedSceneId ? (isDark ? '#b8c4ff' : '#3245A8') : (isDark ? '#D4D4D8' : '#4A5568'),
+                borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(74,85,104,0.08)')}
+              onMouseLeave={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(82,101,224,0.18)' : 'none')}
             >
               {ss.color && <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />}
               <span style={{ fontWeight: 700 }}>SC {ss.sceneNumber}</span>
@@ -101,7 +134,7 @@ function ShotlistSceneBadge({ shot }) {
             </button>
           ))}
           {filteredScenes.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#718096', padding: '10px 8px', fontSize: 11 }}>
+            <div style={{ textAlign: 'center', color: isDark ? '#777' : '#718096', padding: '10px 8px', fontSize: 11 }}>
               No scenes match
             </div>
           )}
@@ -1236,35 +1269,11 @@ export default function ShotlistTab({ containerRef }) {
         zIndex: 20,
         flexShrink: 0,
       }}>
-        <button
+        <ConfigureButton
           onClick={(e) => { e.stopPropagation(); setConfigPanelOpen(p => !p) }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            padding: '4px 10px',
-            border: `1px solid ${isDark ? '#383838' : '#c4bfb5'}`,
-            borderRadius: 4,
-            background: configPanelOpen
-              ? (isDark ? '#2a2a2a' : '#e4e0d8')
-              : (isDark ? '#1e1e1e' : '#f0ede4'),
-            color: isDark ? '#aaa' : '#555',
-            cursor: 'pointer',
-            fontSize: 11,
-            fontFamily: 'monospace',
-            fontWeight: 600,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            transition: 'background 0.1s',
-          }}
-        >
-          {/* Settings gear icon */}
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <circle cx="8" cy="8" r="2.5" />
-            <path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.27 1.27M11.33 11.33l1.27 1.27M12.6 3.4l-1.27 1.27M4.67 11.33l-1.27 1.27" />
-          </svg>
-          Configure Columns
-        </button>
+          active={configPanelOpen}
+          title="Configure columns"
+        />
 
         {configPanelOpen && (
           <ColumnConfigPanel

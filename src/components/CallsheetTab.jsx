@@ -16,6 +16,7 @@ import { CSS } from '@dnd-kit/utilities'
 import useStore, { DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
 import { DayTabBar } from './DayTabBar'
 import PersonProfileDialog from './PersonProfileDialog'
+import ConfigureButton from './ConfigureButton'
 
 // ── Time Utilities (mirrored from ScheduleTab) ────────────────────────────────
 
@@ -1216,32 +1217,11 @@ export default function CallsheetTab() {
           borderBottom: '1px solid #3A3A3C',
           background: '#1C1C1E',
         }}>
-          <button
+          <ConfigureButton
             onClick={() => setConfigOpen(o => !o)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '5px 10px',
-              fontFamily: 'Sora, sans-serif',
-              fontSize: 11,
-              fontWeight: 600,
-              border: '1px solid rgba(74,85,104,0.35)',
-              borderRadius: 3,
-              background: configOpen ? '#2C2C2E' : 'transparent',
-              color: '#EDE9E1',
-              cursor: 'pointer',
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="4" y1="6" x2="16" y2="6" />
-              <line x1="4" y1="10" x2="16" y2="10" />
-              <line x1="4" y1="14" x2="16" y2="14" />
-            </svg>
-            Configure Sections
-          </button>
+            active={configOpen}
+            title="Configure sections"
+          />
         </div>
 
         {/* Panel rendered OUTSIDE the overflow scroll div so it is never clipped */}

@@ -25,6 +25,7 @@ import CastCrewTab from './components/CastCrewTab'
 import ScenePropertiesDialog from './components/ScenePropertiesDialog'
 import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
+import ConfigureButton from './components/ConfigureButton'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -460,12 +461,10 @@ export default function App() {
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           {activeTab === 'storyboard' && (
             <>
-              <button
-                className="toolbar-btn"
+              <ConfigureButton
                 onClick={() => setStoryboardConfigOpen(o => !o)}
-              >
-                Configure
-              </button>
+                active={storyboardConfigOpen}
+              />
               {storyboardConfigOpen && (
                 <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, padding: 10, minWidth: 220, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', zIndex: 80 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#4A5568' }}>

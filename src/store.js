@@ -203,6 +203,7 @@ const useStore = create((set, get) => ({
   // Project metadata
   projectPath: null,
   projectName: 'Untitled Shotlist',
+  projectEmoji: '🎬',
   lastSaved: null,
   hasUnsavedChanges: false,
   documentSession: 0,
@@ -568,7 +569,7 @@ const useStore = create((set, get) => ({
       schedule: [...state.schedule, day],
       scheduleCollapseState: {
         ...state.scheduleCollapseState,
-        days: { ...state.scheduleCollapseState.days, [day.id]: true },
+        days: { ...state.scheduleCollapseState.days, [day.id]: false },
       },
     }))
     get()._scheduleAutoSave()
@@ -1115,6 +1116,10 @@ const useStore = create((set, get) => ({
   setAutoSave: (enabled) => set({ autoSave: enabled }),
   setUseDropdowns: (val) => set({ useDropdowns: val }),
   setProjectName: (name) => set({ projectName: name }),
+  setProjectEmoji: (emoji) => {
+    set({ projectEmoji: emoji || '🎬' })
+    get()._scheduleAutoSave()
+  },
 
   // ── UI actions ───────────────────────────────────────────────────────
 
@@ -1241,7 +1246,7 @@ const useStore = create((set, get) => ({
 
   getProjectData: () => {
     const {
-      projectName, columnCount, defaultFocalLength,
+      projectName, projectEmoji, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
       shotlistColumnWidths, callsheets, callsheetSectionConfig,
@@ -1252,6 +1257,7 @@ const useStore = create((set, get) => ({
     return {
       version: 2,
       projectName,
+      projectEmoji: projectEmoji || '🎬',
       columnCount,
       defaultFocalLength,
       theme,
@@ -1503,7 +1509,7 @@ const useStore = create((set, get) => ({
 
   loadProject: (data) => {
     const {
-      projectName, columnCount, defaultFocalLength,
+      projectName, projectEmoji, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns,
     } = data
 
@@ -1615,7 +1621,7 @@ const useStore = create((set, get) => ({
         }))
       : []
     const loadedCollapseState = {
-      days: Object.fromEntries(loadedSchedule.map(day => [day.id, true])),
+      days: Object.fromEntries(loadedSchedule.map(day => [day.id, false])),
       blocks: Object.fromEntries(
         loadedSchedule.flatMap(day => (day.blocks || []).map(block => [block.id, true]))
       ),
@@ -1623,6 +1629,7 @@ const useStore = create((set, get) => ({
 
     set({
       projectName: projectName || 'Untitled Shotlist',
+      projectEmoji: projectEmoji || '🎬',
       columnCount: columnCount || 4,
       defaultFocalLength: defaultFocalLength || '85mm',
       theme: theme || 'light',
@@ -1798,6 +1805,7 @@ const useStore = create((set, get) => ({
     const scene = createScene({ id: 'scene_1', sceneLabel: 'SCENE 1', location: 'LOCATION' })
     set({
       projectName: name,
+      projectEmoji: '🎬',
       scenes: [scene],
       schedule: [],
       callsheets: {},

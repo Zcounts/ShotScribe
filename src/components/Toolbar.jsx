@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
-import ClapperIcon from './ClapperIcon'
 
 let mobileExportServicePromise = null
 
@@ -13,6 +12,7 @@ async function getMobileExportService() {
 
 export default function Toolbar({ onExportPDF, onExportPNG }) {
   const projectName = useStore(s => s.projectName)
+  const projectEmoji = useStore(s => s.projectEmoji)
   const projectPath = useStore(s => s.projectPath)
   const lastSaved = useStore(s => s.lastSaved)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
@@ -29,7 +29,10 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const recentProjects = useStore(s => s.recentProjects)
   const newProject = useStore(s => s.newProject)
   const setProjectName = useStore(s => s.setProjectName)
+  const setProjectEmoji = useStore(s => s.setProjectEmoji)
   const [editingName, setEditingName] = useState(false)
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  const [emojiInput, setEmojiInput] = useState('')
   const [pdfMenuOpen, setPdfMenuOpen] = useState(false)
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
@@ -38,6 +41,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
   const mobileMenuRef = useRef(null)
+  const emojiPickerRef = useRef(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileExportMode, setMobileExportMode] = useState(null) // 'day' | 'snapshot' | null
   const schedule = useStore(s => s.schedule)
@@ -89,6 +93,17 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [openMenuOpen])
+
+  useEffect(() => {
+    if (!emojiPickerOpen) return
+    const handler = (e) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setEmojiPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [emojiPickerOpen])
 
   useEffect(() => {
     if (!mobileMenuOpen) return
@@ -143,13 +158,101 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
       : activeTab === 'callsheet'
         ? 'Callsheet'
         : 'Storyboard'
+  const emojiChoices = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       <div className="toolbar">
       {/* Left: Project name */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <ClapperIcon size={20} className="flex-shrink-0" />
+        <div ref={emojiPickerRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={() => {
+              setEmojiInput(projectEmoji || '')
+              setEmojiPickerOpen(o => !o)
+            }}
+            title="Choose project emoji"
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 6,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(255,255,255,0.05)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: 15,
+              lineHeight: 1,
+              padding: 0,
+            }}
+          >
+            {projectEmoji || '🎬'}
+          </button>
+          {emojiPickerOpen && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 6px)',
+              left: 0,
+              zIndex: 200,
+              width: 188,
+              background: '#FAF8F4',
+              border: '1px solid rgba(74,85,104,0.2)',
+              borderRadius: 8,
+              boxShadow: '0 10px 26px rgba(0,0,0,0.18)',
+              padding: 8,
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
+                {emojiChoices.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => {
+                      setProjectEmoji(emoji)
+                      setEmojiPickerOpen(false)
+                    }}
+                    style={{
+                      border: '1px solid rgba(74,85,104,0.2)',
+                      borderRadius: 6,
+                      background: '#fff',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      lineHeight: 1,
+                      padding: '6px 0',
+                    }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={emojiInput}
+                onChange={(e) => setEmojiInput(e.target.value)}
+                placeholder="Any emoji"
+                maxLength={3}
+                style={{
+                  width: '100%',
+                  fontSize: 12,
+                  border: '1px solid rgba(74,85,104,0.2)',
+                  borderRadius: 6,
+                  padding: '6px 8px',
+                  marginBottom: 6,
+                  outline: 'none',
+                }}
+              />
+              <button
+                className="toolbar-btn"
+                onClick={() => {
+                  const val = emojiInput.trim()
+                  if (val) setProjectEmoji(val)
+                  setEmojiPickerOpen(false)
+                }}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                Set Emoji
+              </button>
+            </div>
+          )}
+        </div>
 
         {editingName ? (
           <input

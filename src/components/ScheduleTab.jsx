@@ -46,6 +46,7 @@ import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import { SubTabNav } from './SubTabNav'
+import ConfigureButton from './ConfigureButton'
 
 // ── Time Utilities ────────────────────────────────────────────────────────────
 
@@ -1671,7 +1672,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
   const setBlockCollapsed = useStore(s => s.setBlockCollapsed)
   const setDayBlocksCollapsed = useStore(s => s.setDayBlocksCollapsed)
   const collapseState = useStore(s => s.scheduleCollapseState)
-  const collapsed = collapseState.days[day.id] ?? true
+  const collapsed = collapseState.days[day.id] ?? false
   const collapsedBlocksMap = collapseState.blocks
 
   const toggleBlockCollapse = useCallback((blockId) => {
@@ -3518,32 +3519,11 @@ export default function ScheduleTab() {
             <>
               {/* Configure Columns button */}
               <div ref={configPanelRef} style={{ position: 'relative' }}>
-                <button
+                <ConfigureButton
                   onClick={(e) => { e.stopPropagation(); setConfigPanelOpen(p => !p) }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    padding: '7px 12px',
-                    border: '1px solid rgba(74,85,104,0.25)',
-                    borderRadius: 4,
-                    background: configPanelOpen ? '#EDE9E1' : '#FAF8F4',
-                    color: '#4A5568',
-                    cursor: 'pointer',
-                    fontFamily: 'Sora, sans-serif',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    transition: 'background 0.1s',
-                  }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <circle cx="8" cy="8" r="2.5" />
-                    <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
-                  </svg>
-                  Columns
-                </button>
+                  active={configPanelOpen}
+                  title="Configure columns"
+                />
 
                 {configPanelOpen && (
                   <ScheduleColumnConfigPanel
