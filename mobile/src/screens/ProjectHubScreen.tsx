@@ -569,8 +569,6 @@ export function ProjectHubScreen({
   onCycleShotStatus,
 }: ProjectHubScreenProps) {
   const dayList = Object.values(project.days).sort((a, b) => a.shootDate.localeCompare(b.shootDate))
-  const selectedDayIndex = dayList.findIndex((entry) => entry.dayId === day.dayId)
-  const selectedDayLabel = getDayDisplayLabel(day.dayId, selectedDayIndex > -1 ? selectedDayIndex : undefined)
   const [expandedStoryboardShotId, setExpandedStoryboardShotId] = useState<string | null>(null)
   const [focusedShotId, setFocusedShotId] = useState<string | null>(null)
 
@@ -593,9 +591,6 @@ export function ProjectHubScreen({
             <h1>{project.projectName}</h1>
           </div>
           <div className="day-picker-wrap">
-            <label className="day-picker-label" htmlFor="day-select">
-              Shooting day
-            </label>
             <select
               id="day-select"
               className="day-select"
@@ -609,7 +604,6 @@ export function ProjectHubScreen({
                 </option>
               ))}
             </select>
-            <p className="day-picker-date">{selectedDayLabel} • {formatShootDate(day.shootDate)}</p>
           </div>
         </div>
       </header>

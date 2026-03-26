@@ -89,12 +89,14 @@ p {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  align-items: center;
 }
 
 .project-header-copy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: center;
+  width: 100%;
 }
 
 .project-header-copy h1 {
@@ -106,15 +108,8 @@ p {
 .day-picker-wrap {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.day-picker-label {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #6e6053;
-  font-weight: 700;
+  gap: 0;
+  width: 100%;
 }
 
 .day-select {
@@ -128,13 +123,6 @@ p {
   font-size: 0.95rem;
   font-weight: 800;
   letter-spacing: 0.08em;
-}
-
-.day-picker-date {
-  font-size: 0.84rem;
-  color: #665a4c;
-  font-weight: 700;
-  margin-left: 2px;
 }
 
 .tab-strip {
@@ -736,11 +724,12 @@ p {
   .project-header-top {
     flex-direction: row;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
   }
 
   .day-picker-wrap {
     min-width: 260px;
+    width: auto;
   }
 
   .day-select {
