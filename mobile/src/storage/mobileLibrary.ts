@@ -23,6 +23,68 @@ const EMPTY_SESSION: StoredSession = {
   lastOpened: null,
 }
 
+function readString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.length > 0 ? value : fallback
+}
+
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function normalizeStoredLibrary(raw: Partial<StoredLibrary>): StoredLibrary {
+  const nextProjects: StoredLibrary['projects'] = {}
+
+  for (const [projectId, unsafeProject] of Object.entries(raw.projects ?? {})) {
+    if (!unsafeProject || typeof unsafeProject !== 'object') {
+      continue
+    }
+
+    const projectRecord = unsafeProject as Partial<StoredProjectEntry>
+    const nextDays: StoredProjectEntry['days'] = {}
+
+    for (const [dayId, unsafeDay] of Object.entries(projectRecord.days ?? {})) {
+      if (!unsafeDay || typeof unsafeDay !== 'object') {
+        continue
+      }
+
+      const dayRecord = unsafeDay as Partial<StoredDayEntry>
+      if (!dayRecord.dayPackage || typeof dayRecord.dayPackage !== 'object') {
+        continue
+      }
+
+      nextDays[dayId] = {
+        dayId: readString(dayRecord.dayId, dayId),
+        packageId: readString(dayRecord.packageId, ''),
+        packageVersion: readNumber(dayRecord.packageVersion, 0),
+        shootDate: readString(dayRecord.shootDate, ''),
+        updatedAt: readString(dayRecord.updatedAt, ''),
+        importedAt: readString(dayRecord.importedAt, ''),
+        scheduleItemCount: readNumber(dayRecord.scheduleItemCount, 0),
+        dayPackage: dayRecord.dayPackage,
+      }
+    }
+
+    nextProjects[projectId] = {
+      projectId: readString(projectRecord.projectId, projectId),
+      projectName: readString(projectRecord.projectName, 'Untitled project'),
+      projectSlug: typeof projectRecord.projectSlug === 'string' ? projectRecord.projectSlug : undefined,
+      timezone: typeof projectRecord.timezone === 'string' ? projectRecord.timezone : undefined,
+      updatedAt: readString(projectRecord.updatedAt, ''),
+      importedAt: readString(projectRecord.importedAt, ''),
+      days: nextDays,
+    }
+  }
+
+  return {
+    version: 1,
+    projects: nextProjects,
+    shotStatusOverrides:
+      typeof raw.shotStatusOverrides === 'object' && raw.shotStatusOverrides
+        ? (raw.shotStatusOverrides as StoredLibrary['shotStatusOverrides'])
+        : {},
+  }
+}
+
 export function loadLibrary(): StoredLibrary {
   const raw = window.localStorage.getItem(LIBRARY_STORAGE_KEY)
   if (!raw) {
@@ -35,14 +97,7 @@ export function loadLibrary(): StoredLibrary {
       return EMPTY_LIBRARY
     }
 
-    return {
-      version: 1,
-      projects: parsed.projects,
-      shotStatusOverrides:
-        typeof parsed.shotStatusOverrides === 'object' && parsed.shotStatusOverrides
-          ? (parsed.shotStatusOverrides as StoredLibrary['shotStatusOverrides'])
-          : {},
-    }
+    return normalizeStoredLibrary(parsed)
   } catch {
     return EMPTY_LIBRARY
   }
@@ -100,7 +155,7 @@ export function getLatestProject(library: StoredLibrary): StoredProjectEntry | n
     return null
   }
 
-  return projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+  return projects.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))[0]
 }
 
 export function getPreferredDayId(project: StoredProjectEntry, preferredDayId?: string): string | null {
@@ -113,7 +168,11 @@ export function getPreferredDayId(project: StoredProjectEntry, preferredDayId?: 
     return null
   }
 
-  days.sort((a, b) => b.shootDate.localeCompare(a.shootDate) || b.updatedAt.localeCompare(a.updatedAt))
+  days.sort(
+    (a, b) =>
+      (b.shootDate ?? '').localeCompare(a.shootDate ?? '') ||
+      (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
+  )
   return days[0].dayId
 }
 

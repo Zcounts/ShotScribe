@@ -44,7 +44,7 @@ export function App() {
   const [importError, setImportError] = useState<string | null>(null)
 
   const projects = useMemo(() => {
-    return Object.values(library.projects).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    return Object.values(library.projects).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
   }, [library])
 
   function persistLastOpened(next: StoredLastOpened) {
