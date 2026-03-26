@@ -72,42 +72,102 @@ p {
 .project-header {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+  padding: 16px;
+  background:
+    linear-gradient(150deg, rgba(243, 236, 227, 0.95) 0%, rgba(248, 244, 237, 0.98) 72%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(63, 78, 96, 0.045),
+      rgba(63, 78, 96, 0.045) 1px,
+      transparent 1px,
+      transparent 22px
+    );
+}
+
+.project-header-top {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.project-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-header-copy h1 {
+  font-size: 1.46rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+.day-picker-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.day-picker-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #6e6053;
+  font-weight: 700;
 }
 
 .day-select {
   width: 100%;
-  min-height: 46px;
-  border-radius: 999px;
-  border: 1px solid #c3b7a8;
-  background: #efe7da;
-  color: #2c2d33;
-  padding: 10px;
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid #bcae9c;
+  background: linear-gradient(180deg, #f2e8d9 0%, #ebdecb 100%);
+  color: #2b2b2f;
+  padding: 10px 12px;
   font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.day-picker-date {
+  font-size: 0.84rem;
+  color: #665a4c;
   font-weight: 600;
+  margin-left: 2px;
 }
 
 .tab-strip {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  overflow-x: auto;
+  padding: 2px 1px 8px;
   gap: 8px;
+  scrollbar-width: none;
+}
+
+.tab-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-button {
-  min-height: 44px;
-  border: 1px solid #cfc5b8;
+  min-height: 40px;
+  border: 1px solid #cbbfae;
   border-radius: 999px;
-  background: rgba(238, 229, 216, 0.88);
-  color: #3f4149;
-  font-weight: 600;
-  padding: 8px;
-  font-size: 0.84rem;
+  background: rgba(242, 234, 223, 0.92);
+  color: #45474d;
+  font-weight: 700;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  letter-spacing: 0.01em;
 }
 
 .tab-button-active {
-  background: #d9e5f7;
-  border-color: #6f8fb8;
-  color: #213955;
+  background: #4a68a5;
+  border-color: #435f98;
+  color: #f2f4f9;
+  box-shadow: 0 6px 14px rgba(55, 71, 110, 0.22);
 }
 
 .stacked-list,
@@ -266,21 +326,67 @@ p {
 }
 
 .shot-toggle {
-  min-height: 82px;
+  min-height: 98px;
+  border-radius: 16px;
+  align-items: stretch;
+  padding: 12px 12px 12px 14px;
+}
+
+.shot-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shot-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shot-scene-tag {
+  border-radius: 999px;
+  padding: 4px 8px;
+  border: 1px solid #cabca8;
+  background: #eee4d5;
+  color: #5e5347;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
 }
 
 .shot-toggle-open {
-  border-left: 6px solid #c2a35b;
+  border-left: 5px solid #b9964c;
 }
 
 .shot-toggle-done {
-  border-left: 6px solid #7ba688;
+  border-left: 5px solid #6d9681;
   background: #e3efe7;
 }
 
 .shot-state {
-  font-size: 1rem;
+  font-size: 0.78rem;
   letter-spacing: 0.06em;
+  border-radius: 999px;
+  padding: 8px 12px;
+  min-width: 66px;
+  text-align: center;
+  align-self: center;
+}
+
+.shot-state-open {
+  background: #e9dcc3;
+  border: 1px solid #c9af76;
+  color: #624716;
+}
+
+.shot-state-done {
+  background: #d4e8db;
+  border: 1px solid #89af98;
+  color: #215139;
 }
 
 .storyboard-card summary {
@@ -359,17 +465,7 @@ p {
 
 .project-hub-screen {
   padding-top: 16px;
-  gap: 12px;
-}
-
-.project-hub-screen .project-header {
-  gap: 8px;
-}
-
-.project-header-copy h1 {
-  font-size: 1.35rem;
-  line-height: 1.2;
-  letter-spacing: 0.01em;
+  gap: 14px;
 }
 
 .header-meta-row {
@@ -422,17 +518,17 @@ p {
     padding-top: 24px;
   }
 
-  .tab-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .project-header {
+  .project-header-top {
     flex-direction: row;
     justify-content: space-between;
-    align-items: flex-end;
+    align-items: flex-start;
+  }
+
+  .day-picker-wrap {
+    min-width: 260px;
   }
 
   .day-select {
-    max-width: 280px;
+    max-width: 100%;
   }
 }
