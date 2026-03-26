@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import useStore from '../store'
 import { SubTabNav } from './SubTabNav'
 import PersonProfileDialog from './PersonProfileDialog'
@@ -58,8 +58,11 @@ export default function CastCrewTab() {
   const callsheets = useStore(s => s.callsheets)
   const castCrewNotes = useStore(s => s.castCrewNotes)
   const setCastCrewNotes = useStore(s => s.setCastCrewNotes)
-  const [activeSubTab, setActiveSubTab] = useState('Quick Reference')
+  const castCrewViewState = useStore(s => s.tabViewState?.castcrew || {})
+  const setTabViewState = useStore(s => s.setTabViewState)
+  const [activeSubTab, setActiveSubTab] = useState(castCrewViewState.activeSubTab || 'Quick Reference')
   const [editor, setEditor] = useState(null)
+  const scrollRef = useRef(null)
 
   const openProfile = (type, id) => {
     const roster = type === 'cast' ? castRoster : crewRoster
@@ -131,8 +134,27 @@ export default function CastCrewTab() {
       })
   }, [castRoster, scenes, getCastSceneMetrics])
 
+  useEffect(() => {
+    setTabViewState('castcrew', { activeSubTab })
+  }, [activeSubTab, setTabViewState])
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const savedTop = castCrewViewState.scrollTop
+    if (typeof savedTop === 'number') {
+      requestAnimationFrame(() => {
+        node.scrollTop = savedTop
+      })
+    }
+  }, [castCrewViewState.scrollTop])
+
   return (
-    <div className="h-full bg-canvas px-6 py-5 overflow-auto space-y-4">
+    <div
+      ref={scrollRef}
+      className="h-full bg-canvas px-6 py-5 overflow-auto space-y-4"
+      onScroll={(e) => setTabViewState('castcrew', { scrollTop: e.currentTarget.scrollTop })}
+    >
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <SubTabNav
           tabs={['Quick Reference', 'List']}

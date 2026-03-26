@@ -244,11 +244,12 @@ export default function ScriptTab() {
   const scriptFocusRequest = useStore(s => s.scriptFocusRequest)
   const clearScriptFocusRequest = useStore(s => s.clearScriptFocusRequest)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
-  const useDropdowns = useStore(s => s.useDropdowns)
+  const scriptViewState = useStore(s => s.tabViewState?.script || {})
+  const setTabViewState = useStore(s => s.setTabViewState)
 
   const rightRef = useRef(null)
   const headingRefs = useRef({})
-  const [activeSceneId, setActiveSceneId] = useState(null)
+  const [activeSceneId, setActiveSceneId] = useState(scriptViewState.activeSceneId || null)
   const [selectionBar, setSelectionBar] = useState(null)
   const [addShotDialog, setAddShotDialog] = useState(null)
   const [shotLinkDialog, setShotLinkDialog] = useState(null)
@@ -304,6 +305,21 @@ export default function ScriptTab() {
     Object.values(headingRefs.current).forEach(el => el && io.observe(el))
     return () => io.disconnect()
   }, [orderedScenes])
+
+  useEffect(() => {
+    setTabViewState('script', { activeSceneId })
+  }, [activeSceneId, setTabViewState])
+
+  useEffect(() => {
+    const node = rightRef.current
+    if (!node) return
+    const savedTop = scriptViewState.scrollTop
+    if (typeof savedTop === 'number') {
+      requestAnimationFrame(() => {
+        node.scrollTop = savedTop
+      })
+    }
+  }, [scriptViewState.scrollTop])
 
   useEffect(() => {
     if (!scriptFocusRequest) return
@@ -561,7 +577,11 @@ export default function ScriptTab() {
         </div>
       </div>
 
-      <div ref={rightRef} style={{ flex: 1, overflowY: 'auto', padding: 18, position: 'relative' }}>
+      <div
+        ref={rightRef}
+        onScroll={(e) => setTabViewState('script', { scrollTop: e.currentTarget.scrollTop })}
+        style={{ flex: 1, overflowY: 'auto', padding: 18, position: 'relative' }}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
           {pagedScript.map(page => (
             <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', padding: `${PAGE_MARGIN.top}px ${PAGE_MARGIN.right}px ${PAGE_MARGIN.bottom}px ${PAGE_MARGIN.left}px`, fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: SCREENPLAY_FONT_SIZE, lineHeight: SCREENPLAY_LINE_HEIGHT, position: 'relative', overflow: 'hidden' }}>

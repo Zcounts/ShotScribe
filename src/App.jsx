@@ -234,6 +234,9 @@ export default function App() {
   const addScene = useStore(s => s.addScene)
   const activeTab = useStore(s => s.activeTab)
   const setActiveTab = useStore(s => s.setActiveTab)
+  const storyboardViewState = useStore(s => s.tabViewState?.storyboard || {})
+  const setTabViewState = useStore(s => s.setTabViewState)
+  const documentSession = useStore(s => s.documentSession)
   const scriptScenes = useStore(s => s.scriptScenes)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
 
@@ -248,10 +251,11 @@ export default function App() {
   const [restorePrompt, setRestorePrompt] = useState(null) // { data, timeStr, totalShots }
   // When set, overrides activeTab in the export modal (e.g. explicit pick from toolbar dropdown).
   const [forcedExportTab, setForcedExportTab] = useState(null)
-  const [showStoryboardOutline, setShowStoryboardOutline] = useState(true)
+  const [showStoryboardOutline, setShowStoryboardOutline] = useState(storyboardViewState.showOutline ?? true)
   const [storyboardConfigOpen, setStoryboardConfigOpen] = useState(false)
-  const [storyboardOutlineTab, setStoryboardOutlineTab] = useState('Scenes')
-  const [activeOutlineItem, setActiveOutlineItem] = useState(null)
+  const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
+  const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
+  const storyboardScrollRef = useRef(null)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
   const storyboardSceneRefs = useRef({})
@@ -351,6 +355,32 @@ export default function App() {
       setActiveOutlineItem(sceneId)
     }
   }
+
+  useEffect(() => {
+    setTabViewState('storyboard', {
+      showOutline: showStoryboardOutline,
+      outlineTab: storyboardOutlineTab,
+      activeItem: activeOutlineItem,
+    })
+  }, [showStoryboardOutline, storyboardOutlineTab, activeOutlineItem, setTabViewState])
+
+  useEffect(() => {
+    setShowStoryboardOutline(storyboardViewState.showOutline ?? true)
+    setStoryboardOutlineTab(storyboardViewState.outlineTab || 'Scenes')
+    setActiveOutlineItem(storyboardViewState.activeItem || null)
+  }, [documentSession]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeTab !== 'storyboard') return
+    const node = storyboardScrollRef.current
+    if (!node) return
+    const savedTop = storyboardViewState.scrollTop
+    if (typeof savedTop === 'number') {
+      requestAnimationFrame(() => {
+        node.scrollTop = savedTop
+      })
+    }
+  }, [activeTab, storyboardViewState.scrollTop])
 
   const storyboardPageItems = scenes.flatMap((scene, sceneIdx) => {
     const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
@@ -454,7 +484,11 @@ export default function App() {
 
       {/* Main content */}
       {activeTab === 'storyboard' ? (
-        <div className="flex-1 py-4 px-4 overflow-auto canvas-texture">
+        <div
+          ref={storyboardScrollRef}
+          className="flex-1 py-4 px-4 overflow-auto canvas-texture"
+          onScroll={(e) => setTabViewState('storyboard', { scrollTop: e.currentTarget.scrollTop })}
+        >
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
               <aside style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
@@ -533,27 +567,27 @@ export default function App() {
         </div>
       ) : activeTab === 'shotlist' ? (
         <div className="flex-1 flex flex-col overflow-auto">
-          <ShotlistTab containerRef={shotlistRef} />
+          <ShotlistTab key={`shotlist-${documentSession}`} containerRef={shotlistRef} />
         </div>
       ) : activeTab === 'scenes' ? (
         <div className="flex-1 overflow-hidden canvas-texture">
-          <ScenesTab />
+          <ScenesTab key={`scenes-${documentSession}`} />
         </div>
       ) : activeTab === 'script' ? (
         <div className="flex-1 overflow-hidden canvas-texture">
-          <ScriptTab />
+          <ScriptTab key={`script-${documentSession}`} />
         </div>
       ) : activeTab === 'schedule' ? (
         <div className="flex-1 overflow-y-auto canvas-texture">
-          <ScheduleTab />
+          <ScheduleTab key={`schedule-${documentSession}`} />
         </div>
       ) : activeTab === 'callsheet' ? (
         <div className="flex-1 flex flex-col overflow-hidden">
-          <CallsheetTab />
+          <CallsheetTab key={`callsheet-${documentSession}`} />
         </div>
       ) : activeTab === 'castcrew' ? (
         <div className="flex-1 overflow-hidden">
-          <CastCrewTab />
+          <CastCrewTab key={`castcrew-${documentSession}`} />
         </div>
       ) : null}
 

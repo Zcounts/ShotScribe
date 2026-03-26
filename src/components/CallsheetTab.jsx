@@ -1098,13 +1098,19 @@ export default function CallsheetTab() {
   const updateCallsheet = useStore(s => s.updateCallsheet)
   const setCallsheetSectionConfig = useStore(s => s.setCallsheetSectionConfig)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
+  const callsheetViewState = useStore(s => s.tabViewState?.callsheet || {})
+  const setTabViewState = useStore(s => s.setTabViewState)
 
   const isDark = theme === 'dark'
-  const [selectedDayIdx, setSelectedDayIdx] = useState(0)
+  const [selectedDayId, setSelectedDayId] = useState(callsheetViewState.selectedDayId || null)
   const [configOpen, setConfigOpen] = useState(false)
+  const canvasRef = useRef(null)
 
   const scheduleWithShots = getScheduleWithShots()
-  const activeDayIdx = Math.min(selectedDayIdx, Math.max(0, schedule.length - 1))
+  const resolvedDayIdx = selectedDayId
+    ? schedule.findIndex(day => day.id === selectedDayId)
+    : 0
+  const activeDayIdx = Math.max(0, resolvedDayIdx)
   const activeDay = schedule[activeDayIdx] || null
 
   const callsheet = activeDay ? getCallsheet(activeDay.id) : null
@@ -1120,6 +1126,21 @@ export default function CallsheetTab() {
     if (!activeDay) return
     updateCallsheet(activeDay.id, updates)
   }, [activeDay, updateCallsheet])
+
+  useEffect(() => {
+    setTabViewState('callsheet', { selectedDayId: activeDay?.id || null })
+  }, [activeDay, setTabViewState])
+
+  useEffect(() => {
+    const node = canvasRef.current
+    if (!node) return
+    const savedTop = callsheetViewState.scrollTop
+    if (typeof savedTop === 'number') {
+      requestAnimationFrame(() => {
+        node.scrollTop = savedTop
+      })
+    }
+  }, [callsheetViewState.scrollTop])
 
   // Build visible sections in configured order
   const visibleSections = callsheetSectionConfig
@@ -1163,7 +1184,7 @@ export default function CallsheetTab() {
         <DayTabBar
           days={dayTabs}
           activeDay={schedule[activeDayIdx]?.id}
-          onSelect={(dayId) => setSelectedDayIdx(schedule.findIndex(day => day.id === dayId))}
+          onSelect={(dayId) => setSelectedDayId(dayId)}
         />
         <div style={{
           display: 'flex',
@@ -1214,7 +1235,10 @@ export default function CallsheetTab() {
       </div>
 
       {/* Callsheet document canvas */}
-      <div style={{
+      <div
+        ref={canvasRef}
+        onScroll={(e) => setTabViewState('callsheet', { scrollTop: e.currentTarget.scrollTop })}
+        style={{
         flex: 1,
         overflowY: 'auto',
         padding: '24px 16px',

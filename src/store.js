@@ -194,6 +194,7 @@ const useStore = create((set, get) => ({
   projectName: 'Untitled Shotlist',
   lastSaved: null,
   hasUnsavedChanges: false,
+  documentSession: 0,
 
   // Scenes (multi-scene support)
   scenes: [initialScene],
@@ -248,6 +249,15 @@ const useStore = create((set, get) => ({
   scheduleCollapseState: { days: {}, blocks: {} },
   scriptFocusRequest: null, // { sceneId, shotId, at }
   scenePropertiesDialog: null, // { source: 'storyboard'|'script', sceneId }
+  tabViewState: {
+    script: {},
+    scenes: {},
+    storyboard: {},
+    shotlist: {},
+    castcrew: {},
+    schedule: {},
+    callsheet: {},
+  },
 
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
@@ -1013,6 +1023,28 @@ const useStore = create((set, get) => ({
   toggleSettings: () => set(state => ({ settingsOpen: !state.settingsOpen })),
   closeSettings: () => set({ settingsOpen: false }),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setTabViewState: (tab, patch) => {
+    set(state => ({
+      tabViewState: {
+        ...state.tabViewState,
+        [tab]: {
+          ...(state.tabViewState?.[tab] || {}),
+          ...(patch || {}),
+        },
+      },
+    }))
+  },
+  resetTabViewState: () => set({
+    tabViewState: {
+      script: {},
+      scenes: {},
+      storyboard: {},
+      shotlist: {},
+      castcrew: {},
+      schedule: {},
+      callsheet: {},
+    },
+  }),
   requestScriptFocus: (sceneId, shotId = null) => set({
     scriptFocusRequest: { sceneId, shotId, at: Date.now() },
     activeTab: 'script',
@@ -1570,6 +1602,16 @@ const useStore = create((set, get) => ({
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
       activeTab: 'script',
+      documentSession: get().documentSession + 1,
+      tabViewState: {
+        script: {},
+        scenes: {},
+        storyboard: {},
+        shotlist: {},
+        castcrew: {},
+        schedule: {},
+        callsheet: {},
+      },
     })
   },
 
@@ -1668,6 +1710,16 @@ const useStore = create((set, get) => ({
       projectPath: null,
       lastSaved: null,
       activeTab: 'script',
+      documentSession: get().documentSession + 1,
+      tabViewState: {
+        script: {},
+        scenes: {},
+        storyboard: {},
+        shotlist: {},
+        castcrew: {},
+        schedule: {},
+        callsheet: {},
+      },
     })
   },
 
