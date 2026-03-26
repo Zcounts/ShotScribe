@@ -12,6 +12,11 @@ export const SCREENPLAY_FORMAT = {
   },
 }
 
+export const SCENE_PAGINATION_MODES = {
+  CONTINUE: 'natural',
+  NEW_PAGE: 'newPagePerScene',
+}
+
 function wrapCount(text, maxChars) {
   const value = String(text || '').trim()
   if (!value) return 1
@@ -75,12 +80,17 @@ export function getSceneScreenplayElements(scene) {
   return parseScreenplayText(scene?.screenplayText || scene?.actionText || '')
 }
 
-export function estimateScreenplayPagination(scenes = []) {
+export function estimateScreenplayPagination(scenes = [], options = {}) {
+  const scenePaginationMode = options.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
   let totalLineUnits = 0
-  let currentPage = 1
   const byScene = {}
 
   scenes.forEach(scene => {
+    if (scenePaginationMode === SCENE_PAGINATION_MODES.NEW_PAGE && totalLineUnits > 0) {
+      const usedOnPage = totalLineUnits % SCREENPLAY_FORMAT.pageLines
+      if (usedOnPage > 0) totalLineUnits += (SCREENPLAY_FORMAT.pageLines - usedOnPage)
+    }
+
     const elements = getSceneScreenplayElements(scene)
     const startLineUnits = totalLineUnits
 
@@ -106,12 +116,10 @@ export function estimateScreenplayPagination(scenes = []) {
       pageCount: scenePageCount,
       lineUnits: sceneUnits,
     }
-
-    currentPage = endPage
   })
 
   return {
-    totalPages: Math.max(1, Number((Math.max(currentPage, totalLineUnits / SCREENPLAY_FORMAT.pageLines)).toFixed(2))),
+    totalPages: Math.max(1, Number((totalLineUnits / SCREENPLAY_FORMAT.pageLines).toFixed(2))),
     byScene,
   }
 }

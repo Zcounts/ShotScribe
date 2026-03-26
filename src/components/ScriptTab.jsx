@@ -4,14 +4,28 @@ import { naturalSortSceneNumber } from '../utils/sceneSort'
 import SceneColorPicker from './SceneColorPicker'
 import SpecsTable from './SpecsTable'
 import ImportScriptModal from './ImportScriptModal'
-import { estimateScreenplayPagination, getSceneScreenplayElements, SCREENPLAY_FORMAT } from '../utils/screenplay'
+import {
+  estimateScreenplayPagination,
+  getSceneScreenplayElements,
+  SCREENPLAY_FORMAT,
+  SCENE_PAGINATION_MODES,
+} from '../utils/screenplay'
 
-const PAGE_SIZE = { width: 816, height: 1056 }
-const PAGE_MARGIN = { top: 96, right: 96, bottom: 96, left: 144 }
+const PAGE_SIZE = { width: 816, height: 1056 } // 8.5x11 @96dpi
+const PAGE_MARGIN = { top: 96, right: 96, bottom: 96, left: 144 } // 1"/1"/1"/1.5"
 const SCREENPLAY_FONT_SIZE = 12
 const SCREENPLAY_LINE_HEIGHT = 1.5
 const SCREENPLAY_LINE_HEIGHT_PX = SCREENPLAY_FONT_SIZE * SCREENPLAY_LINE_HEIGHT
 const ROWS_PER_PAGE = Math.floor((PAGE_SIZE.height - PAGE_MARGIN.top - PAGE_MARGIN.bottom) / SCREENPLAY_LINE_HEIGHT_PX)
+const CHAR_PX = 7.2
+const ELEMENT_LAYOUT = {
+  heading: { left: 0, width: 63, textTransform: 'uppercase', fontWeight: 700 },
+  action: { left: 0, width: 63 },
+  character: { left: 19, width: 24, textTransform: 'uppercase' },
+  dialogue: { left: 12, width: 35 },
+  parenthetical: { left: 16, width: 28 },
+  transition: { left: 0, width: 63, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 },
+}
 
 function AddShotModal({ scene, shots, onClose, onConfirm }) {
   const [mode, setMode] = useState('new')
@@ -190,6 +204,7 @@ function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
   orderedScenes.forEach(scene => {
     const elements = screenplayBySceneId[scene.id] || []
     let sceneCharOffset = 0
+    let isSceneStart = true
     elements.forEach((line, idx) => {
       const lineText = String(line.text || '')
       const nextOffset = sceneCharOffset + lineText.length + 1
@@ -202,6 +217,7 @@ function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
           sceneCharStart: sceneCharOffset,
           sceneCharEnd: sceneCharOffset,
           sourceIndex: idx,
+          isSceneStart,
         })
       } else {
         const width = SCREENPLAY_FORMAT.charsPerLine[line.type] || SCREENPLAY_FORMAT.charsPerLine.action
@@ -216,23 +232,69 @@ function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
             sceneCharEnd: sceneCharOffset + chunk.end,
             sourceIndex: idx,
             isFirstChunk: chunkIdx === 0,
+            isSceneStart: isSceneStart && chunkIdx === 0,
           })
         })
       }
+      isSceneStart = false
       sceneCharOffset = nextOffset
     })
   })
   return rows
 }
 
-function paginateRows(rows) {
+function getBlockLength(rows, startIndex, predicate) {
+  let len = 0
+  while (startIndex + len < rows.length && predicate(rows[startIndex + len])) len += 1
+  return len
+}
+
+function paginateRows(rows, options = {}) {
+  const scenePaginationMode = options.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
   const pages = []
-  let pageNo = 1
-  for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
-    pages.push({ id: `sp_${pageNo}`, number: pageNo, lines: rows.slice(i, i + ROWS_PER_PAGE) })
-    pageNo += 1
+  let page = { id: 'sp_1', number: 1, lines: [] }
+
+  const pushPage = () => {
+    pages.push(page)
+    page = { id: `sp_${pages.length + 1}`, number: pages.length + 1, lines: [] }
   }
-  return pages.length ? pages : [{ id: 'sp_1', number: 1, lines: [] }]
+  const startNewPageIfNeeded = () => {
+    if (page.lines.length > 0) pushPage()
+  }
+  const addLine = (line) => {
+    if (page.lines.length >= ROWS_PER_PAGE) pushPage()
+    page.lines.push(line)
+  }
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]
+
+    if (scenePaginationMode === SCENE_PAGINATION_MODES.NEW_PAGE && row.isSceneStart) {
+      startNewPageIfNeeded()
+    }
+
+    const isHeading = row.type === 'heading' && row.isFirstChunk
+    if (isHeading) {
+      const headingLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
+      const nextLen = getBlockLength(rows, i + headingLen, r => r.type === 'blank')
+      const actionLen = getBlockLength(rows, i + headingLen + nextLen, r => r.sceneId === row.sceneId && r.type !== 'blank')
+      const keepRows = headingLen + nextLen + Math.min(actionLen, 2)
+      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+    }
+
+    if (row.type === 'character' && row.isFirstChunk) {
+      const cueLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
+      const nextLen = getBlockLength(rows, i + cueLen, r => r.type === 'parenthetical' || r.type === 'dialogue')
+      const keepRows = cueLen + Math.max(1, nextLen)
+      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+    }
+
+    addLine(row)
+  }
+
+  if (page.lines.length || pages.length === 0) {
+    pages.push(page)
+  }
+  return pages
 }
 
 export default function ScriptTab() {
@@ -244,6 +306,8 @@ export default function ScriptTab() {
   const updateShotImage = useStore(s => s.updateShotImage)
   const setActiveTab = useStore(s => s.setActiveTab)
   const updateScriptScene = useStore(s => s.updateScriptScene)
+  const useDropdowns = useStore(s => s.useDropdowns)
+  const scriptSettings = useStore(s => s.scriptSettings)
   const scriptFocusRequest = useStore(s => s.scriptFocusRequest)
   const clearScriptFocusRequest = useStore(s => s.clearScriptFocusRequest)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
@@ -259,7 +323,11 @@ export default function ScriptTab() {
   const [importModalOpen, setImportModalOpen] = useState(false)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
-  const pagination = useMemo(() => estimateScreenplayPagination(orderedScenes), [orderedScenes])
+  const scenePaginationMode = scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
+  const pagination = useMemo(
+    () => estimateScreenplayPagination(orderedScenes, { scenePaginationMode }),
+    [orderedScenes, scenePaginationMode],
+  )
 
   const shotCounts = useMemo(() => {
     const map = {}
@@ -299,7 +367,26 @@ export default function ScriptTab() {
   }, [orderedScenes, screenplayBySceneId])
 
   const screenplayRows = useMemo(() => buildScreenplayRows(orderedScenes, screenplayBySceneId), [orderedScenes, screenplayBySceneId])
-  const pagedScript = useMemo(() => paginateRows(screenplayRows), [screenplayRows])
+  const pagedScript = useMemo(
+    () => paginateRows(screenplayRows, { scenePaginationMode }),
+    [screenplayRows, scenePaginationMode],
+  )
+  const scenePageStats = useMemo(() => {
+    const stats = {}
+    pagedScript.forEach(page => {
+      const sceneIds = [...new Set(page.lines.map(l => l.sceneId).filter(Boolean))]
+      sceneIds.forEach(sceneId => {
+        if (!stats[sceneId]) stats[sceneId] = { startPage: page.number, endPage: page.number, pages: new Set() }
+        stats[sceneId].startPage = Math.min(stats[sceneId].startPage, page.number)
+        stats[sceneId].endPage = Math.max(stats[sceneId].endPage, page.number)
+        stats[sceneId].pages.add(page.number)
+      })
+    })
+    Object.keys(stats).forEach(sceneId => {
+      stats[sceneId].pageCount = Number((stats[sceneId].pages.size).toFixed(2))
+    })
+    return stats
+  }, [pagedScript])
 
   useEffect(() => {
     const io = new IntersectionObserver((entries) => {
@@ -489,20 +576,21 @@ export default function ScriptTab() {
       overflow: 'hidden',
       position: 'relative',
       color: '#111827',
+      width: '100%',
     }
 
     if (lineType === 'heading') return { ...style, textTransform: 'uppercase', fontWeight: 700 }
-    if (lineType === 'action') return { ...style, width: '100%' }
-    if (lineType === 'character') return { ...style, marginLeft: '211px', width: '192px', textAlign: 'center', textTransform: 'uppercase' }
-    if (lineType === 'parenthetical') return { ...style, marginLeft: '144px', width: '240px', color: '#374151' }
-    if (lineType === 'dialogue') return { ...style, marginLeft: '96px', width: '336px' }
+    if (lineType === 'action') return { ...style }
+    if (lineType === 'character') return { ...style, textAlign: 'center', textTransform: 'uppercase' }
+    if (lineType === 'parenthetical') return { ...style, color: '#374151' }
+    if (lineType === 'dialogue') return { ...style }
     if (lineType === 'transition') return { ...style, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 }
     return style
   }
 
   const renderRow = (row) => {
     if (row.type === 'blank') {
-      return <div key={row.rowKey} data-row-start={row.sceneCharStart} data-row-end={row.sceneCharEnd} style={{ height: `${SCREENPLAY_LINE_HEIGHT_PX}px` }} />
+      return <div key={row.rowKey} data-row-start={row.sceneCharStart} data-row-end={row.sceneCharEnd} style={{ height: `${SCREENPLAY_LINE_HEIGHT_PX}px`, width: '100%' }} />
     }
 
     const text = String(row.text || '')
@@ -576,7 +664,7 @@ export default function ScriptTab() {
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       <div style={{ width: 260, borderRight: '1px solid rgba(74,85,104,0.15)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: 10, fontSize: 10, textTransform: 'uppercase', color: '#718096', fontWeight: 700 }}>Scenes · {pagination.totalPages.toFixed(2)} pp</div>
+        <div style={{ padding: 10, fontSize: 10, textTransform: 'uppercase', color: '#718096', fontWeight: 700 }}>Scenes · {pagedScript.length} pp</div>
         <div style={{ overflowY: 'auto' }}>
           {orderedScenes.map(sc => (
             <button key={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: 'none' }}>
@@ -586,7 +674,9 @@ export default function ScriptTab() {
                 <span style={{ fontSize: 10, color: '#718096', marginLeft: 'auto' }}>{shotCounts[sc.id] || 0} shots</span>
               </div>
               <div style={{ fontSize: 10, color: '#4b5563', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.location || sc.slugline}</div>
-              <div style={{ fontSize: 10, color: '#718096' }}>{pagination.byScene[sc.id]?.pageCount?.toFixed(2) || '0.00'} pp</div>
+              <div style={{ fontSize: 10, color: '#718096' }}>
+                {scenePageStats[sc.id]?.pageCount?.toFixed(2) || pagination.byScene[sc.id]?.pageCount?.toFixed(2) || '0.00'} pp
+              </div>
             </button>
           ))}
         </div>
@@ -599,28 +689,87 @@ export default function ScriptTab() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
           {pagedScript.map(page => (
-            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', padding: `${PAGE_MARGIN.top}px ${PAGE_MARGIN.right}px ${PAGE_MARGIN.bottom}px ${PAGE_MARGIN.left}px`, fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: SCREENPLAY_FONT_SIZE, lineHeight: SCREENPLAY_LINE_HEIGHT, position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 16, right: 16, fontSize: 10, color: '#64748b', fontFamily: 'Sora, sans-serif' }}>Page {page.number}</div>
-              {page.lines.map(row => {
-                const scene = orderedScenes.find(sc => sc.id === row.sceneId)
-                const showSceneHeader = row.type === 'heading' && row.isFirstChunk
-                return (
-                  <div key={row.rowKey} data-sceneid={row.sceneId}>
-                    {showSceneHeader && (
+            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: SCREENPLAY_FONT_SIZE, lineHeight: SCREENPLAY_LINE_HEIGHT, position: 'relative', overflow: 'hidden' }}>
+              {page.number > 1 && (
+                <div style={{ position: 'absolute', top: 20, right: 24, fontSize: 12, color: '#111827' }}>{page.number}.</div>
+              )}
+              <div style={{ position: 'absolute', inset: `${PAGE_MARGIN.top}px ${PAGE_MARGIN.right}px ${PAGE_MARGIN.bottom}px ${PAGE_MARGIN.left}px`, overflow: 'hidden' }}>
+                {page.lines.map((row, idx) => {
+                  const scene = orderedScenes.find(sc => sc.id === row.sceneId)
+                  const isSceneAnchor = row.type === 'heading' && row.isFirstChunk
+                  const layout = ELEMENT_LAYOUT[row.type] || ELEMENT_LAYOUT.action
+                  return (
+                    <div
+                      key={row.rowKey}
+                      data-sceneid={row.sceneId}
+                      style={{
+                        position: 'absolute',
+                        top: `${idx * SCREENPLAY_LINE_HEIGHT_PX}px`,
+                        left: 0,
+                        right: 0,
+                        height: `${SCREENPLAY_LINE_HEIGHT_PX}px`,
+                      }}
+                    >
+                      {isSceneAnchor && (
+                        <>
+                          <button
+                            ref={el => { headingRefs.current[row.sceneId] = el }}
+                            data-sceneid={row.sceneId}
+                            onDoubleClick={() => openScenePropertiesDialog('script', row.sceneId)}
+                            onClick={() => setActiveSceneId(row.sceneId)}
+                            title={`Scene ${scene?.sceneNumber || ''}`}
+                            style={{
+                              position: 'absolute',
+                              left: -132,
+                              top: -1,
+                              border: '1px solid rgba(74,85,104,0.3)',
+                              background: '#f8fafc',
+                              color: '#334155',
+                              borderRadius: 999,
+                              padding: '0 8px',
+                              fontSize: 10,
+                              fontFamily: 'Sora, sans-serif',
+                              lineHeight: '16px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            SC {scene?.sceneNumber || ''}
+                            {(shotCounts[row.sceneId] || 0) > 0 ? ` · ${shotCounts[row.sceneId]} shot${shotCounts[row.sceneId] === 1 ? '' : 's'}` : ''}
+                          </button>
+                          <span
+                            style={{
+                              position: 'absolute',
+                              left: -132,
+                              top: 16,
+                              maxWidth: 120,
+                              fontSize: 9,
+                              color: '#64748b',
+                              fontFamily: 'Sora, sans-serif',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              pointerEvents: 'none',
+                            }}
+                            title={scene?.slugline || ''}
+                          >
+                            {scene?.slugline || ''}
+                          </span>
+                        </>
+                      )}
                       <div
-                        ref={el => { headingRefs.current[row.sceneId] = el }}
-                        data-sceneid={row.sceneId}
-                        onDoubleClick={() => openScenePropertiesDialog('script', row.sceneId)}
-                        style={{ fontWeight: 700, borderLeft: `4px solid ${scene?.color || '#9ca3af'}`, padding: '6px 10px', marginBottom: 6, background: scene?.color ? `${scene.color}0d` : 'rgba(148,163,184,0.08)', position: 'relative', fontFamily: 'Sora, sans-serif', fontSize: 13 }}
+                        style={{
+                          position: 'absolute',
+                          left: `${layout.left * CHAR_PX}px`,
+                          width: `${layout.width * CHAR_PX}px`,
+                          ...(layout.textAlign ? { textAlign: layout.textAlign } : {}),
+                        }}
                       >
-                        {scene?.slugline || `${scene?.intExt || ''}. ${scene?.location || ''} - ${scene?.dayNight || ''}`}
-                        <span style={{ position: 'absolute', right: 8, top: 6, fontSize: 10, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 10, padding: '1px 6px', fontFamily: 'monospace' }}>SC {scene?.sceneNumber}</span>
+                        {renderRow(row)}
                       </div>
-                    )}
-                    {renderRow(row)}
-                  </div>
-                )
-              })}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           ))}
         </div>
