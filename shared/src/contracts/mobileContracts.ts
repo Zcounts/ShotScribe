@@ -14,6 +14,16 @@ export interface MobileScheduleItem {
   dayId: string
   type: ScheduleItemType
   shotId?: string
+  shotDisplayName?: string
+  shotCameraName?: string
+  focalLength?: string
+  shotSize?: string
+  shotType?: string
+  shotMove?: string
+  shotEquipment?: string
+  shotNotes?: string
+  shotImageUrl?: string
+  shotColor?: string
   sceneId?: string
   title?: string
   plannedStartTime?: string
@@ -26,6 +36,15 @@ export interface MobileScheduleItem {
 
 export interface MobileStoryboardReference {
   shotId: string
+  shotDisplayName?: string
+  shotCameraName?: string
+  focalLength?: string
+  shotSize?: string
+  shotType?: string
+  shotMove?: string
+  shotEquipment?: string
+  shotNotes?: string
+  shotColor?: string
   thumbnailUrl?: string
   thumbnailWidth?: number
   thumbnailHeight?: number
@@ -35,10 +54,36 @@ export interface MobileStoryboardReference {
 export interface MobileCallsheetData {
   dayId: string
   callTime?: string
+  nearestHospital?: string
   shootLocation?: string
+  locationAddress?: string
+  parkingNotes?: string
+  directions?: string
+  mapsLink?: string
   weatherSummary?: string
   safetyNotes?: string
   generalNotes?: string
+  cast?: Array<{
+    name: string
+    role?: string
+    character?: string
+    phone?: string
+    email?: string
+    notes?: string
+  }>
+  crew?: Array<{
+    name: string
+    role?: string
+    department?: string
+    phone?: string
+    email?: string
+    notes?: string
+  }>
+  scheduleHighlights?: Array<{
+    itemId: string
+    type: ScheduleItemType
+    label: string
+  }>
 }
 
 export interface MobileDayPackage {

@@ -1,4 +1,5 @@
-import type { MobileScheduleItem } from '@shotscribe/shared'
+import { useMemo, useState } from 'react'
+import type { MobileScheduleItem, MobileStoryboardReference } from '@shotscribe/shared'
 import type { MobileTabKey, StoredDayEntry, StoredProjectEntry } from '../types'
 
 interface ProjectHubScreenProps {
@@ -13,6 +14,21 @@ interface ProjectHubScreenProps {
   onImport: () => void
   onDeleteProject: (projectId: string) => void
   onToggleShotDone: (shotId: string) => void
+}
+
+interface MobileShotDetail {
+  shotId: string
+  displayName: string
+  cameraName: string
+  focalLength: string
+  shotSize: string
+  shotType: string
+  shotMove: string
+  shotEquipment: string
+  notes: string
+  sceneTag: string
+  color?: string
+  imageUrl?: string
 }
 
 const TAB_ITEMS: Array<{ key: MobileTabKey; label: string }> = [
@@ -69,6 +85,99 @@ function getEffectiveStatus(
   }
 
   return item.status ?? 'todo'
+}
+
+function toHumanShotName(raw?: string, fallbackNumber = 1, cameraName = 'Camera 1'): string {
+  if (raw && !raw.toLowerCase().startsWith('shot_')) {
+    return raw
+  }
+  return `${fallbackNumber} - ${cameraName}`
+}
+
+function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
+  const shotMap = new Map<string, MobileShotDetail>()
+  const orderedShotItems = day.dayPackage.scheduleItems
+    .filter((item) => item.type === 'shot' && item.shotId)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+
+  orderedShotItems.forEach((item, index) => {
+    if (!item.shotId) return
+    const cameraName = item.shotCameraName ?? 'Camera 1'
+    const displayName = toHumanShotName(item.shotDisplayName, index + 1, cameraName)
+    shotMap.set(item.shotId, {
+      shotId: item.shotId,
+      displayName,
+      cameraName,
+      focalLength: item.focalLength ?? '—',
+      shotSize: item.shotSize ?? '—',
+      shotType: item.shotType ?? '—',
+      shotMove: item.shotMove ?? '—',
+      shotEquipment: item.shotEquipment ?? '—',
+      notes: item.shotNotes ?? '',
+      sceneTag: item.sceneId ? `Scene ${item.sceneId}` : 'Scene —',
+      color: item.shotColor,
+      imageUrl: item.shotImageUrl,
+    })
+  })
+
+  day.dayPackage.storyboardRefs.forEach((ref, index) => {
+    const existing = shotMap.get(ref.shotId)
+    const displayName = toHumanShotName(ref.shotDisplayName, index + 1, ref.shotCameraName ?? 'Camera 1')
+    shotMap.set(ref.shotId, {
+      shotId: ref.shotId,
+      displayName,
+      cameraName: ref.shotCameraName ?? existing?.cameraName ?? 'Camera 1',
+      focalLength: ref.focalLength ?? existing?.focalLength ?? '—',
+      shotSize: ref.shotSize ?? existing?.shotSize ?? '—',
+      shotType: ref.shotType ?? existing?.shotType ?? '—',
+      shotMove: ref.shotMove ?? existing?.shotMove ?? '—',
+      shotEquipment: ref.shotEquipment ?? existing?.shotEquipment ?? '—',
+      notes: ref.shotNotes ?? existing?.notes ?? '',
+      sceneTag: existing?.sceneTag ?? 'Scene —',
+      color: ref.shotColor ?? existing?.color,
+      imageUrl: ref.thumbnailUrl ?? existing?.imageUrl,
+    })
+  })
+
+  return shotMap
+}
+
+function ShotDetailCard({ shot }: { shot: MobileShotDetail }) {
+  return (
+    <article className="mobile-shot-detail">
+      <header className="mobile-shot-detail-header">
+        <h3>{shot.displayName}</h3>
+        <strong className="focal-pill">{shot.focalLength}</strong>
+      </header>
+      {shot.imageUrl ? <img src={shot.imageUrl} alt={`Storyboard frame for ${shot.displayName}`} loading="lazy" /> : null}
+
+      <div className="shot-spec-grid">
+        <p>
+          <span>Size</span>
+          <strong>{shot.shotSize}</strong>
+        </p>
+        <p>
+          <span>Type</span>
+          <strong>{shot.shotType}</strong>
+        </p>
+        <p>
+          <span>Move</span>
+          <strong>{shot.shotMove}</strong>
+        </p>
+        <p>
+          <span>Equip</span>
+          <strong>{shot.shotEquipment}</strong>
+        </p>
+      </div>
+
+      {shot.notes ? (
+        <p className="shot-notes">
+          <span>Notes</span>
+          <strong>{shot.notes}</strong>
+        </p>
+      ) : null}
+    </article>
+  )
 }
 
 function renderOverview(day: StoredDayEntry, doneShots: number, totalShots: number) {
@@ -129,7 +238,9 @@ function renderOverview(day: StoredDayEntry, doneShots: number, totalShots: numb
 function renderSchedule(
   project: StoredProjectEntry,
   day: StoredDayEntry,
-  overrides: Record<string, 'todo' | 'in_progress' | 'done'>
+  overrides: Record<string, 'todo' | 'in_progress' | 'done'>,
+  shotLookup: Map<string, MobileShotDetail>,
+  onOpenDetails: (shotId: string) => void
 ) {
   const sortedItems = [...day.dayPackage.scheduleItems].sort((a, b) => a.sortOrder - b.sortOrder)
 
@@ -137,16 +248,41 @@ function renderSchedule(
     <div className="stacked-list">
       {sortedItems.map((item) => {
         const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
+
+        if (item.type === 'shot' && item.shotId) {
+          const shot = shotLookup.get(item.shotId)
+          return (
+            <article
+              key={item.scheduleItemId}
+              className={`mobile-shot-card status-outline-${effectiveStatus}`}
+              onDoubleClick={() => onOpenDetails(item.shotId as string)}
+            >
+              <div className="mobile-shot-row">
+                <h4>{shot?.displayName ?? 'Shot'}</h4>
+                <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
+              </div>
+              <div className="mobile-shot-subrow">
+                <span className="shot-scene-tag">{shot?.sceneTag ?? 'Scene —'}</span>
+                <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+              </div>
+              <div className="mobile-shot-actions">
+                <button type="button" className="inline-button" onClick={() => onOpenDetails(item.shotId as string)}>
+                  Details
+                </button>
+                <p className="hint-text">{formatTime(item.actualStartTime || item.plannedStartTime)} – {formatTime(item.actualEndTime || item.plannedEndTime)}</p>
+              </div>
+            </article>
+          )
+        }
+
         return (
           <article key={item.scheduleItemId} className={`timeline-card status-outline-${effectiveStatus}`}>
             <div>
               <p className="timeline-type">{item.type.toUpperCase()}</p>
-              <h4>{item.title ?? item.shotId ?? item.scheduleItemId}</h4>
+              <h4>{item.title ?? item.scheduleItemId}</h4>
               <p className="hint-text">
-                {formatTime(item.actualStartTime || item.plannedStartTime)} –{' '}
-                {formatTime(item.actualEndTime || item.plannedEndTime)}
+                {formatTime(item.actualStartTime || item.plannedStartTime)} – {formatTime(item.actualEndTime || item.plannedEndTime)}
               </p>
-              {item.shotId ? <p className="hint-text">Shot {item.shotId}</p> : null}
             </div>
             <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
           </article>
@@ -160,7 +296,9 @@ function renderShotlist(
   project: StoredProjectEntry,
   day: StoredDayEntry,
   overrides: Record<string, 'todo' | 'in_progress' | 'done'>,
-  onToggleShotDone: (shotId: string) => void
+  onToggleShotDone: (shotId: string) => void,
+  shotLookup: Map<string, MobileShotDetail>,
+  onOpenDetails: (shotId: string) => void
 ) {
   const shotItems = day.dayPackage.scheduleItems
     .filter((item) => item.type === 'shot' && item.shotId)
@@ -176,61 +314,68 @@ function renderShotlist(
         const shotId = item.shotId as string
         const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
         const done = effectiveStatus === 'done'
+        const shot = shotLookup.get(shotId)
 
         return (
-          <button
-            type="button"
+          <article
             key={item.scheduleItemId}
-            className={`shot-toggle ${done ? 'shot-toggle-done' : 'shot-toggle-open'}`}
-            onClick={() => onToggleShotDone(shotId)}
+            className={`mobile-shot-card ${done ? 'shot-toggle-done' : 'shot-toggle-open'}`}
+            onDoubleClick={() => onOpenDetails(shotId)}
           >
-            <div className="shot-main">
-              <div className="shot-meta-row">
-                <p className="timeline-type">Shot {shotId}</p>
-                <span className="shot-scene-tag">{item.sceneId ? `Scene ${item.sceneId}` : 'Scene —'}</span>
-              </div>
-              <h4>{item.title ?? 'Untitled shot'}</h4>
-              <p className="hint-text">{done ? 'Completed • Tap to reopen' : 'Tap to mark complete'}</p>
+            <div className="mobile-shot-row">
+              <h4>{shot?.displayName ?? 'Shot'}</h4>
+              <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
             </div>
-            <strong className={`shot-state ${done ? 'shot-state-done' : 'shot-state-open'}`}>{done ? 'DONE' : 'OPEN'}</strong>
-          </button>
+            <div className="mobile-shot-subrow">
+              <span className="shot-scene-tag">{shot?.sceneTag ?? 'Scene —'}</span>
+              <strong className={`shot-state ${done ? 'shot-state-done' : 'shot-state-open'}`}>{done ? 'DONE' : 'OPEN'}</strong>
+            </div>
+            <div className="mobile-shot-actions">
+              <button type="button" className="inline-button" onClick={() => onOpenDetails(shotId)}>
+                Details
+              </button>
+              <button type="button" className="inline-button" onClick={() => onToggleShotDone(shotId)}>
+                {done ? 'Reopen shot' : 'Mark done'}
+              </button>
+            </div>
+          </article>
         )
       })}
     </div>
   )
 }
 
-function renderStoryboard(day: StoredDayEntry) {
-  const refs = day.dayPackage.storyboardRefs
-
+function renderStoryboard(
+  refs: MobileStoryboardReference[],
+  shotLookup: Map<string, MobileShotDetail>,
+  expandedShotId: string | null,
+  onToggleExpanded: (shotId: string) => void
+) {
   if (refs.length === 0) {
     return <p className="hint-text">No storyboard references in this package.</p>
   }
 
   return (
     <div className="stacked-list">
-      {refs.map((ref) => (
-        <details key={`${ref.shotId}-${ref.updatedAt}`} className="storyboard-card">
-          <summary>
-            <span>Shot {ref.shotId}</span>
-            <small>Updated {new Date(ref.updatedAt).toLocaleString()}</small>
-          </summary>
-          <div className="storyboard-body">
-            {ref.thumbnailUrl ? (
-              <img
-                src={ref.thumbnailUrl}
-                alt={`Storyboard for shot ${ref.shotId}`}
-                width={ref.thumbnailWidth}
-                height={ref.thumbnailHeight}
-                loading="lazy"
-              />
-            ) : (
-              <p className="hint-text">No thumbnail URL provided.</p>
-            )}
-            <p className="hint-text">Related shot: {ref.shotId}</p>
-          </div>
-        </details>
-      ))}
+      {refs.map((ref) => {
+        const shot = shotLookup.get(ref.shotId)
+        const isExpanded = expandedShotId === ref.shotId
+        return (
+          <article key={`${ref.shotId}-${ref.updatedAt}`} className="mobile-shot-card storyboard-card">
+            <button type="button" className="storyboard-collapse-button" onClick={() => onToggleExpanded(ref.shotId)}>
+              <span className="mobile-shot-row">
+                <strong>{shot?.displayName ?? 'Shot'}</strong>
+                <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
+              </span>
+              <span className="mobile-shot-subrow">
+                <span className="shot-scene-tag">{shot?.sceneTag ?? 'Scene —'}</span>
+                <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
+              </span>
+            </button>
+            {isExpanded && shot ? <ShotDetailCard shot={shot} /> : null}
+          </article>
+        )
+      })}
     </div>
   )
 }
@@ -242,33 +387,100 @@ function renderCallsheet(day: StoredDayEntry) {
   }
 
   return (
-    <article className="project-card callsheet-card">
-      <h3>Callsheet</h3>
-      <p>
-        <span>Day</span>
-        <strong>{getDayDisplayLabel(callsheet.dayId)}</strong>
-      </p>
-      <p>
-        <span>Call Time</span>
-        <strong>{formatTime(callsheet.callTime)}</strong>
-      </p>
-      <p>
-        <span>Location</span>
-        <strong>{callsheet.shootLocation ?? 'TBD'}</strong>
-      </p>
-      <p>
-        <span>Weather</span>
-        <strong>{callsheet.weatherSummary ?? 'TBD'}</strong>
-      </p>
-      <p>
-        <span>Safety Notes</span>
-        <strong>{callsheet.safetyNotes ?? '—'}</strong>
-      </p>
-      <p>
-        <span>General Notes</span>
-        <strong>{callsheet.generalNotes ?? '—'}</strong>
-      </p>
-    </article>
+    <div className="stacked-list">
+      <article className="project-card callsheet-card">
+        <div className="section-heading">
+          <h3>General info</h3>
+          <span className="status-chip status-chip-warm">{getDayDisplayLabel(callsheet.dayId)}</span>
+        </div>
+        <div className="quicksheet-grid">
+          <p>
+            <span>Call time</span>
+            <strong>{formatTime(callsheet.callTime)}</strong>
+          </p>
+          <p>
+            <span>Location</span>
+            <strong>{callsheet.shootLocation || 'TBD'}</strong>
+          </p>
+          <p>
+            <span>Weather</span>
+            <strong>{callsheet.weatherSummary || 'TBD'}</strong>
+          </p>
+          <p>
+            <span>Nearest hospital</span>
+            <strong>{callsheet.nearestHospital || 'TBD'}</strong>
+          </p>
+        </div>
+      </article>
+
+      <article className="project-card callsheet-card">
+        <h3>Location details</h3>
+        <div className="quicksheet-grid">
+          <p>
+            <span>Address</span>
+            <strong>{callsheet.locationAddress || '—'}</strong>
+          </p>
+          <p>
+            <span>Parking</span>
+            <strong>{callsheet.parkingNotes || '—'}</strong>
+          </p>
+          <p>
+            <span>Directions</span>
+            <strong>{callsheet.directions || '—'}</strong>
+          </p>
+          <p>
+            <span>Maps link</span>
+            <strong>{callsheet.mapsLink || '—'}</strong>
+          </p>
+        </div>
+      </article>
+
+      {(callsheet.cast?.length || callsheet.crew?.length) ? (
+        <article className="project-card callsheet-card">
+          <h3>Cast & crew</h3>
+          <div className="callsheet-roster-grid">
+            {(callsheet.cast ?? []).map((person) => (
+              <p key={`cast-${person.name}`}>
+                <span>{person.character ? `${person.name} — ${person.character}` : person.name}</span>
+                <strong>{person.phone || person.email || person.role || 'Cast'}</strong>
+              </p>
+            ))}
+            {(callsheet.crew ?? []).map((person) => (
+              <p key={`crew-${person.name}`}>
+                <span>{person.name}</span>
+                <strong>{person.role || person.department || person.phone || 'Crew'}</strong>
+              </p>
+            ))}
+          </div>
+        </article>
+      ) : null}
+
+      {(callsheet.scheduleHighlights?.length ?? 0) > 0 ? (
+        <article className="project-card callsheet-card">
+          <h3>Schedule highlights</h3>
+          <div className="callsheet-roster-grid">
+            {callsheet.scheduleHighlights?.map((item) => (
+              <p key={item.itemId}>
+                <span>{item.type.toUpperCase()}</span>
+                <strong>{item.label}</strong>
+              </p>
+            ))}
+          </div>
+        </article>
+      ) : null}
+
+      <article className="project-card callsheet-card">
+        <h3>Safety + notes</h3>
+        <p>
+          <span>Safety</span>
+          <strong>{callsheet.safetyNotes || '—'}</strong>
+        </p>
+        <p>
+          <span>General</span>
+          <strong>{callsheet.generalNotes || '—'}</strong>
+        </p>
+      </article>
+    </div>
   )
 }
 
@@ -327,6 +539,10 @@ export function ProjectHubScreen({
   const dayList = Object.values(project.days).sort((a, b) => a.shootDate.localeCompare(b.shootDate))
   const selectedDayIndex = dayList.findIndex((entry) => entry.dayId === day.dayId)
   const selectedDayLabel = getDayDisplayLabel(day.dayId, selectedDayIndex > -1 ? selectedDayIndex : undefined)
+  const [expandedStoryboardShotId, setExpandedStoryboardShotId] = useState<string | null>(null)
+  const [focusedShotId, setFocusedShotId] = useState<string | null>(null)
+
+  const shotLookup = useMemo(() => buildShotDetails(day), [day])
 
   const shotItems = day.dayPackage.scheduleItems.filter((item) => item.type === 'shot' && item.shotId)
   const totalShots = shotItems.length
@@ -335,17 +551,14 @@ export function ProjectHubScreen({
     return status === 'done'
   }).length
 
+  const focusedShot = focusedShotId ? shotLookup.get(focusedShotId) : undefined
+
   return (
     <section className="screen project-hub-screen">
       <header className="project-header hero-card">
         <div className="project-header-top">
           <div className="project-header-copy">
-            <p className="eyebrow">ShotScribe project</p>
             <h1>{project.projectName}</h1>
-            <div className="header-meta-row">
-              <span className="status-chip status-chip-warm">{selectedDayLabel}</span>
-              <p className="hint-text">Updated {new Date(project.updatedAt).toLocaleDateString()}</p>
-            </div>
           </div>
           <div className="day-picker-wrap">
             <label className="day-picker-label" htmlFor="day-select">
@@ -364,7 +577,7 @@ export function ProjectHubScreen({
                 </option>
               ))}
             </select>
-            <p className="day-picker-date">{formatShootDate(day.shootDate)}</p>
+            <p className="day-picker-date">{selectedDayLabel} • {formatShootDate(day.shootDate)}</p>
           </div>
         </div>
       </header>
@@ -383,15 +596,35 @@ export function ProjectHubScreen({
       </nav>
 
       {selectedTab === 'overview' ? renderOverview(day, doneShots, totalShots) : null}
-      {selectedTab === 'schedule' ? renderSchedule(project, day, shotStatusOverrides) : null}
-      {selectedTab === 'shotlist'
-        ? renderShotlist(project, day, shotStatusOverrides, onToggleShotDone)
+      {selectedTab === 'schedule'
+        ? renderSchedule(project, day, shotStatusOverrides, shotLookup, setFocusedShotId)
         : null}
-      {selectedTab === 'storyboard' ? renderStoryboard(day) : null}
+      {selectedTab === 'shotlist'
+        ? renderShotlist(project, day, shotStatusOverrides, onToggleShotDone, shotLookup, setFocusedShotId)
+        : null}
+      {selectedTab === 'storyboard'
+        ? renderStoryboard(day.dayPackage.storyboardRefs, shotLookup, expandedStoryboardShotId, (shotId) => {
+          setExpandedStoryboardShotId((current) => (current === shotId ? null : shotId))
+        })
+        : null}
       {selectedTab === 'callsheet' ? renderCallsheet(day) : null}
       {selectedTab === 'project'
         ? renderProjectMore(projects, project, onSelectProject, onDeleteProject, onImport)
         : null}
+
+      {focusedShot ? (
+        <div className="mobile-shot-modal-backdrop" role="presentation" onClick={() => setFocusedShotId(null)}>
+          <div className="mobile-shot-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="mobile-shot-modal-top">
+              <h3>Shot details</h3>
+              <button type="button" className="inline-button" onClick={() => setFocusedShotId(null)}>
+                Close
+              </button>
+            </div>
+            <ShotDetailCard shot={focusedShot} />
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

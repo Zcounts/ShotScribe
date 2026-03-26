@@ -94,7 +94,7 @@ p {
 .project-header-copy {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .project-header-copy h1 {
@@ -133,7 +133,7 @@ p {
 .day-picker-date {
   font-size: 0.84rem;
   color: #665a4c;
-  font-weight: 600;
+  font-weight: 700;
   margin-left: 2px;
 }
 
@@ -431,6 +431,149 @@ p {
 .callsheet-card span {
   font-size: 0.8rem;
   opacity: 0.8;
+}
+
+.mobile-shot-card {
+  background: #f8f5ef;
+  border: 1px solid #d4cdc2;
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(57, 39, 26, 0.07);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-shot-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-shot-row h4 {
+  font-size: 1.08rem;
+}
+
+.mobile-shot-subrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.focal-pill {
+  border-radius: 999px;
+  border: 1px solid #b9a78f;
+  background: #efe4d3;
+  color: #413423;
+  padding: 4px 10px;
+  font-size: 0.86rem;
+  letter-spacing: 0.03em;
+}
+
+.mobile-shot-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.storyboard-collapse-button {
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chevron-indicator {
+  color: #4d5f8f;
+  font-size: 1.08rem;
+}
+
+.mobile-shot-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-shot-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.mobile-shot-detail img {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #c8b9a4;
+  background: #eee4d4;
+}
+
+.shot-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shot-spec-grid p,
+.callsheet-roster-grid p,
+.shot-notes {
+  background: #f4ece0;
+  border: 1px solid #d5c8b6;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shot-spec-grid span,
+.callsheet-roster-grid span,
+.shot-notes span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6f6254;
+}
+
+.callsheet-roster-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-shot-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(42, 38, 33, 0.5);
+  padding: 16px;
+  display: flex;
+  align-items: flex-end;
+  z-index: 100;
+}
+
+.mobile-shot-modal {
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: 18px;
+  background: #faf7f1;
+  border: 1px solid #d2c7b9;
+  box-shadow: 0 16px 40px rgba(43, 34, 27, 0.25);
+  padding: 14px;
+}
+
+.mobile-shot-modal-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
 .inline-button {
