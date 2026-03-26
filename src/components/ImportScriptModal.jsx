@@ -237,6 +237,7 @@ function Step2({ scenes, warnings, onScenesChange }) {
     padding: '4px 6px',
     fontSize: 11,
     fontFamily: 'monospace',
+    color: '#e2e8f0',
     borderBottom: '1px solid rgba(128,128,128,0.15)',
     verticalAlign: 'middle',
     maxWidth: 160,
@@ -324,7 +325,7 @@ function Step2({ scenes, warnings, onScenesChange }) {
             {scenes.map((scene, i) => (
               <tr
                 key={scene.id}
-                style={{ background: i % 2 === 0 ? 'rgba(0,0,0,0.1)' : 'transparent' }}
+                style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent' }}
               >
                 {/* # */}
                 <td style={{ ...tdStyle, width: 30, color: '#e2e8f0' }}>{i + 1}</td>
@@ -339,10 +340,10 @@ function Step2({ scenes, warnings, onScenesChange }) {
                     onChange={e => updateScene(i, 'intExt', e.target.value || null)}
                     style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'monospace', fontSize: 11, width: '100%', cursor: 'pointer' }}
                   >
-                    <option value="">—</option>
-                    <option>INT</option>
-                    <option>EXT</option>
-                    <option>INT/EXT</option>
+                    <option value="" style={{ color: '#0f172a' }}>—</option>
+                    <option style={{ color: '#0f172a' }}>INT</option>
+                    <option style={{ color: '#0f172a' }}>EXT</option>
+                    <option style={{ color: '#0f172a' }}>INT/EXT</option>
                   </select>
                 </td>
 
@@ -353,13 +354,13 @@ function Step2({ scenes, warnings, onScenesChange }) {
                     onChange={e => updateScene(i, 'dayNight', e.target.value || null)}
                     style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'monospace', fontSize: 11, width: '100%', cursor: 'pointer' }}
                   >
-                    <option value="">—</option>
-                    <option>DAY</option>
-                    <option>NIGHT</option>
-                    <option>DAWN</option>
-                    <option>DUSK</option>
-                    <option>CONTINUOUS</option>
-                    <option>LATER</option>
+                    <option value="" style={{ color: '#0f172a' }}>—</option>
+                    <option style={{ color: '#0f172a' }}>DAY</option>
+                    <option style={{ color: '#0f172a' }}>NIGHT</option>
+                    <option style={{ color: '#0f172a' }}>DAWN</option>
+                    <option style={{ color: '#0f172a' }}>DUSK</option>
+                    <option style={{ color: '#0f172a' }}>CONTINUOUS</option>
+                    <option style={{ color: '#0f172a' }}>LATER</option>
                   </select>
                 </td>
 

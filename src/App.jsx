@@ -392,13 +392,13 @@ export default function App() {
         paddingRight: '16px',
       }}>
         {[
+          { id: 'script',     label: 'Script' },
+          { id: 'scenes',     label: 'Scenes' },
           { id: 'storyboard', label: 'Storyboard' },
           { id: 'shotlist',   label: 'Shotlist' },
-          { id: 'scenes',     label: 'Scenes' },
-          { id: 'script',     label: 'Script' },
+          { id: 'castcrew',   label: 'Cast/Crew' },
           { id: 'schedule',   label: 'Schedule' },
           { id: 'callsheet',  label: 'Callsheet' },
-          { id: 'castcrew',   label: 'Cast/Crew' },
         ].map(({ id, label }) => (
           <button
             key={id}

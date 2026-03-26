@@ -232,7 +232,7 @@ const useStore = create((set, get) => ({
   // UI state
   settingsOpen: false,
   contextMenu: null, // { shotId, sceneId, x, y }
-  activeTab: 'storyboard', // 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
+  activeTab: 'script', // 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
@@ -1569,6 +1569,7 @@ const useStore = create((set, get) => ({
       },
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
+      activeTab: 'script',
     })
   },
 
@@ -1666,6 +1667,7 @@ const useStore = create((set, get) => ({
       importedScripts: [],
       projectPath: null,
       lastSaved: null,
+      activeTab: 'script',
     })
   },
 
