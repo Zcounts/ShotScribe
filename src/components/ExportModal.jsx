@@ -1305,7 +1305,7 @@ ${pageDivs.join('\n')}
 // schedule; all other fields come from the callsheets store map.
 
 function buildCallsheetPrintHtml(dayIdxFilter = null) {
-  const { schedule, callsheets, projectName, scenes } = useStore.getState()
+  const { schedule, callsheets, projectName, scenes, castRoster, getDayCastRosterEntries } = useStore.getState()
 
   if (schedule.length === 0) {
     return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40px"><p>No shooting days scheduled.</p></body></html>`
@@ -1416,9 +1416,29 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
 
     // ── Cast List
     const cast = cs.cast || []
-    const castRows = cast.length === 0
+    const derivedCast = getDayCastRosterEntries(day.id).map(entry => ({
+      rosterId: entry.id,
+      name: entry.name || '',
+      character: entry.character || entry.characterIds?.[0] || '',
+      pickupTime: '',
+      makeupCall: '',
+      setCall: '',
+    }))
+    const mergedCast = [...cast]
+    const existingRosterIds = new Set(cast.map(row => row.rosterId).filter(Boolean))
+    derivedCast.forEach(row => {
+      if (!existingRosterIds.has(row.rosterId)) mergedCast.push(row)
+    })
+    const castWithRoster = mergedCast.map(row => {
+      if (!row.rosterId) return row
+      const rosterEntry = castRoster.find(entry => entry.id === row.rosterId)
+      return rosterEntry
+        ? { ...row, name: rosterEntry.name || row.name, character: rosterEntry.character || row.character || rosterEntry.characterIds?.[0] || '' }
+        : row
+    })
+    const castRows = castWithRoster.length === 0
       ? `<tr><td colspan="5" style="color:#aaa;font-style:italic;padding:6px 8px">No cast listed</td></tr>`
-      : cast.map((r, i) =>
+      : castWithRoster.map((r, i) =>
           `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">
             <td>${escapeHtml(r.name || '')}</td>
             <td>${escapeHtml(r.character || '')}</td>
