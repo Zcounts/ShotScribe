@@ -4,6 +4,7 @@ import { naturalSortSceneNumber } from '../utils/sceneSort'
 import SceneColorPicker from './SceneColorPicker'
 import SpecsTable from './SpecsTable'
 import ImportScriptModal from './ImportScriptModal'
+import SidebarPane from './SidebarPane'
 import {
   estimateScreenplayPagination,
   getSceneScreenplayElements,
@@ -14,17 +15,19 @@ import {
 const PAGE_SIZE = { width: 816, height: 1056 } // 8.5x11 @96dpi
 const PAGE_MARGIN = { top: 96, right: 96, bottom: 96, left: 144 } // 1"/1"/1"/1.5"
 const SCREENPLAY_FONT_SIZE = 12
-const SCREENPLAY_LINE_HEIGHT = 1.5
+const SCREENPLAY_LINE_HEIGHT = 1.44
 const SCREENPLAY_LINE_HEIGHT_PX = SCREENPLAY_FONT_SIZE * SCREENPLAY_LINE_HEIGHT
 const ROWS_PER_PAGE = Math.floor((PAGE_SIZE.height - PAGE_MARGIN.top - PAGE_MARGIN.bottom) / SCREENPLAY_LINE_HEIGHT_PX)
-const CHAR_PX = 7.2
+const INCH = 96
+const CONTENT_WIDTH = PAGE_SIZE.width - PAGE_MARGIN.left - PAGE_MARGIN.right
+const CHAR_PX = 9.6
 const ELEMENT_LAYOUT = {
-  heading: { left: 0, width: 63, textTransform: 'uppercase', fontWeight: 700 },
-  action: { left: 0, width: 63 },
-  character: { left: 19, width: 24, textTransform: 'uppercase' },
-  dialogue: { left: 12, width: 35 },
-  parenthetical: { left: 16, width: 28 },
-  transition: { left: 0, width: 63, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 },
+  heading: { leftPx: 0, widthPx: CONTENT_WIDTH, textTransform: 'uppercase', fontWeight: 700 },
+  action: { leftPx: 0, widthPx: CONTENT_WIDTH },
+  character: { leftPx: INCH * 2, widthPx: INCH * 2, textTransform: 'uppercase', textAlign: 'center' },
+  dialogue: { leftPx: INCH, widthPx: INCH * 3 },
+  parenthetical: { leftPx: INCH * 1.35, widthPx: INCH * 2.45 },
+  transition: { leftPx: INCH * 4.5, widthPx: INCH * 1.5, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 },
 }
 
 function AddShotModal({ scene, shots, onClose, onConfirm }) {
@@ -33,12 +36,22 @@ function AddShotModal({ scene, shots, onClose, onConfirm }) {
 
   return (
     <div className="modal-overlay" style={{ zIndex: 650 }} onClick={onClose}>
-      <div className="modal app-dialog" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+      <div className="modal app-dialog" style={{ maxWidth: 640, borderRadius: 12 }} onClick={e => e.stopPropagation()}>
         <h3 className="dialog-title" style={{ marginBottom: 4 }}>Add Shot to SC {scene.sceneNumber}</h3>
-        <p className="dialog-description" style={{ marginBottom: 12 }}>{scene.slugline || scene.location || 'Script scene'}</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="radio" checked={mode === 'existing'} onChange={() => setMode('existing')} />Link existing shot</label>
-          {mode === 'existing' && (
+        <p className="dialog-description" style={{ marginBottom: 14 }}>{scene.slugline || scene.location || 'Script scene'}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <button onClick={() => setMode('existing')} style={{ border: mode === 'existing' ? '1px solid rgba(232,64,64,0.6)' : '1px solid rgba(74,85,104,0.2)', borderRadius: 10, background: mode === 'existing' ? 'rgba(232,64,64,0.08)' : '#fff', padding: 12, textAlign: 'left', cursor: 'pointer' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937', marginBottom: 4 }}>Link existing shot</div>
+            <div style={{ fontSize: 11, color: '#64748b' }}>Attach this script selection to an existing storyboard shot.</div>
+          </button>
+          <button onClick={() => setMode('new')} style={{ border: mode === 'new' ? '1px solid rgba(232,64,64,0.6)' : '1px solid rgba(74,85,104,0.2)', borderRadius: 10, background: mode === 'new' ? 'rgba(232,64,64,0.08)' : '#fff', padding: 12, textAlign: 'left', cursor: 'pointer' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937', marginBottom: 4 }}>Create new shot</div>
+            <div style={{ fontSize: 11, color: '#64748b' }}>Create, link, and open full shot details immediately.</div>
+          </button>
+        </div>
+        {mode === 'existing' && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 11, color: '#4b5563', marginBottom: 6, fontWeight: 600 }}>Select shot</div>
             <div style={{ maxHeight: 170, overflowY: 'auto', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6 }}>
               {shots.length === 0 && <div style={{ padding: 10, fontSize: 12, color: '#718096' }}>No existing shots found for this scene.</div>}
               {shots.map(shot => (
@@ -49,16 +62,46 @@ function AddShotModal({ scene, shots, onClose, onConfirm }) {
                 </label>
               ))}
             </div>
-          )}
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="radio" checked={mode === 'new'} onChange={() => setMode('new')} />Create brand new shot</label>
-        </div>
+          </div>
+        )}
         <div className="dialog-actions">
           <button className="dialog-button-secondary" onClick={onClose}>Cancel</button>
-          <button className="dialog-button-primary" onClick={() => onConfirm({ mode, selectedShotId })} disabled={mode === 'existing' && !selectedShotId}>Confirm</button>
+          <button className="dialog-button-primary" onClick={() => onConfirm({ mode, selectedShotId })} disabled={mode === 'existing' && !selectedShotId}>
+            {mode === 'new' ? 'Create & Edit Shot' : 'Link Shot'}
+          </button>
         </div>
       </div>
     </div>
   )
+}
+
+const normalizeShotColor = (color) => {
+  const value = String(color || '').trim().toLowerCase()
+  if (!value) return null
+  if (value === '#fff' || value === '#ffffff' || value === 'white' || value === 'rgb(255,255,255)' || value === 'rgb(255, 255, 255)') {
+    return '#CBD5E1'
+  }
+  return color
+}
+
+const toRgba = (hex, alpha) => {
+  const clean = String(hex || '').replace('#', '').trim()
+  if (![3, 6].includes(clean.length)) return null
+  const expanded = clean.length === 3 ? clean.split('').map(ch => ch + ch).join('') : clean
+  const num = Number.parseInt(expanded, 16)
+  if (Number.isNaN(num)) return null
+  const r = (num >> 16) & 255
+  const g = (num >> 8) & 255
+  const b = num & 255
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+const getHighlightStyleForShot = (shot) => {
+  const normalized = normalizeShotColor(shot?.color || '#E84040')
+  return {
+    background: toRgba(normalized, normalized === '#CBD5E1' ? 0.55 : 0.24) || 'rgba(239,68,68,0.18)',
+    underline: toRgba(normalized, normalized === '#CBD5E1' ? 0.65 : 0.55) || 'rgba(220,38,38,0.55)',
+  }
 }
 
 function ShotLinkDialog({ data, onClose, onUpdateShot, onUpdateShotImage, useDropdowns, onJumpToStoryboard }) {
@@ -320,6 +363,7 @@ export default function ScriptTab() {
   const [selectionBar, setSelectionBar] = useState(null)
   const [addShotDialog, setAddShotDialog] = useState(null)
   const [shotLinkDialog, setShotLinkDialog] = useState(null)
+  const [pendingOpenShotDialog, setPendingOpenShotDialog] = useState(null)
   const [importModalOpen, setImportModalOpen] = useState(false)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
@@ -528,7 +572,7 @@ export default function ScriptTab() {
     }
     const targetStoryboardScene = findStoryboardSceneForScriptScene(scriptScene)
     if (!targetStoryboardScene) return
-    addShotWithOverrides(targetStoryboardScene.id, {
+    const createdShotId = addShotWithOverrides(targetStoryboardScene.id, {
       linkedSceneId: scriptScene.id,
       linkedDialogueLine: selectedText || null,
       linkedDialogueOffset: Number.isFinite(rangeStart) ? rangeStart : null,
@@ -536,6 +580,9 @@ export default function ScriptTab() {
       linkedScriptRangeEnd: rangeEnd,
       notes: selectedText || '',
     })
+    if (createdShotId) {
+      setPendingOpenShotDialog({ sceneId: scriptScene.id, shotId: createdShotId })
+    }
     setAddShotDialog(null)
   }
 
@@ -545,6 +592,19 @@ export default function ScriptTab() {
     const shotMap = Object.fromEntries(shots.map(sh => [sh.id, sh]))
     setShotLinkDialog({ sceneId, shotIds, shotMap })
   }
+
+  useEffect(() => {
+    if (!pendingOpenShotDialog) return
+    const shots = allLinkedShotsForScriptScene(pendingOpenShotDialog.sceneId)
+    const foundShot = shots.find(sh => sh.id === pendingOpenShotDialog.shotId)
+    if (!foundShot) return
+    setShotLinkDialog({
+      sceneId: pendingOpenShotDialog.sceneId,
+      shotIds: [foundShot.id],
+      shotMap: { [foundShot.id]: foundShot },
+    })
+    setPendingOpenShotDialog(null)
+  }, [pendingOpenShotDialog, allLinkedShotsForScriptScene])
 
   const jumpToStoryboardShot = (shot) => {
     if (!shot?.id) return
@@ -623,6 +683,8 @@ export default function ScriptTab() {
         {pieces.map(piece => {
           if (!piece.matches.length) return <span key={piece.key}>{piece.text}</span>
           const shotIds = [...new Set(piece.matches.map(m => m.shotId))]
+          const firstShot = allLinkedShotsForScriptScene(row.sceneId).find(sh => sh.id === shotIds[0])
+          const highlightStyle = getHighlightStyleForShot(firstShot)
           return (
             <span
               key={piece.key}
@@ -630,8 +692,8 @@ export default function ScriptTab() {
                 e.stopPropagation()
                 openShotLinkDialog(row.sceneId, shotIds)
               }}
-              style={{ background: 'rgba(239,68,68,0.18)', boxShadow: 'inset 0 -1px 0 rgba(220,38,38,0.55)', cursor: 'pointer' }}
-              title="View linked shot"
+              style={{ background: highlightStyle.background, boxShadow: `inset 0 -1px 0 ${highlightStyle.underline}`, cursor: 'pointer' }}
+              title={firstShot?.displayId ? `View Shot ${firstShot.displayId}` : 'View Linked Shot'}
             >
               {piece.text}
             </span>
@@ -663,11 +725,9 @@ export default function ScriptTab() {
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
-      <div style={{ width: 260, borderRight: '1px solid rgba(74,85,104,0.15)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: 10, fontSize: 10, textTransform: 'uppercase', color: '#718096', fontWeight: 700 }}>Scenes · {pagedScript.length} pp</div>
-        <div style={{ overflowY: 'auto' }}>
+      <SidebarPane title={`Scenes · ${pagedScript.length} pp`} width={260}>
           {orderedScenes.map(sc => (
-            <button key={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: 'none' }}>
+            <button key={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: activeSceneId === sc.id ? 'rgba(232,64,64,0.08)' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <SceneColorPicker value={sc.color || null} onChange={(color) => updateScriptScene(sc.id, { color })} title="Scene color" />
                 <span style={{ fontWeight: 700, fontSize: 11 }}>SC {sc.sceneNumber}</span>
@@ -679,8 +739,7 @@ export default function ScriptTab() {
               </div>
             </button>
           ))}
-        </div>
-      </div>
+      </SidebarPane>
 
       <div
         ref={rightRef}
@@ -689,7 +748,7 @@ export default function ScriptTab() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
           {pagedScript.map(page => (
-            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: SCREENPLAY_FONT_SIZE, lineHeight: SCREENPLAY_LINE_HEIGHT, position: 'relative', overflow: 'hidden' }}>
+            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: SCREENPLAY_FONT_SIZE, lineHeight: SCREENPLAY_LINE_HEIGHT, position: 'relative', overflow: 'hidden' }}>
               {page.number > 1 && (
                 <div style={{ position: 'absolute', top: 20, right: 24, fontSize: 12, color: '#111827' }}>{page.number}.</div>
               )}
@@ -759,8 +818,8 @@ export default function ScriptTab() {
                       <div
                         style={{
                           position: 'absolute',
-                          left: `${layout.left * CHAR_PX}px`,
-                          width: `${layout.width * CHAR_PX}px`,
+                          left: `${layout.leftPx ?? ((layout.left || 0) * CHAR_PX)}px`,
+                          width: `${layout.widthPx ?? ((layout.width || 63) * CHAR_PX)}px`,
                           ...(layout.textAlign ? { textAlign: layout.textAlign } : {}),
                         }}
                       >

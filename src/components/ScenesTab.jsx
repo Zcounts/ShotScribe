@@ -5,6 +5,7 @@ import { naturalSortSceneNumber } from '../utils/sceneSort'
 import ImportScriptModal from './ImportScriptModal'
 import SceneColorPicker from './SceneColorPicker'
 import { estimateScreenplayPagination } from '../utils/screenplay'
+import SidebarPane from './SidebarPane'
 
 function CharacterTagInput({ scene, allCharacters, onChange }) {
   const [input, setInput] = useState('')
@@ -226,10 +227,12 @@ export default function ScenesTab() {
 
   return (
     <div style={{ display: 'flex', height: '100%' }} onClick={() => { setCtxMenu(null); setScriptCtxMenu(null) }}>
-      <div style={{ width: 220, borderRight: '1px solid rgba(74,85,104,0.15)', background: '#EDE9E1', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '10px 12px', fontSize: 10, textTransform: 'uppercase', color: '#718096', fontWeight: 700 }}>Imported Scripts</div>
-        <button onClick={() => setActiveScript(null)} style={{ textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 12px' }}>All Scenes</button>
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+      <SidebarPane
+        width={240}
+        title="Imported Scripts"
+        controls={<button onClick={() => setActiveScript(null)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 12px', borderRadius: 4 }}>All Scenes</button>}
+        footer={<button onClick={() => setImportModalOpen(true)} style={{ width: '100%', background: '#E84040', color: '#fff', border: 'none', borderRadius: 5, padding: 7 }}>+ Import Script</button>}
+      >
           {importedScripts.map(sc => (
             <div
               key={sc.id}
@@ -238,12 +241,10 @@ export default function ScenesTab() {
                 setScriptCtxMenu({ x: e.clientX, y: e.clientY, script: sc })
               }}
             >
-              <button onClick={() => setActiveScript(sc.id)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript === sc.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 12px' }}>{sc.filename}</button>
+              <button onClick={() => setActiveScript(sc.id)} style={{ width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeScript === sc.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 12px' }}>{sc.filename}</button>
             </div>
           ))}
-        </div>
-        <div style={{ padding: 10 }}><button onClick={() => setImportModalOpen(true)} style={{ width: '100%', background: '#E84040', color: '#fff', border: 'none', borderRadius: 5, padding: 7 }}>+ Import Script</button></div>
-      </div>
+      </SidebarPane>
 
       <div
         ref={listRef}
