@@ -61,6 +61,13 @@ export default function CastCrewTab() {
   const [activeSubTab, setActiveSubTab] = useState('Quick Reference')
   const [editor, setEditor] = useState(null)
 
+  const openProfile = (type, id) => {
+    const roster = type === 'cast' ? castRoster : crewRoster
+    const person = roster.find(entry => entry.id === id)
+    if (!person) return
+    setEditor({ type, id: person.id })
+  }
+
   const scheduleDays = getScheduleWithShots()
 
   const castNames = useMemo(() => castRoster.filter(entry => entry.name?.trim()).map(entry => entry.name.trim()), [castRoster])
@@ -195,7 +202,7 @@ export default function CastCrewTab() {
               </thead>
               <tbody>
                 {castListRows.map(row => (
-                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => setEditor({ type: 'cast', id: row.id })}>
+                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => openProfile('cast', row.id)}>
                     <td className="p-2 font-medium text-ink">{row.name}</td>
                     <td className="p-2 text-slate">{row.characterDisplay}</td>
                     <td className="p-2 text-right text-slate">{row.scriptSceneCount}</td>
@@ -219,7 +226,7 @@ export default function CastCrewTab() {
               </thead>
               <tbody>
                 {crewRows.map(row => (
-                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => setEditor({ type: 'crew', id: row.id })}>
+                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => openProfile('crew', row.id)}>
                     <td className="p-2 font-medium text-ink">{row.name}</td>
                     <td className="p-2 text-slate">{row.department || '—'}</td>
                     <td className="p-2 text-slate">{row.role || '—'}</td>

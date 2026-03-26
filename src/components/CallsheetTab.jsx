@@ -15,6 +15,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import useStore, { DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
 import { DayTabBar } from './DayTabBar'
+import PersonProfileDialog from './PersonProfileDialog'
 
 // ── Time Utilities (mirrored from ScheduleTab) ────────────────────────────────
 
@@ -706,10 +707,11 @@ let castIdCounter = 0
 function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
   const cast = callsheet.cast || []
   const castRoster = useStore(s => s.castRoster)
-  const upsertCastRosterEntry = useStore(s => s.upsertCastRosterEntry)
   const getCastSceneMetrics = useStore(s => s.getCastSceneMetrics)
+  const upsertCastRosterEntry = useStore(s => s.upsertCastRosterEntry)
 
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [editorId, setEditorId] = useState(null)
 
   const addRowFromRoster = (rosterEntry) => {
     castIdCounter++
@@ -729,36 +731,27 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
 
   const addNewRow = () => {
     castIdCounter++
-    const newEntry = { id: `cast_${Date.now()}_${castIdCounter}`, name: '', character: '', pickupTime: '', makeupCall: '', setCall: '' }
-    onUpdate({ cast: [...cast, newEntry] })
+    const rosterId = `croster_${Date.now()}_${castIdCounter}`
+    upsertCastRosterEntry({ id: rosterId, name: 'New Cast', character: '' })
+    onUpdate({ cast: [...cast, { id: `cast_${Date.now()}_${castIdCounter}`, rosterId, name: 'New Cast', character: '', pickupTime: '', makeupCall: '', setCall: '' }] })
     setPickerOpen(false)
-  }
-
-  const updateRow = (id, field, value) => {
-    onUpdate({ cast: cast.map(r => r.id === id ? { ...r, [field]: value } : r) })
+    setEditorId(rosterId)
   }
 
   const removeRow = (id) => {
     onUpdate({ cast: cast.filter(r => r.id !== id) })
   }
 
-  // When a row's name or character is blurred, always save changes to the roster silently.
-  const handleBlurSaveToRoster = (row) => {
-    if (!row.name) return
-    if (!row.rosterId) {
-      // New member: save silently to the roster
-      castIdCounter++
-      const rosterId = `croster_${Date.now()}_${castIdCounter}`
-      upsertCastRosterEntry({ id: rosterId, name: row.name, character: row.character || '' })
-      onUpdate({ cast: cast.map(r => r.id === row.id ? { ...r, rosterId } : r) })
-      return
-    }
-    // Existing roster member: update silently if changed
-    const rosterEntry = castRoster.find(r => r.id === row.rosterId)
-    if (rosterEntry && (rosterEntry.name !== row.name || rosterEntry.character !== row.character)) {
-      upsertCastRosterEntry({ id: row.rosterId, name: row.name, character: row.character })
-    }
-  }
+  useEffect(() => {
+    if (!castRoster.length || !cast.length) return
+    const synced = cast.map(row => {
+      if (!row.rosterId) return row
+      const roster = castRoster.find(entry => entry.id === row.rosterId)
+      return roster ? { ...row, name: roster.name || row.name, character: roster.character || row.character } : row
+    })
+    onUpdate({ cast: synced })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [castRoster])
 
   const thStyle = {
     padding: '4px 6px',
@@ -777,18 +770,6 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
     padding: '3px 4px',
     borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#f0ede4'}`,
     verticalAlign: 'middle',
-  }
-
-  const inputStyle = {
-    width: '100%',
-    background: isDark ? '#222' : '#faf8f5',
-    border: `1px solid ${isDark ? '#3a3a3a' : '#e8e4db'}`,
-    borderRadius: 2,
-    padding: '2px 5px',
-    fontSize: 12,
-    fontFamily: 'monospace',
-    color: isDark ? '#eee' : '#111',
-    outline: 'none',
   }
 
   return (
@@ -827,30 +808,14 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
           {cast.map((row, idx) => {
             const metrics = row.rosterId ? getCastSceneMetrics(row.rosterId, dayId || null) : { sceneCount: 0, pageCount: 0 }
             return (
-            <tr key={row.id} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
-              <td style={cellStyle}>
-                <input
-                  style={inputStyle}
-                  value={row.name}
-                  onChange={e => updateRow(row.id, 'name', e.target.value)}
-                  onBlur={() => handleBlurSaveToRoster(row)}
-                  placeholder="Actor name"
-                />
-              </td>
-              <td style={cellStyle}>
-                <input
-                  style={inputStyle}
-                  value={row.character}
-                  onChange={e => updateRow(row.id, 'character', e.target.value)}
-                  onBlur={() => handleBlurSaveToRoster(row)}
-                  placeholder="Character"
-                />
-              </td>
+            <tr key={row.id} onDoubleClick={() => setEditorId(row.rosterId)} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
+              <td style={{ ...cellStyle, color: '#111', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{row.name || '—'}</td>
+              <td style={{ ...cellStyle, color: '#374151', fontSize: 12 }}>{row.character || '—'}</td>
               <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 11, color: '#666' }}>{metrics.sceneCount}</td>
               <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 11, color: '#666' }}>{Number(metrics.pageCount || 0).toFixed(2)}</td>
-              <td style={cellStyle}><input style={inputStyle} value={row.pickupTime} onChange={e => updateRow(row.id, 'pickupTime', e.target.value)} placeholder="7:00 AM" /></td>
-              <td style={cellStyle}><input style={inputStyle} value={row.makeupCall} onChange={e => updateRow(row.id, 'makeupCall', e.target.value)} placeholder="7:30 AM" /></td>
-              <td style={cellStyle}><input style={inputStyle} value={row.setCall} onChange={e => updateRow(row.id, 'setCall', e.target.value)} placeholder="9:00 AM" /></td>
+              <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 12, color: '#111' }}>{row.pickupTime || '—'}</td>
+              <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 12, color: '#111' }}>{row.makeupCall || '—'}</td>
+              <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 12, color: '#111' }}>{row.setCall || '—'}</td>
               <td style={cellStyle}>
                 <button
                   onClick={() => removeRow(row.id)}
@@ -895,6 +860,13 @@ function CastListSection({ callsheet, dayId, isDark, onUpdate }) {
           onClose={() => setPickerOpen(false)}
         />
       )}
+      {editorId && (
+        <PersonProfileDialog
+          personType="cast"
+          person={castRoster.find(entry => entry.id === editorId)}
+          onClose={() => setEditorId(null)}
+        />
+      )}
 
     </SectionBlock>
   )
@@ -910,6 +882,7 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
   const upsertCrewRosterEntry = useStore(s => s.upsertCrewRosterEntry)
 
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [editorId, setEditorId] = useState(null)
 
   const addRowFromRoster = (rosterEntry) => {
     crewIdCounter++
@@ -927,35 +900,27 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
 
   const addNewRow = () => {
     crewIdCounter++
-    onUpdate({ crew: [...crew, { id: `crew_${Date.now()}_${crewIdCounter}`, name: '', role: '', callTime: '' }] })
+    const rosterId = `rroster_${Date.now()}_${crewIdCounter}`
+    upsertCrewRosterEntry({ id: rosterId, name: 'New Crew', role: '' })
+    onUpdate({ crew: [...crew, { id: `crew_${Date.now()}_${crewIdCounter}`, rosterId, name: 'New Crew', role: '', callTime: '' }] })
     setPickerOpen(false)
-  }
-
-  const updateRow = (id, field, value) => {
-    onUpdate({ crew: crew.map(r => r.id === id ? { ...r, [field]: value } : r) })
+    setEditorId(rosterId)
   }
 
   const removeRow = (id) => {
     onUpdate({ crew: crew.filter(r => r.id !== id) })
   }
 
-  // When a row's name or role is blurred, always save changes to the roster silently.
-  const handleBlurSaveToRoster = (row) => {
-    if (!row.name) return
-    if (!row.rosterId) {
-      // New member: save silently to the roster
-      crewIdCounter++
-      const rosterId = `rroster_${Date.now()}_${crewIdCounter}`
-      upsertCrewRosterEntry({ id: rosterId, name: row.name, role: row.role || '' })
-      onUpdate({ crew: crew.map(r => r.id === row.id ? { ...r, rosterId } : r) })
-      return
-    }
-    // Existing roster member: update silently if changed
-    const rosterEntry = crewRoster.find(r => r.id === row.rosterId)
-    if (rosterEntry && (rosterEntry.name !== row.name || rosterEntry.role !== row.role)) {
-      upsertCrewRosterEntry({ id: row.rosterId, name: row.name, role: row.role })
-    }
-  }
+  useEffect(() => {
+    if (!crewRoster.length || !crew.length) return
+    const synced = crew.map(row => {
+      if (!row.rosterId) return row
+      const roster = crewRoster.find(entry => entry.id === row.rosterId)
+      return roster ? { ...row, name: roster.name || row.name, role: roster.role || row.role } : row
+    })
+    onUpdate({ crew: synced })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crewRoster])
 
   const thStyle = {
     padding: '4px 6px',
@@ -974,18 +939,6 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
     padding: '3px 4px',
     borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#f0ede4'}`,
     verticalAlign: 'middle',
-  }
-
-  const inputStyle = {
-    width: '100%',
-    background: isDark ? '#222' : '#faf8f5',
-    border: `1px solid ${isDark ? '#3a3a3a' : '#e8e4db'}`,
-    borderRadius: 2,
-    padding: '2px 5px',
-    fontSize: 12,
-    fontFamily: 'monospace',
-    color: isDark ? '#eee' : '#111',
-    outline: 'none',
   }
 
   return (
@@ -1014,26 +967,10 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
             </tr>
           )}
           {crew.map((row, idx) => (
-            <tr key={row.id} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
-              <td style={cellStyle}>
-                <input
-                  style={inputStyle}
-                  value={row.name}
-                  onChange={e => updateRow(row.id, 'name', e.target.value)}
-                  onBlur={() => handleBlurSaveToRoster(row)}
-                  placeholder="Name"
-                />
-              </td>
-              <td style={cellStyle}>
-                <input
-                  style={inputStyle}
-                  value={row.role}
-                  onChange={e => updateRow(row.id, 'role', e.target.value)}
-                  onBlur={() => handleBlurSaveToRoster(row)}
-                  placeholder="e.g. Director of Photography"
-                />
-              </td>
-              <td style={cellStyle}><input style={inputStyle} value={row.callTime} onChange={e => updateRow(row.id, 'callTime', e.target.value)} placeholder="7:00 AM" /></td>
+            <tr key={row.id} onDoubleClick={() => setEditorId(row.rosterId)} style={{ background: idx % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') }}>
+              <td style={{ ...cellStyle, color: '#111', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{row.name || '—'}</td>
+              <td style={{ ...cellStyle, color: '#374151', fontSize: 12 }}>{row.role || '—'}</td>
+              <td style={{ ...cellStyle, fontFamily: 'monospace', fontSize: 12, color: '#111' }}>{row.callTime || '—'}</td>
               <td style={cellStyle}>
                 <button
                   onClick={() => removeRow(row.id)}
@@ -1076,6 +1013,13 @@ function CrewListSection({ callsheet, isDark, onUpdate }) {
           onSelect={addRowFromRoster}
           onNewMember={addNewRow}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+      {editorId && (
+        <PersonProfileDialog
+          personType="crew"
+          person={crewRoster.find(entry => entry.id === editorId)}
+          onClose={() => setEditorId(null)}
         />
       )}
 
