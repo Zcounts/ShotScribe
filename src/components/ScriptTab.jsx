@@ -55,7 +55,10 @@ function paginateScenes(orderedScenes, screenplayBySceneId) {
 
   orderedScenes.forEach(scene => {
     const elements = screenplayBySceneId[scene.id] || []
+    let sceneCharOffset = 0
     elements.forEach((line, idx) => {
+      const lineText = String(line.text || '')
+      const nextOffset = sceneCharOffset + lineText.length + 1
       const units = line.type === 'blank' ? 1 : (wrapCount(line.text, line.type) + 0.15)
       if (used + units > maxLines && currentPage.length > 0) {
         pages.push({ id: `sp_${pageNumber}`, number: pageNumber, lines: currentPage })
@@ -63,8 +66,9 @@ function paginateScenes(orderedScenes, screenplayBySceneId) {
         used = 0
         pageNumber += 1
       }
-      currentPage.push({ ...line, sceneId: scene.id, rowKey: `${scene.id}-${idx}` })
+      currentPage.push({ ...line, sceneId: scene.id, rowKey: `${scene.id}-${idx}`, sceneCharStart: sceneCharOffset, sceneCharEnd: nextOffset })
       used += units
+      sceneCharOffset = nextOffset
     })
   })
 
@@ -103,9 +107,13 @@ export default function ScriptTab() {
     const map = {}
     scenes.forEach(storyScene => {
       storyScene.shots.forEach(shot => {
-        if (!shot.linkedSceneId || !shot.linkedDialogueLine) return
-        if (!map[shot.linkedSceneId]) map[shot.linkedSceneId] = new Set()
-        map[shot.linkedSceneId].add(shot.linkedDialogueLine.trim().toLowerCase())
+        if (!shot.linkedSceneId) return
+        if (!map[shot.linkedSceneId]) map[shot.linkedSceneId] = []
+        if (Number.isFinite(shot.linkedScriptRangeStart) && Number.isFinite(shot.linkedScriptRangeEnd)) {
+          map[shot.linkedSceneId].push({ start: shot.linkedScriptRangeStart, end: shot.linkedScriptRangeEnd })
+        } else if (shot.linkedDialogueLine) {
+          map[shot.linkedSceneId].push({ text: shot.linkedDialogueLine.trim().toLowerCase() })
+        }
       })
     })
     return map
@@ -146,7 +154,15 @@ export default function ScriptTab() {
       const sceneId = sceneEl?.getAttribute('data-sceneid')
       if (!sceneId) return
       const scene = scriptScenes.find(s => s.id === sceneId)
-      setSelectionBar({ x: rect.left + window.scrollX, y: rect.top + window.scrollY - 40, text: text.slice(0, 260), sceneId, sceneNumber: scene?.sceneNumber || '' })
+      let rangeStart = null
+      let rangeEnd = null
+      const fullText = String(scene?.screenplayText || scene?.actionText || '')
+      const idx = fullText.toLowerCase().indexOf(text.toLowerCase())
+      if (idx >= 0) {
+        rangeStart = idx
+        rangeEnd = idx + text.length
+      }
+      setSelectionBar({ x: rect.left + window.scrollX, y: rect.top + window.scrollY - 40, text: text.slice(0, 260), sceneId, sceneNumber: scene?.sceneNumber || '', rangeStart, rangeEnd })
     }
     document.addEventListener('mouseup', onMouseUp)
     return () => document.removeEventListener('mouseup', onMouseUp)
@@ -173,15 +189,26 @@ export default function ScriptTab() {
   const openAddShotDialog = (sceneId, selectedText = '') => {
     const scriptScene = scriptScenes.find(scene => scene.id === sceneId)
     if (!scriptScene) return
-    setAddShotDialog({ scene: scriptScene, selectedText, existingShots: allLinkedShotsForScriptScene(sceneId) })
+    setAddShotDialog({
+      scene: scriptScene,
+      selectedText,
+      existingShots: allLinkedShotsForScriptScene(sceneId),
+      rangeStart: selectionBar?.rangeStart ?? null,
+      rangeEnd: selectionBar?.rangeEnd ?? null,
+    })
     setSelectionBar(null)
   }
 
   const confirmAddShotDialog = ({ mode, selectedShotId }) => {
     if (!addShotDialog) return
-    const { scene: scriptScene, selectedText } = addShotDialog
+    const { scene: scriptScene, selectedText, rangeStart, rangeEnd } = addShotDialog
     if (mode === 'existing' && selectedShotId) {
-      linkShotToScene(selectedShotId, scriptScene.id, { linkedDialogueLine: selectedText || null, linkedDialogueOffset: selectedText ? (scriptScene.actionText || '').indexOf(selectedText) : null })
+      linkShotToScene(selectedShotId, scriptScene.id, {
+        linkedDialogueLine: selectedText || null,
+        linkedDialogueOffset: selectedText ? (scriptScene.actionText || '').indexOf(selectedText) : null,
+        linkedScriptRangeStart: rangeStart,
+        linkedScriptRangeEnd: rangeEnd,
+      })
       if (selectedText) updateShot(selectedShotId, { notes: selectedText })
       setAddShotDialog(null)
       return
@@ -192,6 +219,8 @@ export default function ScriptTab() {
       linkedSceneId: scriptScene.id,
       linkedDialogueLine: selectedText || null,
       linkedDialogueOffset: selectedText ? (scriptScene.actionText || '').indexOf(selectedText) : null,
+      linkedScriptRangeStart: rangeStart,
+      linkedScriptRangeEnd: rangeEnd,
       notes: selectedText || '',
     })
     setAddShotDialog(null)
@@ -200,10 +229,16 @@ export default function ScriptTab() {
   if (orderedScenes.length === 0) return <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><div style={{ textAlign: 'center' }}><p>No script imported yet.</p><button onClick={() => setActiveTab('scenes')}>Go to Scenes tab</button></div></div>
 
   const renderLine = (line) => {
-    const linkedMatches = linkedSnippetsByScene[line.sceneId] || new Set()
-    const isAnnotated = linkedMatches.has(String(line.text || '').trim().toLowerCase())
-    const shared = { whiteSpace: 'pre-wrap', marginBottom: 4, position: 'relative', background: isAnnotated ? 'rgba(232,64,64,0.14)' : 'transparent', borderRadius: isAnnotated ? 4 : 0, paddingRight: isAnnotated ? 50 : 0 }
-    const badge = isAnnotated ? <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 9, color: '#991b1b', border: '1px solid rgba(153,27,27,0.35)', borderRadius: 999, padding: '0 6px', fontFamily: 'Sora, sans-serif', background: '#fff1f2' }}>SHOT</span> : null
+    const linkedMatches = linkedSnippetsByScene[line.sceneId] || []
+    const fallback = String(line.text || '').trim().toLowerCase()
+    const isAnnotated = linkedMatches.some(match => {
+      if (match?.start != null && match?.end != null) {
+        return match.start < (line.sceneCharEnd ?? 0) && match.end > (line.sceneCharStart ?? 0)
+      }
+      return match?.text && match.text === fallback
+    })
+    const shared = { whiteSpace: 'pre-wrap', marginBottom: 4, position: 'relative', background: isAnnotated ? 'rgba(232,64,64,0.10)' : 'transparent', borderLeft: isAnnotated ? '3px solid rgba(220,38,38,0.75)' : '3px solid transparent', borderRadius: isAnnotated ? 4 : 0, paddingLeft: 8, paddingRight: isAnnotated ? 50 : 0 }
+    const badge = isAnnotated ? <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 9, color: '#991b1b', border: '1px solid rgba(153,27,27,0.35)', borderRadius: 999, padding: '0 6px', fontFamily: 'Sora, sans-serif', background: '#fff1f2' }}>SHOT LINK</span> : null
 
     if (line.type === 'blank') return <div key={line.rowKey} style={{ height: 8 }} />
     if (line.type === 'heading') return <div key={line.rowKey} style={{ ...shared, textTransform: 'uppercase', fontWeight: 700 }}>{line.text}{badge}</div>
@@ -237,7 +272,7 @@ export default function ScriptTab() {
       <div ref={rightRef} style={{ flex: 1, overflowY: 'auto', padding: 18, position: 'relative' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
           {pagedScript.map(page => (
-            <div key={page.id} style={{ width: '816px', minHeight: '1056px', background: '#fffdf8', border: '1px solid rgba(74,85,104,0.2)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', padding: '56px 72px', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: 16, lineHeight: 1.5, position: 'relative' }}>
+            <div key={page.id} style={{ width: '816px', height: '1056px', background: '#fffdf8', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', padding: '56px 72px', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: 16, lineHeight: 1.5, position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 12, right: 16, fontSize: 10, color: '#64748b', fontFamily: 'Sora, sans-serif' }}>Page {page.number}</div>
               {page.lines.map(line => {
                 const scene = orderedScenes.find(sc => sc.id === line.sceneId)

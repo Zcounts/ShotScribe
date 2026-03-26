@@ -1141,12 +1141,12 @@ export default function ShotlistTab({ containerRef }) {
   const c = {
     pageBg:      '#F5F2EC',
     tableBg:     '#FAF8F4',
-    rowAlt:      'rgba(245,242,236,0.6)',
+    rowAlt:      '#F1ECE2',
     headerBg:    '#2C2C2E',
     border:      'rgba(74,85,104,0.1)',
     thickBorder: 'rgba(74,85,104,0.15)',
-    text:        '#2C2C2C',
-    muted:       '#718096',
+    text:        '#111827',
+    muted:       '#374151',
   }
 
   const handleShotChange = useCallback((shotId, key, value) => {
@@ -1385,7 +1385,7 @@ export default function ShotlistTab({ containerRef }) {
                     top: 0,
                     zIndex: 10,
                     backgroundColor: c.headerBg,
-                    color: '#718096',
+                    color: '#FFFFFF',
                     fontSize: 9,
                     fontWeight: 700,
                     fontFamily: 'Sora, sans-serif',
@@ -1430,7 +1430,7 @@ export default function ShotlistTab({ containerRef }) {
                       style={{
                         height: 34,
                         backgroundColor: 'rgba(242,194,80,0.1)',
-                        color: '#2C2C2C',
+                        color: '#111827',
                         fontWeight: 700,
                         fontSize: 11,
                         fontFamily: 'Sora, sans-serif',

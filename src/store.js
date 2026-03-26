@@ -125,6 +125,8 @@ function createShot(overrides = {}) {
     linkedSceneId: null,
     linkedDialogueLine: null,
     linkedDialogueOffset: null,
+    linkedScriptRangeStart: null,
+    linkedScriptRangeEnd: null,
     ...overrides,
   }
 }
@@ -139,6 +141,7 @@ function createScene(overrides = {}) {
     dayNight: 'DAY',
     cameras: [{ name: 'Camera 1', body: 'fx30' }],
     pageNotes: ['*NOTE: \n*SHOOT ORDER: '],
+    pageColors: [],
     shots: [],
     ...overrides,
   }
@@ -415,6 +418,8 @@ const useStore = create((set, get) => ({
   linkShotToScene: (shotId, sceneId, opts = {}) => {
     const nextDialogue = opts.linkedDialogueLine !== undefined ? opts.linkedDialogueLine : null
     const nextOffset = opts.linkedDialogueOffset !== undefined ? opts.linkedDialogueOffset : null
+    const nextRangeStart = opts.linkedScriptRangeStart !== undefined ? opts.linkedScriptRangeStart : null
+    const nextRangeEnd = opts.linkedScriptRangeEnd !== undefined ? opts.linkedScriptRangeEnd : null
     set(state => ({
       scenes: state.scenes.map(sc => ({
         ...sc,
@@ -425,6 +430,8 @@ const useStore = create((set, get) => ({
                 linkedSceneId: sceneId,
                 linkedDialogueLine: sceneId ? nextDialogue : null,
                 linkedDialogueOffset: sceneId ? nextOffset : null,
+                linkedScriptRangeStart: sceneId ? nextRangeStart : null,
+                linkedScriptRangeEnd: sceneId ? nextRangeEnd : null,
               }
             : sh
         ),
@@ -521,7 +528,13 @@ const useStore = create((set, get) => ({
       blocks: [],
       ...overrides,
     }
-    set(state => ({ schedule: [...state.schedule, day] }))
+    set(state => ({
+      schedule: [...state.schedule, day],
+      scheduleCollapseState: {
+        ...state.scheduleCollapseState,
+        days: { ...state.scheduleCollapseState.days, [day.id]: true },
+      },
+    }))
     get()._scheduleAutoSave()
     return day.id
   },
@@ -538,6 +551,10 @@ const useStore = create((set, get) => ({
       schedule: state.schedule.map(d =>
         d.id === dayId ? { ...d, blocks: [...d.blocks, block] } : d
       ),
+      scheduleCollapseState: {
+        ...state.scheduleCollapseState,
+        blocks: { ...state.scheduleCollapseState.blocks, [block.id]: true },
+      },
     }))
     get()._scheduleAutoSave()
     return block.id
@@ -558,6 +575,10 @@ const useStore = create((set, get) => ({
       schedule: state.schedule.map(d =>
         d.id === dayId ? { ...d, blocks: [...d.blocks, block] } : d
       ),
+      scheduleCollapseState: {
+        ...state.scheduleCollapseState,
+        blocks: { ...state.scheduleCollapseState.blocks, [block.id]: true },
+      },
     }))
     get()._scheduleAutoSave()
     return block.id
@@ -590,6 +611,10 @@ const useStore = create((set, get) => ({
       schedule: state.schedule.map(d =>
         d.id === dayId ? { ...d, blocks: [...d.blocks, block] } : d
       ),
+      scheduleCollapseState: {
+        ...state.scheduleCollapseState,
+        blocks: { ...state.scheduleCollapseState.blocks, [block.id]: true },
+      },
     }))
     get()._scheduleAutoSave()
     return block.id
@@ -1139,6 +1164,8 @@ const useStore = create((set, get) => ({
             linkedSceneId: s.linkedSceneId || null,
             linkedDialogueLine: s.linkedDialogueLine || null,
             linkedDialogueOffset: s.linkedDialogueOffset ?? null,
+            linkedScriptRangeStart: s.linkedScriptRangeStart ?? null,
+            linkedScriptRangeEnd: s.linkedScriptRangeEnd ?? null,
           }
           for (const key of Object.keys(s)) {
             if (key.startsWith('custom_')) shot[key] = s[key]
@@ -1154,6 +1181,7 @@ const useStore = create((set, get) => ({
           cameras: scene.cameras,
           // pageNotes is stored as an array (one entry per storyboard page)
           pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes : [scene.pageNotes || ''],
+          pageColors: Array.isArray(scene.pageColors) ? scene.pageColors : [],
           shots,
         }
       }),
@@ -1376,6 +1404,8 @@ const useStore = create((set, get) => ({
       linkedSceneId: s.linkedSceneId || null,
       linkedDialogueLine: s.linkedDialogueLine || null,
       linkedDialogueOffset: s.linkedDialogueOffset ?? null,
+      linkedScriptRangeStart: s.linkedScriptRangeStart ?? null,
+      linkedScriptRangeEnd: s.linkedScriptRangeEnd ?? null,
       // Preserve any extra fields (e.g. custom columns)
       ...Object.fromEntries(
         Object.entries(s).filter(([k]) => k.startsWith('custom_'))
@@ -1396,6 +1426,7 @@ const useStore = create((set, get) => ({
         pageNotes: Array.isArray(scene.pageNotes)
           ? scene.pageNotes
           : [scene.pageNotes || ''],
+        pageColors: Array.isArray(scene.pageColors) ? scene.pageColors : [],
         shots: (scene.shots || []).map(s => mapShot(s, scene.intOrExt, scene.dayNight)),
       }))
     } else {
@@ -1408,6 +1439,7 @@ const useStore = create((set, get) => ({
         dayNight: data.dayNight || 'DAY',
         cameras: [{ name: data.cameraName || 'Camera 1', body: data.cameraBody || 'fx30' }],
         pageNotes: Array.isArray(data.pageNotes) ? data.pageNotes : [data.pageNotes || ''],
+        pageColors: Array.isArray(data.pageColors) ? data.pageColors : [],
         shots: (data.shots || []).map(s => mapShot(s, data.intOrExt, data.dayNight)),
       })]
     }
@@ -1452,6 +1484,12 @@ const useStore = create((set, get) => ({
           }),
         }))
       : []
+    const loadedCollapseState = {
+      days: Object.fromEntries(loadedSchedule.map(day => [day.id, true])),
+      blocks: Object.fromEntries(
+        loadedSchedule.flatMap(day => (day.blocks || []).map(block => [block.id, true]))
+      ),
+    }
 
     set({
       projectName: projectName || 'Untitled Shotlist',
@@ -1492,6 +1530,7 @@ const useStore = create((set, get) => ({
       customDropdownOptions: loadedCustomDropdownOptions,
       scenes,
       schedule: loadedSchedule,
+      scheduleCollapseState: loadedCollapseState,
       scheduleColumnConfig: (() => {
         const saved = data.scheduleColumnConfig
         if (!saved || !Array.isArray(saved) || saved.length === 0) return DEFAULT_SCHEDULE_COLUMN_CONFIG

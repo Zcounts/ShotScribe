@@ -36,7 +36,7 @@ function WizardStep({ step, current, label }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 11, fontFamily: 'monospace', fontWeight: 700,
         background: done ? '#22c55e' : active ? '#3b82f6' : 'rgba(128,128,128,0.2)',
-        color: done || active ? '#fff' : '#888',
+        color: done || active ? '#fff' : '#b8b8b8',
         flexShrink: 0,
         transition: 'background 0.2s',
       }}>
@@ -44,7 +44,7 @@ function WizardStep({ step, current, label }) {
       </div>
       <span style={{
         fontSize: 11, fontFamily: 'monospace',
-        color: active ? '#fff' : done ? '#aaa' : '#555',
+        color: active ? '#fff' : done ? '#d1d5db' : '#cbd5e1',
         fontWeight: active ? 700 : 400,
       }}>
         {label}
@@ -158,7 +158,7 @@ function Step1({ onFileReady }) {
         <div style={{ fontSize: 13, fontFamily: 'monospace', marginBottom: 6, color: '#ccc' }}>
           Drop your script file here
         </div>
-        <div style={{ fontSize: 11, color: '#666' }}>
+        <div style={{ fontSize: 11, color: '#cbd5e1' }}>
           .fountain &nbsp;·&nbsp; .fdx &nbsp;·&nbsp; .txt &nbsp;·&nbsp; .pdf
         </div>
       </div>
@@ -298,7 +298,7 @@ function Step2({ scenes, warnings, onScenesChange }) {
         </div>
       )}
 
-      <div style={{ fontSize: 12, color: '#aaa', fontFamily: 'monospace' }}>
+      <div style={{ fontSize: 12, color: '#e2e8f0', fontFamily: 'monospace' }}>
         Found <strong style={{ color: '#fff' }}>{scenes.length}</strong> scenes
         &nbsp;·&nbsp; <strong style={{ color: '#fff' }}>{uniqueChars.size}</strong> unique characters
         &nbsp;·&nbsp; <strong style={{ color: '#fff' }}>{uniqueLocs.size}</strong> locations
@@ -311,7 +311,7 @@ function Step2({ scenes, warnings, onScenesChange }) {
               {['#', 'Slugline', 'INT/EXT', 'D/N', 'Location', 'Characters', 'Color', 'Actions'].map(h => (
                 <th key={h} style={{
                   padding: '5px 6px', fontSize: 10, fontFamily: 'monospace',
-                  textAlign: 'left', color: '#888', fontWeight: 700,
+                  textAlign: 'left', color: '#f8fafc', fontWeight: 700,
                   letterSpacing: '0.06em', textTransform: 'uppercase',
                   borderBottom: '1px solid rgba(128,128,128,0.2)',
                 }}>
@@ -327,7 +327,7 @@ function Step2({ scenes, warnings, onScenesChange }) {
                 style={{ background: i % 2 === 0 ? 'rgba(0,0,0,0.1)' : 'transparent' }}
               >
                 {/* # */}
-                <td style={{ ...tdStyle, width: 30, color: '#666' }}>{i + 1}</td>
+                <td style={{ ...tdStyle, width: 30, color: '#e2e8f0' }}>{i + 1}</td>
 
                 {/* Slugline */}
                 <EditableCell row={i} field="slugline" value={scene.slugline} width={180} />
@@ -368,7 +368,7 @@ function Step2({ scenes, warnings, onScenesChange }) {
 
                 {/* Characters */}
                 <td style={{ ...tdStyle, width: 120, fontSize: 10 }}>
-                  <span style={{ color: '#aaa' }}>{scene.characters.slice(0, 3).join(', ')}{scene.characters.length > 3 ? '…' : ''}</span>
+                  <span style={{ color: '#e2e8f0' }}>{scene.characters.slice(0, 3).join(', ')}{scene.characters.length > 3 ? '…' : ''}</span>
                 </td>
 
                 {/* Color */}
@@ -399,7 +399,7 @@ function Step2({ scenes, warnings, onScenesChange }) {
                     onClick={() => mergeWithNext(i)}
                     title="Merge with next scene"
                     disabled={i >= scenes.length - 1}
-                    style={{ fontSize: 10, background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '1px 3px', opacity: i >= scenes.length - 1 ? 0.3 : 0.7 }}
+                    style={{ fontSize: 10, background: 'none', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: '1px 3px', opacity: i >= scenes.length - 1 ? 0.3 : 0.7 }}
                   >
                     ⤵
                   </button>
@@ -429,14 +429,14 @@ function Step3({ template, onTemplateChange, previewScene }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 12, color: '#e2e8f0', lineHeight: 1.6 }}>
         If your production uses a specific scene header format, paste an example here.
         ShotScribe will use this pattern to pre-fill the{' '}
         <strong style={{ color: '#ddd' }}>Custom Header</strong> field for each imported scene.
       </div>
 
       <div>
-        <label style={{ fontSize: 11, fontFamily: 'monospace', color: '#888', display: 'block', marginBottom: 4 }}>
+        <label style={{ fontSize: 11, fontFamily: 'monospace', color: '#f1f5f9', display: 'block', marginBottom: 4 }}>
           HEADER TEMPLATE
         </label>
         <input
@@ -456,7 +456,7 @@ function Step3({ template, onTemplateChange, previewScene }) {
         />
       </div>
 
-      <div style={{ fontSize: 11, color: '#666', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: '#d1d5db', lineHeight: 1.6 }}>
         Available tokens: &nbsp;
         {['{sceneNumber}', '{location}', '{intExt}', '{dayNight}'].map(t => (
           <code key={t} style={{
@@ -470,12 +470,12 @@ function Step3({ template, onTemplateChange, previewScene }) {
 
       {template && previewScene && (
         <div style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 4, padding: '8px 12px' }}>
-          <div style={{ fontSize: 10, color: '#666', fontFamily: 'monospace', marginBottom: 4 }}>PREVIEW (first scene):</div>
+          <div style={{ fontSize: 10, color: '#d1d5db', fontFamily: 'monospace', marginBottom: 4 }}>PREVIEW (first scene):</div>
           <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#93c5fd' }}>{preview}</div>
         </div>
       )}
 
-      <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+      <div style={{ fontSize: 11, color: '#d1d5db', marginTop: 4 }}>
         Leave blank to use the raw slugline as the custom header.
       </div>
     </div>
@@ -529,7 +529,7 @@ function Step4({ scenes, existingImport, importMode, onImportModeChange }) {
             padding: '6px 12px', fontSize: 11, fontFamily: 'monospace',
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{stat.count}</div>
-            <div style={{ color: '#888' }}>{stat.label}</div>
+            <div style={{ color: '#e2e8f0' }}>{stat.label}</div>
           </div>
         ))}
       </div>
@@ -664,7 +664,7 @@ export default function ImportScriptModal({ isOpen, onClose }) {
 
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+            style={{ background: 'none', border: 'none', color: '#f1f5f9', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
           >
             ✕
           </button>
@@ -676,7 +676,7 @@ export default function ImportScriptModal({ isOpen, onClose }) {
             <>
               <Step1 onFileReady={handleFileReady} />
               {parsing && (
-                <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: '#888', fontFamily: 'monospace' }}>
+                <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: '#e2e8f0', fontFamily: 'monospace' }}>
                   Parsing script…
                 </div>
               )}
@@ -734,7 +734,7 @@ export default function ImportScriptModal({ isOpen, onClose }) {
               fontFamily: 'monospace', fontSize: 12,
               background: 'transparent',
               border: '1px solid rgba(128,128,128,0.3)',
-              borderRadius: 4, color: '#aaa', cursor: 'pointer',
+              borderRadius: 4, color: '#f1f5f9', cursor: 'pointer',
             }}
           >
             {step === 1 ? 'Cancel' : '← Back'}

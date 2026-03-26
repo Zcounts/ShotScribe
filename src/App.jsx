@@ -23,6 +23,7 @@ import ScenesTab from './components/ScenesTab'
 import ScriptTab from './components/ScriptTab'
 import CastCrewTab from './components/CastCrewTab'
 import ScenePropertiesDialog from './components/ScenePropertiesDialog'
+import SceneColorPicker from './components/SceneColorPicker'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -104,6 +105,7 @@ function SceneSection({
           const globalPageNum = pageIndexOffset + pageIdx + 1
           const isContinuation = pageIdx > 0
           const isLastPage = pageIdx === pages.length - 1
+          const pageColor = (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || null
 
           return (
             <div
@@ -111,6 +113,7 @@ function SceneSection({
               id={`${scene.id}__page_${pageIdx}`}
               ref={el => { if (el) pageRefs.current[globalPageNum - 1] = el }}
               className="page-document"
+              style={{ borderLeft: `5px solid ${pageColor || 'rgba(74,85,104,0.18)'}` }}
             >
               <PageHeader
                 scene={scene}
@@ -130,6 +133,19 @@ function SceneSection({
               />
 
               <div className="page-footer">
+                <div style={{ position: 'absolute', right: 12, top: 8 }}>
+                  <SceneColorPicker
+                    value={pageColor}
+                    size={12}
+                    title={`Set color for page ${globalPageNum}`}
+                    onChange={(color) => {
+                      const nextColors = [...(Array.isArray(scene.pageColors) ? scene.pageColors : [])]
+                      while (nextColors.length <= pageIdx) nextColors.push(null)
+                      nextColors[pageIdx] = color
+                      useStore.getState().updateScene(scene.id, { pageColors: nextColors })
+                    }}
+                  />
+                </div>
                 {/* Delete scene button — lower-left of footer, first page only, subtle trash icon */}
                 {!isContinuation && canDelete && (
                   <button
@@ -343,7 +359,7 @@ export default function App() {
       id: `${scene.id}__page_${pageIdx}`,
       label: `Page ${scenePageOffsets[sceneIdx] + pageIdx + 1}`,
       subtitle: `${scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${scene.location || ''}`,
-      sceneColor: scriptScenes[sceneIdx]?.color || '#94a3b8',
+      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || scriptScenes[sceneIdx]?.color || '#94a3b8',
     }))
   })
 
@@ -369,9 +385,11 @@ export default function App() {
       <div className="tab-nav" style={{
         display: 'flex',
         flexShrink: 0,
+        alignItems: 'center',
         borderBottom: '1px solid #3A3A3C',
         backgroundColor: '#1C1C1E',
         paddingLeft: '16px',
+        paddingRight: '16px',
       }}>
         {[
           { id: 'storyboard', label: 'Storyboard' },
@@ -408,13 +426,9 @@ export default function App() {
             {label}
           </button>
         ))}
-      </div>
-
-      {/* Main content */}
-      {activeTab === 'storyboard' ? (
-        <div className="flex-1 py-4 px-4 overflow-auto canvas-texture">
-          <div style={{ position: 'sticky', top: 0, zIndex: 35, display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-            <div style={{ position: 'relative' }}>
+        <div style={{ marginLeft: 'auto', position: 'relative' }}>
+          {activeTab === 'storyboard' && (
+            <>
               <button
                 className="toolbar-btn"
                 onClick={() => setStoryboardConfigOpen(o => !o)}
@@ -422,7 +436,7 @@ export default function App() {
                 Configure
               </button>
               {storyboardConfigOpen && (
-                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, padding: 10, minWidth: 220, boxShadow: '0 6px 20px rgba(0,0,0,0.15)' }}>
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, padding: 10, minWidth: 220, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', zIndex: 80 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#4A5568' }}>
                     <input
                       type="checkbox"
@@ -433,8 +447,14 @@ export default function App() {
                   </label>
                 </div>
               )}
-            </div>
-          </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Main content */}
+      {activeTab === 'storyboard' ? (
+        <div className="flex-1 py-4 px-4 overflow-auto canvas-texture">
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
               <aside style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>

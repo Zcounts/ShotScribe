@@ -1671,16 +1671,16 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
   const setBlockCollapsed = useStore(s => s.setBlockCollapsed)
   const setDayBlocksCollapsed = useStore(s => s.setDayBlocksCollapsed)
   const collapseState = useStore(s => s.scheduleCollapseState)
-  const collapsed = collapseState.days[day.id] || false
+  const collapsed = collapseState.days[day.id] ?? true
   const collapsedBlocksMap = collapseState.blocks
 
   const toggleBlockCollapse = useCallback((blockId) => {
-    setBlockCollapsed(blockId, !collapsedBlocksMap[blockId])
+    setBlockCollapsed(blockId, !(collapsedBlocksMap[blockId] ?? true))
   }, [setBlockCollapsed, collapsedBlocksMap])
 
   const handleCtrlToggleAllBlocks = useCallback(() => {
     const shotBlockIds = blocks.filter(b => b.type !== 'break').map(b => b.id)
-    const anyExpanded = shotBlockIds.some(id => !collapsedBlocksMap[id])
+    const anyExpanded = shotBlockIds.some(id => !(collapsedBlocksMap[id] ?? true))
     setDayBlocksCollapsed(shotBlockIds, anyExpanded)
   }, [blocks, collapsedBlocksMap, setDayBlocksCollapsed])
 
@@ -1934,7 +1934,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
                     isDark={isDark}
                     projectedTime={projectedTime}
                     columnConfig={columnConfig}
-                    isCollapsed={collapsedBlocksMap[block.id] || false}
+                    isCollapsed={collapsedBlocksMap[block.id] ?? true}
                     onToggleCollapse={() => toggleBlockCollapse(block.id)}
                     onCtrlToggleAll={handleCtrlToggleAllBlocks}
                   />

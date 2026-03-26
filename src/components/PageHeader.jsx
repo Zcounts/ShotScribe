@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
+import SceneColorPicker from './SceneColorPicker'
 
 const CAMERA_COLORS = [
   '#4ade80', '#22d3ee', '#facc15', '#f87171', '#60a5fa',
@@ -106,12 +107,21 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
   // Legacy projects saved it as a plain string — treat that as page 0.
   const pageNotesArray = Array.isArray(scene.pageNotes) ? scene.pageNotes : [scene.pageNotes || '']
   const currentPageNotes = pageNotesArray[pageIndex] || ''
+  const pageColors = Array.isArray(scene.pageColors) ? scene.pageColors : []
+  const currentPageColor = pageColors[pageIndex] || null
 
   const setPageNotes = (val) => {
     const updated = [...pageNotesArray]
     while (updated.length <= pageIndex) updated.push('')
     updated[pageIndex] = val
     set({ pageNotes: updated })
+  }
+
+  const setPageColor = (color) => {
+    const updated = [...pageColors]
+    while (updated.length <= pageIndex) updated.push(null)
+    updated[pageIndex] = color
+    set({ pageColors: updated })
   }
 
   const cycleIntExt = () => {
@@ -164,36 +174,42 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
   return (
     <div className="page-header" onDoubleClick={onDoubleClick}>
       {/* Left: Scene Label */}
-      <div className="flex flex-col gap-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
+      <div className="flex flex-col gap-1 min-w-0 items-start">
+        <div className="flex items-baseline gap-1.5 flex-wrap justify-start">
+          <SceneColorPicker
+            value={currentPageColor}
+            onChange={setPageColor}
+            size={12}
+            title={`Set page ${pageNum} color`}
+          />
           <input
             type="text"
             value={scene.sceneLabel}
             onChange={e => set({ sceneLabel: e.target.value })}
-            className="text-xl font-black tracking-tight bg-transparent border-none outline-none p-0"
+            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0"
             style={{ minWidth: 80, width: `${Math.max((scene.sceneLabel || '').length, 6)}ch` }}
             placeholder="SCENE 1"
           />
-          <span className="text-xl font-black">|</span>
+          <span className="text-[19px] font-black">|</span>
           <input
             type="text"
             value={scene.location}
             onChange={e => set({ location: e.target.value })}
-            className="text-xl font-black tracking-tight bg-transparent border-none outline-none p-0"
+            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0"
             style={{ minWidth: 60, width: `${Math.max((scene.location || '').length, 4)}ch` }}
             placeholder="LOCATION"
           />
-          <span className="text-xl font-black">|</span>
+          <span className="text-[19px] font-black">|</span>
           <button
             onClick={cycleIntExt}
-            className="text-xl font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0"
+            className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0"
           >
             {scene.intOrExt}
           </button>
-          <span className="text-xl font-black">·</span>
+          <span className="text-[19px] font-black">·</span>
           <button
             onClick={cycleDayNight}
-            className="text-xl font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0"
+            className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0"
           >
             {scene.dayNight || 'DAY'}
           </button>
