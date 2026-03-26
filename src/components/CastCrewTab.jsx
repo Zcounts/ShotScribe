@@ -22,9 +22,9 @@ function isNightShot(shotData) {
 
 function Circle({ status }) {
   const styles = {
-    full: 'bg-[#2D6A4F] border-[#2D6A4F]',
-    brief: 'bg-[#74C69D]/40 border-[#2D6A4F]',
-    night: 'bg-[#1B3A2D] border-[#1B3A2D]',
+    full: 'bg-[#5265E0] border-[#5265E0]',
+    brief: 'bg-[#C7D0FF] border-[#5265E0]',
+    night: 'bg-[#6E4450] border-[#6E4450]',
     none: 'bg-transparent border-slate/25',
   }
   return <div className={`w-5 h-5 rounded-full border-2 mx-auto ${styles[status]}`} />
@@ -139,7 +139,7 @@ export default function CastCrewTab() {
           onChange={setActiveSubTab}
         />
         <div className="flex items-center gap-2">
-          <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#2D6A4F]/50 text-[#1B4332] bg-[#74C69D]/25 hover:bg-[#74C69D]/35" onClick={() => openProfile('cast', null)}>
+          <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#5265E0]/45 text-[#2E3E9A] bg-[#5265E0]/15 hover:bg-[#5265E0]/22" onClick={() => openProfile('cast', null)}>
             + Add Cast
           </button>
           <button className="px-3 py-1.5 text-xs font-semibold rounded border border-slate/30 text-ink bg-canvas-dark/50 hover:bg-canvas-dark" onClick={() => openProfile('crew', null)}>
@@ -157,7 +157,7 @@ export default function CastCrewTab() {
                   <tr>
                     <th className="sticky left-0 z-30 min-w-[160px] bg-canvas-dark text-left text-xs text-ink font-semibold px-3 py-2 border-r border-slate/10">Actor</th>
                     {scheduleDays.map(day => (
-                      <th key={day.id} className="bg-[#2D5A3D] text-white font-semibold text-xs text-center px-3 py-2 border-r border-slate/10 whitespace-nowrap">
+                      <th key={day.id} className="bg-[#5265E0] text-white font-semibold text-xs text-center px-3 py-2 border-r border-slate/10 whitespace-nowrap">
                         {formatDayHeader(day)}
                       </th>
                     ))}
@@ -244,9 +244,9 @@ export default function CastCrewTab() {
       )}
 
       <div className="flex items-center gap-6 text-xs text-slate mt-1">
-        <span>● Full day</span>
-        <span>◎ Brief (≤2 hrs)</span>
-        <span>⬤ Night block only</span>
+        <span className="inline-flex items-center gap-1"><span className="text-[#5265E0]">●</span> Full day</span>
+        <span className="inline-flex items-center gap-1"><span className="text-[#5265E0]">◎</span> Brief (≤2 hrs)</span>
+        <span className="inline-flex items-center gap-1"><span className="text-[#6E4450]">⬤</span> Night block only</span>
         <span>○ Not needed</span>
       </div>
 
