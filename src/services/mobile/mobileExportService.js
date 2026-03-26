@@ -56,11 +56,25 @@ function buildScheduleItems(day, shotLookup) {
   return (day.blocks || []).map((block, index) => {
     if (block.type === 'shot') {
       const linked = shotLookup.get(block.shotId)
+      const shot = linked?.shot
+      const shotImageUrl = (shot?.image && (shot.image.startsWith('data:image/') || /^https?:\/\//.test(shot.image)))
+        ? shot.image
+        : undefined
       return {
         scheduleItemId: block.id,
         dayId: day.id,
         type: 'shot',
         shotId: block.shotId,
+        shotDisplayName: linked ? `${linked.displayId} - ${shot?.cameraName || 'Camera 1'}` : undefined,
+        shotCameraName: shot?.cameraName || undefined,
+        focalLength: shot?.focalLength || undefined,
+        shotSize: shot?.specs?.size || undefined,
+        shotType: shot?.specs?.type || undefined,
+        shotMove: shot?.specs?.move || undefined,
+        shotEquipment: shot?.specs?.equip || undefined,
+        shotNotes: shot?.notes || undefined,
+        shotImageUrl,
+        shotColor: shot?.color || undefined,
         sceneId: linked?.scene?.id,
         title: linked ? `${linked.displayId} ${linked.scene.sceneLabel}` : 'Shot',
         status: linked?.shot?.checked ? 'done' : 'todo',
@@ -83,9 +97,18 @@ function buildStoryboardRefs(day, shotLookup, timestampIso) {
     .filter(block => block.type === 'shot' && block.shotId)
     .map(block => shotLookup.get(block.shotId))
     .filter(Boolean)
-    .map(({ shot }) => {
+    .map(({ shot, displayId }) => {
       const out = {
         shotId: shot.id,
+        shotDisplayName: `${displayId} - ${shot.cameraName || 'Camera 1'}`,
+        shotCameraName: shot.cameraName || undefined,
+        focalLength: shot.focalLength || undefined,
+        shotSize: shot.specs?.size || undefined,
+        shotType: shot.specs?.type || undefined,
+        shotMove: shot.specs?.move || undefined,
+        shotEquipment: shot.specs?.equip || undefined,
+        shotNotes: shot.notes || undefined,
+        shotColor: shot.color || undefined,
         updatedAt: timestampIso,
       }
       if (shot.image && /^https?:\/\//.test(shot.image)) {
@@ -97,17 +120,65 @@ function buildStoryboardRefs(day, shotLookup, timestampIso) {
     })
 }
 
-function buildCallsheet(day, callsheets) {
+function buildCallsheet(day, callsheets, shotLookup) {
   const callsheet = callsheets?.[day.id]
   if (!callsheet && !day.startTime && !day.basecamp) return undefined
+
+  const castList = Array.isArray(callsheet?.cast)
+    ? callsheet.cast
+      .filter(person => person && person.name)
+      .map(person => ({
+        name: person.name,
+        role: person.role || undefined,
+        character: person.character || undefined,
+        phone: person.phone || undefined,
+        email: person.email || undefined,
+        notes: person.notes || undefined,
+      }))
+    : []
+
+  const crewList = Array.isArray(callsheet?.crew)
+    ? callsheet.crew
+      .filter(person => person && person.name)
+      .map(person => ({
+        name: person.name,
+        role: person.role || undefined,
+        department: person.department || undefined,
+        phone: person.phone || undefined,
+        email: person.email || undefined,
+        notes: person.notes || undefined,
+      }))
+    : []
+
+  const scheduleHighlights = Array.isArray(day.blocks)
+    ? day.blocks.map(block => ({
+      itemId: block.id,
+      type: block.type,
+      label: block.type === 'shot'
+        ? (block.shotId
+          ? (shotLookup.get(block.shotId)
+            ? `${shotLookup.get(block.shotId).displayId} - ${shotLookup.get(block.shotId).shot.cameraName || 'Camera 1'}`
+            : `Shot ${block.shotId}`)
+          : 'Shot TBD')
+        : (block.label || block.type),
+    }))
+    : []
 
   return {
     dayId: day.id,
     callTime: isoFromDayTime(day.date, day.startTime),
+    nearestHospital: callsheet?.nearestHospital || '',
     shootLocation: callsheet?.shootLocation || day.basecamp || '',
+    locationAddress: callsheet?.locationAddress || '',
+    parkingNotes: callsheet?.parkingNotes || '',
+    directions: callsheet?.directions || '',
+    mapsLink: callsheet?.mapsLink || '',
     weatherSummary: callsheet?.weather || '',
     safetyNotes: callsheet?.emergencyContacts || '',
     generalNotes: callsheet?.additionalNotes || '',
+    cast: castList,
+    crew: crewList,
+    scheduleHighlights,
   }
 }
 
@@ -118,6 +189,19 @@ export function createMobileDayPackageFromProject(projectData, options = {}) {
   const nowIso = options.nowIso || new Date().toISOString()
   const project = makeProjectMetadata(projectData)
   const shotLookup = buildShotLookup(projectData.scenes || [])
+  const displayByShotId = new Map()
+  ;(projectData.scenes || []).forEach((scene, sceneIdx) => {
+    ;(scene.shots || []).forEach((shot, shotIdx) => {
+      displayByShotId.set(shot.id, `${sceneIdx + 1}${getShotLetter(shotIdx)} - ${shot.cameraName || 'Camera 1'}`)
+    })
+  })
+  const scheduleItems = buildScheduleItems(day, shotLookup).map(item => {
+    if (item.type !== 'shot' || !item.shotId) return item
+    return {
+      ...item,
+      shotDisplayName: item.shotDisplayName || displayByShotId.get(item.shotId),
+    }
+  })
 
   return {
     schemaVersion: 1,
@@ -129,9 +213,12 @@ export function createMobileDayPackageFromProject(projectData, options = {}) {
     project,
     dayId: day.id,
     shootDate: safeDate(day.date),
-    scheduleItems: buildScheduleItems(day, shotLookup),
-    storyboardRefs: buildStoryboardRefs(day, shotLookup, nowIso),
-    callsheet: buildCallsheet(day, projectData.callsheets),
+    scheduleItems,
+    storyboardRefs: buildStoryboardRefs(day, shotLookup, nowIso).map(ref => ({
+      ...ref,
+      shotDisplayName: displayByShotId.get(ref.shotId),
+    })),
+    callsheet: buildCallsheet(day, projectData.callsheets, shotLookup),
   }
 }
 
