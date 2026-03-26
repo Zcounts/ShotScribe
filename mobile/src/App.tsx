@@ -190,10 +190,15 @@ export function App() {
           },
         })
       }
-      onToggleShotDone={(shotId) => {
+      onCycleShotStatus={(shotId) => {
         const key = `${activeProject.projectId}::${activeDay.dayId}::${shotId}`
         const current = library.shotStatusOverrides[key] ?? 'todo'
-        const nextStatus = current === 'done' ? 'todo' : 'done'
+        const nextStatus =
+          current === 'done'
+            ? 'skipped'
+            : current === 'skipped'
+              ? 'todo'
+              : 'done'
         const nextLibrary = setShotStatusOverride(
           library,
           activeProject.projectId,

@@ -7,14 +7,16 @@ interface ProjectHubScreenProps {
   project: StoredProjectEntry
   day: StoredDayEntry
   selectedTab: MobileTabKey
-  shotStatusOverrides: Record<string, 'todo' | 'in_progress' | 'done'>
+  shotStatusOverrides: Record<string, ShotStatus>
   onSelectTab: (tab: MobileTabKey) => void
   onSelectDay: (dayId: string) => void
   onSelectProject: (projectId: string) => void
   onImport: () => void
   onDeleteProject: (projectId: string) => void
-  onToggleShotDone: (shotId: string) => void
+  onCycleShotStatus: (shotId: string) => void
 }
+
+type ShotStatus = 'todo' | 'in_progress' | 'done' | 'skipped'
 
 interface MobileShotDetail {
   shotId: string
@@ -26,7 +28,7 @@ interface MobileShotDetail {
   shotMove: string
   shotEquipment: string
   notes: string
-  sceneTag: string
+  sceneTag?: string
   color?: string
   imageUrl?: string
 }
@@ -74,8 +76,8 @@ function getEffectiveStatus(
   projectId: string,
   dayId: string,
   item: MobileScheduleItem,
-  overrides: Record<string, 'todo' | 'in_progress' | 'done'>
-): 'todo' | 'in_progress' | 'done' {
+  overrides: Record<string, ShotStatus>
+): ShotStatus {
   if (item.shotId) {
     const key = `${projectId}::${dayId}::${item.shotId}`
     const override = overrides[key]
@@ -92,6 +94,32 @@ function toHumanShotName(raw?: string, fallbackNumber = 1, cameraName = 'Camera 
     return raw
   }
   return `${fallbackNumber} - ${cameraName}`
+}
+
+function toSceneTag(sceneId?: string): string | undefined {
+  if (!sceneId) return undefined
+  const value = sceneId.trim()
+  if (!value) return undefined
+
+  if (/^scene[_-]/i.test(value)) {
+    const pieces = value.match(/\d+[A-Za-z]?/g)
+    if (!pieces || pieces.length === 0) {
+      return undefined
+    }
+    return `Scene ${pieces.join('.')}`
+  }
+
+  return `Scene ${value}`
+}
+
+function getShotActionState(status: ShotStatus): { label: string; tone: 'neutral' | 'done' | 'skipped' } {
+  if (status === 'done') {
+    return { label: 'Done', tone: 'done' }
+  }
+  if (status === 'skipped') {
+    return { label: 'Skipped', tone: 'skipped' }
+  }
+  return { label: 'Mark Done', tone: 'neutral' }
 }
 
 function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
@@ -114,7 +142,7 @@ function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
       shotMove: item.shotMove ?? '—',
       shotEquipment: item.shotEquipment ?? '—',
       notes: item.shotNotes ?? '',
-      sceneTag: item.sceneId ? `Scene ${item.sceneId}` : 'Scene —',
+      sceneTag: toSceneTag(item.sceneId),
       color: item.shotColor,
       imageUrl: item.shotImageUrl,
     })
@@ -133,7 +161,7 @@ function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
       shotMove: ref.shotMove ?? existing?.shotMove ?? '—',
       shotEquipment: ref.shotEquipment ?? existing?.shotEquipment ?? '—',
       notes: ref.shotNotes ?? existing?.notes ?? '',
-      sceneTag: existing?.sceneTag ?? 'Scene —',
+      sceneTag: existing?.sceneTag,
       color: ref.shotColor ?? existing?.color,
       imageUrl: ref.thumbnailUrl ?? existing?.imageUrl,
     })
@@ -238,7 +266,7 @@ function renderOverview(day: StoredDayEntry, doneShots: number, totalShots: numb
 function renderSchedule(
   project: StoredProjectEntry,
   day: StoredDayEntry,
-  overrides: Record<string, 'todo' | 'in_progress' | 'done'>,
+  overrides: Record<string, ShotStatus>,
   shotLookup: Map<string, MobileShotDetail>,
   onOpenDetails: (shotId: string) => void
 ) {
@@ -262,7 +290,7 @@ function renderSchedule(
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
               </div>
               <div className="mobile-shot-subrow">
-                <span className="shot-scene-tag">{shot?.sceneTag ?? 'Scene —'}</span>
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-spacer" aria-hidden="true" />}
                 <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
               </div>
               <div className="mobile-shot-actions">
@@ -295,8 +323,8 @@ function renderSchedule(
 function renderShotlist(
   project: StoredProjectEntry,
   day: StoredDayEntry,
-  overrides: Record<string, 'todo' | 'in_progress' | 'done'>,
-  onToggleShotDone: (shotId: string) => void,
+  overrides: Record<string, ShotStatus>,
+  onCycleShotStatus: (shotId: string) => void,
   shotLookup: Map<string, MobileShotDetail>,
   onOpenDetails: (shotId: string) => void
 ) {
@@ -313,13 +341,13 @@ function renderShotlist(
       {shotItems.map((item) => {
         const shotId = item.shotId as string
         const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
-        const done = effectiveStatus === 'done'
+        const actionState = getShotActionState(effectiveStatus)
         const shot = shotLookup.get(shotId)
 
         return (
           <article
             key={item.scheduleItemId}
-            className={`mobile-shot-card ${done ? 'shot-toggle-done' : 'shot-toggle-open'}`}
+            className={`mobile-shot-card shot-toggle-${actionState.tone}`}
             onDoubleClick={() => onOpenDetails(shotId)}
           >
             <div className="mobile-shot-row">
@@ -327,15 +355,19 @@ function renderShotlist(
               <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
             </div>
             <div className="mobile-shot-subrow">
-              <span className="shot-scene-tag">{shot?.sceneTag ?? 'Scene —'}</span>
-              <strong className={`shot-state ${done ? 'shot-state-done' : 'shot-state-open'}`}>{done ? 'DONE' : 'OPEN'}</strong>
+              {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-spacer" aria-hidden="true" />}
+              <strong className={`shot-state shot-state-${actionState.tone}`}>{actionState.label.toUpperCase()}</strong>
             </div>
             <div className="mobile-shot-actions">
-              <button type="button" className="inline-button" onClick={() => onOpenDetails(shotId)}>
+              <button type="button" className="shot-action-button shot-action-button-neutral" onClick={() => onOpenDetails(shotId)}>
                 Details
               </button>
-              <button type="button" className="inline-button" onClick={() => onToggleShotDone(shotId)}>
-                {done ? 'Reopen shot' : 'Mark done'}
+              <button
+                type="button"
+                className={`shot-action-button shot-action-button-${actionState.tone}`}
+                onClick={() => onCycleShotStatus(shotId)}
+              >
+                {actionState.label}
               </button>
             </div>
           </article>
@@ -368,7 +400,7 @@ function renderStoryboard(
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
               </span>
               <span className="mobile-shot-subrow">
-                <span className="shot-scene-tag">{shot?.sceneTag ?? 'Scene —'}</span>
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-spacer" aria-hidden="true" />}
                 <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
               </span>
             </button>
@@ -534,7 +566,7 @@ export function ProjectHubScreen({
   onSelectProject,
   onImport,
   onDeleteProject,
-  onToggleShotDone,
+  onCycleShotStatus,
 }: ProjectHubScreenProps) {
   const dayList = Object.values(project.days).sort((a, b) => a.shootDate.localeCompare(b.shootDate))
   const selectedDayIndex = dayList.findIndex((entry) => entry.dayId === day.dayId)
@@ -600,7 +632,7 @@ export function ProjectHubScreen({
         ? renderSchedule(project, day, shotStatusOverrides, shotLookup, setFocusedShotId)
         : null}
       {selectedTab === 'shotlist'
-        ? renderShotlist(project, day, shotStatusOverrides, onToggleShotDone, shotLookup, setFocusedShotId)
+        ? renderShotlist(project, day, shotStatusOverrides, onCycleShotStatus, shotLookup, setFocusedShotId)
         : null}
       {selectedTab === 'storyboard'
         ? renderStoryboard(day.dayPackage.storyboardRefs, shotLookup, expandedStoryboardShotId, (shotId) => {
@@ -621,7 +653,9 @@ export function ProjectHubScreen({
                 Close
               </button>
             </div>
-            <ShotDetailCard shot={focusedShot} />
+            <div className="mobile-shot-modal-body">
+              <ShotDetailCard shot={focusedShot} />
+            </div>
           </div>
         </div>
       ) : null}
