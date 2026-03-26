@@ -100,8 +100,15 @@ function CameraColorSwatch({ color, onChange }) {
 
 export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0, onDoubleClick }) {
   const updateScene = useStore(s => s.updateScene)
+  const scriptScenes = useStore(s => s.scriptScenes)
 
   const set = (updates) => updateScene(scene.id, updates)
+  const linkedScriptScene = scene.linkedScriptSceneId
+    ? scriptScenes.find(s => s.id === scene.linkedScriptSceneId)
+    : null
+  const displayLocation = linkedScriptScene?.location || scene.location
+  const displayIntExt = linkedScriptScene?.intExt || scene.intOrExt
+  const displayDayNight = linkedScriptScene?.dayNight || scene.dayNight
 
   // Per-page notes: pageNotes is stored as an array (one element per page).
   // Legacy projects saved it as a plain string — treat that as page 0.
@@ -175,7 +182,7 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
     <div className="page-header" onDoubleClick={onDoubleClick}>
       {/* Left: Scene Label */}
       <div className="page-header-scene">
-        <div className="page-header-meta">
+        <div className="page-header-row page-header-row-top">
           <SceneColorPicker
             value={currentPageColor}
             onChange={setPageColor}
@@ -186,17 +193,19 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
             type="text"
             value={scene.sceneLabel}
             onChange={e => set({ sceneLabel: e.target.value })}
-            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input"
+            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-scene-label"
             style={{ minWidth: 80, width: `${Math.min(Math.max((scene.sceneLabel || '').length, 6), 20)}ch` }}
             placeholder="SCENE 1"
           />
+        </div>
+        <div className="page-header-row page-header-row-bottom">
           <span className="text-[19px] font-black">|</span>
           <input
             type="text"
-            value={scene.location}
+            value={displayLocation}
             onChange={e => set({ location: e.target.value })}
             className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input"
-            style={{ minWidth: 60, width: `${Math.min(Math.max((scene.location || '').length, 4), 42)}ch` }}
+            style={{ minWidth: 60, width: `${Math.min(Math.max((displayLocation || '').length, 4), 42)}ch` }}
             placeholder="LOCATION"
           />
           <span className="text-[19px] font-black">|</span>
@@ -204,14 +213,14 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
             onClick={cycleIntExt}
             className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
           >
-            {scene.intOrExt}
+            {displayIntExt}
           </button>
           <span className="text-[19px] font-black">·</span>
           <button
             onClick={cycleDayNight}
             className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
           >
-            {scene.dayNight || 'DAY'}
+            {displayDayNight || 'DAY'}
           </button>
         </div>
         {isContinuation && (
