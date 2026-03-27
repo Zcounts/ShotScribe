@@ -908,38 +908,34 @@ p {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 3px 2px;
+  gap: 5px;
   min-height: 0;
 }
 
 .sl-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.sl-meta-dot {
-  color: #b09880;
-  font-size: 0.7rem;
-  margin: 0 2px;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  gap: 4px;
+  align-items: baseline;
+  padding: 2px 0;
 }
 
 .sl-meta-val {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   color: #504336;
-  font-weight: 500;
+  font-weight: 650;
 }
 
 .sl-meta-key {
-  font-size: 0.65rem;
-  letter-spacing: 0.07em;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 800;
   color: #7a6653;
 }
 
 .sl-notes {
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   color: #4a3e32;
   line-height: 1.35;
   margin: 0;
@@ -958,15 +954,22 @@ p {
    =================================== */
 
 .sched-shot-item {
-  padding: 9px 10px 8px;
+  padding: 8px 9px;
   gap: 5px;
 }
 
 .sched-r1 {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+}
+
+.sched-title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .sched-r1 h4 {
@@ -992,28 +995,25 @@ p {
   font-size: 0.67rem;
 }
 
-.sched-r2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 0;
-}
-
-.sched-timing {
-  display: flex;
-  gap: 12px;
-  margin-left: auto;
+.sched-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 8px;
+  border-top: 1px dashed #d7cbbd;
+  border-bottom: 1px dashed #d7cbbd;
+  padding: 6px 0;
 }
 
 .sched-time-unit {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  align-items: flex-end;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .sched-time-lbl {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #7a6a58;
@@ -1021,16 +1021,31 @@ p {
 }
 
 .sched-time-val {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #2f2f34;
+  line-height: 1.2;
 }
 
-.sched-unscheduled {
-  margin-left: auto;
+.sched-empty-time {
+  grid-column: 1 / -1;
   font-size: 0.72rem;
-  color: #9a8a78;
-  font-style: italic;
+  color: #8b7a67;
+}
+
+.sched-r3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+}
+
+.sched-lens-tag {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6f5e4d;
+  font-weight: 700;
 }
 
 .sched-shot-item .shot-action-button {
@@ -1044,19 +1059,17 @@ p {
    =================================== */
 
 .storyboard-card {
-  padding: 9px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  cursor: pointer;
 }
 
-.storyboard-collapsed-layout {
-  border: none;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  padding: 0;
+.storyboard-grid {
   display: grid;
-  grid-template-columns: minmax(132px, 45%) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 8px;
-  align-items: stretch;
 }
 
 .storyboard-media-col {
@@ -1093,19 +1106,20 @@ p {
 .storyboard-info-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
-.sb-header-row {
+.sb-subline {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 6px;
+  min-height: 0;
 }
 
 .sb-shot-name {
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 700;
   min-width: 0;
   overflow: hidden;
@@ -1115,9 +1129,14 @@ p {
 }
 
 .storyboard-info-col .shot-scene-tag {
-  align-self: flex-start;
   padding: 2px 7px;
   font-size: 0.62rem;
+}
+
+.sb-lens {
+  font-size: 0.68rem;
+  color: #5c4c3d;
+  font-weight: 700;
 }
 
 .storyboard-info-col .mobile-shot-actions {
@@ -1128,13 +1147,6 @@ p {
   min-height: 32px;
   padding: 5px 8px;
   font-size: 0.75rem;
-}
-
-@media (max-width: 420px) {
-  .storyboard-collapsed-layout {
-    grid-template-columns: minmax(112px, 42%) minmax(0, 1fr);
-    gap: 7px;
-  }
 }
 
 @media (min-width: 768px) {
@@ -1216,6 +1228,11 @@ p {
   .shotlist-card,
   .schedule-shot-card {
     gap: 5px;
+  }
+
+  .storyboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .mobile-shot-subrow {
