@@ -3,6 +3,7 @@ import { arrayMove } from '@dnd-kit/sortable'
 import { computeEstimate, computeConfidence, parseSlugline } from './utils/scriptParser'
 import { ensureEditableScreenplayElements, estimateScreenplayPagination } from './utils/screenplay'
 import { DEFAULT_SCRIPT_DOCUMENT_SETTINGS, normalizeDocumentSettings } from './utils/scriptDocumentFormatting'
+import { computeCastSceneMetrics, resolveLinkedScriptSceneId } from './utils/callsheetMetrics'
 import {
   SHORTCUT_DEFAULTS,
   getActiveBindings,
@@ -732,13 +733,16 @@ const useStore = create((set, get) => ({
       blocks: day.blocks.map(block => {
         if (block.type !== 'shot' && block.shotId === undefined) return block
         const found = shotMap.get(block.shotId)
-        // Look up linked script scene (if any)
-          const scriptScene = found && found.shot.linkedSceneId
-            ? get().scriptScenes.find(ss => ss.id === found.shot.linkedSceneId)
-            : null
+        // Look up linked script scene (if any), with fallback to the parent storyboard scene link.
+        const resolvedLinkedSceneId = found
+          ? resolveLinkedScriptSceneId(found.shot, found.scene)
+          : null
+        const scriptScene = resolvedLinkedSceneId
+          ? get().scriptScenes.find(ss => ss.id === resolvedLinkedSceneId)
+          : null
 
-          const castRosterEntries = found ? get().getCastRosterByShot(found.shot) : []
-          return {
+        const castRosterEntries = found ? get().getCastRosterByShot(found.shot, found.scene) : []
+        return {
           ...block,
           // Null when the referenced shot has been deleted
           shotData: found ? {
@@ -755,7 +759,7 @@ const useStore = create((set, get) => ({
             setupTime: found.shot.setupTime || '',
             scriptTime: found.shot.scriptTime || '',
             // Script scene link (display only)
-            linkedSceneId: found.shot.linkedSceneId || null,
+            linkedSceneId: resolvedLinkedSceneId,
             linkedSceneData: scriptScene ? {
               sceneNumber: scriptScene.sceneNumber,
               location: scriptScene.location,
@@ -1054,11 +1058,12 @@ const useStore = create((set, get) => ({
     })
   },
 
-  getCastRosterByShot: (shot) => {
+  getCastRosterByShot: (shot, storyboardScene = null) => {
     if (!shot) return []
     const { scriptScenes, getCastRosterByCharacterNames } = get()
-    const scriptScene = shot.linkedSceneId
-      ? scriptScenes.find(scene => scene.id === shot.linkedSceneId)
+    const linkedScriptSceneId = resolveLinkedScriptSceneId(shot, storyboardScene)
+    const scriptScene = linkedScriptSceneId
+      ? scriptScenes.find(scene => scene.id === linkedScriptSceneId)
       : null
 
     const characterNames = new Set()
@@ -1083,15 +1088,16 @@ const useStore = create((set, get) => ({
     const shotMap = new Map()
     scenes.forEach(scene => {
       scene.shots.forEach(shot => {
-        shotMap.set(shot.id, shot)
+        shotMap.set(shot.id, { shot, scene })
       })
     })
 
     const byId = new Map()
     ;(day.blocks || []).forEach(block => {
       if (!block?.shotId) return
-      const shot = shotMap.get(block.shotId)
-      const rosterEntries = getCastRosterByShot(shot)
+      const shotContext = shotMap.get(block.shotId)
+      if (!shotContext) return
+      const rosterEntries = getCastRosterByShot(shotContext.shot, shotContext.scene)
       rosterEntries.forEach(entry => {
         if (!byId.has(entry.id)) byId.set(entry.id, entry)
       })
@@ -1126,9 +1132,12 @@ const useStore = create((set, get) => ({
       )
       filteredSceneIds = new Set([...allSceneIds].filter(id => daySceneIds.has(id)))
     }
-    const selectedScenes = scriptScenes.filter(scene => filteredSceneIds.has(scene.id))
-    const pageCount = selectedScenes.reduce((sum, scene) => sum + Number(scene.pageCount || 0), 0)
-    return { sceneCount: selectedScenes.length, pageCount, sceneIds: Array.from(filteredSceneIds) }
+    return computeCastSceneMetrics({
+      castCharacterKeys: linkedChars,
+      scriptScenes,
+      allowedSceneIds: filteredSceneIds,
+      normalizeCharacterKey: normalizePersonKey,
+    })
   },
 
   // ── Scene helpers ────────────────────────────────────────────────────
