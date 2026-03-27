@@ -321,9 +321,9 @@
   }
 
   .page-header-scene-bottom {
-    display: inline-flex;
+    display: flex;
     align-items: baseline;
-    gap: 16px;
+    gap: 0;
     width: fit-content;
     max-width: 100%;
   }
@@ -333,7 +333,6 @@
     align-items: baseline;
     gap: 6px;
     white-space: nowrap;
-    justify-self: start;
   }
 
   .page-header-scene-label {
