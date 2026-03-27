@@ -16,16 +16,16 @@ export const SCREENPLAY_LAYOUT = {
   },
   typography: {
     fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
-    fontSizePx: 15.2,
-    lineHeightPx: ((11 - 1 - 1) * INCH) / 55,
+    fontSizePx: 16,
+    lineHeightPx: ((11 - 1 - 1) * INCH) / 54,
   },
   elementColumnsIn: {
-    heading: { left: 0, width: 6 },
-    action: { left: 0, width: 6 },
-    character: { left: 1.78, width: 2.2 },
-    parenthetical: { left: 1.38, width: 2.8 },
-    dialogue: { left: 1.0, width: 3.75 },
-    transition: { left: 4.2, width: 1.8 },
+    heading: { left: 0, width: 5.9 },
+    action: { left: 0, width: 5.9 },
+    character: { left: 2.6, width: 2.0 },
+    parenthetical: { left: 1.5, width: 1.5 },
+    dialogue: { left: 1.0, width: 3.5 },
+    transition: { left: 4.5, width: 1.5 },
   },
   spacing: {
     heading: { before: 0, after: 1 },
@@ -35,6 +35,16 @@ export const SCREENPLAY_LAYOUT = {
     dialogue: { before: 0, after: 0 },
     transition: { before: 1, after: 1 },
     blank: { before: 0, after: 0 },
+  },
+  pagination: {
+    minLinesAfterHeading: 2,
+    minDialogueLinesAfterCharacter: 2,
+    minDialogueLinesAtPageTop: 2,
+  },
+  pageNumber: {
+    topPx: 0.5 * INCH,
+    rightPx: 1 * INCH,
+    fontSizePx: 16,
   },
 }
 
