@@ -342,6 +342,13 @@ function paginateRows(rows, options = {}) {
     if (page.lines.length >= ROWS_PER_PAGE) pushPage()
     page.lines.push(line)
   }
+  const previousContentRow = (index) => {
+    for (let idx = index - 1; idx >= 0; idx -= 1) {
+      const row = rows[idx]
+      if (row.type !== 'blank' && row.type !== 'spacer') return row
+    }
+    return null
+  }
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i]
 
@@ -376,6 +383,36 @@ function paginateRows(rows, options = {}) {
           const dialogueRowsOnNextPage = countRowsOfTypes(rowsOnNextPage, ['dialogue', 'parenthetical'])
           if (dialogueRowsOnNextPage > 0 && dialogueRowsOnNextPage < minDialogueAtPageTop) startNewPageIfNeeded()
         }
+      }
+    }
+
+    if (row.type === 'transition' && row.isFirstChunk) {
+      const transitionLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
+      const gapLen = getBlockLength(rows, i + transitionLen, r => r.type === 'blank' || r.type === 'spacer')
+      const nextBlockLen = getBlockLength(rows, i + transitionLen + gapLen, r => r.type !== 'blank' && r.type !== 'spacer')
+      const minAfterTransition = SCREENPLAY_LAYOUT.pagination?.minLinesAfterTransition ?? 2
+      const keepRows = transitionLen + gapLen + Math.min(nextBlockLen, minAfterTransition)
+      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+    }
+
+    if (row.type === 'section' && row.isFirstChunk) {
+      const sectionLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
+      const gapLen = getBlockLength(rows, i + sectionLen, r => r.type === 'blank' || r.type === 'spacer')
+      const nextBlockLen = getBlockLength(rows, i + sectionLen + gapLen, r => r.type !== 'blank' && r.type !== 'spacer')
+      const minAfterSection = SCREENPLAY_LAYOUT.pagination?.minLinesAfterSection ?? 1
+      const keepRows = sectionLen + gapLen + Math.min(nextBlockLen, minAfterSection)
+      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+    }
+
+    if (row.type === 'action' && row.isFirstChunk) {
+      const prevContent = previousContentRow(i)
+      const minActionLinesAfterDialogue = SCREENPLAY_LAYOUT.pagination?.minActionLinesAfterDialogue ?? 2
+      if (
+        page.lines.length > 0
+        && (prevContent?.type === 'dialogue' || prevContent?.type === 'parenthetical')
+        && (ROWS_PER_PAGE - page.lines.length) < minActionLinesAfterDialogue
+      ) {
+        startNewPageIfNeeded()
       }
     }
 
@@ -690,6 +727,7 @@ export default function ScriptTab() {
     if (lineType === 'heading') return { ...style, textTransform: 'uppercase', fontWeight: 700 }
     if (lineType === 'spacer') return { ...style, color: 'transparent' }
     if (lineType === 'action') return { ...style }
+    if (lineType === 'section') return { ...style, textTransform: 'uppercase', textAlign: 'center', fontWeight: 700, color: '#374151' }
     if (lineType === 'character') return { ...style, textAlign: 'center', textTransform: 'uppercase' }
     if (lineType === 'parenthetical') return { ...style, color: '#374151' }
     if (lineType === 'dialogue') return { ...style }
