@@ -1,8 +1,38 @@
 /**
  * scriptParser.js
- * Parses script files (.fountain, .fdx, .txt, .pdf) into a normalized
+ * Parses script files (.fountain, .fdx, .txt, .pdf, .docx, .md) into a normalized
  * array of ParsedScene objects for import into ShotScribe.
  */
+
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+
+export const SUPPORTED_SCRIPT_EXTENSIONS = ['fountain', 'fdx', 'txt', 'pdf', 'docx', 'md']
+
+export const SCRIPT_FORMAT_LABELS = {
+  fountain: 'Fountain (.fountain)',
+  fdx: 'Final Draft (.fdx)',
+  txt: 'Plain Text (.txt)',
+  pdf: 'PDF (.pdf)',
+  docx: 'Word Document (.docx)',
+  md: 'Markdown (.md)',
+}
+
+const SUPPORTED_EXTENSIONS_LIST = SUPPORTED_SCRIPT_EXTENSIONS.map(ext => `.${ext}`).join(', ')
+
+export function getScriptFileExtension(filename = '') {
+  const parts = String(filename).toLowerCase().trim().split('.')
+  return parts.length > 1 ? parts.pop() : ''
+}
+
+export function isSupportedScriptExtension(ext = '') {
+  return SUPPORTED_SCRIPT_EXTENSIONS.includes(String(ext).toLowerCase())
+}
+
+function normalizeImportedText(text, { stripBom = false } = {}) {
+  const raw = String(text || '')
+  const withoutBom = stripBom ? raw.replace(/^\uFEFF/, '') : raw
+  return withoutBom.replace(/\r\n?/g, '\n')
+}
 
 // ── Scene object factory ──────────────────────────────────────────────────────
 
@@ -503,9 +533,9 @@ async function parsePdf(arrayBuffer, filename) {
 
   let pdfDoc
   try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
     const loadingTask = pdfjsLib.getDocument({
       data: arrayBuffer,
-      disableWorker: true,
       useWorkerFetch: false,
       isEvalSupported: false,
     })
@@ -548,6 +578,22 @@ async function parsePdf(arrayBuffer, filename) {
   return parseTxt(lines.join('\n'), filename)
 }
 
+async function parseDocx(arrayBuffer, filename) {
+  let mammoth
+  try {
+    mammoth = await import('mammoth')
+  } catch {
+    throw new Error('DOCX parser dependency failed to load.')
+  }
+
+  try {
+    const { value } = await mammoth.extractRawText({ arrayBuffer })
+    return parseTxt(normalizeImportedText(value), filename)
+  } catch (err) {
+    throw new Error(`DOCX parse error: ${err?.message || 'Unable to read DOCX'}`)
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
@@ -575,27 +621,40 @@ function assignSceneNumbers(scenes) {
  */
 export async function parseScriptFile(file) {
   const name = file.name || ''
-  const ext = name.split('.').pop().toLowerCase()
+  const ext = getScriptFileExtension(name)
   const warnings = []
   let scenes = []
   let format = 'unknown'
 
   try {
+    if (!isSupportedScriptExtension(ext)) {
+      throw new Error(`Unsupported file type ".${ext || 'unknown'}". Supported types: ${SUPPORTED_EXTENSIONS_LIST}.`)
+    }
+
     if (ext === 'fountain') {
-      format = 'Fountain (.fountain)'
+      format = SCRIPT_FORMAT_LABELS.fountain
       const text = typeof file.text === 'string' ? file.text : await file.text()
-      scenes = await parseFountain(text, name)
+      const normalizedText = normalizeImportedText(text, { stripBom: true })
+      scenes = await parseFountain(normalizedText, name)
     } else if (ext === 'fdx') {
-      format = 'Final Draft (.fdx)'
+      format = SCRIPT_FORMAT_LABELS.fdx
       const text = typeof file.text === 'string' ? file.text : await file.text()
-      scenes = parseFdx(text, name)
+      const normalizedText = normalizeImportedText(text, { stripBom: true })
+      scenes = parseFdx(normalizedText, name)
     } else if (ext === 'txt') {
-      format = 'Plain Text (.txt)'
+      format = SCRIPT_FORMAT_LABELS.txt
       const text = typeof file.text === 'string' ? file.text : await file.text()
-      scenes = parseTxt(text, name)
+      const normalizedText = normalizeImportedText(text, { stripBom: true })
+      scenes = parseTxt(normalizedText, name)
       warnings.push('Plain text parsing uses heuristics. Review all imported scenes carefully.')
+    } else if (ext === 'md') {
+      format = SCRIPT_FORMAT_LABELS.md
+      const text = typeof file.text === 'string' ? file.text : await file.text()
+      const normalizedText = normalizeImportedText(text, { stripBom: true })
+      scenes = parseTxt(normalizedText, name)
+      warnings.push('Markdown import uses plain-text heuristics. Review all imported scenes carefully.')
     } else if (ext === 'pdf') {
-      format = 'PDF (.pdf)'
+      format = SCRIPT_FORMAT_LABELS.pdf
       warnings.push(
         'PDF import accuracy depends on how the PDF was generated. ' +
         'Scanned PDFs are not supported. Review all imported scenes carefully.'
@@ -604,12 +663,15 @@ export async function parseScriptFile(file) {
         ? await file.arrayBuffer()
         : file.arrayBuffer
       scenes = await parsePdf(buffer, name)
+    } else if (ext === 'docx') {
+      format = SCRIPT_FORMAT_LABELS.docx
+      warnings.push('DOCX import converts content to plain text before parsing. Review all imported scenes carefully.')
+      const buffer = typeof file.arrayBuffer === 'function'
+        ? await file.arrayBuffer()
+        : file.arrayBuffer
+      scenes = await parseDocx(buffer, name)
     } else {
-      // Unknown extension — try heuristic text parse
-      format = 'Unknown (heuristic)'
-      warnings.push('Unknown file type — attempting heuristic text parsing. Review all scenes carefully.')
-      const text = typeof file.text === 'function' ? await file.text() : (file.text || '')
-      scenes = parseTxt(text, name)
+      throw new Error(`Unsupported file type ".${ext}". Supported types: ${SUPPORTED_EXTENSIONS_LIST}.`)
     }
   } catch (err) {
     throw new Error(`Failed to parse "${name}": ${err.message}`)

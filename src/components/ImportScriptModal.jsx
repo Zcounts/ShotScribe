@@ -9,7 +9,14 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import useStore from '../store'
-import { parseScriptFile, applyHeaderTemplate } from '../utils/scriptParser'
+import {
+  parseScriptFile,
+  applyHeaderTemplate,
+  SCRIPT_FORMAT_LABELS,
+  SUPPORTED_SCRIPT_EXTENSIONS,
+  getScriptFileExtension,
+  isSupportedScriptExtension,
+} from '../utils/scriptParser'
 
 // ── Small UI helpers ──────────────────────────────────────────────────────────
 
@@ -109,17 +116,18 @@ function Step1({ onFileReady }) {
   const [detectedFormat, setDetectedFormat] = useState(null)
   const [error, setError] = useState(null)
   const fileInputRef = useRef(null)
+  const supportedExtensionsText = SUPPORTED_SCRIPT_EXTENSIONS.map(ext => `.${ext}`).join(' · ')
+  const fileInputAccept = SUPPORTED_SCRIPT_EXTENSIONS.map(ext => `.${ext}`).join(',')
 
   const handleFile = useCallback(async (file) => {
     if (!file) return
-    const ext = file.name.split('.').pop().toLowerCase()
-    const formatLabels = {
-      fountain: 'Fountain (.fountain)',
-      fdx: 'Final Draft (.fdx)',
-      txt: 'Plain Text (.txt)',
-      pdf: 'PDF (.pdf)',
+    const ext = getScriptFileExtension(file.name)
+    if (!isSupportedScriptExtension(ext)) {
+      setDetectedFormat(null)
+      setError(`Unsupported file type ".${ext || 'unknown'}". Supported types: ${SUPPORTED_SCRIPT_EXTENSIONS.map(value => `.${value}`).join(', ')}`)
+      return
     }
-    setDetectedFormat(formatLabels[ext] || `Unknown (.${ext})`)
+    setDetectedFormat(SCRIPT_FORMAT_LABELS[ext] || `Unknown (.${ext})`)
     setError(null)
     onFileReady(file)
   }, [onFileReady])
@@ -159,7 +167,7 @@ function Step1({ onFileReady }) {
           Drop your script file here
         </div>
         <div style={{ fontSize: 11, color: '#cbd5e1' }}>
-          .fountain &nbsp;·&nbsp; .fdx &nbsp;·&nbsp; .txt &nbsp;·&nbsp; .pdf
+          {supportedExtensionsText}
         </div>
       </div>
 
@@ -192,7 +200,7 @@ function Step1({ onFileReady }) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".fountain,.fdx,.txt,.pdf"
+        accept={fileInputAccept}
         style={{ display: 'none' }}
         onChange={handleInputChange}
       />
