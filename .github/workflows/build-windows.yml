@@ -46,14 +46,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.pkg.outputs.version }}-${{ github.run_number }}
-          name: Storyboard v${{ steps.pkg.outputs.version }}
+          name: ShotScribe v${{ steps.pkg.outputs.version }}
           body: |
-            ## Storyboard — Film Shotlist Desktop App
+            ## ShotScribe — Film Shotlist Desktop App
 
             ### Installation
             1. Download **${{ steps.installer.outputs.name }}** below
             2. Run the installer — it will install automatically with one click
-            3. Launch **Storyboard** from your Desktop or Start Menu
+            3. Launch **ShotScribe** from your Desktop or Start Menu
 
             ### What's included
             - One-click Windows installer (no technical knowledge needed)
@@ -104,7 +104,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.pkg.outputs.version }}-${{ github.run_number }}
-          name: Storyboard v${{ steps.pkg.outputs.version }}
+          name: ShotScribe v${{ steps.pkg.outputs.version }}
           files: ${{ steps.installer.outputs.path }}
           draft: false
           prerelease: false
