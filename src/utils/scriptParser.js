@@ -128,21 +128,37 @@ export function parseSlugline(rawText) {
     text = text.replace(/^(EXT\.?|EXTERIOR)\s+/i, '')
   }
 
-  // Parse time of day from the last dash-separated segment
+  // Parse time of day from dash-separated segments, preferring the last
+  // matching token. This supports headings such as:
+  //   INT. GAS STATION - NIGHT - (MARJORIE'S STORY)
+  // where NIGHT appears before a trailing parenthetical annotation.
   let dayNight = null
   let location = text
 
-  // Work backwards through ' - ' separators to find a time of day token
-  const dashParts = text.split(' - ')
+  const normalizeSlugSegment = (segment) => (
+    String(segment || '')
+      .trim()
+      .toUpperCase()
+      .replace(/^[([{]+/, '')
+      .replace(/[)\]}.,:;!?]+$/g, '')
+      .trim()
+  )
+  const dashParts = text.split(' - ').map(part => part.trim()).filter(Boolean)
   if (dashParts.length >= 2) {
-    const lastPart = dashParts[dashParts.length - 1].trim().toUpperCase()
-    // Try multi-word keywords first (longer match wins)
-    for (const kw of TIME_OF_DAY_KEYWORDS) {
-      if (lastPart === kw || lastPart.startsWith(kw + ' ') || lastPart.startsWith(kw + '/')) {
-        dayNight = TOD_MAP[kw] || null
-        location = dashParts.slice(0, -1).join(' - ').trim()
-        break
+    for (let idx = dashParts.length - 1; idx >= 0; idx -= 1) {
+      const normalizedPart = normalizeSlugSegment(dashParts[idx])
+      let matchedKeyword = null
+      for (const kw of TIME_OF_DAY_KEYWORDS) {
+        if (normalizedPart === kw || normalizedPart.startsWith(`${kw} `) || normalizedPart.startsWith(`${kw}/`)) {
+          matchedKeyword = kw
+          break
+        }
       }
+      if (!matchedKeyword) continue
+      dayNight = TOD_MAP[matchedKeyword] || null
+      const nextParts = dashParts.filter((_, partIdx) => partIdx !== idx)
+      location = nextParts.join(' - ').trim()
+      break
     }
   }
 
