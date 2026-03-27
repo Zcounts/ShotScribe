@@ -34,11 +34,6 @@ interface MobileShotDetail {
   imageUrl?: string
 }
 
-interface LabeledValue {
-  label: string
-  value: string
-}
-
 const TAB_ITEMS: Array<{ key: MobileTabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'schedule', label: 'Schedule' },
@@ -414,49 +409,55 @@ function renderSchedule(
               className={`mobile-shot-card sched-shot-item status-outline-${effectiveStatus}`}
               onClick={() => onOpenDetails(item.shotId as string)}
             >
-              <div className="sched-r1">
-                <div className="sched-title-stack">
-                  <h4>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</h4>
+              <div className="sched-layout">
+                <div className="sched-time-panel">
+                  <p className="sched-order">#{item.sortOrder + 1}</p>
+                  {setupTime ? (
+                    <p className="sched-time-line">
+                      <span className="sched-time-lbl">Setup</span>
+                      <strong className="sched-time-val">{setupTime}</strong>
+                    </p>
+                  ) : null}
+                  {shotTime ? (
+                    <p className="sched-time-line">
+                      <span className="sched-time-lbl">Shot</span>
+                      <strong className="sched-time-val">{shotTime}</strong>
+                    </p>
+                  ) : null}
+                  {estimatedDuration ? (
+                    <p className="sched-time-line">
+                      <span className="sched-time-lbl">Est.</span>
+                      <strong className="sched-time-val">{estimatedDuration}</strong>
+                    </p>
+                  ) : null}
+                  {actualDuration ? (
+                    <p className="sched-time-line">
+                      <span className="sched-time-lbl">Actual</span>
+                      <strong className="sched-time-val">{actualDuration}</strong>
+                    </p>
+                  ) : null}
+                  {!hasTimeData ? (
+                    <p className="sched-unscheduled-block">
+                      <span className="sched-time-lbl">Time</span>
+                      <strong className="sched-time-val">Unscheduled</strong>
+                    </p>
+                  ) : null}
                 </div>
-                <div className="sched-r1-right">
-                  <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+
+                <div className="sched-main-panel">
+                  <div className="sched-r1">
+                    <div className="sched-title-stack">
+                      <h4>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</h4>
+                    </div>
+                    <div className="sched-r1-right">
+                      <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+                    </div>
+                  </div>
+                  <div className="sched-r2">
+                    <span className="sched-scene">{shot?.sceneTag ?? 'Scene not assigned'}</span>
+                    {shot?.focalLength ? <span className="sched-lens">Lens {shot.focalLength}</span> : null}
+                  </div>
                 </div>
-              </div>
-              <div className="sched-r2">
-                <span className="sched-scene">{shot?.sceneTag ?? 'Scene not assigned'}</span>
-                {shot?.focalLength ? <span className="sched-lens">Lens {shot.focalLength}</span> : null}
-              </div>
-              <div className="sched-time-grid">
-                {setupTime ? (
-                  <span className="sched-time-unit">
-                    <span className="sched-time-lbl">Setup</span>
-                    <span className="sched-time-val">{setupTime}</span>
-                  </span>
-                ) : null}
-                {shotTime ? (
-                  <span className="sched-time-unit">
-                    <span className="sched-time-lbl">Shot</span>
-                    <span className="sched-time-val">{shotTime}</span>
-                  </span>
-                ) : null}
-                {estimatedDuration ? (
-                  <span className="sched-time-unit">
-                    <span className="sched-time-lbl">Est.</span>
-                    <span className="sched-time-val">{estimatedDuration}</span>
-                  </span>
-                ) : null}
-                {actualDuration ? (
-                  <span className="sched-time-unit">
-                    <span className="sched-time-lbl">Actual</span>
-                    <span className="sched-time-val">{actualDuration}</span>
-                  </span>
-                ) : null}
-                {!hasTimeData ? (
-                  <span className="sched-empty-time">
-                    <span className="sched-time-lbl">Timing</span>
-                    <span className="sched-time-val">No setup/shot times assigned yet</span>
-                  </span>
-                ) : null}
               </div>
               <div onClick={(event) => event.stopPropagation()}>
                 <ShotActions
@@ -527,58 +528,67 @@ function renderShotlist(
             <span>{sceneShots.length} shot(s)</span>
           </header>
 
-          <div className="shotlist-row-stack">
+          <div className="shotlist-table-scroll" role="region" aria-label="Shotlist table">
+            <div className="shotlist-table shotlist-table-head" role="row">
+              <span>Shot #</span>
+              <span>Shot Size / Coverage</span>
+              <span>Angle / Type</span>
+              <span>Move</span>
+              <span>Equipment</span>
+              <span>Lens</span>
+              <span>Setup Time</span>
+              <span>Shot Time</span>
+              <span>Notes</span>
+              <span>Status</span>
+              <span>Actions</span>
+            </div>
+
             {sceneShots.map((item) => {
               const shotId = item.shotId as string
               const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
               const actionState = getShotActionState(effectiveStatus)
               const shot = shotLookup.get(shotId)
-              const shotCode = shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'
-              const metaValues: LabeledValue[] = [
-                shot?.shotSize ? { label: 'Coverage', value: shot.shotSize } : null,
-                shot?.shotType ? { label: 'Angle/Type', value: shot.shotType } : null,
-                shot?.shotMove ? { label: 'Move', value: shot.shotMove } : null,
-                shot?.shotEquipment ? { label: 'Equip', value: shot.shotEquipment } : null,
-              ].filter((v): v is LabeledValue => Boolean(v))
+              const setupTime = formatTimeRange(item.plannedStartTime, item.plannedEndTime)
+              const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
+              const shotCode = shot?.shotNumberLabel ?? shot?.displayName ?? 'Shot'
+              const notesPreview = shot?.notes ? shot.notes.replace(/\s+/g, ' ') : ''
 
               return (
-                <article
+                <div
                   key={item.scheduleItemId}
-                  className={`sl-shot-row shot-toggle-${actionState.tone}`}
+                  className={`shotlist-table sl-shot-row shot-toggle-${actionState.tone}`}
+                  role="row"
                   onClick={() => onOpenDetails(shotId)}
                 >
-                  <div className="sl-r1">
-                    <h4 className="sl-shot-label">{shotCode}</h4>
-                    <div className="sl-r1-right">
-                      {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
-                      <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+                  <span className="sl-cell-shot">{shotCode}</span>
+                  <span>{shot?.shotSize ?? ''}</span>
+                  <span>{shot?.shotType ?? ''}</span>
+                  <span>{shot?.shotMove ?? ''}</span>
+                  <span>{shot?.shotEquipment ?? ''}</span>
+                  <span>{shot?.focalLength ?? ''}</span>
+                  <span>{setupTime ?? ''}</span>
+                  <span>{shotTime ?? ''}</span>
+                  <span className="sl-cell-notes" title={shot?.notes ?? ''}>
+                    {notesPreview}
+                  </span>
+                  <span className="sl-status-cell">
+                    <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+                  </span>
+                  <span className="sl-actions-cell" onClick={(event) => event.stopPropagation()}>
+                    <div className="sl-actions-inline">
+                      <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(shotId)}>
+                        Details
+                      </button>
+                      <button
+                        type="button"
+                        className={`shot-action-button shot-action-button-${actionState.tone}`}
+                        onClick={() => onCycleShotStatus(shotId)}
+                      >
+                        {actionState.label}
+                      </button>
                     </div>
-                  </div>
-
-                  {metaValues.length > 0 ? (
-                    <div className="sl-meta-line">
-                      {metaValues.map((meta) => (
-                        <span key={`${meta.label}-${meta.value}`} className="sl-meta-item">
-                          <span className="sl-meta-key">{meta.label}</span>
-                          <span className="sl-meta-val">{meta.value}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="sl-meta-empty">No production metadata</p>
-                  )}
-
-                  {shot?.notes ? <p className="sl-notes">{shot.notes}</p> : null}
-
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <ShotActions
-                      actionLabel={actionState.label}
-                      actionTone={actionState.tone}
-                      onOpenDetails={() => onOpenDetails(shotId)}
-                      onCycleStatus={() => onCycleShotStatus(shotId)}
-                    />
-                  </div>
-                </article>
+                  </span>
+                </div>
               )
             })}
           </div>
