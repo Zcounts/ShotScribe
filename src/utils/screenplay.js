@@ -1,4 +1,5 @@
 const HEADING_RE = /^(INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?)/i
+const TRANSITION_RE = /^(FADE IN|FADE OUT|CUT TO|DISSOLVE TO|SMASH CUT TO|MATCH CUT(?: FORWARD)? TO|WIPE TO|BACK TO|JUMP CUT TO|INTERCUT)\b/i
 
 const DPI = 96
 const INCH = DPI
@@ -23,6 +24,7 @@ export const SCREENPLAY_LAYOUT = {
   elementColumnsIn: {
     heading: { left: 0, width: 6.0 },
     action: { left: 0, width: 6.0 },
+    section: { left: 0, width: 6.0 },
     character: { left: 2.6, width: 2.0 },
     parenthetical: { left: 1.8, width: 2.0 },
     dialogue: { left: 1.0, width: 3.5 },
@@ -31,20 +33,24 @@ export const SCREENPLAY_LAYOUT = {
   spacing: {
     heading: { before: 0, after: 1 },
     action: { before: 0, after: 0 },
+    section: { before: 1, after: 1 },
     character: { before: 1, after: 0 },
     parenthetical: { before: 0, after: 0 },
     dialogue: { before: 0, after: 0 },
     transition: { before: 1, after: 1 },
     blank: { before: 0, after: 0 },
     pairAfter: {
-      dialogue: { action: 1 },
-      parenthetical: { action: 1 },
+      dialogue: { action: 2 },
+      parenthetical: { action: 2 },
     },
   },
   pagination: {
     minLinesAfterHeading: 3,
     minDialogueLinesAfterCharacter: 2,
     minDialogueLinesAtPageTop: 2,
+    minLinesAfterTransition: 2,
+    minLinesAfterSection: 1,
+    minActionLinesAfterDialogue: 2,
   },
   pageNumber: {
     topPx: 0.5 * INCH,
@@ -98,7 +104,72 @@ export function parseScreenplayText(text) {
   const elements = []
   let expectingDialogue = false
 
-  for (const rawLine of lines) {
+  const previousContentElement = () => {
+    for (let idx = elements.length - 1; idx >= 0; idx -= 1) {
+      if (elements[idx]?.type !== 'blank') return elements[idx]
+    }
+    return null
+  }
+
+  const isUppercaseHeavy = (value) => {
+    const letters = value.match(/[A-Za-z]/g) || []
+    if (!letters.length) return false
+    const uppercaseLetters = value.match(/[A-Z]/g) || []
+    return uppercaseLetters.length / letters.length >= 0.85
+  }
+
+  const isParentheticalLine = (value) => /^\([^()]{1,60}\)$/.test(value.trim())
+
+  const isTransitionLine = (value) => {
+    const trimmed = value.trim()
+    if (!trimmed) return false
+    if (TRANSITION_RE.test(trimmed)) return true
+    return isUppercaseHeavy(trimmed) && (trimmed.endsWith(' TO') || trimmed.endsWith(' TO:'))
+  }
+
+  const isSectionMarkerLine = (value) => {
+    const trimmed = value.trim()
+    if (!trimmed) return false
+    if (/^[-=_*#~]{3,}$/.test(trimmed)) return true
+    if (!isUppercaseHeavy(trimmed) || trimmed.length > 50) return false
+    return /^(ACT|SEQUENCE|PART|EPISODE|PROLOGUE|EPILOGUE|MONTAGE|END MONTAGE)\b/.test(trimmed)
+  }
+
+  const nextNonEmptyLine = (fromIndex) => {
+    for (let idx = fromIndex + 1; idx < lines.length; idx += 1) {
+      const next = lines[idx].trim()
+      if (next) return next
+    }
+    return ''
+  }
+
+  const isLikelyCharacterCue = (value, lineIndex) => {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed.length > 42) return false
+    if (HEADING_RE.test(trimmed) || isTransitionLine(trimmed) || isSectionMarkerLine(trimmed)) return false
+
+    const cueBase = trimmed
+      .replace(/:\s*$/, '')
+      .replace(/\s*\([^)]*\)\s*$/, '')
+      .trim()
+
+    if (!cueBase || cueBase.length < 2) return false
+    if (!/^[A-Z][A-Z0-9\s'.-]*$/.test(cueBase)) return false
+    if (!isUppercaseHeavy(cueBase)) return false
+
+    const next = nextNonEmptyLine(lineIndex)
+    if (!next || HEADING_RE.test(next) || isTransitionLine(next)) return false
+
+    if (trimmed.endsWith(':')) return true
+    if (isParentheticalLine(next)) return true
+    if (/[a-z]/.test(next) || /[.?!…]$/.test(next)) return true
+
+    const prev = previousContentElement()
+    return prev?.type === 'dialogue' || prev?.type === 'parenthetical' || prev?.type === 'character'
+  }
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex]
     const line = rawLine.replace(/\t/g, '  ')
     const trimmed = line.trim()
 
@@ -114,20 +185,26 @@ export function parseScreenplayText(text) {
       continue
     }
 
-    if (/^[A-Z0-9 '\-.()]+$/.test(trimmed) && trimmed.length <= 42 && !trimmed.includes(':')) {
-      expectingDialogue = true
-      elements.push({ type: 'character', text: trimmed.toUpperCase() })
-      continue
-    }
-
-    if (/^\(.+\)$/.test(trimmed) && expectingDialogue) {
-      elements.push({ type: 'parenthetical', text: trimmed })
-      continue
-    }
-
-    if (trimmed.endsWith('TO:') || (/^[A-Z ]+:$/.test(trimmed) && trimmed.length <= 30)) {
+    if (isTransitionLine(trimmed)) {
       expectingDialogue = false
       elements.push({ type: 'transition', text: trimmed.toUpperCase() })
+      continue
+    }
+
+    if (isSectionMarkerLine(trimmed)) {
+      expectingDialogue = false
+      elements.push({ type: 'section', text: trimmed.toUpperCase() })
+      continue
+    }
+
+    if (isLikelyCharacterCue(trimmed, lineIndex)) {
+      expectingDialogue = true
+      elements.push({ type: 'character', text: trimmed.replace(/:\s*$/, '').toUpperCase() })
+      continue
+    }
+
+    if (isParentheticalLine(trimmed) && expectingDialogue) {
+      elements.push({ type: 'parenthetical', text: trimmed })
       continue
     }
 

@@ -310,6 +310,7 @@ function parseFdx(xmlText, filename) {
 // ── Heuristic text parser ─────────────────────────────────────────────────────
 
 const SCENE_HEADING_REGEX = /^(INT\.|EXT\.|INT\/EXT\.|I\/E\.|INTERIOR|EXTERIOR)\s+.+/im
+const TRANSITION_REGEX = /^(FADE IN|FADE OUT|CUT TO|DISSOLVE TO|SMASH CUT TO|MATCH CUT(?: FORWARD)? TO|WIPE TO|BACK TO|JUMP CUT TO|INTERCUT)\b/i
 
 /**
  * Parse plain text using heuristic scene-heading detection.
@@ -324,12 +325,25 @@ function parseTxt(text, filename) {
   const isTransitionLine = (line) => {
     const trimmed = line.trim()
     return (
-      /^(FADE IN|FADE OUT|CUT TO|DISSOLVE TO|SMASH CUT TO|MATCH CUT TO|WIPE TO|BACK TO)\b/i.test(trimmed) ||
-      (trimmed.endsWith('TO:') && trimmed === trimmed.toUpperCase())
+      TRANSITION_REGEX.test(trimmed) ||
+      ((trimmed.endsWith('TO:') || trimmed.endsWith(' TO')) && trimmed === trimmed.toUpperCase())
     )
   }
 
   const isParentheticalLine = (line) => /^\([^()]{1,60}\)$/.test(line.trim())
+  const isUppercaseHeavy = (value) => {
+    const letters = value.match(/[A-Za-z]/g) || []
+    if (!letters.length) return false
+    const uppercaseLetters = value.match(/[A-Z]/g) || []
+    return uppercaseLetters.length / letters.length >= 0.85
+  }
+  const isSectionMarkerLine = (line) => {
+    const trimmed = line.trim()
+    if (!trimmed) return false
+    if (/^[-=_*#~]{3,}$/.test(trimmed)) return true
+    if (trimmed.length > 50 || !isUppercaseHeavy(trimmed)) return false
+    return /^(ACT|SEQUENCE|PART|EPISODE|PROLOGUE|EPILOGUE|MONTAGE|END MONTAGE)\b/.test(trimmed)
+  }
 
   const nextNonEmptyLine = (index) => {
     for (let j = index + 1; j < lines.length; j++) {
@@ -339,24 +353,43 @@ function parseTxt(text, filename) {
     return ''
   }
 
-  // A character line is all-caps (with optional parenthetical), ≤ 42 chars, and followed by likely dialogue
+  const prevNonEmptyType = () => {
+    if (!current) return null
+    for (let idx = current.screenplayElements.length - 1; idx >= 0; idx -= 1) {
+      const type = current.screenplayElements[idx]?.type
+      if (type && type !== 'blank') return type
+    }
+    return null
+  }
+
+  // A character line is mostly uppercase (with optional trailing colon), ≤ 42 chars,
+  // not a heading/transition/section marker, and followed by likely dialogue.
   const isCharacterLine = (line, lineIndex) => {
     const trimmed = line.trim()
     if (!trimmed) return false
     if (trimmed.length > 42) return false
-    // Strip parenthetical
-    const stripped = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim()
-    if (!(stripped === stripped.toUpperCase() && /^[A-Z][A-Z0-9\s'.-]+$/.test(stripped) && stripped.length >= 2)) return false
-    if (SCENE_HEADING_REGEX.test(trimmed) || isTransitionLine(trimmed)) return false
+    const stripped = trimmed
+      .replace(/:\s*$/, '')
+      .replace(/\s*\([^)]*\)\s*$/, '')
+      .trim()
+    if (!stripped || stripped.length < 2) return false
+    if (!/^[A-Z][A-Z0-9\s'.-]+$/.test(stripped) || !isUppercaseHeavy(stripped)) return false
+    if (SCENE_HEADING_REGEX.test(trimmed) || isTransitionLine(trimmed) || isSectionMarkerLine(trimmed)) return false
     const next = nextNonEmptyLine(lineIndex)
-    return !!next && !SCENE_HEADING_REGEX.test(next) && !isCharacterLineShallow(next) && !isTransitionLine(next)
+    if (!next || SCENE_HEADING_REGEX.test(next) || isTransitionLine(next)) return false
+    if (trimmed.endsWith(':') || isParentheticalLine(next) || /[a-z]/.test(next) || /[.?!…]$/.test(next)) return true
+    const prevType = prevNonEmptyType()
+    return prevType === 'dialogue' || prevType === 'parenthetical' || prevType === 'character'
   }
 
   const isCharacterLineShallow = (line) => {
     const trimmed = line.trim()
     if (!trimmed || trimmed.length > 42) return false
-    const stripped = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim()
-    return stripped === stripped.toUpperCase() && /^[A-Z][A-Z0-9\s'.-]+$/.test(stripped)
+    const stripped = trimmed
+      .replace(/:\s*$/, '')
+      .replace(/\s*\([^)]*\)\s*$/, '')
+      .trim()
+    return isUppercaseHeavy(stripped) && /^[A-Z][A-Z0-9\s'.-]+$/.test(stripped)
   }
 
   let dialogueMode = false
@@ -403,8 +436,17 @@ function parseTxt(text, filename) {
       continue
     }
 
+    if (isSectionMarkerLine(trimmed)) {
+      appendScreenplayElement(current, 'section', trimmed.toUpperCase())
+      dialogueMode = false
+      continue
+    }
+
     if (isCharacterLineShallow(trimmed) && isCharacterLine(trimmed, i)) {
-      const charName = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim()
+      const charName = trimmed
+        .replace(/:\s*$/, '')
+        .replace(/\s*\([^)]*\)\s*$/, '')
+        .trim()
       if (!current.characters.includes(charName)) {
         current.characters.push(charName)
       }
@@ -424,9 +466,10 @@ function parseTxt(text, filename) {
       continue
     }
 
-    if (/^[A-Z][A-Z0-9 '.-]+$/.test(trimmed) && trimmed.length <= 60 && i + 1 < lines.length && isParentheticalLine(lines[i + 1])) {
-      appendScreenplayElement(current, 'character', trimmed)
-      if (!current.characters.includes(trimmed)) current.characters.push(trimmed)
+    if (/^[A-Z][A-Z0-9 '.:-]+$/.test(trimmed) && trimmed.length <= 60 && i + 1 < lines.length && isParentheticalLine(lines[i + 1])) {
+      const charName = trimmed.replace(/:\s*$/, '')
+      appendScreenplayElement(current, 'character', charName)
+      if (!current.characters.includes(charName)) current.characters.push(charName)
       dialogueMode = true
     } else {
       current.actionText += (current.actionText ? '\n' : '') + trimmed
