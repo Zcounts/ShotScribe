@@ -407,6 +407,7 @@ function renderSchedule(
           const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
           const estimatedDuration = formatDuration(item.plannedStartTime, item.plannedEndTime)
           const actualDuration = formatDuration(item.actualStartTime, item.actualEndTime)
+          const hasTimeData = Boolean(setupTime || shotTime || estimatedDuration || actualDuration)
           return (
             <article
               key={item.scheduleItemId}
@@ -416,11 +417,14 @@ function renderSchedule(
               <div className="sched-r1">
                 <div className="sched-title-stack">
                   <h4>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</h4>
-                  {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
                 </div>
                 <div className="sched-r1-right">
                   <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
                 </div>
+              </div>
+              <div className="sched-r2">
+                <span className="sched-scene">{shot?.sceneTag ?? 'Scene not assigned'}</span>
+                {shot?.focalLength ? <span className="sched-lens">Lens {shot.focalLength}</span> : null}
               </div>
               <div className="sched-time-grid">
                 {setupTime ? (
@@ -447,13 +451,12 @@ function renderSchedule(
                     <span className="sched-time-val">{actualDuration}</span>
                   </span>
                 ) : null}
-                {!setupTime && !shotTime && !estimatedDuration && !actualDuration ? (
-                  <span className="sched-empty-time">No schedule time assigned</span>
+                {!hasTimeData ? (
+                  <span className="sched-empty-time">
+                    <span className="sched-time-lbl">Timing</span>
+                    <span className="sched-time-val">No setup/shot times assigned yet</span>
+                  </span>
                 ) : null}
-              </div>
-              <div className="sched-r3">
-                {shot?.focalLength ? <span className="sched-lens-tag">Lens {shot.focalLength}</span> : null}
-                {!shot?.focalLength ? <span className="sched-lens-tag">Lens —</span> : null}
               </div>
               <div onClick={(event) => event.stopPropagation()}>
                 <ShotActions
@@ -561,7 +564,9 @@ function renderShotlist(
                         </span>
                       ))}
                     </div>
-                  ) : null}
+                  ) : (
+                    <p className="sl-meta-empty">No production metadata</p>
+                  )}
 
                   {shot?.notes ? <p className="sl-notes">{shot.notes}</p> : null}
 
@@ -626,7 +631,7 @@ function renderStoryboard(
             <div className="storyboard-info-col">
               <strong className="sb-shot-name">{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
               <div className="sb-subline">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
+                <span>{shot?.sceneTag ?? 'Scene not assigned'}</span>
                 {shot?.focalLength ? <span className="sb-lens">{shot.focalLength}</span> : null}
               </div>
               <ShotActions
