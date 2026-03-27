@@ -39,6 +39,27 @@ function chunkArray(arr, size) {
   return pages
 }
 
+function hexToRgb(hex) {
+  if (typeof hex !== 'string') return null
+  const clean = hex.trim().replace('#', '')
+  if (!/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(clean)) return null
+  const full = clean.length === 3
+    ? clean.split('').map(ch => ch + ch).join('')
+    : clean
+  const int = parseInt(full, 16)
+  return {
+    r: (int >> 16) & 255,
+    g: (int >> 8) & 255,
+    b: int & 255,
+  }
+}
+
+function tintFromColor(color, alpha = 0.14) {
+  const rgb = hexToRgb(color)
+  if (!rgb) return `rgba(74,85,104,${alpha * 0.65})`
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
+}
+
 /** One scene rendered as one or more page-document divs inside a single DnD context */
 function SceneSection({
   scene,
@@ -392,13 +413,16 @@ export default function App() {
   }, [activeTab, storyboardViewState.scrollTop])
 
   const storyboardPageItems = scenes.flatMap((scene, sceneIdx) => {
+    const linkedScene = scene.linkedScriptSceneId
+      ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
+      : null
     const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
     const count = Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
     return Array.from({ length: count }).map((_, pageIdx) => ({
       id: `${scene.id}__page_${pageIdx}`,
       label: `Page ${scenePageOffsets[sceneIdx] + pageIdx + 1}`,
       subtitle: `${scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${scene.location || ''}`,
-      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || scriptScenes[sceneIdx]?.color || '#94a3b8',
+      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || linkedScene?.color || '#94a3b8',
     }))
   })
 
@@ -498,7 +522,7 @@ export default function App() {
         >
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
-              <div style={{ width: 260, position: 'sticky', top: 42, alignSelf: 'flex-start', height: 'calc(100vh - 170px)', maxHeight: 'calc(100vh - 170px)', display: 'flex' }}>
+              <div style={{ width: 260, position: 'sticky', top: 0, alignSelf: 'flex-start', height: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }}>
                 <SidebarPane
                   width={260}
                   controls={(
@@ -517,7 +541,7 @@ export default function App() {
                     </button>
                   )
                 }) : storyboardPageItems.map(item => (
-                  <button key={item.id} onClick={() => { const el = document.getElementById(item.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveOutlineItem(item.id) } }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? 'rgba(45,90,61,0.12)' : 'none', padding: '8px 10px', cursor: 'pointer' }}>
+                  <button key={item.id} onClick={() => { const el = document.getElementById(item.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveOutlineItem(item.id) } }} style={{ display: 'block', width: '100%', textAlign: 'left', border: '1px solid', borderColor: activeOutlineItem === item.id ? tintFromColor(item.sceneColor, 0.45) : 'rgba(74,85,104,0.08)', borderBottomColor: activeOutlineItem === item.id ? tintFromColor(item.sceneColor, 0.45) : 'rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? tintFromColor(item.sceneColor, 0.16) : 'none', padding: '8px 10px', cursor: 'pointer', marginBottom: -1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
                     <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                   </button>
