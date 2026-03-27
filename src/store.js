@@ -23,23 +23,26 @@ export const CARD_COLORS = [
 ]
 
 export const DEFAULT_COLUMN_CONFIG = [
-  { key: 'checked',        visible: true },
+  { key: 'status',         visible: true },
+  { key: 'thumbnail',      visible: false },
   { key: 'displayId',      visible: true },
-  { key: '__int__',        visible: true },
-  { key: '__dn__',         visible: true },
-  { key: 'cast',           visible: true },
-  { key: 'specs.type',     visible: true },
-  { key: 'focalLength',    visible: true },
-  { key: 'specs.equip',    visible: true },
-  { key: 'specs.move',     visible: true },
+  { key: 'description',    visible: true },
   { key: 'specs.size',     visible: true },
+  { key: 'specs.type',     visible: true },
+  { key: 'specs.move',     visible: true },
+  { key: 'specs.equip',    visible: true },
+  { key: 'focalLength',    visible: true },
+  { key: 'frameRate',      visible: true },
+  { key: 'sound',          visible: false },
+  { key: 'props',          visible: false },
   { key: 'notes',          visible: true },
-  { key: 'sound',          visible: true },
-  { key: 'props',          visible: true },
+  { key: 'setupTime',      visible: false },
+  { key: 'shootTime',      visible: false },
+  { key: 'cast',           visible: true },
+  { key: '__int__',        visible: false },
+  { key: '__dn__',         visible: false },
   { key: 'scriptTime',     visible: true },
-  { key: 'setupTime',      visible: true },
   { key: 'predictedTakes', visible: true },
-  { key: 'shootTime',      visible: true },
   { key: 'takeNumber',     visible: true },
 ]
 
@@ -210,6 +213,7 @@ function createShot(overrides = {}) {
     },
     notes: '',
     subject: '',
+    description: '',
     cast: '',
     checked: false,
     // Per-shot I/E and D/N (shotlist-only; scene heading uses scene.intOrExt/dayNight)
@@ -223,6 +227,7 @@ function createShot(overrides = {}) {
     takeNumber: '',
     sound: '',
     props: '',
+    frameRate: '',
     // Script scene link — references a scriptScene id (display-only, not enforced)
     linkedSceneId: null,
     linkedDialogueLine: null,
@@ -1640,6 +1645,7 @@ const useStore = create((set, get) => ({
               : { size: '', type: '', move: '', equip: '' },
             notes: s.notes,
             subject: s.subject,
+            description: s.description || s.subject || '',
             cast: s.cast || '',
             checked: s.checked,
             intOrExt: s.intOrExt,
@@ -1651,6 +1657,7 @@ const useStore = create((set, get) => ({
             takeNumber: s.takeNumber,
             sound: s.sound || '',
             props: s.props || '',
+            frameRate: s.frameRate || '',
             linkedSceneId: s.linkedSceneId || null,
             linkedDialogueLine: s.linkedDialogueLine || null,
             linkedDialogueOffset: s.linkedDialogueOffset ?? null,
@@ -1884,6 +1891,7 @@ const useStore = create((set, get) => ({
       specs: s.specs || { size: '', type: '', move: '', equip: '' },
       notes: s.notes || '',
       subject: s.subject || '',
+      description: s.description || s.subject || '',
       cast: s.cast || '',
       checked: s.checked || false,
       // Per-shot I/E and D/N: use saved value if present, else inherit from scene (migration)
@@ -1896,6 +1904,7 @@ const useStore = create((set, get) => ({
       takeNumber: s.takeNumber || '',
       sound: s.sound || '',
       props: s.props || '',
+      frameRate: s.frameRate || '',
       linkedSceneId: s.linkedSceneId || null,
       linkedDialogueLine: s.linkedDialogueLine || null,
       linkedDialogueOffset: s.linkedDialogueOffset ?? null,
@@ -2013,8 +2022,13 @@ const useStore = create((set, get) => ({
           }
         }
         const base = didMigrate ? migrated : saved
-        // Migrate subject → cast column key
-        const migratedCast = base.map(c => c.key === 'subject' ? { ...c, key: 'cast' } : c)
+        // Migrate legacy keys
+        const migratedCast = base.map(c => {
+          if (c.key === 'subject') return { ...c, key: 'cast' }
+          if (c.key === 'checked') return { ...c, key: 'status' }
+          if (c.key === 'image') return { ...c, key: 'thumbnail' }
+          return c
+        })
         // Append any built-in columns not yet in saved config
         const savedKeys = new Set(migratedCast.map(c => c.key))
         const newBuiltin = DEFAULT_COLUMN_CONFIG.filter(c => !savedKeys.has(c.key))
