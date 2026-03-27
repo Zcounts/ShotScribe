@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { arrayMove } from '@dnd-kit/sortable'
 import { computeEstimate, computeConfidence, parseSlugline } from './utils/scriptParser'
 import { ensureEditableScreenplayElements, estimateScreenplayPagination } from './utils/screenplay'
+import { DEFAULT_SCRIPT_DOCUMENT_SETTINGS, normalizeDocumentSettings } from './utils/scriptDocumentFormatting'
 import {
   SHORTCUT_DEFAULTS,
   getActiveBindings,
@@ -398,6 +399,7 @@ const useStore = create((set, get) => ({
     showConfidenceIndicators: true, // show ●●● indicators
     defaultSceneColor: null,  // default color for new scenes (null = no color)
     scenePaginationMode: 'natural', // natural | newPagePerScene
+    documentSettings: DEFAULT_SCRIPT_DOCUMENT_SETTINGS,
   },
 
   // ── Script scene actions ──────────────────────────────────────────────
@@ -1740,6 +1742,8 @@ const useStore = create((set, get) => ({
         autoSuggestTags: true,
         showConfidenceIndicators: true,
         defaultSceneColor: null,
+        scenePaginationMode: 'natural',
+        documentSettings: DEFAULT_SCRIPT_DOCUMENT_SETTINGS,
       },
       shortcutBindings: getActiveBindings(shortcutBindings || SHORTCUT_DEFAULTS),
       exportedAt: new Date().toISOString(),
@@ -2077,6 +2081,7 @@ const useStore = create((set, get) => ({
         defaultSceneColor: null,
         scenePaginationMode: 'natural',
         ...(data.scriptSettings || {}),
+        documentSettings: normalizeDocumentSettings(data?.scriptSettings?.documentSettings),
       },
       shortcutBindings: getActiveBindings(data.shortcutBindings || loadShortcutBindings() || SHORTCUT_DEFAULTS),
       lastSaved: new Date().toISOString(),
