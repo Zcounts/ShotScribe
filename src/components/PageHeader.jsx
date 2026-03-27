@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
-import SceneColorPicker from './SceneColorPicker'
 
 const CAMERA_COLORS = [
   '#4ade80', '#22d3ee', '#facc15', '#f87171', '#60a5fa',
@@ -100,35 +99,22 @@ function CameraColorSwatch({ color, onChange }) {
 
 export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0, onDoubleClick }) {
   const updateScene = useStore(s => s.updateScene)
-  const scriptScenes = useStore(s => s.scriptScenes)
 
   const set = (updates) => updateScene(scene.id, updates)
-  const linkedScriptScene = scene.linkedScriptSceneId
-    ? scriptScenes.find(s => s.id === scene.linkedScriptSceneId)
-    : null
-  const displayLocation = linkedScriptScene?.location || scene.location
-  const displayIntExt = linkedScriptScene?.intExt || scene.intOrExt
-  const displayDayNight = linkedScriptScene?.dayNight || scene.dayNight
+  const displayLocation = scene.location || ''
+  const displayIntExt = scene.intOrExt || 'INT'
+  const displayDayNight = scene.dayNight || 'DAY'
 
   // Per-page notes: pageNotes is stored as an array (one element per page).
   // Legacy projects saved it as a plain string — treat that as page 0.
   const pageNotesArray = Array.isArray(scene.pageNotes) ? scene.pageNotes : [scene.pageNotes || '']
   const currentPageNotes = pageNotesArray[pageIndex] || ''
-  const pageColors = Array.isArray(scene.pageColors) ? scene.pageColors : []
-  const currentPageColor = pageColors[pageIndex] || null
 
   const setPageNotes = (val) => {
     const updated = [...pageNotesArray]
     while (updated.length <= pageIndex) updated.push('')
     updated[pageIndex] = val
     set({ pageNotes: updated })
-  }
-
-  const setPageColor = (color) => {
-    const updated = [...pageColors]
-    while (updated.length <= pageIndex) updated.push(null)
-    updated[pageIndex] = color
-    set({ pageColors: updated })
   }
 
   const cycleIntExt = () => {
@@ -184,12 +170,6 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
       <div className="page-header-scene">
         <div className="page-header-row page-header-scene-top">
           <div className="page-header-intdn">
-            <SceneColorPicker
-              value={currentPageColor}
-              onChange={setPageColor}
-              size={12}
-              title={`Set page ${pageNum} color`}
-            />
             <input
               type="text"
               value={scene.sceneLabel}

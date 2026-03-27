@@ -81,6 +81,7 @@ function SceneSection({
   useDropdowns,
   pageIndexOffset,
   pageRefs,
+  pageNavRefs,
   onOpenSceneProperties,
 }) {
   const getShotsForScene = useStore(s => s.getShotsForScene)
@@ -148,7 +149,12 @@ function SceneSection({
             <div
               key={`${scene.id}_page_${pageIdx}`}
               id={`${scene.id}__page_${pageIdx}`}
-              ref={el => { if (el) pageRefs.current[globalPageNum - 1] = el }}
+              ref={el => {
+                if (!el) return
+                pageRefs.current[globalPageNum - 1] = el
+                pageNavRefs.current[`${scene.id}__page_${pageIdx}`] = el
+              }}
+              data-outline-id={`${scene.id}__page_${pageIdx}`}
               className="page-document"
               style={{ borderLeft: `5px solid ${pageColor || 'rgba(74,85,104,0.18)'}` }}
             >
@@ -296,6 +302,7 @@ export default function App() {
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
   const storyboardSceneRefs = useRef({})
+  const storyboardPageRefs = useRef({})
   // shotlistRef points to the ShotlistTab root container for PDF export
   const shotlistRef = useRef(null)
 
@@ -305,6 +312,18 @@ export default function App() {
     return acc + Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }, 0)
   pageRefs.current = pageRefs.current.slice(0, totalPages)
+
+  useEffect(() => {
+    const validSceneIds = new Set(scenes.map(scene => scene.id))
+    Object.keys(storyboardSceneRefs.current).forEach((key) => {
+      if (key.startsWith('script-')) return
+      if (!validSceneIds.has(key)) delete storyboardSceneRefs.current[key]
+    })
+    Object.keys(storyboardPageRefs.current).forEach((key) => {
+      const sceneId = key.split('__page_')[0]
+      if (!validSceneIds.has(sceneId)) delete storyboardPageRefs.current[key]
+    })
+  }, [scenes])
 
   // Keyboard shortcuts: Ctrl+S = Save, Ctrl+Shift+S = Save As
   useEffect(() => {
@@ -400,6 +419,14 @@ export default function App() {
     }
   }
 
+  const jumpToStoryboardPage = useCallback((pageId) => {
+    const node = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setActiveOutlineItem(pageId)
+    }
+  }, [])
+
   useEffect(() => {
     setTabViewState('storyboard', {
       showOutline: showStoryboardOutline,
@@ -425,6 +452,37 @@ export default function App() {
       })
     }
   }, [activeTab, storyboardViewState.scrollTop])
+
+  useEffect(() => {
+    if (activeTab !== 'storyboard') return
+    const root = storyboardScrollRef.current
+    if (!root) return
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+
+      if (!visible.length) return
+      const best = visible[0].target
+      const id = best.getAttribute('data-outline-id')
+      if (id) setActiveOutlineItem(id)
+    }, { root, threshold: [0.3, 0.5, 0.7] })
+
+    if (storyboardOutlineTab === 'Scenes') {
+      Object.entries(storyboardSceneRefs.current).forEach(([key, node]) => {
+        if (!node || key.startsWith('script-')) return
+        observer.observe(node)
+      })
+    } else {
+      Object.values(storyboardPageRefs.current).forEach((node) => {
+        if (!node) return
+        observer.observe(node)
+      })
+    }
+
+    return () => observer.disconnect()
+  }, [activeTab, storyboardOutlineTab, scenes, columnCount])
 
   const storyboardPageItems = scenes.flatMap((scene, sceneIdx) => {
     const linkedScene = scene.linkedScriptSceneId
@@ -555,7 +613,7 @@ export default function App() {
                     </button>
                   )
                 }) : storyboardPageItems.map(item => (
-                  <button key={item.id} onClick={() => { const el = document.getElementById(item.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveOutlineItem(item.id) } }} style={getOutlineItemStyle(item.sceneColor, activeOutlineItem === item.id)}>
+                  <button key={item.id} onClick={() => jumpToStoryboardPage(item.id)} style={getOutlineItemStyle(item.sceneColor, activeOutlineItem === item.id)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
                     <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                   </button>
@@ -576,6 +634,7 @@ export default function App() {
                     }
                   }}
                   id={scene.id}
+                  data-outline-id={scene.id}
                 >
                   {/* Scene separator (between scenes) */}
                   {sceneIdx > 0 && (
@@ -590,6 +649,7 @@ export default function App() {
                     useDropdowns={useDropdowns}
                     pageIndexOffset={scenePageOffsets[sceneIdx]}
                     pageRefs={pageRefs}
+                    pageNavRefs={storyboardPageRefs}
                     onOpenSceneProperties={(sceneId) => openScenePropertiesDialog('storyboard', sceneId)}
                   />
                 </div>
