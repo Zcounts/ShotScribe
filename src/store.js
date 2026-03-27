@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { arrayMove } from '@dnd-kit/sortable'
-import { computeEstimate, computeConfidence } from './utils/scriptParser'
-import { estimateScreenplayPagination } from './utils/screenplay'
+import { computeEstimate, computeConfidence, parseSlugline } from './utils/scriptParser'
+import { ensureEditableScreenplayElements, estimateScreenplayPagination } from './utils/screenplay'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -60,6 +60,52 @@ let shotCounter = 0
 let sceneIdCounter = 0
 let dayIdCounter = 0
 let blockIdCounter = 0
+
+const SCREENPLAY_SCENE_HEADING_TYPE = 'heading'
+const SCREENPLAY_CHARACTER_TYPE = 'character'
+const SCREENPLAY_DIALOGUE_TYPE = 'dialogue'
+const SCREENPLAY_ACTION_TYPE = 'action'
+
+function deriveScriptSceneFromElements(scene, elements) {
+  const normalizedElements = ensureEditableScreenplayElements(elements)
+  const joinedText = normalizedElements.map(element => String(element.text || '')).join('\n')
+  const headingElement = normalizedElements.find(element => element.type === SCREENPLAY_SCENE_HEADING_TYPE && String(element.text || '').trim())
+  const headingText = headingElement ? String(headingElement.text || '').trim().toUpperCase() : ''
+  const parsedHeading = headingText ? parseSlugline(headingText) : {}
+
+  const characterNames = []
+  const seenCharacters = new Set()
+  normalizedElements.forEach(element => {
+    if (element.type !== SCREENPLAY_CHARACTER_TYPE) return
+    const name = String(element.text || '')
+      .replace(/:\s*$/, '')
+      .replace(/\s*\([^)]*\)\s*$/, '')
+      .trim()
+      .toUpperCase()
+    if (!name || seenCharacters.has(name)) return
+    seenCharacters.add(name)
+    characterNames.push(name)
+  })
+
+  return {
+    ...scene,
+    screenplayElements: normalizedElements,
+    screenplayText: joinedText,
+    actionText: normalizedElements
+      .filter(element => element.type === SCREENPLAY_ACTION_TYPE)
+      .map(element => String(element.text || '').trim())
+      .filter(Boolean)
+      .join('\n'),
+    dialogueCount: normalizedElements.filter(element => element.type === SCREENPLAY_DIALOGUE_TYPE).length,
+    characters: characterNames,
+    slugline: headingText || scene.slugline || '',
+    customHeader: headingText || scene.customHeader || '',
+    intExt: parsedHeading.intExt ?? scene.intExt ?? null,
+    dayNight: parsedHeading.dayNight ?? scene.dayNight ?? null,
+    location: parsedHeading.location ?? scene.location ?? '',
+    sceneNumber: scene.sceneNumber != null ? String(scene.sceneNumber) : '',
+  }
+}
 
 function normalizeCastEntry(entry = {}) {
   const characterIds = Array.isArray(entry.characterIds)
@@ -299,13 +345,14 @@ const useStore = create((set, get) => ({
       // Enrich scenes with estimated minutes and confidence
       const pagination = estimateScreenplayPagination(parsedScenes)
       const enriched = parsedScenes.map(scene => {
-        const estimated = computeEstimate(scene, settings.baseMinutesPerPage)
+        const normalizedScene = deriveScriptSceneFromElements(scene, scene.screenplayElements || [])
+        const estimated = computeEstimate(normalizedScene, settings.baseMinutesPerPage)
         return {
-          ...scene,
-          sceneNumber: scene.sceneNumber != null ? String(scene.sceneNumber) : '',
-          pageCount: pagination.byScene[scene.id]?.pageCount ?? scene.pageCount ?? null,
-          pageStart: pagination.byScene[scene.id]?.startPage ?? null,
-          pageEnd: pagination.byScene[scene.id]?.endPage ?? null,
+          ...normalizedScene,
+          sceneNumber: normalizedScene.sceneNumber != null ? String(normalizedScene.sceneNumber) : '',
+          pageCount: pagination.byScene[scene.id]?.pageCount ?? normalizedScene.pageCount ?? null,
+          pageStart: pagination.byScene[scene.id]?.startPage ?? normalizedScene.pageStart ?? null,
+          pageEnd: pagination.byScene[scene.id]?.endPage ?? normalizedScene.pageEnd ?? null,
           estimatedMinutes: estimated,
         }
       })
@@ -406,6 +453,43 @@ const useStore = create((set, get) => ({
               location: updatedScriptScene.location || storyScene.location,
               intOrExt: updatedScriptScene.intExt || storyScene.intOrExt,
               dayNight: updatedScriptScene.dayNight || storyScene.dayNight,
+            }
+          }),
+      }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  updateScriptSceneScreenplay: (sceneId, screenplayElements) => {
+    set(state => {
+      const settings = state.scriptSettings
+      const updatedScenes = state.scriptScenes.map(scene => (
+        scene.id === sceneId
+          ? deriveScriptSceneFromElements(scene, screenplayElements)
+          : scene
+      ))
+      const pagination = estimateScreenplayPagination(updatedScenes, {
+        scenePaginationMode: settings.scenePaginationMode,
+      })
+      const updatedScene = updatedScenes.find(scene => scene.id === sceneId)
+      return {
+        scriptScenes: updatedScenes.map(scene => ({
+          ...scene,
+          pageCount: pagination.byScene[scene.id]?.pageCount ?? scene.pageCount ?? null,
+          pageStart: pagination.byScene[scene.id]?.startPage ?? scene.pageStart ?? null,
+          pageEnd: pagination.byScene[scene.id]?.endPage ?? scene.pageEnd ?? null,
+          estimatedMinutes: computeEstimate(scene, settings.baseMinutesPerPage),
+        })),
+        scenes: !updatedScene
+          ? state.scenes
+          : state.scenes.map(storyScene => {
+            if (storyScene.linkedScriptSceneId !== sceneId) return storyScene
+            return {
+              ...storyScene,
+              sceneLabel: updatedScene.sceneNumber ? `SCENE ${updatedScene.sceneNumber}` : storyScene.sceneLabel,
+              location: updatedScene.location || storyScene.location,
+              intOrExt: updatedScene.intExt || storyScene.intOrExt,
+              dayNight: updatedScene.dayNight || storyScene.dayNight,
             }
           }),
       }
@@ -1449,7 +1533,7 @@ const useStore = create((set, get) => ({
         characters: s.characters || [],
         actionText: s.actionText || '',
         screenplayText: s.screenplayText || '',
-        screenplayElements: Array.isArray(s.screenplayElements) ? s.screenplayElements : [],
+        screenplayElements: ensureEditableScreenplayElements(s.screenplayElements),
         dialogueCount: s.dialogueCount || 0,
         pageCount: s.pageCount ?? null,
         pageStart: s.pageStart ?? null,
@@ -1788,7 +1872,10 @@ const useStore = create((set, get) => ({
       })(),
       // Script import state — default to empty for older project files
       scriptScenes: Array.isArray(data.scriptScenes)
-        ? data.scriptScenes.map(s => ({ ...s, sceneNumber: s?.sceneNumber != null ? String(s.sceneNumber) : '' }))
+        ? data.scriptScenes.map(s => deriveScriptSceneFromElements(
+          { ...s, sceneNumber: s?.sceneNumber != null ? String(s.sceneNumber) : '' },
+          s.screenplayElements,
+        ))
         : [],
       importedScripts: Array.isArray(data.importedScripts) ? data.importedScripts : [],
       scriptSettings: {
