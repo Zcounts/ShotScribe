@@ -303,6 +303,11 @@ function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
         pushSpacerRows(spacingRule.after, idx)
       }
 
+      const pairSpacing = SCREENPLAY_LAYOUT.spacing.pairAfter?.[line.type]?.[nextType] ?? 0
+      if (pairSpacing > 0) {
+        pushSpacerRows(pairSpacing, idx)
+      }
+
       isSceneStart = false
       sceneCharOffset = nextOffset
     })
