@@ -25,29 +25,9 @@ import {
 const SCREENPLAY_FONT_SIZE = SCREENPLAY_LAYOUT.typography.fontSizePx
 const SCREENPLAY_LINE_HEIGHT_PX = SCREENPLAY_LAYOUT.typography.lineHeightPx
 const ROWS_PER_PAGE = SCREENPLAY_FORMAT.pageLines
-<<<<<<< codex/improve-script-tab-layout-and-ui-g9ojvq
 const EDIT_BAR_HEIGHT_PX = 42
 const RULER_HEIGHT_PX = 30
 const RULER_PAGE_GAP_PX = 8
-=======
-const EDITABLE_TYPE_VALUES = EDITABLE_SCREENPLAY_TYPES.map(type => type.value)
-const EDIT_BAR_HEIGHT_PX = 42
-const RULER_HEIGHT_PX = 30
-const RULER_PAGE_GAP_PX = 8
-
-const NEXT_ENTER_TYPE = {
-  heading: 'action',
-  action: 'action',
-  character: 'dialogue',
-  dialogue: 'character',
-  parenthetical: 'dialogue',
-  transition: 'heading',
-}
->>>>>>> main
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value))
-}
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
@@ -484,10 +464,6 @@ export default function ScriptTab() {
   const [isInspectorOpen, setIsInspectorOpen] = useState(Boolean(scriptViewState.isInspectorOpen))
   const [selectedBlock, setSelectedBlock] = useState(null)
   const [draggingMarker, setDraggingMarker] = useState(null)
-<<<<<<< codex/improve-script-tab-layout-and-ui-g9ojvq
-=======
-  const editorRefs = useRef({})
->>>>>>> main
   const rulerTrackRef = useRef(null)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
@@ -979,7 +955,6 @@ export default function ScriptTab() {
             </div>
             {isEditMode && <div style={{ marginTop: 4 }}><DocumentRuler /></div>}
             <div style={{ height: isEditMode ? RULER_PAGE_GAP_PX : 6 }} />
-<<<<<<< codex/improve-script-tab-layout-and-ui-g9ojvq
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {pagedScript.map((page) => (
                 <div
@@ -1050,116 +1025,6 @@ export default function ScriptTab() {
                   <div style={{ position: 'absolute', top: 8, right: 14, fontSize: 11, color: 'rgba(100,116,139,0.8)' }}>{page.number}</div>
                 </div>
               ))}
-=======
-            <div
-              style={{
-                width: `${pageSettings.widthPx}px`,
-                minHeight: `${pageSettings.heightPx}px`,
-                background: '#fff',
-                border: '1px solid rgba(148,163,184,0.42)',
-                boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
-                fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily,
-                fontSize: SCREENPLAY_FONT_SIZE,
-                lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`,
-                paddingTop: `${pageSettings.marginTopPx}px`,
-                paddingRight: `${pageSettings.marginRightPx}px`,
-                paddingBottom: `${pageSettings.marginBottomPx}px`,
-                paddingLeft: `${pageSettings.marginLeftPx}px`,
-                boxSizing: 'border-box',
-              }}
-            >
-              {orderedScenes.map(scene => {
-                const blocks = ensureEditableScreenplayElements(screenplayBySceneId[scene.id])
-                return (
-                  <div key={scene.id} ref={el => { headingRefs.current[scene.id] = el }} data-sceneid={scene.id} style={{ marginBottom: SCREENPLAY_LINE_HEIGHT_PX * 2 }}>
-                    {blocks.map((block, index) => {
-                      const styleCfg = getBlockStyleForType(documentSettings, block.type)
-                      const selected = selectedBlock?.sceneId === scene.id && selectedBlock?.blockId === block.id
-                      const sharedTextStyle = {
-                        width: '100%',
-                        border: selected && isEditMode ? '1px solid rgba(37,99,235,0.55)' : '1px solid transparent',
-                        background: selected && isEditMode ? 'rgba(37,99,235,0.06)' : 'transparent',
-                        borderRadius: 4,
-                        padding: '0 4px',
-                        fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily,
-                        fontSize: `${styleCfg.fontSizePx}px`,
-                        lineHeight: `${styleCfg.lineHeightPx}px`,
-                        minHeight: `${styleCfg.lineHeightPx}px`,
-                        letterSpacing: `${styleCfg.letterSpacingPx}px`,
-                        whiteSpace: 'pre-wrap',
-                        overflowWrap: 'break-word',
-                        textIndent: `${styleCfg.firstLineIndentPx}px`,
-                        textTransform: ['heading', 'character', 'transition'].includes(block.type) ? 'uppercase' : 'none',
-                        boxSizing: 'border-box',
-                      }
-                      return (
-                        <div key={block.id} style={{ marginTop: `${index === 0 ? 0 : styleCfg.spacingBeforePx}px`, marginBottom: `${styleCfg.spacingAfterPx}px`, minHeight: `${styleCfg.lineHeightPx}px` }}>
-                          <div
-                            style={{
-                              marginLeft: `${styleCfg.marginLeftPx}px`,
-                              marginRight: `${styleCfg.marginRightPx}px`,
-                              maxWidth: styleCfg.maxWidthPx ? `${styleCfg.maxWidthPx}px` : 'none',
-                              paddingLeft: `${styleCfg.paddingLeftPx}px`,
-                              paddingRight: `${styleCfg.paddingRightPx}px`,
-                              textAlign: styleCfg.align || 'left',
-                            }}
-                          >
-                            {isEditMode ? (
-                              <textarea
-                                ref={node => { editorRefs.current[`${scene.id}:${block.id}`] = node }}
-                                value={String(block.text || '')}
-                                onFocus={() => { setSelectedBlock({ sceneId: scene.id, blockId: block.id }); setActiveSceneId(scene.id) }}
-                                onClick={() => setSelectedBlock({ sceneId: scene.id, blockId: block.id })}
-                                onChange={(event) => updateBlock(scene.id, block.id, { text: event.target.value })}
-                                onInput={(event) => {
-                                  const node = event.currentTarget
-                                  node.style.height = 'auto'
-                                  node.style.height = `${Math.max(styleCfg.lineHeightPx, node.scrollHeight)}px`
-                                }}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Tab') {
-                                    event.preventDefault()
-                                    cycleBlockType(scene.id, block.id, event.shiftKey ? -1 : 1)
-                                    return
-                                  }
-                                  if (event.key === 'Enter' && !event.shiftKey) {
-                                    event.preventDefault()
-                                    splitBlockWithType(scene.id, block.id, getNextElementType(block.type))
-                                    return
-                                  }
-                                  if (event.key === 'Backspace') {
-                                    const cursor = Number.isFinite(event.currentTarget.selectionStart) ? event.currentTarget.selectionStart : 0
-                                    const hasSelection = event.currentTarget.selectionEnd !== event.currentTarget.selectionStart
-                                    if (cursor === 0 && !hasSelection && index > 0) {
-                                      event.preventDefault()
-                                      mergeBlock(scene.id, block.id, 'up')
-                                    }
-                                  }
-                                }}
-                                style={{
-                                  ...sharedTextStyle,
-                                  resize: 'none',
-                                  overflow: 'hidden',
-                                }}
-                              />
-                            ) : (
-                              <div
-                                data-row-start={0}
-                                data-row-end={0}
-                                onClick={() => { setSelectedBlock({ sceneId: scene.id, blockId: block.id }); setActiveSceneId(scene.id) }}
-                                style={sharedTextStyle}
-                              >
-                                {String(block.text || '')}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
->>>>>>> main
             </div>
           </div>
           {isInspectorOpen && isEditMode && (
