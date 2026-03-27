@@ -51,7 +51,8 @@ function getCellValue(colKey, shot, scene) {
 // No reference to the live app DOM.
 
 function buildStoryboardPrintHtml() {
-  const { scenes, columnCount, projectName } = useStore.getState()
+  const { getStoryboardScenes, columnCount, projectName } = useStore.getState()
+  const scenes = getStoryboardScenes()
   const cols = Math.max(2, Math.min(4, columnCount || 4))
   const cardsPerPage = cols * 2  // two rows of cards per page
 

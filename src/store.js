@@ -86,6 +86,7 @@ function cloneUndoSnapshot(snapshot) {
 function getUndoableSnapshot(state) {
   return {
     scenes: state.scenes,
+    storyboardSceneOrder: state.storyboardSceneOrder,
     scriptScenes: state.scriptScenes,
     schedule: state.schedule,
     callsheets: state.callsheets,
@@ -112,6 +113,29 @@ function applyUndoSnapshot(snapshot, state) {
     ...state,
     ...cloneUndoSnapshot(snapshot),
   }
+}
+
+function normalizeStoryboardSceneOrder(order, scenes) {
+  const sceneIds = scenes.map(scene => scene.id)
+  const validIds = new Set(sceneIds)
+  const normalized = []
+  const seen = new Set()
+
+  if (Array.isArray(order)) {
+    order.forEach((sceneId) => {
+      if (!validIds.has(sceneId) || seen.has(sceneId)) return
+      seen.add(sceneId)
+      normalized.push(sceneId)
+    })
+  }
+
+  sceneIds.forEach((sceneId) => {
+    if (seen.has(sceneId)) return
+    seen.add(sceneId)
+    normalized.push(sceneId)
+  })
+
+  return normalized
 }
 
 function deriveScriptSceneFromElements(scene, elements) {
@@ -325,6 +349,7 @@ const useStore = create((set, get) => ({
 
   // Scenes (multi-scene support)
   scenes: [initialScene],
+  storyboardSceneOrder: [],
 
   // Global settings
   columnCount: 4,
@@ -1110,6 +1135,18 @@ const useStore = create((set, get) => ({
 
   getScene: (sceneId) => get().scenes.find(s => s.id === sceneId),
 
+  getStoryboardSceneOrder: () => {
+    const state = get()
+    return normalizeStoryboardSceneOrder(state.storyboardSceneOrder, state.scenes)
+  },
+
+  getStoryboardScenes: () => {
+    const state = get()
+    const order = normalizeStoryboardSceneOrder(state.storyboardSceneOrder, state.scenes)
+    const byId = new Map(state.scenes.map(scene => [scene.id, scene]))
+    return order.map(sceneId => byId.get(sceneId)).filter(Boolean)
+  },
+
   // Returns shots for a scene with computed displayIds.
   // Scene number is always derived from the scene's position in the scenes array
   // (index 0 → Scene 1, index 1 → Scene 2, etc.) — never from the sceneLabel text,
@@ -1171,6 +1208,17 @@ const useStore = create((set, get) => ({
     set(state => ({
       scenes: state.scenes.map(s => s.id === sceneId ? { ...s, ...updates } : s),
     }))
+    get()._scheduleAutoSave()
+  },
+
+  reorderStoryboardScenes: (activeId, overId) => {
+    set(state => {
+      const order = normalizeStoryboardSceneOrder(state.storyboardSceneOrder, state.scenes)
+      const oldIndex = order.findIndex(id => id === activeId)
+      const newIndex = order.findIndex(id => id === overId)
+      if (oldIndex === -1 || newIndex === -1) return state
+      return { storyboardSceneOrder: arrayMove(order, oldIndex, newIndex) }
+    })
     get()._scheduleAutoSave()
   },
 
@@ -1612,6 +1660,7 @@ const useStore = create((set, get) => ({
       castCrewNotes,
       scriptScenes, importedScripts, scriptSettings,
       shortcutBindings,
+      storyboardSceneOrder,
     } = get()
     return {
       version: 2,
@@ -1627,6 +1676,7 @@ const useStore = create((set, get) => ({
       shotlistColumnWidths: shotlistColumnWidths || {},
       customColumns,
       customDropdownOptions,
+      storyboardSceneOrder: normalizeStoryboardSceneOrder(storyboardSceneOrder, scenes),
       // Scenes and shots are reconstructed field-by-field so that any
       // non-serializable value that accidentally landed in state (e.g. a DOM
       // event object spread via an overrides parameter) is stripped before
@@ -2054,6 +2104,7 @@ const useStore = create((set, get) => ({
           sceneLabel: fallbackScriptScene.sceneNumber ? `SCENE ${fallbackScriptScene.sceneNumber}` : scene.sceneLabel,
         }
       }),
+      storyboardSceneOrder: normalizeStoryboardSceneOrder(data.storyboardSceneOrder, scenes),
       schedule: loadedSchedule,
       scheduleCollapseState: loadedCollapseState,
       scheduleColumnConfig: (() => {
@@ -2204,6 +2255,7 @@ const useStore = create((set, get) => ({
       projectName: name,
       projectEmoji: '🎬',
       scenes: [scene],
+      storyboardSceneOrder: [],
       schedule: [],
       callsheets: {},
       castRoster: [],
