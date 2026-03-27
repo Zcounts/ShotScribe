@@ -1048,12 +1048,15 @@ function SortableShotRow({
 // ── Main ShotlistTab ──────────────────────────────────────────────────────────
 export default function ShotlistTab({ containerRef }) {
   const scenes                  = useStore(s => s.scenes)
+  const scriptScenes            = useStore(s => s.scriptScenes)
   const schedule                = useStore(s => s.schedule)
   const addShootingDay          = useStore(s => s.addShootingDay)
   const getShotsForScene        = useStore(s => s.getShotsForScene)
   const updateShot              = useStore(s => s.updateShot)
   const updateShotSpec          = useStore(s => s.updateShotSpec)
   const updateScene             = useStore(s => s.updateScene)
+  const updateCanonicalStoryboardSceneMetadata = useStore(s => s.updateCanonicalStoryboardSceneMetadata)
+  const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
   const addShot                 = useStore(s => s.addShot)
   const addShotBlock            = useStore(s => s.addShotBlock)
   const deleteShot              = useStore(s => s.deleteShot)
@@ -1121,10 +1124,11 @@ export default function ShotlistTab({ containerRef }) {
     return scenes
       .map(scene => {
         const shots = getShotsForScene(scene.id).filter(s => activeDayShotIds.has(s.id))
-        return { ...scene, _filteredShots: shots }
+        const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
+        return { ...scene, _filteredShots: shots, _canonical: canonical }
       })
       .filter(scene => scene._filteredShots.length > 0)
-  }, [scenes, activeDay, activeDayShotIds, getShotsForScene])
+  }, [scenes, scriptScenes, activeDay, activeDayShotIds, getShotsForScene, getCanonicalStoryboardSceneMetadata])
 
   // ── Column resize state ────────────────────────────────────────────────────
   // Track active resize: { key, startX, startWidth }
@@ -1480,8 +1484,8 @@ export default function ShotlistTab({ containerRef }) {
                           {/* Scene label */}
                           <input
                             type="text"
-                            value={scene.sceneLabel}
-                            onChange={e => updateScene(scene.id, { sceneLabel: e.target.value })}
+                            value={scene._canonical?.sceneNumber || scene.sceneLabel}
+                            onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { sceneNumber: e.target.value })}
                             onPointerDown={e => e.stopPropagation()}
                             style={{
                               background: 'transparent',
@@ -1494,16 +1498,16 @@ export default function ShotlistTab({ containerRef }) {
                               letterSpacing: '0.08em',
                               padding: 0,
                               minWidth: 50,
-                              width: `${Math.max((scene.sceneLabel || '').length, 7)}ch`,
+                              width: `${Math.max((scene._canonical?.sceneNumber || scene.sceneLabel || '').length, 7)}ch`,
                             }}
-                            placeholder="SCENE 1"
+                            placeholder="1"
                           />
                           <span style={{ opacity: 0.4, margin: '0 8px' }}>|</span>
                           {/* Location */}
                           <input
                             type="text"
-                            value={scene.location}
-                            onChange={e => updateScene(scene.id, { location: e.target.value })}
+                            value={scene._canonical?.location || scene.location}
+                            onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { location: e.target.value })}
                             onPointerDown={e => e.stopPropagation()}
                             style={{
                               background: 'transparent',
@@ -1516,7 +1520,7 @@ export default function ShotlistTab({ containerRef }) {
                               letterSpacing: '0.08em',
                               padding: 0,
                               minWidth: 40,
-                              width: `${Math.max((scene.location || '').length, 8)}ch`,
+                              width: `${Math.max((scene._canonical?.location || scene.location || '').length, 8)}ch`,
                             }}
                             placeholder="LOCATION"
                           />
@@ -1525,7 +1529,8 @@ export default function ShotlistTab({ containerRef }) {
                           <button
                             onClick={() => {
                               const next = { INT: 'EXT', EXT: 'INT/EXT', 'INT/EXT': 'INT' }
-                              updateScene(scene.id, { intOrExt: next[scene.intOrExt] || 'INT' })
+                              const current = scene._canonical?.intOrExt || scene.intOrExt
+                              updateCanonicalStoryboardSceneMetadata(scene.id, { intOrExt: next[current] || 'INT' })
                             }}
                             title="Click to cycle INT / EXT / INT/EXT"
                             style={{
@@ -1542,14 +1547,15 @@ export default function ShotlistTab({ containerRef }) {
                               opacity: 0.9,
                             }}
                           >
-                            {scene.intOrExt || 'INT'}
+                            {scene._canonical?.intOrExt || scene.intOrExt || 'INT'}
                           </button>
                           <span style={{ opacity: 0.4, margin: '0 6px' }}>·</span>
                           {/* D/N cycle button */}
                           <button
                             onClick={() => {
                               const next = { DAY: 'NIGHT', NIGHT: 'DAY/NIGHT', 'DAY/NIGHT': 'DAY' }
-                              updateScene(scene.id, { dayNight: next[scene.dayNight] || 'DAY' })
+                              const current = scene._canonical?.dayNight || scene.dayNight
+                              updateCanonicalStoryboardSceneMetadata(scene.id, { dayNight: next[current] || 'DAY' })
                             }}
                             title="Click to cycle DAY / NIGHT / DAY/NIGHT"
                             style={{
@@ -1566,7 +1572,7 @@ export default function ShotlistTab({ containerRef }) {
                               opacity: 0.9,
                             }}
                           >
-                            {scene.dayNight || 'DAY'}
+                            {scene._canonical?.dayNight || scene.dayNight || 'DAY'}
                           </button>
                         </div>
                         <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.6, letterSpacing: '0.05em', flexShrink: 0 }}>

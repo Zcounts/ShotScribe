@@ -9,8 +9,9 @@ export default function ScenePropertiesDialog() {
   const scenes = useStore(s => s.scenes)
   const scriptScenes = useStore(s => s.scriptScenes)
   const scriptSettings = useStore(s => s.scriptSettings)
-  const updateScene = useStore(s => s.updateScene)
   const updateScriptScene = useStore(s => s.updateScriptScene)
+  const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
+  const updateCanonicalStoryboardSceneMetadata = useStore(s => s.updateCanonicalStoryboardSceneMetadata)
   const linkStoryboardSceneToScriptScene = useStore(s => s.linkStoryboardSceneToScriptScene)
 
   if (!dialog) return null
@@ -19,6 +20,9 @@ export default function ScenePropertiesDialog() {
   const scene = isScript
     ? scriptScenes.find(s => s.id === dialog.sceneId)
     : scenes.find(s => s.id === dialog.sceneId)
+  const canonicalStoryboardScene = !isScript
+    ? getCanonicalStoryboardSceneMetadata(dialog.sceneId)
+    : null
 
   if (!scene) return null
 
@@ -30,7 +34,7 @@ export default function ScenePropertiesDialog() {
 
   const update = (updates) => {
     if (isScript) updateScriptScene(scene.id, updates)
-    else updateScene(scene.id, updates)
+    else updateCanonicalStoryboardSceneMetadata(scene.id, updates)
   }
 
   return (
@@ -39,22 +43,29 @@ export default function ScenePropertiesDialog() {
         <h3 className="dialog-title">Scene Properties</h3>
         <div className="dialog-form-grid">
           <label className="dialog-label">Scene Number</label>
-          <input value={isScript ? (scene.sceneNumber || '') : (scene.sceneLabel || '')} onChange={(e) => update(isScript ? { sceneNumber: e.target.value } : { sceneLabel: e.target.value })} />
+          <input
+            value={isScript ? (scene.sceneNumber || '') : (canonicalStoryboardScene?.sceneNumber || '')}
+            onChange={(e) => update({ sceneNumber: e.target.value })}
+          />
 
           <label className="dialog-label">Title / Slugline</label>
-          <input value={isScript ? (scene.slugline || '') : ''} onChange={(e) => isScript && update({ slugline: e.target.value })} disabled={!isScript} />
+          <input
+            value={isScript ? (scene.slugline || '') : (canonicalStoryboardScene?.titleSlugline || '')}
+            onChange={(e) => update(isScript ? { slugline: e.target.value } : { titleSlugline: e.target.value })}
+            disabled={!isScript && !canonicalStoryboardScene?.linkedScriptSceneId}
+          />
 
           <label className="dialog-label">Location</label>
-          <input value={scene.location || ''} onChange={(e) => update({ location: e.target.value })} />
+          <input value={isScript ? (scene.location || '') : (canonicalStoryboardScene?.location || '')} onChange={(e) => update({ location: e.target.value })} />
 
           <label className="dialog-label">INT / EXT</label>
-          <input value={(isScript ? scene.intExt : scene.intOrExt) || ''} onChange={(e) => update(isScript ? { intExt: e.target.value } : { intOrExt: e.target.value })} />
+          <input value={isScript ? (scene.intExt || '') : (canonicalStoryboardScene?.intOrExt || '')} onChange={(e) => update(isScript ? { intExt: e.target.value } : { intOrExt: e.target.value })} />
 
           <label className="dialog-label">DAY / NIGHT</label>
-          <input value={scene.dayNight || ''} onChange={(e) => update({ dayNight: e.target.value })} />
+          <input value={isScript ? (scene.dayNight || '') : (canonicalStoryboardScene?.dayNight || '')} onChange={(e) => update({ dayNight: e.target.value })} />
 
           <label className="dialog-label">Color</label>
-          <SceneColorPicker value={scene.color || null} onChange={(color) => update({ color })} size={16} />
+          <SceneColorPicker value={isScript ? (scene.color || null) : (canonicalStoryboardScene?.color || null)} onChange={(color) => update({ color })} size={16} />
 
           {!isScript && (
             <>
