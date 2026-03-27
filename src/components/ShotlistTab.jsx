@@ -156,29 +156,35 @@ const DAY_NIGHT_OPTIONS = ['DAY', 'NIGHT', 'DAY/NIGHT']
 
 // ── Built-in column definitions (source of truth for metadata) ──────────────
 const BUILTIN_COLUMNS = [
-  { key: 'checked',        label: 'X',                  width: 36,  type: 'checkbox' },
-  { key: 'displayId',      label: 'SHOT#',              width: 54,  type: 'readonly' },
-  { key: '__int__',        label: 'I/E',                width: 52,  type: 'intExt' },
-  { key: '__dn__',         label: 'D/N',                width: 52,  type: 'dayNight' },
-  { key: 'cast',           label: 'CAST',               width: 130, type: 'text' },
-  { key: 'specs.type',     label: 'ANGLE',              width: 96,  type: 'dropdown', options: TYPE_OPTIONS,  customOptionsField: 'type'  },
-  { key: 'focalLength',    label: 'LENS',               width: 64,  type: 'text' },
-  { key: 'specs.equip',    label: 'EQUIPMENT',          width: 100, type: 'dropdown', options: EQUIP_OPTIONS, customOptionsField: 'equip' },
-  { key: 'specs.move',     label: 'MOVEMENT',           width: 96,  type: 'dropdown', options: MOVE_OPTIONS,  customOptionsField: 'move'  },
-  { key: 'specs.size',     label: 'COVERAGE',           width: 110, type: 'dropdown', options: SIZE_OPTIONS,  customOptionsField: 'size'  },
-  { key: 'notes',          label: 'NOTES',              width: 160, type: 'textarea' },
+  { key: 'status',         label: 'STATUS',             width: 74,  type: 'status' },
+  { key: 'thumbnail',      label: 'THUMB',              width: 72,  type: 'thumbnail' },
+  { key: 'displayId',      label: 'SHOT#',              width: 72,  type: 'readonly' },
+  { key: 'description',    label: 'DESCRIPTION',        width: 240, type: 'text' },
+  { key: 'specs.size',     label: 'SHOT SIZE',          width: 110, type: 'dropdown', options: SIZE_OPTIONS,  customOptionsField: 'size' },
+  { key: 'specs.type',     label: 'TYPE/COVERAGE',      width: 118, type: 'dropdown', options: TYPE_OPTIONS,  customOptionsField: 'type' },
+  { key: 'specs.move',     label: 'MOVEMENT',           width: 106, type: 'dropdown', options: MOVE_OPTIONS,  customOptionsField: 'move' },
+  { key: 'specs.equip',    label: 'EQUIPMENT',          width: 112, type: 'dropdown', options: EQUIP_OPTIONS, customOptionsField: 'equip' },
+  { key: 'focalLength',    label: 'LENS',               width: 76,  type: 'text' },
+  { key: 'frameRate',      label: 'FRAME RATE',         width: 92,  type: 'text' },
   { key: 'sound',          label: 'SOUND',              width: 100, type: 'text' },
-  { key: 'props',          label: 'PROPS',              width: 100, type: 'text' },
+  { key: 'props',          label: 'PROPS',              width: 110, type: 'text' },
+  { key: 'notes',          label: 'NOTES',              width: 180, type: 'textarea' },
+  { key: 'setupTime',      label: 'SETUP',              width: 78,  type: 'text' },
+  { key: 'shootTime',      label: 'SHOOT',              width: 78,  type: 'text' },
+  { key: 'cast',           label: 'CAST',               width: 120, type: 'text' },
+  { key: '__int__',        label: 'I/E',                width: 58,  type: 'intExt' },
+  { key: '__dn__',         label: 'D/N',                width: 58,  type: 'dayNight' },
   { key: 'scriptTime',     label: 'SCRIPT TIME',        width: 84,  type: 'text' },
-  { key: 'setupTime',      label: 'SETUP TIME',         width: 84,  type: 'text' },
-  { key: 'predictedTakes', label: 'PREDIC# OF TAKES',  width: 104, type: 'text' },
-  { key: 'shootTime',      label: 'SHOOT TIME',         width: 84,  type: 'text' },
-  { key: 'takeNumber',     label: 'TAKE #',             width: 60,  type: 'text' },
+  { key: 'predictedTakes', label: 'PRED. TAKES',        width: 92,  type: 'text' },
+  { key: 'takeNumber',     label: 'TAKE #',             width: 64,  type: 'text' },
 ]
 
 // Non-configurable drag-handle/delete utility column width
 const DRAG_COL_WIDTH = 36
-const ROW_H = 28
+const DENSITY_ROW_HEIGHT = {
+  compact: 24,
+  comfortable: 30,
+}
 
 // ── Time utilities ────────────────────────────────────────────────────────────
 function parseTimeStr(str) {
@@ -317,8 +323,8 @@ function EditableCell({ value, onChange, type, options, customOptions, onAddCust
         height: '100%',
         fontWeight: 700,
         fontFamily: 'monospace',
-        fontSize: 11,
-        color: isDark ? '#aaa' : '#555',
+        fontSize: 12,
+        color: isDark ? '#d4d4d8' : '#1f2937',
         userSelect: 'none',
       }}>
         {value}
@@ -392,7 +398,7 @@ function EditableCell({ value, onChange, type, options, customOptions, onAddCust
         style={{
           ...inputStyle,
           height: 'auto',
-          minHeight: ROW_H,
+          minHeight: DENSITY_ROW_HEIGHT.compact,
           padding: '2px 6px',
           resize: 'none',
           overflow: 'hidden',
@@ -553,7 +559,10 @@ function SortableColumnItem({ id, label, visible, onToggle, isDark, isCustom, on
 }
 
 // ── Column config panel ───────────────────────────────────────────────────────
-function ColumnConfigPanel({ config, isDark, onChange, onClose, customColumns, onAddCustomColumn, onRemoveCustomColumn }) {
+function ColumnConfigPanel({
+  config, isDark, onChange, onClose, customColumns, onAddCustomColumn, onRemoveCustomColumn,
+  viewSettings, onViewSettingsChange,
+}) {
   const panelSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   )
@@ -661,6 +670,46 @@ function ColumnConfigPanel({ config, isDark, onChange, onClose, customColumns, o
       }}>
         Drag to reorder · toggle to show/hide
       </p>
+
+      <div style={{
+        marginBottom: 8,
+        paddingBottom: 8,
+        borderBottom: `1px solid ${isDark ? '#2e2e2e' : '#eee'}`,
+        display: 'grid',
+        gap: 6,
+      }}>
+        <label style={{ fontSize: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span>Density</span>
+          <select value={viewSettings.density} onChange={e => onViewSettingsChange({ density: e.target.value })}>
+            <option value="compact">Compact</option>
+            <option value="comfortable">Comfortable</option>
+          </select>
+        </label>
+        <label style={{ fontSize: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span>Sorting</span>
+          <select value={viewSettings.sortingMode} onChange={e => onViewSettingsChange({ sortingMode: e.target.value })}>
+            <option value="shotNumber">Shot number</option>
+            <option value="status">Status</option>
+          </select>
+        </label>
+        <label style={{ fontSize: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span>Grouping</span>
+          <select value={viewSettings.groupingMode} onChange={e => onViewSettingsChange({ groupingMode: e.target.value })}>
+            <option value="scene">By scene</option>
+            <option value="none">Flat</option>
+          </select>
+        </label>
+        {[
+          ['showThumbnails', 'Show thumbnails'],
+          ['showSidebar', 'Show sidebar'],
+          ['showSceneDetails', 'Show scene details'],
+        ].map(([key, label]) => (
+          <label key={key} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={!!viewSettings[key]} onChange={() => onViewSettingsChange({ [key]: !viewSettings[key] })} />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
 
       {/* Sortable column list */}
       <DndContext
@@ -846,7 +895,7 @@ function ColResizeHandle({ colKey, width, isDark, onResizeStart }) {
 // ── SortableShotRow ───────────────────────────────────────────────────────────
 function SortableShotRow({
   shot, shotIndex, scene, visibleColumns,
-  c, isDark, handleShotChange, updateScene, onDelete,
+  c, isDark, handleShotChange, onDelete, rowHeight, sceneIntOrExt, sceneDayNight,
 }) {
   const [hovered, setHovered] = useState(false)
   const {
@@ -866,7 +915,7 @@ function SortableShotRow({
     <tr
       ref={setNodeRef}
       style={{
-        height: ROW_H,
+        height: rowHeight,
         backgroundColor: rowBg,
         opacity: isChecked ? 0.5 : isDragging ? 0.35 : 1,
         transform: CSS.Transform.toString(transform),
@@ -890,7 +939,7 @@ function SortableShotRow({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          height: ROW_H,
+          height: rowHeight,
           padding: '0 3px',
         }}>
           {/* Drag grip */}
@@ -948,21 +997,45 @@ function SortableShotRow({
           borderBottom: `1px solid ${c.border}`,
           borderRight: !isLastCol ? `1px solid ${c.border}` : 'none',
           padding: 0,
-          ...(isNotes ? { minHeight: ROW_H, overflow: 'visible', verticalAlign: 'top' } : { height: ROW_H, overflow: 'hidden', verticalAlign: 'middle' }),
+          ...(isNotes ? { minHeight: rowHeight, overflow: 'visible', verticalAlign: 'top' } : { height: rowHeight, overflow: 'hidden', verticalAlign: 'middle' }),
           textOverflow: 'ellipsis',
           whiteSpace: isNotes ? 'normal' : 'nowrap',
           userSelect: 'none',
         }
 
-        if (col.type === 'checkbox') {
+        if (col.type === 'status') {
           return (
             <td key={col.key} style={{ ...cellStyle, textAlign: 'center' }}>
-              <EditableCell
-                type="checkbox"
-                isChecked={isChecked}
-                isDark={isDark}
-                onChange={(val) => handleShotChange(shot.id, 'checked', val)}
-              />
+              <button
+                onClick={() => handleShotChange(shot.id, 'checked', !isChecked)}
+                style={{
+                  border: `1px solid ${isChecked ? '#16a34a' : c.border}`,
+                  background: isChecked ? 'rgba(22,163,74,0.14)' : 'transparent',
+                  color: isChecked ? '#166534' : '#6b7280',
+                  borderRadius: 999,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  cursor: 'pointer',
+                }}
+              >
+                {isChecked ? 'Done' : 'Open'}
+              </button>
+            </td>
+          )
+        }
+
+        if (col.type === 'thumbnail') {
+          const thumb = shot.image
+          return (
+            <td key={col.key} style={cellStyle}>
+              <div style={{ height: rowHeight, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {thumb ? (
+                  <img src={thumb} alt="Storyboard thumbnail" style={{ width: 46, height: rowHeight - 6, borderRadius: 3, objectFit: 'cover', border: `1px solid ${c.border}` }} />
+                ) : (
+                  <span style={{ fontSize: 9, opacity: 0.35 }}>—</span>
+                )}
+              </div>
             </td>
           )
         }
@@ -970,13 +1043,14 @@ function SortableShotRow({
         if (col.type === 'readonly') {
           return (
             <td key={col.key} style={cellStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', height: ROW_H, gap: 3, paddingRight: 2, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', height: rowHeight, gap: 3, paddingRight: 2, overflow: 'hidden' }}>
                 <EditableCell
                   type="readonly"
                   value={shot.displayId}
                   isDark={isDark}
                   onChange={() => {}}
                 />
+                <span style={{ fontSize: 10, opacity: 0.45, fontFamily: 'monospace' }}>{shot.cameraName || ''}</span>
                 <ShotlistSceneBadge shot={shot} />
               </div>
             </td>
@@ -995,6 +1069,7 @@ function SortableShotRow({
                 onAddCustomOption={(v) => addCustomDropdownOption('int', v)}
                 isDark={isDark}
                 onChange={(val) => handleShotChange(shot.id, 'intOrExt', val)}
+                placeholder={sceneIntOrExt || ''}
               />
             </td>
           )
@@ -1012,6 +1087,7 @@ function SortableShotRow({
                 onAddCustomOption={(v) => addCustomDropdownOption('dn', v)}
                 isDark={isDark}
                 onChange={(val) => handleShotChange(shot.id, 'dayNight', val)}
+                placeholder={sceneDayNight || ''}
               />
             </td>
           )
@@ -1020,7 +1096,7 @@ function SortableShotRow({
         // Compute value for regular cells
         const val = col.key.startsWith('specs.')
           ? (shot.specs?.[col.key.split('.')[1]] ?? '')
-          : (shot[col.key] ?? '')
+          : (col.key === 'description' ? (shot.description ?? shot.subject ?? '') : (shot[col.key] ?? ''))
 
         const customOpts = col.customOptionsField
           ? (customDropdownOptions[col.customOptionsField] || [])
@@ -1038,7 +1114,7 @@ function SortableShotRow({
               }
               value={val}
               isDark={isDark}
-              onChange={(newVal) => handleShotChange(shot.id, col.key, newVal)}
+              onChange={(newVal) => handleShotChange(shot.id, col.key === 'description' ? 'description' : col.key, newVal)}
             />
           </td>
         )
@@ -1078,6 +1154,15 @@ export default function ShotlistTab({ containerRef }) {
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const [selectedDayId, setSelectedDayId] = useState(shotlistViewState.selectedDayId || null)
+  const [selectedSceneId, setSelectedSceneId] = useState(shotlistViewState.selectedSceneId || null)
+  const [viewSettings, setViewSettings] = useState({
+    density: shotlistViewState.density || 'compact',
+    showThumbnails: shotlistViewState.showThumbnails ?? true,
+    showSidebar: shotlistViewState.showSidebar ?? true,
+    showSceneDetails: shotlistViewState.showSceneDetails ?? false,
+    groupingMode: shotlistViewState.groupingMode || 'scene',
+    sortingMode: shotlistViewState.sortingMode || 'shotNumber',
+  })
   const scrollerRef = useRef(null)
   const dayTabs = useMemo(
     () => schedule.map((day, idx) => ({
@@ -1095,8 +1180,12 @@ export default function ShotlistTab({ containerRef }) {
   const activeDay = activeDayIdx >= 0 ? schedule[activeDayIdx] : null
 
   useEffect(() => {
-    setTabViewState('shotlist', { selectedDayId: activeDay?.id || null })
-  }, [activeDay, setTabViewState])
+    setTabViewState('shotlist', {
+      selectedDayId: activeDay?.id || null,
+      selectedSceneId,
+      ...viewSettings,
+    })
+  }, [activeDay, selectedSceneId, setTabViewState, viewSettings])
 
   useEffect(() => {
     const node = scrollerRef.current
@@ -1131,6 +1220,21 @@ export default function ShotlistTab({ containerRef }) {
       })
       .filter(scene => scene._filteredShots.length > 0)
   }, [scenes, scriptScenes, activeDay, activeDayShotIds, getShotsForScene, getCanonicalStoryboardSceneMetadata])
+
+  useEffect(() => {
+    if (filteredScenes.length === 0) {
+      setSelectedSceneId(null)
+      return
+    }
+    if (!selectedSceneId || !filteredScenes.some(scene => scene.id === selectedSceneId)) {
+      setSelectedSceneId(filteredScenes[0].id)
+    }
+  }, [filteredScenes, selectedSceneId])
+
+  const activeScene = useMemo(
+    () => filteredScenes.find(scene => scene.id === selectedSceneId) || null,
+    [filteredScenes, selectedSceneId]
+  )
 
 
   const scriptPaginationByScene = useMemo(
@@ -1196,11 +1300,12 @@ export default function ShotlistTab({ containerRef }) {
       .map(c => {
         const col = allColumnsMap[c.key]
         if (!col) return null
+        if (!viewSettings.showThumbnails && col.key === 'thumbnail') return null
         const overrideWidth = shotlistColumnWidths?.[col.key]
         return overrideWidth != null ? { ...col, width: overrideWidth } : col
       })
       .filter(Boolean)
-  }, [shotlistColumnConfig, allColumnsMap, shotlistColumnWidths])
+  }, [shotlistColumnConfig, allColumnsMap, shotlistColumnWidths, viewSettings.showThumbnails])
 
   const totalTableWidth = DRAG_COL_WIDTH + visibleColumns.reduce((sum, col) => sum + col.width, 0)
 
@@ -1215,9 +1320,32 @@ export default function ShotlistTab({ containerRef }) {
     muted:       '#374151',
   }
 
+  const rowHeight = DENSITY_ROW_HEIGHT[viewSettings.density] || DENSITY_ROW_HEIGHT.compact
+
+  const sortedShots = useMemo(() => {
+    if (!activeScene) return []
+    const shots = [...activeScene._filteredShots]
+    if (viewSettings.sortingMode === 'status') {
+      shots.sort((a, b) => Number(!!a.checked) - Number(!!b.checked))
+      return shots
+    }
+    const displayRank = (displayId) => {
+      const match = String(displayId || '').match(/^(\d+)([A-Z]*)$/i)
+      if (!match) return Number.MAX_SAFE_INTEGER
+      const n = Number(match[1] || 0)
+      const suffix = String(match[2] || '').toUpperCase()
+      const s = suffix ? suffix.charCodeAt(0) - 64 : 0
+      return n * 100 + s
+    }
+    shots.sort((a, b) => displayRank(a.displayId) - displayRank(b.displayId))
+    return shots
+  }, [activeScene, viewSettings.sortingMode])
+
   const handleShotChange = useCallback((shotId, key, value) => {
     if (key.startsWith('specs.')) {
       updateShotSpec(shotId, key.split('.')[1], value)
+    } else if (key === 'description') {
+      updateShot(shotId, { description: value, subject: value })
     } else {
       updateShot(shotId, { [key]: value })
     }
@@ -1296,6 +1424,8 @@ export default function ShotlistTab({ containerRef }) {
             customColumns={customColumns}
             onAddCustomColumn={addCustomColumn}
             onRemoveCustomColumn={removeCustomColumn}
+            viewSettings={viewSettings}
+            onViewSettingsChange={(patch) => setViewSettings(prev => ({ ...prev, ...patch }))}
           />
         )}
       </div>
@@ -1389,18 +1519,111 @@ export default function ShotlistTab({ containerRef }) {
       )}
 
       {/* ── Table ── */}
-      {schedule.length > 0 && activeDay && filteredScenes.length > 0 && (
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
-        <table style={{
-          borderCollapse: 'collapse',
-          tableLayout: 'fixed',
-          width: totalTableWidth,
-          minWidth: '100%',
-          backgroundColor: c.tableBg,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08)',
-          fontSize: 11,
-          fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif',
-        }}>
+      {schedule.length > 0 && activeDay && filteredScenes.length > 0 && activeScene && (
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+        {viewSettings.showSidebar && (
+          <aside style={{ width: 280, borderRight: `1px solid ${c.thickBorder}`, background: '#F8F5EF', overflow: 'auto' }}>
+            <div style={{ padding: '10px 12px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, opacity: 0.6 }}>
+              Day scenes
+            </div>
+            {filteredScenes.map((scene) => (
+              <button
+                key={scene.id}
+                onClick={() => setSelectedSceneId(scene.id)}
+                style={{
+                  width: '100%',
+                  border: 'none',
+                  background: selectedSceneId === scene.id ? 'rgba(0,0,0,0.06)' : 'transparent',
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  borderLeft: `3px solid ${scene._canonical?.color || scene.color || '#94a3b8'}`,
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 800, fontFamily: 'monospace' }}>SC {scene._canonical?.sceneNumber || scene.sceneLabel}</div>
+                <div style={{ fontSize: 11, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Untitled scene'}
+                </div>
+                <div style={{ marginTop: 3, fontSize: 10, opacity: 0.6 }}>{scene._filteredShots.length} shots</div>
+              </button>
+            ))}
+          </aside>
+        )}
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
+          <div
+            onDoubleClick={() => openScenePropertiesDialog('storyboard', activeScene.id)}
+            style={{
+              background: '#fff',
+              border: `1px solid ${c.thickBorder}`,
+              borderLeft: `4px solid ${activeScene._canonical?.color || activeScene.color || '#F2C250'}`,
+              borderRadius: 6,
+              padding: '8px 10px',
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 800, fontFamily: 'monospace' }}>SC {activeScene._canonical?.sceneNumber || activeScene.sceneLabel}</span>
+                <span style={{ opacity: 0.45 }}>•</span>
+                <span>{activeScene._canonical?.titleSlugline || activeScene.slugline || activeScene.location}</span>
+                <span style={{ opacity: 0.45 }}>•</span>
+                <span>{activeScene._canonical?.location || activeScene.location}</span>
+                <span style={{ opacity: 0.45 }}>•</span>
+                <span>{activeScene._canonical?.intOrExt || activeScene.intOrExt}</span>
+                <span>{activeScene._canonical?.dayNight || activeScene.dayNight}</span>
+                <span style={{ opacity: 0.45 }}>•</span>
+                <span>
+                  {activeScene.linkedScriptSceneId && scriptPaginationByScene[activeScene.linkedScriptSceneId]
+                    ? `${scriptPaginationByScene[activeScene.linkedScriptSceneId].pageCount.toFixed(2)} pp`
+                    : '—'}
+                </span>
+                {(activeScene._canonical?.characters || []).map((character) => (
+                  <span key={character} style={{ fontSize: 10, border: `1px solid ${c.border}`, borderRadius: 999, padding: '1px 6px' }}>
+                    {character}
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, opacity: 0.65 }}>{sortedShots.length} shots</span>
+                <button
+                  onClick={() => setViewSettings(prev => ({ ...prev, showSceneDetails: !prev.showSceneDetails }))}
+                  style={{ border: `1px solid ${c.border}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 10, padding: '3px 7px' }}
+                >
+                  {viewSettings.showSceneDetails ? 'Hide details' : 'Show details'}
+                </button>
+              </div>
+            </div>
+            {viewSettings.showSceneDetails && (
+              <div style={{ marginTop: 8, borderTop: `1px solid ${c.border}`, paddingTop: 8 }}>
+                <ScenePropertiesPanel
+                  values={{
+                    sceneNumber: activeScene._canonical?.sceneNumber || activeScene.sceneLabel || '',
+                    titleSlugline: activeScene._canonical?.titleSlugline || activeScene.slugline || '',
+                    location: activeScene._canonical?.location || activeScene.location || '',
+                    intExt: activeScene._canonical?.intOrExt || activeScene.intOrExt || '',
+                    dayNight: activeScene._canonical?.dayNight || activeScene.dayNight || '',
+                    color: activeScene._canonical?.color || activeScene.color || null,
+                    characters: activeScene._canonical?.characters || [],
+                  }}
+                  estimatedPages={activeScene.linkedScriptSceneId && scriptPaginationByScene[activeScene.linkedScriptSceneId]
+                    ? `${scriptPaginationByScene[activeScene.linkedScriptSceneId].pageCount.toFixed(2)} pp · p${scriptPaginationByScene[activeScene.linkedScriptSceneId].startPage}–${scriptPaginationByScene[activeScene.linkedScriptSceneId].endPage}`
+                    : '—'}
+                />
+              </div>
+            )}
+          </div>
+
+          <table style={{
+            borderCollapse: 'collapse',
+            tableLayout: 'fixed',
+            width: totalTableWidth,
+            minWidth: '100%',
+            backgroundColor: c.tableBg,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08)',
+            fontSize: 11,
+            fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif',
+          }}>
           <colgroup>
             {/* Drag/delete utility column */}
             <col style={{ width: DRAG_COL_WIDTH }} />
@@ -1411,7 +1634,7 @@ export default function ShotlistTab({ containerRef }) {
 
           {/* ── Sticky column header ── */}
           <thead>
-            <tr style={{ height: ROW_H }}>
+            <tr style={{ height: rowHeight }}>
               {/* Drag col header (empty) */}
               <th className="shotlist-ui-col" style={{
                 position: 'sticky',
@@ -1461,261 +1684,46 @@ export default function ShotlistTab({ containerRef }) {
 
           {/* ── Body ── */}
           <tbody>
-            {filteredScenes.map(scene => {
-              const shots = scene._filteredShots
-              const timeTotal = sumScriptTimes(shots)
-              const totalCols = visibleColumns.length + 1 // +1 for drag/delete col
-
-              return (
-                <React.Fragment key={scene.id}>
-
-                  {/* Scene header row — inline editable, syncs bidirectionally with storyboard */}
-                  <tr onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)}>
-                    <td
-                      colSpan={totalCols}
-                      style={{
-                        height: 34,
-                        backgroundColor: 'rgba(242,194,80,0.1)',
-                        color: '#111827',
-                        fontWeight: 700,
-                        fontSize: 11,
-                        fontFamily: 'Sora, sans-serif',
-                        letterSpacing: '0.04em',
-                        padding: '0 12px',
-                        borderTop: '2px solid rgba(0,0,0,0.08)',
-                        borderBottom: '1px solid rgba(74,85,104,0.12)',
-                        borderLeft: '3px solid #F2C250',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'nowrap' }}>
-                          {/* Scene label */}
-                          <input
-                            type="text"
-                            value={scene._canonical?.sceneNumber || scene.sceneLabel}
-                            onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { sceneNumber: e.target.value })}
-                            onPointerDown={e => e.stopPropagation()}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              outline: 'none',
-                              color: '#1f2937',
-                              fontWeight: 700,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              letterSpacing: '0.08em',
-                              padding: 0,
-                              minWidth: 50,
-                              width: `${Math.max((scene._canonical?.sceneNumber || scene.sceneLabel || '').length, 7)}ch`,
-                            }}
-                            placeholder="1"
-                          />
-                          <span style={{ opacity: 0.4, margin: '0 8px' }}>|</span>
-                          {/* Location */}
-                          <input
-                            type="text"
-                            value={scene._canonical?.location || scene.location}
-                            onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { location: e.target.value })}
-                            onPointerDown={e => e.stopPropagation()}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              outline: 'none',
-                              color: '#1f2937',
-                              fontWeight: 700,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              letterSpacing: '0.08em',
-                              padding: 0,
-                              minWidth: 40,
-                              width: `${Math.max((scene._canonical?.location || scene.location || '').length, 8)}ch`,
-                            }}
-                            placeholder="LOCATION"
-                          />
-                          <span style={{ opacity: 0.4, margin: '0 8px' }}>|</span>
-                          {/* I/E cycle button */}
-                          <button
-                            onClick={() => {
-                              const next = { INT: 'EXT', EXT: 'INT/EXT', 'INT/EXT': 'INT' }
-                              const current = scene._canonical?.intOrExt || scene.intOrExt
-                              updateCanonicalStoryboardSceneMetadata(scene.id, { intOrExt: next[current] || 'INT' })
-                            }}
-                            title="Click to cycle INT / EXT / INT/EXT"
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              outline: 'none',
-                              color: '#1f2937',
-                              fontWeight: 700,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              letterSpacing: '0.08em',
-                              padding: 0,
-                              cursor: 'pointer',
-                              opacity: 0.9,
-                            }}
-                          >
-                            {scene._canonical?.intOrExt || scene.intOrExt || 'INT'}
-                          </button>
-                          <span style={{ opacity: 0.4, margin: '0 6px' }}>·</span>
-                          {/* D/N cycle button */}
-                          <button
-                            onClick={() => {
-                              const next = { DAY: 'NIGHT', NIGHT: 'DAY/NIGHT', 'DAY/NIGHT': 'DAY' }
-                              const current = scene._canonical?.dayNight || scene.dayNight
-                              updateCanonicalStoryboardSceneMetadata(scene.id, { dayNight: next[current] || 'DAY' })
-                            }}
-                            title="Click to cycle DAY / NIGHT / DAY/NIGHT"
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              outline: 'none',
-                              color: '#1f2937',
-                              fontWeight: 700,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              letterSpacing: '0.08em',
-                              padding: 0,
-                              cursor: 'pointer',
-                              opacity: 0.9,
-                            }}
-                          >
-                            {scene._canonical?.dayNight || scene.dayNight || 'DAY'}
-                          </button>
-                        </div>
-                        <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.6, letterSpacing: '0.05em', flexShrink: 0 }}>
-                          {shots.length} SHOT{shots.length !== 1 ? 'S' : ''}
-                          {timeTotal ? ` · ${timeTotal} TOTAL` : ''}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-
-                  <tr>
-                    <td
-                      colSpan={totalCols}
-                      style={{
-                        padding: '8px 12px 10px',
-                        background: 'rgba(255,255,255,0.5)',
-                        borderBottom: '1px solid rgba(74,85,104,0.12)',
-                      }}
-                    >
-                      <ScenePropertiesPanel
-                        values={{
-                          sceneNumber: scene._canonical?.sceneNumber || scene.sceneLabel || '',
-                          titleSlugline: scene._canonical?.titleSlugline || scene.slugline || '',
-                          location: scene._canonical?.location || scene.location || '',
-                          intExt: scene._canonical?.intOrExt || scene.intOrExt || '',
-                          dayNight: scene._canonical?.dayNight || scene.dayNight || '',
-                          color: scene._canonical?.color || scene.color || null,
-                          characters: scene._canonical?.characters || [],
-                        }}
-                        estimatedPages={scene.linkedScriptSceneId && scriptPaginationByScene[scene.linkedScriptSceneId]
-                          ? `${scriptPaginationByScene[scene.linkedScriptSceneId].pageCount.toFixed(2)} pp · p${scriptPaginationByScene[scene.linkedScriptSceneId].startPage}–${scriptPaginationByScene[scene.linkedScriptSceneId].endPage}`
-                          : '—'}
-                      />
-                    </td>
-                  </tr>
-
-                  {/* Sortable shot rows — one DndContext per scene */}
-                  <DndContext
-                    sensors={rowSensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(e) => handleRowDragEnd(e, scene.id)}
-                  >
-                    <SortableContext
-                      items={shots.map(s => s.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {shots.map((shot, idx) => (
-                        <SortableShotRow
-                          key={shot.id}
-                          shot={shot}
-                          shotIndex={idx}
-                          scene={scene}
-                          visibleColumns={visibleColumns}
-                          c={c}
-                          isDark={isDark}
-                          handleShotChange={handleShotChange}
-                          updateScene={updateScene}
-                          onDelete={deleteShot}
-                        />
-                      ))}
-                    </SortableContext>
-                  </DndContext>
-
-                  {/* Empty scene placeholder */}
-                  {shots.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={totalCols}
-                        style={{
-                          height: 36,
-                          padding: '0 16px',
-                          fontSize: 11,
-                          color: c.muted,
-                          fontStyle: 'italic',
-                          borderBottom: `1px solid ${c.border}`,
-                        }}
-                      >
-                        No shots yet — use the button below or add from the Storyboard tab
-                      </td>
-                    </tr>
-                  )}
-
-                  {/* ＋ Add Shot row */}
-                  <tr className="shotlist-add-row">
-                    <td
-                      colSpan={totalCols}
-                      style={{
-                        height: 30,
-                        padding: 0,
-                        borderBottom: `2px solid ${c.thickBorder}`,
-                      }}
-                    >
-                      <button
-                        onClick={() => handleAddShotForDay(scene.id)}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          fontWeight: 600,
-                          letterSpacing: '0.05em',
-                          color: isDark ? '#3a3a3a' : '#c0bdb8',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          padding: '0 12px',
-                          transition: 'color 0.12s, background 0.12s',
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.color = isDark ? '#4ade80' : '#16a34a'
-                          e.currentTarget.style.background = isDark ? 'rgba(74,222,128,0.06)' : 'rgba(22,163,74,0.05)'
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.color = isDark ? '#3a3a3a' : '#c0bdb8'
-                          e.currentTarget.style.background = 'none'
-                        }}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                          <line x1="5" y1="1" x2="5" y2="9" />
-                          <line x1="1" y1="5" x2="9" y2="5" />
-                        </svg>
-                        Add Shot
-                      </button>
-                    </td>
-                  </tr>
-
-                </React.Fragment>
-              )
-            })}
+            <DndContext
+              sensors={rowSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e) => handleRowDragEnd(e, activeScene.id)}
+            >
+              <SortableContext
+                items={sortedShots.map(s => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {sortedShots.map((shot, idx) => (
+                  <SortableShotRow
+                    key={shot.id}
+                    shot={shot}
+                    shotIndex={idx}
+                    scene={activeScene}
+                    visibleColumns={visibleColumns}
+                    c={c}
+                    isDark={isDark}
+                    handleShotChange={handleShotChange}
+                    onDelete={deleteShot}
+                    rowHeight={rowHeight}
+                    sceneIntOrExt={activeScene._canonical?.intOrExt || activeScene.intOrExt}
+                    sceneDayNight={activeScene._canonical?.dayNight || activeScene.dayNight}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+            <tr className="shotlist-add-row">
+              <td colSpan={visibleColumns.length + 1} style={{ height: 30, padding: 0, borderBottom: `2px solid ${c.thickBorder}` }}>
+                <button
+                  onClick={() => handleAddShotForDay(activeScene.id)}
+                  style={{ width: '100%', height: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.05em', color: '#7c7468' }}
+                >
+                  + Add Shot
+                </button>
+              </td>
+            </tr>
           </tbody>
         </table>
-
+        </div>
       </div>
       )}
     </div>
