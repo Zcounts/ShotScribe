@@ -26,6 +26,7 @@ import ScenePropertiesDialog from './components/ScenePropertiesDialog'
 import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
+import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -282,8 +283,8 @@ export default function App() {
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
 
   const projectName = useStore(s => s.projectName)
-  const saveProject = useStore(s => s.saveProject)
-  const saveProjectAs = useStore(s => s.saveProjectAs)
+  const shortcutBindings = useStore(s => s.shortcutBindings)
+  const executeCommand = useStore(s => s.executeCommand)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   // Autosave restore — kept as React state so we never call window.confirm()
   // (native OS dialogs steal focus from the webContents; after dismissal
@@ -323,21 +324,25 @@ export default function App() {
     })
   }, [scenes])
 
-  // Keyboard shortcuts: Ctrl+S = Save, Ctrl+Shift+S = Save As
+  // Global keyboard shortcuts (rebindable via Settings)
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault()
-        if (e.shiftKey) {
-          saveProjectAs()
-        } else {
-          saveProject()
-        }
-      }
+      if (e.defaultPrevented || e.repeat) return
+      const entries = Object.entries(shortcutBindings || SHORTCUT_DEFAULTS)
+      const match = entries.find(([, binding]) => isShortcutMatch(binding, e))
+      if (!match) return
+
+      const [actionId] = match
+      if (!actionId) return
+
+      e.preventDefault()
+      e.stopPropagation()
+      executeCommand(actionId)
     }
+
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [saveProject, saveProjectAs])
+  }, [executeCommand, shortcutBindings])
 
   // Auto-save every 60 seconds
   useEffect(() => {

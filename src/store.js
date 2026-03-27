@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import { arrayMove } from '@dnd-kit/sortable'
 import { computeEstimate, computeConfidence, parseSlugline } from './utils/scriptParser'
 import { ensureEditableScreenplayElements, estimateScreenplayPagination } from './utils/screenplay'
+import {
+  SHORTCUT_DEFAULTS,
+  getActiveBindings,
+  loadShortcutBindings,
+  normalizeShortcutBinding,
+  saveShortcutBindings,
+} from './shortcuts'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -65,6 +72,43 @@ const SCREENPLAY_SCENE_HEADING_TYPE = 'heading'
 const SCREENPLAY_CHARACTER_TYPE = 'character'
 const SCREENPLAY_DIALOGUE_TYPE = 'dialogue'
 const SCREENPLAY_ACTION_TYPE = 'action'
+const UNDO_HISTORY_LIMIT = 120
+const UNDO_GROUP_WINDOW_MS = 600
+
+function cloneUndoSnapshot(snapshot) {
+  return JSON.parse(JSON.stringify(snapshot))
+}
+
+function getUndoableSnapshot(state) {
+  return {
+    scenes: state.scenes,
+    scriptScenes: state.scriptScenes,
+    schedule: state.schedule,
+    callsheets: state.callsheets,
+    castRoster: state.castRoster,
+    crewRoster: state.crewRoster,
+    castCrewNotes: state.castCrewNotes,
+    projectName: state.projectName,
+    projectEmoji: state.projectEmoji,
+    columnCount: state.columnCount,
+    defaultFocalLength: state.defaultFocalLength,
+    useDropdowns: state.useDropdowns,
+    shotlistColumnConfig: state.shotlistColumnConfig,
+    scheduleColumnConfig: state.scheduleColumnConfig,
+    callsheetSectionConfig: state.callsheetSectionConfig,
+    shotlistColumnWidths: state.shotlistColumnWidths,
+    customColumns: state.customColumns,
+    customDropdownOptions: state.customDropdownOptions,
+    scriptSettings: state.scriptSettings,
+  }
+}
+
+function applyUndoSnapshot(snapshot, state) {
+  return {
+    ...state,
+    ...cloneUndoSnapshot(snapshot),
+  }
+}
 
 function deriveScriptSceneFromElements(scene, elements) {
   const normalizedElements = ensureEditableScreenplayElements(elements)
@@ -339,6 +383,10 @@ const useStore = create((set, get) => ({
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
   customDropdownOptions: {}, // { fieldKey: ['option1', 'option2', ...] }
+  shortcutBindings: loadShortcutBindings(),
+  undoPast: [],
+  undoFuture: [],
+  undoLastRecordedAt: 0,
 
   // ── Script import state ───────────────────────────────────────────────
   // Script-imported scenes (separate from storyboard scenes)
@@ -1413,6 +1461,93 @@ const useStore = create((set, get) => ({
   showContextMenu: (shotId, sceneId, x, y) => set({ contextMenu: { shotId, sceneId, x, y } }),
   hideContextMenu: () => set({ contextMenu: null }),
 
+  setShortcutBinding: (actionId, binding, opts = {}) => {
+    const normalized = normalizeShortcutBinding(binding)
+    if (!normalized) return { ok: false, reason: 'invalid' }
+
+    const { replaceActionId = null } = opts
+    const nextBindings = { ...get().shortcutBindings }
+    const conflictingAction = Object.keys(nextBindings).find(existingAction => (
+      existingAction !== actionId
+      && existingAction !== replaceActionId
+      && nextBindings[existingAction] === normalized
+    ))
+
+    if (conflictingAction) {
+      return { ok: false, reason: 'conflict', conflictActionId: conflictingAction }
+    }
+
+    if (replaceActionId && replaceActionId !== actionId) {
+      nextBindings[replaceActionId] = SHORTCUT_DEFAULTS[replaceActionId]
+    }
+
+    nextBindings[actionId] = normalized
+    const hydrated = getActiveBindings(nextBindings)
+    set({ shortcutBindings: hydrated })
+    saveShortcutBindings(hydrated)
+    return { ok: true }
+  },
+
+  resetShortcutBinding: (actionId) => {
+    const nextBindings = getActiveBindings({
+      ...get().shortcutBindings,
+      [actionId]: SHORTCUT_DEFAULTS[actionId],
+    })
+    set({ shortcutBindings: nextBindings })
+    saveShortcutBindings(nextBindings)
+  },
+
+  resetAllShortcutBindings: () => {
+    const defaults = { ...SHORTCUT_DEFAULTS }
+    set({ shortcutBindings: defaults })
+    saveShortcutBindings(defaults)
+  },
+
+  executeCommand: async (actionId) => {
+    const commands = {
+      undo: () => get().undo(),
+      redo: () => get().redo(),
+      saveProject: () => get().saveProject(),
+      saveProjectAs: () => get().saveProjectAs(),
+    }
+    const command = commands[actionId]
+    if (!command) return false
+    await command()
+    return true
+  },
+
+  undo: () => {
+    const { undoPast, undoFuture } = get()
+    if (!undoPast.length) return false
+    const previousSnapshot = undoPast[undoPast.length - 1]
+    const currentSnapshot = getUndoableSnapshot(get())
+
+    set(state => applyUndoSnapshot(previousSnapshot, {
+      ...state,
+      undoPast: undoPast.slice(0, -1),
+      undoFuture: [cloneUndoSnapshot(currentSnapshot), ...undoFuture],
+      undoLastRecordedAt: Date.now(),
+    }))
+
+    return true
+  },
+
+  redo: () => {
+    const { undoPast, undoFuture } = get()
+    if (!undoFuture.length) return false
+    const nextSnapshot = undoFuture[0]
+    const currentSnapshot = getUndoableSnapshot(get())
+
+    set(state => applyUndoSnapshot(nextSnapshot, {
+      ...state,
+      undoPast: [...undoPast, cloneUndoSnapshot(currentSnapshot)].slice(-UNDO_HISTORY_LIMIT),
+      undoFuture: undoFuture.slice(1),
+      undoLastRecordedAt: Date.now(),
+    }))
+
+    return true
+  },
+
   // ── Shotlist column widths ────────────────────────────────────────────
   setShotlistColumnWidth: (key, width) => {
     set(state => ({
@@ -1468,6 +1603,7 @@ const useStore = create((set, get) => ({
       castRoster, crewRoster,
       castCrewNotes,
       scriptScenes, importedScripts, scriptSettings,
+      shortcutBindings,
     } = get()
     return {
       version: 2,
@@ -1604,6 +1740,7 @@ const useStore = create((set, get) => ({
         showConfidenceIndicators: true,
         defaultSceneColor: null,
       },
+      shortcutBindings: getActiveBindings(shortcutBindings || SHORTCUT_DEFAULTS),
       exportedAt: new Date().toISOString(),
     }
   },
@@ -1940,6 +2077,7 @@ const useStore = create((set, get) => ({
         scenePaginationMode: 'natural',
         ...(data.scriptSettings || {}),
       },
+      shortcutBindings: getActiveBindings(data.shortcutBindings || loadShortcutBindings() || SHORTCUT_DEFAULTS),
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
       activeTab: 'script',
@@ -1953,7 +2091,11 @@ const useStore = create((set, get) => ({
         schedule: {},
         callsheet: {},
       },
+      undoPast: [],
+      undoFuture: [],
+      undoLastRecordedAt: 0,
     })
+    saveShortcutBindings(get().shortcutBindings)
   },
 
   openProject: async () => {
@@ -2062,6 +2204,9 @@ const useStore = create((set, get) => ({
         schedule: {},
         callsheet: {},
       },
+      undoPast: [],
+      undoFuture: [],
+      undoLastRecordedAt: 0,
     })
   },
 
@@ -2087,5 +2232,55 @@ const useStore = create((set, get) => ({
 
   CARD_COLORS,
 }))
+
+let isApplyingUndoState = false
+
+useStore.subscribe((state, previousState) => {
+  if (isApplyingUndoState) return
+
+  const stateChangedByUndo =
+    state.undoPast !== previousState.undoPast
+    || state.undoFuture !== previousState.undoFuture
+    || state.undoLastRecordedAt !== previousState.undoLastRecordedAt
+
+  if (stateChangedByUndo) return
+
+  const previousSnapshot = getUndoableSnapshot(previousState)
+  const nextSnapshot = getUndoableSnapshot(state)
+  const previousSerialized = JSON.stringify(previousSnapshot)
+  const nextSerialized = JSON.stringify(nextSnapshot)
+  if (previousSerialized === nextSerialized) return
+
+  const now = Date.now()
+  const shouldGroup = now - (state.undoLastRecordedAt || 0) <= UNDO_GROUP_WINDOW_MS
+
+  isApplyingUndoState = true
+  useStore.setState(currentState => ({
+    undoPast: shouldGroup
+      ? currentState.undoPast
+      : [...currentState.undoPast, cloneUndoSnapshot(previousSnapshot)].slice(-UNDO_HISTORY_LIMIT),
+    undoFuture: [],
+    undoLastRecordedAt: now,
+  }))
+  isApplyingUndoState = false
+})
+
+const baseUndo = useStore.getState().undo
+const baseRedo = useStore.getState().redo
+
+useStore.setState({
+  undo: () => {
+    isApplyingUndoState = true
+    const result = baseUndo()
+    isApplyingUndoState = false
+    return result
+  },
+  redo: () => {
+    isApplyingUndoState = true
+    const result = baseRedo()
+    isApplyingUndoState = false
+    return result
+  },
+})
 
 export default useStore
