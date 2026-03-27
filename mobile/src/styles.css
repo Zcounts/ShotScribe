@@ -356,8 +356,8 @@ p {
   font-weight: 700;
 }
 
-.shot-scene-spacer {
-  flex: 1 1 auto;
+.shot-scene-tag-muted {
+  opacity: 0.65;
 }
 
 .shot-toggle-neutral {
@@ -434,11 +434,27 @@ p {
   gap: 10px;
 }
 
+.shotlist-structured-card {
+  border-color: #cfc3b3;
+}
+
 .mobile-shot-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+}
+
+.mobile-shot-row-top {
+  align-items: flex-start;
+}
+
+.shot-number-label {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #6d5e4f;
+  font-weight: 800;
 }
 
 .mobile-shot-row h4 {
@@ -453,6 +469,35 @@ p {
   gap: 8px;
   align-items: center;
   min-height: 28px;
+}
+
+.scene-shot-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #d3c8ba;
+  border-radius: 12px;
+  background: #efe6d9;
+  padding: 10px 12px;
+}
+
+.scene-group-header h4 {
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #574a3d;
+}
+
+.scene-group-header span {
+  font-size: 0.78rem;
+  color: #6b5b4a;
+  font-weight: 700;
 }
 
 .focal-pill {
@@ -476,6 +521,61 @@ p {
   margin-top: 2px;
 }
 
+.schedule-shot-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.meta-chip {
+  border: 1px solid #d4c7b4;
+  border-radius: 10px;
+  background: #f4ecdf;
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meta-chip span {
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #715f4f;
+}
+
+.meta-chip strong {
+  font-size: 0.8rem;
+  color: #2f2f34;
+}
+
+.shotlist-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.shot-production-notes {
+  border: 1px solid #d3c3ad;
+  background: #f3ebdf;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shot-production-notes span {
+  font-size: 0.69rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b5c4a;
+}
+
+.schedule-shot-card {
+  gap: 10px;
+}
+
 .shot-action-button {
   flex: 1 1 0;
   border: 1px solid #b1a493;
@@ -488,6 +588,11 @@ p {
   font-weight: 700;
   letter-spacing: 0.02em;
   text-align: center;
+}
+
+.mobile-shot-actions-modal .shot-action-button {
+  flex: 0 0 auto;
+  width: 100%;
 }
 
 .shot-action-button-secondary {

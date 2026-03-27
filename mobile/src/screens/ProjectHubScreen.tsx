@@ -20,6 +20,7 @@ type ShotStatus = 'todo' | 'in_progress' | 'done' | 'skipped'
 
 interface MobileShotDetail {
   shotId: string
+  shotNumberLabel: string
   displayName: string
   cameraName: string
   focalLength: string
@@ -134,6 +135,7 @@ function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
     const displayName = toHumanShotName(item.shotDisplayName, index + 1, cameraName)
     shotMap.set(item.shotId, {
       shotId: item.shotId,
+      shotNumberLabel: `Shot ${index + 1}`,
       displayName,
       cameraName,
       focalLength: item.focalLength ?? '—',
@@ -153,6 +155,7 @@ function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
     const displayName = toHumanShotName(ref.shotDisplayName, index + 1, ref.shotCameraName ?? 'Camera 1')
     shotMap.set(ref.shotId, {
       shotId: ref.shotId,
+      shotNumberLabel: existing?.shotNumberLabel ?? `Shot ${index + 1}`,
       displayName,
       cameraName: ref.shotCameraName ?? existing?.cameraName ?? 'Camera 1',
       focalLength: ref.focalLength ?? existing?.focalLength ?? '—',
@@ -170,7 +173,16 @@ function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
   return shotMap
 }
 
-function ShotDetailCard({ shot }: { shot: MobileShotDetail }) {
+function ShotDetailCard({
+  shot,
+  status,
+  onCycleStatus,
+}: {
+  shot: MobileShotDetail
+  status?: ShotStatus
+  onCycleStatus?: () => void
+}) {
+  const actionState = status ? getShotActionState(status) : null
   return (
     <article className="mobile-shot-detail">
       <header className="mobile-shot-detail-header">
@@ -203,6 +215,18 @@ function ShotDetailCard({ shot }: { shot: MobileShotDetail }) {
           <span>Notes</span>
           <strong>{shot.notes}</strong>
         </p>
+      ) : null}
+
+      {actionState && onCycleStatus ? (
+        <div className="mobile-shot-actions mobile-shot-actions-modal">
+          <button
+            type="button"
+            className={`shot-action-button shot-action-button-${actionState.tone}`}
+            onClick={onCycleStatus}
+          >
+            {actionState.label}
+          </button>
+        </div>
       ) : null}
     </article>
   )
@@ -268,7 +292,8 @@ function renderSchedule(
   day: StoredDayEntry,
   overrides: Record<string, ShotStatus>,
   shotLookup: Map<string, MobileShotDetail>,
-  onOpenDetails: (shotId: string) => void
+  onOpenDetails: (shotId: string) => void,
+  onCycleShotStatus: (shotId: string) => void
 ) {
   const sortedItems = [...day.dayPackage.scheduleItems].sort((a, b) => a.sortOrder - b.sortOrder)
 
@@ -279,25 +304,42 @@ function renderSchedule(
 
         if (item.type === 'shot' && item.shotId) {
           const shot = shotLookup.get(item.shotId)
+          const actionState = getShotActionState(effectiveStatus)
           return (
             <article
               key={item.scheduleItemId}
-              className={`mobile-shot-card status-outline-${effectiveStatus}`}
+              className={`mobile-shot-card schedule-shot-card shot-toggle-${actionState.tone} status-outline-${effectiveStatus}`}
               onDoubleClick={() => onOpenDetails(item.shotId as string)}
             >
+              <div className="mobile-shot-row mobile-shot-row-top">
+                <p className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</p>
+                <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+              </div>
               <div className="mobile-shot-row">
                 <h4>{shot?.displayName ?? 'Shot'}</h4>
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
               </div>
-              <div className="mobile-shot-subrow">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-spacer" aria-hidden="true" />}
-                <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+              <div className="schedule-shot-meta-grid">
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
+                <p className="meta-chip">
+                  <span>Window</span>
+                  <strong>
+                    {formatTime(item.actualStartTime || item.plannedStartTime)} –{' '}
+                    {formatTime(item.actualEndTime || item.plannedEndTime)}
+                  </strong>
+                </p>
               </div>
               <div className="mobile-shot-actions">
-                <button type="button" className="inline-button" onClick={() => onOpenDetails(item.shotId as string)}>
+                <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(item.shotId as string)}>
                   Details
                 </button>
-                <p className="hint-text">{formatTime(item.actualStartTime || item.plannedStartTime)} – {formatTime(item.actualEndTime || item.plannedEndTime)}</p>
+                <button
+                  type="button"
+                  className={`shot-action-button shot-action-button-${actionState.tone}`}
+                  onClick={() => onCycleShotStatus(item.shotId as string)}
+                >
+                  {actionState.label}
+                </button>
               </div>
             </article>
           )
@@ -336,44 +378,120 @@ function renderShotlist(
     return <p className="hint-text">No shots found in this day package.</p>
   }
 
+  const groupedByScene = shotItems.reduce<Record<string, typeof shotItems>>((acc, item) => {
+    const key = item.sceneId?.trim() ? item.sceneId : 'unscheduled-scene'
+    if (!acc[key]) {
+      acc[key] = []
+    }
+    acc[key].push(item)
+    return acc
+  }, {})
+
+  const orderedGroups = Object.entries(groupedByScene).sort((a, b) => {
+    if (a[0] === 'unscheduled-scene') return 1
+    if (b[0] === 'unscheduled-scene') return -1
+    return a[0].localeCompare(b[0], undefined, { numeric: true })
+  })
+
   return (
     <div className="stacked-list">
-      {shotItems.map((item) => {
-        const shotId = item.shotId as string
-        const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
-        const actionState = getShotActionState(effectiveStatus)
-        const shot = shotLookup.get(shotId)
+      {orderedGroups.map(([sceneKey, sceneShots]) => (
+        <section key={sceneKey} className="scene-shot-group">
+          <header className="scene-group-header">
+            <h4>{toSceneTag(sceneKey) ?? 'Scene pending'}</h4>
+            <span>{sceneShots.length} shot(s)</span>
+          </header>
 
-        return (
-          <article
-            key={item.scheduleItemId}
-            className={`mobile-shot-card shotlist-card shot-toggle-${actionState.tone}`}
-            onDoubleClick={() => onOpenDetails(shotId)}
-          >
-            <div className="mobile-shot-row">
-              <h4>{shot?.displayName ?? 'Shot'}</h4>
-              <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
-            </div>
-            {shot?.sceneTag ? (
-              <div className="mobile-shot-subrow">
-                <span className="shot-scene-tag">{shot.sceneTag}</span>
-              </div>
-            ) : null}
-            <div className="mobile-shot-actions">
-              <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(shotId)}>
-                Details
-              </button>
-              <button
-                type="button"
-                className={`shot-action-button shot-action-button-${actionState.tone}`}
-                onClick={() => onCycleShotStatus(shotId)}
+          {sceneShots.map((item) => {
+            const shotId = item.shotId as string
+            const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
+            const actionState = getShotActionState(effectiveStatus)
+            const shot = shotLookup.get(shotId)
+            const shotCode = shot?.displayName ?? 'Shot'
+            const interiorExterior = /ext/i.test(shotCode) ? 'E' : /int/i.test(shotCode) ? 'I' : 'I/E'
+            const dayNight = /night/i.test((shot?.notes ?? '') + shotCode) ? 'N' : /day/i.test((shot?.notes ?? '') + shotCode) ? 'D' : 'D/N'
+
+            return (
+              <article
+                key={item.scheduleItemId}
+                className={`mobile-shot-card shotlist-card shotlist-structured-card shot-toggle-${actionState.tone}`}
+                onDoubleClick={() => onOpenDetails(shotId)}
               >
-                {actionState.label}
-              </button>
-            </div>
-          </article>
-        )
-      })}
+                <div className="mobile-shot-row mobile-shot-row-top">
+                  <p className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</p>
+                  <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+                </div>
+
+                <div className="mobile-shot-row">
+                  <h4>{shotCode}</h4>
+                  <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
+                </div>
+
+                <div className="shotlist-meta-grid">
+                  <p className="meta-chip">
+                    <span>I/E</span>
+                    <strong>{interiorExterior}</strong>
+                  </p>
+                  <p className="meta-chip">
+                    <span>D/N</span>
+                    <strong>{dayNight}</strong>
+                  </p>
+                  <p className="meta-chip">
+                    <span>Coverage</span>
+                    <strong>{shot?.shotSize ?? '—'}</strong>
+                  </p>
+                  <p className="meta-chip">
+                    <span>Type</span>
+                    <strong>{shot?.shotType ?? '—'}</strong>
+                  </p>
+                  <p className="meta-chip">
+                    <span>Move</span>
+                    <strong>{shot?.shotMove ?? '—'}</strong>
+                  </p>
+                  <p className="meta-chip">
+                    <span>Equipment</span>
+                    <strong>{shot?.shotEquipment ?? '—'}</strong>
+                  </p>
+                  <p className="meta-chip">
+                    <span>Camera</span>
+                    <strong>{shot?.cameraName ?? 'Camera'}</strong>
+                  </p>
+                  <p className="meta-chip">
+                    <span>Planned</span>
+                    <strong>
+                      {formatTime(item.plannedStartTime)} – {formatTime(item.plannedEndTime)}
+                    </strong>
+                  </p>
+                </div>
+
+                {shot?.notes ? (
+                  <p className="shot-production-notes">
+                    <span>Notes / Sound / Props</span>
+                    <strong>{shot.notes}</strong>
+                  </p>
+                ) : null}
+
+                <div className="mobile-shot-actions">
+                  <button
+                    type="button"
+                    className="shot-action-button shot-action-button-secondary"
+                    onClick={() => onOpenDetails(shotId)}
+                  >
+                    Details
+                  </button>
+                  <button
+                    type="button"
+                    className={`shot-action-button shot-action-button-${actionState.tone}`}
+                    onClick={() => onCycleShotStatus(shotId)}
+                  >
+                    {actionState.label}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </section>
+      ))}
     </div>
   )
 }
@@ -381,6 +499,11 @@ function renderShotlist(
 function renderStoryboard(
   refs: MobileStoryboardReference[],
   shotLookup: Map<string, MobileShotDetail>,
+  project: StoredProjectEntry,
+  day: StoredDayEntry,
+  overrides: Record<string, ShotStatus>,
+  onCycleShotStatus: (shotId: string) => void,
+  onOpenDetails: (shotId: string) => void,
   expandedShotId: string | null,
   onToggleExpanded: (shotId: string) => void
 ) {
@@ -392,6 +515,8 @@ function renderStoryboard(
     <div className="stacked-list">
       {refs.map((ref) => {
         const shot = shotLookup.get(ref.shotId)
+        const effectiveStatus: ShotStatus = overrides[`${project.projectId}::${day.dayId}::${ref.shotId}`] ?? 'todo'
+        const actionState = getShotActionState(effectiveStatus)
         const isExpanded = expandedShotId === ref.shotId
         return (
           <article key={`${ref.shotId}-${ref.updatedAt}`} className="mobile-shot-card storyboard-card">
@@ -401,11 +526,23 @@ function renderStoryboard(
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
               </span>
               <span className="mobile-shot-subrow">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-spacer" aria-hidden="true" />}
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-tag shot-scene-tag-muted">Scene TBD</span>}
                 <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
               </span>
             </button>
             {isExpanded && shot ? <ShotDetailCard shot={shot} /> : null}
+            <div className="mobile-shot-actions">
+              <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(ref.shotId)}>
+                Details
+              </button>
+              <button
+                type="button"
+                className={`shot-action-button shot-action-button-${actionState.tone}`}
+                onClick={() => onCycleShotStatus(ref.shotId)}
+              >
+                {actionState.label}
+              </button>
+            </div>
           </article>
         )
       })}
@@ -583,6 +720,8 @@ export function ProjectHubScreen({
   }).length
 
   const focusedShot = focusedShotId ? shotLookup.get(focusedShotId) : undefined
+  const focusedShotStatus =
+    focusedShotId ? shotStatusOverrides[`${project.projectId}::${day.dayId}::${focusedShotId}`] ?? 'todo' : undefined
 
   return (
     <section className="screen project-hub-screen">
@@ -624,15 +763,25 @@ export function ProjectHubScreen({
 
       {selectedTab === 'overview' ? renderOverview(day, doneShots, totalShots) : null}
       {selectedTab === 'schedule'
-        ? renderSchedule(project, day, shotStatusOverrides, shotLookup, setFocusedShotId)
+        ? renderSchedule(project, day, shotStatusOverrides, shotLookup, setFocusedShotId, onCycleShotStatus)
         : null}
       {selectedTab === 'shotlist'
         ? renderShotlist(project, day, shotStatusOverrides, onCycleShotStatus, shotLookup, setFocusedShotId)
         : null}
       {selectedTab === 'storyboard'
-        ? renderStoryboard(day.dayPackage.storyboardRefs, shotLookup, expandedStoryboardShotId, (shotId) => {
-          setExpandedStoryboardShotId((current) => (current === shotId ? null : shotId))
-        })
+        ? renderStoryboard(
+            day.dayPackage.storyboardRefs,
+            shotLookup,
+            project,
+            day,
+            shotStatusOverrides,
+            onCycleShotStatus,
+            setFocusedShotId,
+            expandedStoryboardShotId,
+            (shotId) => {
+              setExpandedStoryboardShotId((current) => (current === shotId ? null : shotId))
+            }
+          )
         : null}
       {selectedTab === 'callsheet' ? renderCallsheet(day) : null}
       {selectedTab === 'project'
@@ -649,7 +798,11 @@ export function ProjectHubScreen({
               </button>
             </div>
             <div className="mobile-shot-modal-body">
-              <ShotDetailCard shot={focusedShot} />
+              <ShotDetailCard
+                shot={focusedShot}
+                status={focusedShotStatus}
+                onCycleStatus={() => onCycleShotStatus(focusedShot.shotId)}
+              />
             </div>
           </div>
         </div>
