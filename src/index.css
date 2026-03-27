@@ -321,12 +321,11 @@
   }
 
   .page-header-scene-bottom {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: inline-flex;
     align-items: baseline;
-    column-gap: 10px;
-    width: 100%;
-    max-width: 620px;
+    gap: 16px;
+    width: fit-content;
+    max-width: 100%;
   }
 
   .page-header-intdn {
@@ -347,6 +346,8 @@
 
   .page-header-slugline {
     min-width: 0;
+    max-width: min(40ch, 100%);
+    flex: 0 1 auto;
   }
 
   .page-header-token {

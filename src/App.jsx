@@ -60,6 +60,20 @@ function tintFromColor(color, alpha = 0.14) {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
 }
 
+function getOutlineItemStyle(color, isActive = false) {
+  return {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    border: '1px solid',
+    borderColor: isActive ? tintFromColor(color, 0.5) : tintFromColor(color, 0.25),
+    background: tintFromColor(color, isActive ? 0.18 : 0.1),
+    padding: '8px 10px',
+    cursor: 'pointer',
+    marginBottom: -1,
+  }
+}
+
 /** One scene rendered as one or more page-document divs inside a single DnD context */
 function SceneSection({
   scene,
@@ -374,7 +388,7 @@ export default function App() {
       label,
       subtitle,
       linkedSceneId: linkedScene?.id || null,
-      color: linkedScene?.color || '#94a3b8',
+      color: scene.color || (Array.isArray(scene.pageColors) ? scene.pageColors.find(Boolean) : null) || linkedScene?.color || '#94a3b8',
     }
   })
 
@@ -422,7 +436,7 @@ export default function App() {
       id: `${scene.id}__page_${pageIdx}`,
       label: `Page ${scenePageOffsets[sceneIdx] + pageIdx + 1}`,
       subtitle: `${scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${scene.location || ''}`,
-      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || linkedScene?.color || '#94a3b8',
+      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || scene.color || linkedScene?.color || '#94a3b8',
     }))
   })
 
@@ -535,13 +549,13 @@ export default function App() {
                 >
                   {storyboardOutlineTab === 'Scenes' ? sceneNavItems.map(item => {
                   return (
-                    <button key={item.id} onDoubleClick={() => openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 10px', cursor: 'pointer' }}>
+                    <button key={item.id} onDoubleClick={() => openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={getOutlineItemStyle(item.color, activeOutlineItem === item.id)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 999, background: item.color, border: '1px solid rgba(0,0,0,0.1)' }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
                       <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                     </button>
                   )
                 }) : storyboardPageItems.map(item => (
-                  <button key={item.id} onClick={() => { const el = document.getElementById(item.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveOutlineItem(item.id) } }} style={{ display: 'block', width: '100%', textAlign: 'left', border: '1px solid', borderColor: activeOutlineItem === item.id ? tintFromColor(item.sceneColor, 0.45) : 'rgba(74,85,104,0.08)', borderBottomColor: activeOutlineItem === item.id ? tintFromColor(item.sceneColor, 0.45) : 'rgba(74,85,104,0.08)', background: activeOutlineItem === item.id ? tintFromColor(item.sceneColor, 0.16) : 'none', padding: '8px 10px', cursor: 'pointer', marginBottom: -1 }}>
+                  <button key={item.id} onClick={() => { const el = document.getElementById(item.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveOutlineItem(item.id) } }} style={getOutlineItemStyle(item.sceneColor, activeOutlineItem === item.id)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
                     <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                   </button>
