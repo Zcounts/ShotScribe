@@ -477,55 +477,59 @@ function renderShotlist(
             <span>{sceneShots.length} shot(s)</span>
           </header>
 
-          {sceneShots.map((item) => {
-            const shotId = item.shotId as string
-            const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
-            const actionState = getShotActionState(effectiveStatus)
-            const shot = shotLookup.get(shotId)
-            const shotCode = shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'
-            const metaValues = [
-              toCleanValue(shot?.shotSize),
-              toCleanValue(shot?.shotType),
-              toCleanValue(shot?.shotMove),
-              toCleanValue(shot?.shotEquipment),
-            ].filter((v): v is string => Boolean(v))
+          <div className="shotlist-row-stack">
+            {sceneShots.map((item) => {
+              const shotId = item.shotId as string
+              const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
+              const actionState = getShotActionState(effectiveStatus)
+              const shot = shotLookup.get(shotId)
+              const shotCode = shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'
+              const metaValues: LabeledValue[] = [
+                shot?.shotSize ? { label: 'Coverage', value: shot.shotSize } : null,
+                shot?.shotType ? { label: 'Angle/Type', value: shot.shotType } : null,
+                shot?.shotMove ? { label: 'Move', value: shot.shotMove } : null,
+                shot?.shotEquipment ? { label: 'Equip', value: shot.shotEquipment } : null,
+              ].filter((v): v is LabeledValue => Boolean(v))
 
-            return (
-              <article
-                key={item.scheduleItemId}
-                className={`mobile-shot-card sl-shot-item shot-toggle-${actionState.tone}`}
-                onDoubleClick={() => onOpenDetails(shotId)}
-              >
-                <div className="sl-r1">
-                  <h4>{shotCode}</h4>
-                  <div className="sl-r1-right">
-                    {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
-                    <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+              return (
+                <article
+                  key={item.scheduleItemId}
+                  className={`sl-shot-row shot-toggle-${actionState.tone}`}
+                  onDoubleClick={() => onOpenDetails(shotId)}
+                >
+                  <div className="sl-r1">
+                    <h4 className="sl-shot-label">{shotCode}</h4>
+                    <div className="sl-r1-right">
+                      {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
+                      <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+                    </div>
                   </div>
-                </div>
 
-                {metaValues.length > 0 ? (
-                  <div className="sl-meta-line">
-                    {metaValues.map((val, i) => (
-                      <span key={val} className="sl-meta-item">
-                        {i > 0 ? <span className="sl-meta-dot">·</span> : null}
-                        <span className="sl-meta-val">{val}</span>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                  {metaValues.length > 0 ? (
+                    <div className="sl-meta-line">
+                      {metaValues.map((meta, i) => (
+                        <span key={`${meta.label}-${meta.value}`} className="sl-meta-item">
+                          {i > 0 ? <span className="sl-meta-dot">·</span> : null}
+                          <span className="sl-meta-val">
+                            <span className="sl-meta-key">{meta.label}</span> {meta.value}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
 
-                {shot?.notes ? <p className="sl-notes">{shot.notes}</p> : null}
+                  {shot?.notes ? <p className="sl-notes">{shot.notes}</p> : null}
 
-                <ShotActions
-                  actionLabel={actionState.label}
-                  actionTone={actionState.tone}
-                  onOpenDetails={() => onOpenDetails(shotId)}
-                  onCycleStatus={() => onCycleShotStatus(shotId)}
-                />
-              </article>
-            )
-          })}
+                  <ShotActions
+                    actionLabel={actionState.label}
+                    actionTone={actionState.tone}
+                    onOpenDetails={() => onOpenDetails(shotId)}
+                    onCycleStatus={() => onCycleShotStatus(shotId)}
+                  />
+                </article>
+              )
+            })}
+          </div>
         </section>
       ))}
     </div>
@@ -539,9 +543,7 @@ function renderStoryboard(
   day: StoredDayEntry,
   overrides: Record<string, ShotStatus>,
   onCycleShotStatus: (shotId: string) => void,
-  onOpenDetails: (shotId: string) => void,
-  expandedShotId: string | null,
-  onToggleExpanded: (shotId: string) => void
+  onOpenDetails: (shotId: string) => void
 ) {
   if (refs.length === 0) {
     return <p className="hint-text">No storyboard references in this package.</p>
@@ -553,67 +555,45 @@ function renderStoryboard(
         const shot = shotLookup.get(ref.shotId)
         const effectiveStatus: ShotStatus = overrides[`${project.projectId}::${day.dayId}::${ref.shotId}`] ?? 'todo'
         const actionState = getShotActionState(effectiveStatus)
-        const isExpanded = expandedShotId === ref.shotId
         return (
           <article key={`${ref.shotId}-${ref.updatedAt}`} className={`mobile-shot-card storyboard-card status-outline-${effectiveStatus}`}>
-            <button type="button" className="storyboard-collapse-button" onClick={() => onToggleExpanded(ref.shotId)}>
-              <div className="sb-header-row">
-                <strong className="sb-shot-name">{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
-                <div className="sb-header-right">
-                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
-                  <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
-                </div>
+            <button
+              type="button"
+              className="storyboard-collapsed-layout"
+              onClick={() => onOpenDetails(ref.shotId)}
+              aria-label={`Open details for ${shot?.displayName ?? shot?.shotNumberLabel ?? 'shot'}`}
+            >
+              <div className="storyboard-media-col">
+                {shot?.imageUrl ? (
+                  <img
+                    className="storyboard-preview-image storyboard-preview-image-thumb"
+                    src={shot.imageUrl}
+                    alt={`Storyboard frame for ${shot.displayName}`}
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="storyboard-preview-fallback">
+                    <span>No thumbnail</span>
+                  </div>
+                )}
               </div>
-              {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
+              <div className="storyboard-info-col">
+                <div className="sb-header-row">
+                  <strong className="sb-shot-name">{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
+                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
+                </div>
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
+                <ShotActions
+                  actionLabel={actionState.label}
+                  actionTone={actionState.tone}
+                  onOpenDetails={() => onOpenDetails(ref.shotId)}
+                  onCycleStatus={() => onCycleShotStatus(ref.shotId)}
+                />
+              </div>
             </button>
-            {shot?.imageUrl ? (
-              <img
-                className={`storyboard-preview-image ${isExpanded ? 'storyboard-preview-image-expanded' : 'storyboard-preview-image-collapsed'}`}
-                src={shot.imageUrl}
-                alt={`Storyboard frame for ${shot.displayName}`}
-                loading="lazy"
-              />
-            ) : null}
-            {isExpanded && shot ? <StoryboardExpandedMeta shot={shot} /> : null}
-            <ShotActions
-              actionLabel={actionState.label}
-              actionTone={actionState.tone}
-              onOpenDetails={() => onOpenDetails(ref.shotId)}
-              onCycleStatus={() => onCycleShotStatus(ref.shotId)}
-            />
           </article>
         )
       })}
-    </div>
-  )
-}
-
-function StoryboardExpandedMeta({ shot }: { shot: MobileShotDetail }) {
-  const metadata = [
-    shot.shotSize ? { label: 'Size', value: shot.shotSize } : null,
-    shot.shotType ? { label: 'Type', value: shot.shotType } : null,
-    shot.shotMove ? { label: 'Move', value: shot.shotMove } : null,
-    shot.shotEquipment ? { label: 'Equip', value: shot.shotEquipment } : null,
-  ].filter((entry): entry is { label: string; value: string } => Boolean(entry))
-
-  return (
-    <div className="storyboard-expanded-meta">
-      {metadata.length > 0 ? (
-        <div className="shot-spec-grid">
-          {metadata.map((item) => (
-            <p key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </p>
-          ))}
-        </div>
-      ) : null}
-      {shot.notes ? (
-        <p className="shot-notes">
-          <span>Notes</span>
-          <strong>{shot.notes}</strong>
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -775,7 +755,6 @@ export function ProjectHubScreen({
   onCycleShotStatus,
 }: ProjectHubScreenProps) {
   const dayList = Object.values(project.days).sort((a, b) => a.shootDate.localeCompare(b.shootDate))
-  const [expandedStoryboardShotId, setExpandedStoryboardShotId] = useState<string | null>(null)
   const [focusedShotId, setFocusedShotId] = useState<string | null>(null)
 
   const shotLookup = useMemo(() => buildShotDetails(day), [day])
@@ -844,11 +823,7 @@ export function ProjectHubScreen({
             day,
             shotStatusOverrides,
             onCycleShotStatus,
-            setFocusedShotId,
-            expandedStoryboardShotId,
-            (shotId) => {
-              setExpandedStoryboardShotId((current) => (current === shotId ? null : shotId))
-            }
+            setFocusedShotId
           )
         : null}
       {selectedTab === 'callsheet' ? renderCallsheet(day) : null}
