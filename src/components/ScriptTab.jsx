@@ -26,6 +26,9 @@ const SCREENPLAY_FONT_SIZE = SCREENPLAY_LAYOUT.typography.fontSizePx
 const SCREENPLAY_LINE_HEIGHT_PX = SCREENPLAY_LAYOUT.typography.lineHeightPx
 const ROWS_PER_PAGE = SCREENPLAY_FORMAT.pageLines
 const EDITABLE_TYPE_VALUES = EDITABLE_SCREENPLAY_TYPES.map(type => type.value)
+const EDIT_BAR_HEIGHT_PX = 42
+const RULER_HEIGHT_PX = 30
+const RULER_PAGE_GAP_PX = 8
 
 const NEXT_ENTER_TYPE = {
   heading: 'action',
@@ -38,6 +41,10 @@ const NEXT_ENTER_TYPE = {
 
 function getNextElementType(currentType) {
   return NEXT_ENTER_TYPE[currentType] || 'action'
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
 }
 
 function AddShotModal({ scene, shots, onClose, onConfirm }) {
@@ -468,7 +475,9 @@ export default function ScriptTab() {
   const [isEditMode, setIsEditMode] = useState(Boolean(scriptViewState.isEditMode))
   const [isInspectorOpen, setIsInspectorOpen] = useState(Boolean(scriptViewState.isInspectorOpen))
   const [selectedBlock, setSelectedBlock] = useState(null)
+  const [draggingMarker, setDraggingMarker] = useState(null)
   const editorRefs = useRef({})
+  const rulerTrackRef = useRef(null)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
   const scenePaginationMode = scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
@@ -777,19 +786,6 @@ export default function ScriptTab() {
     })
   }
 
-  if (orderedScenes.length === 0) {
-    return (
-      <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <p style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>No script imported yet</p>
-          <p style={{ margin: 0, color: '#4A5568' }}>Import a screenplay to generate scenes and start linking shots.</p>
-          <button className="dialog-button-primary" onClick={() => setImportModalOpen(true)}>Import Script</button>
-        </div>
-        <ImportScriptModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
-      </div>
-    )
-  }
-
   const selectedScene = selectedBlock?.sceneId ? getSceneById(selectedBlock.sceneId) : null
   const selectedBlockData = selectedScene
     ? ensureEditableScreenplayElements(getSceneScreenplayElements(selectedScene)).find((block) => block.id === selectedBlock?.blockId)
@@ -798,8 +794,95 @@ export default function ScriptTab() {
   const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
 
+  const isBlockSelectedForEdit = Boolean(isEditMode && selectedBlockData)
+  const blockLeftPx = pageSettings.marginLeftPx + selectedStyle.marginLeftPx
+  const blockRightPx = pageSettings.widthPx - pageSettings.marginRightPx - selectedStyle.marginRightPx
+  const firstLineIndentPx = blockLeftPx + selectedStyle.firstLineIndentPx
+
+  useEffect(() => {
+    if (!draggingMarker || !isBlockSelectedForEdit) return
+    const onPointerMove = (event) => {
+      const trackRect = rulerTrackRef.current?.getBoundingClientRect()
+      if (!trackRect) return
+      const x = clamp(event.clientX - trackRect.left, 0, trackRect.width)
+      if (draggingMarker === 'marginLeftPx') {
+        const nextLeft = clamp(x - pageSettings.marginLeftPx, 0, pageContentWidthPx - selectedStyle.marginRightPx)
+        updateBlockStyle(selectedStyleType, 'marginLeftPx', Math.round(nextLeft))
+      } else if (draggingMarker === 'marginRightPx') {
+        const distanceFromRight = clamp((pageSettings.widthPx - pageSettings.marginRightPx) - x, 0, pageContentWidthPx - selectedStyle.marginLeftPx)
+        updateBlockStyle(selectedStyleType, 'marginRightPx', Math.round(distanceFromRight))
+      } else if (draggingMarker === 'firstLineIndentPx') {
+        const maxIndent = Math.max(0, pageContentWidthPx - selectedStyle.marginLeftPx - selectedStyle.marginRightPx)
+        const nextIndent = clamp(x - blockLeftPx, 0, maxIndent)
+        updateBlockStyle(selectedStyleType, 'firstLineIndentPx', Math.round(nextIndent))
+      }
+    }
+    const onPointerUp = () => setDraggingMarker(null)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+  }, [blockLeftPx, draggingMarker, isBlockSelectedForEdit, pageContentWidthPx, pageSettings.marginLeftPx, pageSettings.marginRightPx, pageSettings.widthPx, selectedStyle.firstLineIndentPx, selectedStyle.marginLeftPx, selectedStyle.marginRightPx, selectedStyleType, updateBlockStyle])
+
+  const DocumentRuler = () => {
+    const totalInches = pageSettings.widthPx / 96
+    const quarterTicks = Math.round(totalInches * 4)
+    const ticks = Array.from({ length: quarterTicks + 1 }, (_, idx) => {
+      const isInch = idx % 4 === 0
+      const isHalf = idx % 2 === 0
+      return {
+        x: (idx / quarterTicks) * pageSettings.widthPx,
+        height: isInch ? 12 : isHalf ? 8 : 5,
+        label: isInch ? String(idx / 4) : null,
+      }
+    })
+
+    return (
+      <div
+        style={{
+          width: `${pageSettings.widthPx}px`,
+          height: RULER_HEIGHT_PX,
+          border: '1px solid rgba(148,163,184,0.55)',
+          borderRadius: 4,
+          background: '#f8fafc',
+          position: 'relative',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div
+          ref={rulerTrackRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(to right, rgba(226,232,240,0.6) ${pageSettings.marginLeftPx}px, transparent ${pageSettings.marginLeftPx}px, transparent ${pageSettings.widthPx - pageSettings.marginRightPx}px, rgba(226,232,240,0.6) ${pageSettings.widthPx - pageSettings.marginRightPx}px)`,
+          }}
+        >
+          {ticks.map((tick) => (
+            <div key={tick.x} style={{ position: 'absolute', left: tick.x, bottom: 0, transform: 'translateX(-0.5px)' }}>
+              <div style={{ width: 1, height: tick.height, background: 'rgba(51,65,85,0.48)' }} />
+              {tick.label && <span style={{ position: 'absolute', top: 2, left: 4, fontSize: 9, color: '#64748b' }}>{tick.label}</span>}
+            </div>
+          ))}
+          <div style={{ position: 'absolute', left: pageSettings.marginLeftPx, top: 0, bottom: 0, width: 1, background: 'rgba(30,41,59,0.35)' }} />
+          <div style={{ position: 'absolute', left: pageSettings.widthPx - pageSettings.marginRightPx, top: 0, bottom: 0, width: 1, background: 'rgba(30,41,59,0.35)' }} />
+
+          {isBlockSelectedForEdit && (
+            <>
+              <button type="button" onPointerDown={() => setDraggingMarker('marginLeftPx')} style={{ position: 'absolute', left: blockLeftPx - 6, top: -1, width: 12, height: 12, borderRadius: 2, border: '1px solid #2563eb', background: '#3b82f6', cursor: 'ew-resize' }} aria-label="Adjust block left margin" />
+              <button type="button" onPointerDown={() => setDraggingMarker('marginRightPx')} style={{ position: 'absolute', left: blockRightPx - 6, top: -1, width: 12, height: 12, borderRadius: 2, border: '1px solid #2563eb', background: '#3b82f6', cursor: 'ew-resize' }} aria-label="Adjust block right margin" />
+              <button type="button" onPointerDown={() => setDraggingMarker('firstLineIndentPx')} style={{ position: 'absolute', left: firstLineIndentPx - 6, top: 15, width: 12, height: 12, clipPath: 'polygon(50% 0%, 100% 100%, 0% 100%)', border: '1px solid #1d4ed8', background: '#60a5fa', cursor: 'ew-resize' }} aria-label="Adjust first-line indent" />
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const BlockStyleInspector = ({ type, style }) => (
-    <div style={{ width: 280, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 10, background: '#ffffff', padding: 12, alignSelf: 'flex-start' }}>
+    <div style={{ width: 260, border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, background: 'rgba(255,255,255,0.96)', padding: 12, alignSelf: 'flex-start', boxShadow: '0 4px 14px rgba(15,23,42,0.08)' }}>
       <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Page Layout</div>
       {[
         ['widthPx', 'Page width'],
@@ -849,20 +932,25 @@ export default function ScriptTab() {
     </div>
   )
 
+  if (orderedScenes.length === 0) {
+    return (
+      <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+          <p style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>No script imported yet</p>
+          <p style={{ margin: 0, color: '#4A5568' }}>Import a screenplay to generate scenes and start linking shots.</p>
+          <button className="dialog-button-primary" onClick={() => setImportModalOpen(true)}>Import Script</button>
+        </div>
+        <ImportScriptModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       <SidebarPane
         title={`Scenes · ${pagedScript.length} pp`}
         width={260}
-        controls={(
-          <button
-            className={`toolbar-btn script-edit-toggle ${isEditMode ? 'active' : ''}`}
-            onClick={() => setIsEditMode(value => !value)}
-            style={{ width: '100%' }}
-          >
-            {isEditMode ? 'Done Editing' : 'Edit Script'}
-          </button>
-        )}
+        controls={null}
       >
           {orderedScenes.map(sc => (
             <button key={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: activeSceneId === sc.id ? 'rgba(232,64,64,0.08)' : 'none' }}>
@@ -884,68 +972,51 @@ export default function ScriptTab() {
         onScroll={(e) => {
           setTabViewState('script', { scrollTop: e.currentTarget.scrollTop })
         }}
-        style={{ flex: 1, overflowY: 'auto', padding: 18, position: 'relative', background: '#eef2f7' }}
+        style={{ flex: 1, overflowY: 'auto', padding: '8px 12px 16px', position: 'relative', background: '#eef2f7' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 16, alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: `${pageSettings.widthPx}px`, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 8, background: '#f8fafc', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', position: 'relative' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ width: `${pageSettings.widthPx}px`, minHeight: EDIT_BAR_HEIGHT_PX, border: '1px solid rgba(148,163,184,0.45)', borderRadius: 6, background: 'rgba(248,250,252,0.95)', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, boxSizing: 'border-box' }}>
               <button
                 className={`toolbar-btn script-edit-toggle ${isEditMode ? 'active' : ''}`}
                 onClick={() => setIsEditMode(value => !value)}
               >
                 {isEditMode ? 'Done Editing' : 'Edit Script'}
               </button>
-              <select
-                value={selectedStyleType}
-                onChange={(event) => selectedBlock && updateBlock(selectedBlock.sceneId, selectedBlock.blockId, { type: event.target.value })}
-                style={{ border: '1px solid rgba(74,85,104,0.3)', borderRadius: 4, background: '#fff', padding: '3px 6px', fontSize: 11, fontWeight: 700 }}
-              >
-                {EDITABLE_SCREENPLAY_TYPES.map(type => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </select>
-              <button className="toolbar-btn" onClick={() => selectedBlock && splitBlock(selectedBlock.sceneId, selectedBlock.blockId)} style={{ fontSize: 11, padding: '2px 6px' }}>Split</button>
-              <button className="toolbar-btn" onClick={() => selectedBlock && mergeBlock(selectedBlock.sceneId, selectedBlock.blockId, 'up')} style={{ fontSize: 11, padding: '2px 6px' }}>Merge ↑</button>
-              <button className="toolbar-btn" onClick={() => selectedBlock && mergeBlock(selectedBlock.sceneId, selectedBlock.blockId, 'down')} style={{ fontSize: 11, padding: '2px 6px' }}>Merge ↓</button>
-              <button className="toolbar-btn" onClick={() => selectedBlock && insertBlockAfter(selectedBlock.sceneId, selectedBlock.blockId)} style={{ fontSize: 11, padding: '2px 6px' }}>+ Block</button>
-              <button className="toolbar-btn" onClick={() => setIsInspectorOpen(value => !value)} style={{ marginLeft: 'auto', fontSize: 11 }}>
-                {isInspectorOpen ? 'Hide Formatting' : 'Show Formatting'}
-              </button>
+              {isEditMode && (
+                <>
+                  {isBlockSelectedForEdit && (
+                    <>
+                      <select
+                        value={selectedStyleType}
+                        onChange={(event) => selectedBlock && updateBlock(selectedBlock.sceneId, selectedBlock.blockId, { type: event.target.value })}
+                        style={{ border: '1px solid rgba(74,85,104,0.28)', borderRadius: 4, background: '#fff', padding: '2px 6px', fontSize: 11 }}
+                      >
+                        {EDITABLE_SCREENPLAY_TYPES.map(type => (
+                          <option key={type.value} value={type.value}>{type.label}</option>
+                        ))}
+                      </select>
+                      <button className="toolbar-btn" onClick={() => selectedBlock && splitBlock(selectedBlock.sceneId, selectedBlock.blockId)} style={{ fontSize: 11, padding: '2px 6px' }}>Split</button>
+                      <button className="toolbar-btn" onClick={() => selectedBlock && mergeBlock(selectedBlock.sceneId, selectedBlock.blockId, 'up')} style={{ fontSize: 11, padding: '2px 6px' }}>Merge ↑</button>
+                      <button className="toolbar-btn" onClick={() => selectedBlock && mergeBlock(selectedBlock.sceneId, selectedBlock.blockId, 'down')} style={{ fontSize: 11, padding: '2px 6px' }}>Merge ↓</button>
+                      <button className="toolbar-btn" onClick={() => selectedBlock && insertBlockAfter(selectedBlock.sceneId, selectedBlock.blockId)} style={{ fontSize: 11, padding: '2px 6px' }}>+ Block</button>
+                    </>
+                  )}
+                  <button className="toolbar-btn" onClick={() => setIsInspectorOpen(value => !value)} style={{ marginLeft: 'auto', fontSize: 11 }}>
+                    {isInspectorOpen ? 'Hide Formatting' : 'Show Formatting'}
+                  </button>
+                </>
+              )}
             </div>
-            <div style={{ width: `${pageSettings.widthPx}px`, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 8, background: '#f8fafc', padding: '8px 10px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Ruler</div>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, pageContentWidthPx - selectedStyle.marginRightPx)}
-                value={Math.max(0, selectedStyle.marginLeftPx)}
-                onChange={(e) => updateBlockStyle(selectedStyleType, 'marginLeftPx', Number(e.target.value) || 0)}
-                style={{ width: '100%' }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, pageContentWidthPx - selectedStyle.marginLeftPx)}
-                value={Math.max(0, selectedStyle.marginRightPx)}
-                onChange={(e) => updateBlockStyle(selectedStyleType, 'marginRightPx', Number(e.target.value) || 0)}
-                style={{ width: '100%' }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, pageContentWidthPx)}
-                value={Math.max(0, selectedStyle.firstLineIndentPx)}
-                onChange={(e) => updateBlockStyle(selectedStyleType, 'firstLineIndentPx', Number(e.target.value) || 0)}
-                style={{ width: '100%' }}
-              />
-            </div>
+            {isEditMode && <div style={{ marginTop: 4 }}><DocumentRuler /></div>}
+            <div style={{ height: isEditMode ? RULER_PAGE_GAP_PX : 6 }} />
             <div
               style={{
                 width: `${pageSettings.widthPx}px`,
                 minHeight: `${pageSettings.heightPx}px`,
                 background: '#fff',
-                border: '1px solid rgba(74,85,104,0.28)',
-                boxShadow: '0 8px 24px rgba(15,23,42,0.12)',
+                border: '1px solid rgba(148,163,184,0.42)',
+                boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
                 fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily,
                 fontSize: SCREENPLAY_FONT_SIZE,
                 lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`,
@@ -1049,7 +1120,11 @@ export default function ScriptTab() {
               })}
             </div>
           </div>
-          {isInspectorOpen && <BlockStyleInspector type={selectedStyleType} style={selectedStyle} />}
+          {isInspectorOpen && isEditMode && (
+            <div style={{ position: 'absolute', top: EDIT_BAR_HEIGHT_PX + RULER_HEIGHT_PX + 24, right: 12 }}>
+              <BlockStyleInspector type={selectedStyleType} style={selectedStyle} />
+            </div>
+          )}
         </div>
       </div>
 

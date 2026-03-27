@@ -13,14 +13,14 @@ export const SCREENPLAY_LAYOUT = {
     marginsPx: {
       top: 1 * INCH,
       right: 1 * INCH,
-      bottom: 1.05 * INCH,
+      bottom: 1 * INCH,
       left: 1.5 * INCH,
     },
   },
   typography: {
     fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
     fontSizePx: 16,
-    lineHeightPx: ((11 - 1 - 1.05) * INCH) / TARGET_LINES_PER_PAGE,
+    lineHeightPx: ((11 - 1 - 1) * INCH) / TARGET_LINES_PER_PAGE,
   },
   elementColumnsIn: {
     heading: { left: 0, width: 6.0 },
