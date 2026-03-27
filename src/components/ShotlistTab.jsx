@@ -159,7 +159,7 @@ const BUILTIN_COLUMNS = [
   { key: 'status',         label: 'STATUS',             width: 74,  type: 'status' },
   { key: 'thumbnail',      label: 'THUMB',              width: 72,  type: 'thumbnail' },
   { key: 'displayId',      label: 'SHOT#',              width: 72,  type: 'readonly' },
-  { key: 'description',    label: 'DESCRIPTION',        width: 240, type: 'text' },
+  { key: 'description',    label: 'DESCRIPTION',        width: 300, type: 'text' },
   { key: 'specs.size',     label: 'SHOT SIZE',          width: 110, type: 'dropdown', options: SIZE_OPTIONS,  customOptionsField: 'size' },
   { key: 'specs.type',     label: 'TYPE/COVERAGE',      width: 118, type: 'dropdown', options: TYPE_OPTIONS,  customOptionsField: 'type' },
   { key: 'specs.move',     label: 'MOVEMENT',           width: 106, type: 'dropdown', options: MOVE_OPTIONS,  customOptionsField: 'move' },
@@ -168,7 +168,7 @@ const BUILTIN_COLUMNS = [
   { key: 'frameRate',      label: 'FRAME RATE',         width: 92,  type: 'text' },
   { key: 'sound',          label: 'SOUND',              width: 100, type: 'text' },
   { key: 'props',          label: 'PROPS',              width: 110, type: 'text' },
-  { key: 'notes',          label: 'NOTES',              width: 180, type: 'textarea' },
+  { key: 'notes',          label: 'NOTES',              width: 220, type: 'textarea' },
   { key: 'setupTime',      label: 'SETUP',              width: 78,  type: 'text' },
   { key: 'shootTime',      label: 'SHOOT',              width: 78,  type: 'text' },
   { key: 'cast',           label: 'CAST',               width: 120, type: 'text' },
@@ -892,6 +892,72 @@ function ColResizeHandle({ colKey, width, isDark, onResizeStart }) {
   )
 }
 
+function ShotlistAddShotModal({ scene, candidates, onClose, onCreateNew, onAttachExisting }) {
+  const [mode, setMode] = useState('new')
+  const [search, setSearch] = useState('')
+  const [selectedShotId, setSelectedShotId] = useState(candidates[0]?.id || null)
+  const filtered = candidates.filter(shot => {
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    return `${shot.displayId || ''} ${shot.description || shot.subject || ''} ${shot.notes || ''}`.toLowerCase().includes(q)
+  })
+
+  useEffect(() => {
+    if (!filtered.some(shot => shot.id === selectedShotId)) {
+      setSelectedShotId(filtered[0]?.id || null)
+    }
+  }, [filtered, selectedShotId])
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 760 }} onClick={onClose}>
+      <div className="modal app-dialog" style={{ maxWidth: 680, width: '92vw' }} onClick={e => e.stopPropagation()}>
+        <h3 className="dialog-title" style={{ marginBottom: 4 }}>Add Shot to SC {scene._canonical?.sceneNumber || scene.sceneLabel}</h3>
+        <p className="dialog-description" style={{ marginBottom: 12 }}>{scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Scene'}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setMode('new')} style={{ border: mode === 'new' ? '1px solid rgba(232,64,64,0.5)' : '1px solid rgba(74,85,104,0.2)', background: mode === 'new' ? 'rgba(232,64,64,0.08)' : '#fff', borderRadius: 8, padding: 10, textAlign: 'left', cursor: 'pointer' }}>
+            <div style={{ fontWeight: 700, fontSize: 12 }}>Create New Shot</div>
+            <div style={{ fontSize: 11, color: '#64748b' }}>Create a new shot record and schedule it in this day.</div>
+          </button>
+          <button onClick={() => setMode('existing')} style={{ border: mode === 'existing' ? '1px solid rgba(232,64,64,0.5)' : '1px solid rgba(74,85,104,0.2)', background: mode === 'existing' ? 'rgba(232,64,64,0.08)' : '#fff', borderRadius: 8, padding: 10, textAlign: 'left', cursor: 'pointer' }}>
+            <div style={{ fontWeight: 700, fontSize: 12 }}>Add Existing Shot</div>
+            <div style={{ fontSize: 11, color: '#64748b' }}>Attach an existing project shot to this shoot day.</div>
+          </button>
+        </div>
+        {mode === 'existing' && (
+          <div style={{ marginBottom: 8 }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search shot #, description, or notes"
+              style={{ width: '100%', marginBottom: 8, padding: '8px 10px', borderRadius: 6, border: '1px solid rgba(74,85,104,0.2)' }}
+            />
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6 }}>
+              {filtered.length === 0 && <div style={{ padding: 12, fontSize: 12, color: '#718096' }}>No unscheduled shots found.</div>}
+              {filtered.map(shot => (
+                <label key={shot.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid rgba(74,85,104,0.08)' }}>
+                  <input type="radio" checked={selectedShotId === shot.id} onChange={() => setSelectedShotId(shot.id)} />
+                  <span style={{ fontFamily: 'monospace', fontSize: 11, minWidth: 36 }}>{shot.displayId}</span>
+                  <span style={{ fontSize: 11, color: '#4A5568', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {shot.description || shot.subject || shot.notes || 'Untitled shot'}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="dialog-actions">
+          <button className="dialog-button-secondary" onClick={onClose}>Cancel</button>
+          {mode === 'new' ? (
+            <button className="dialog-button-primary" onClick={onCreateNew}>Create New Shot</button>
+          ) : (
+            <button className="dialog-button-primary" onClick={() => onAttachExisting(selectedShotId)} disabled={!selectedShotId}>Add Existing Shot</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── SortableShotRow ───────────────────────────────────────────────────────────
 function SortableShotRow({
   shot, shotIndex, scene, visibleColumns,
@@ -1132,7 +1198,6 @@ export default function ShotlistTab({ containerRef }) {
   const getShotsForScene        = useStore(s => s.getShotsForScene)
   const updateShot              = useStore(s => s.updateShot)
   const updateShotSpec          = useStore(s => s.updateShotSpec)
-  const updateScene             = useStore(s => s.updateScene)
   const updateCanonicalStoryboardSceneMetadata = useStore(s => s.updateCanonicalStoryboardSceneMetadata)
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
   const addShot                 = useStore(s => s.addShot)
@@ -1154,7 +1219,11 @@ export default function ShotlistTab({ containerRef }) {
 
   const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const [selectedDayId, setSelectedDayId] = useState(shotlistViewState.selectedDayId || null)
-  const [selectedSceneId, setSelectedSceneId] = useState(shotlistViewState.selectedSceneId || null)
+  const [activeNavSceneId, setActiveNavSceneId] = useState(shotlistViewState.activeNavSceneId || null)
+  const [expandedSceneDetails, setExpandedSceneDetails] = useState(shotlistViewState.expandedSceneDetails || {})
+  const [highlightedSceneId, setHighlightedSceneId] = useState(null)
+  const sceneSectionRefs = useRef({})
+  const mainPanelRef = useRef(null)
   const [viewSettings, setViewSettings] = useState({
     density: shotlistViewState.density || 'compact',
     showThumbnails: shotlistViewState.showThumbnails ?? true,
@@ -1182,10 +1251,11 @@ export default function ShotlistTab({ containerRef }) {
   useEffect(() => {
     setTabViewState('shotlist', {
       selectedDayId: activeDay?.id || null,
-      selectedSceneId,
+      activeNavSceneId,
+      expandedSceneDetails,
       ...viewSettings,
     })
-  }, [activeDay, selectedSceneId, setTabViewState, viewSettings])
+  }, [activeDay, activeNavSceneId, expandedSceneDetails, setTabViewState, viewSettings])
 
   useEffect(() => {
     const node = scrollerRef.current
@@ -1222,19 +1292,14 @@ export default function ShotlistTab({ containerRef }) {
   }, [scenes, scriptScenes, activeDay, activeDayShotIds, getShotsForScene, getCanonicalStoryboardSceneMetadata])
 
   useEffect(() => {
-    if (filteredScenes.length === 0) {
-      setSelectedSceneId(null)
+    if (!filteredScenes.length) {
+      setActiveNavSceneId(null)
       return
     }
-    if (!selectedSceneId || !filteredScenes.some(scene => scene.id === selectedSceneId)) {
-      setSelectedSceneId(filteredScenes[0].id)
+    if (!activeNavSceneId || !filteredScenes.some(scene => scene.id === activeNavSceneId)) {
+      setActiveNavSceneId(filteredScenes[0].id)
     }
-  }, [filteredScenes, selectedSceneId])
-
-  const activeScene = useMemo(
-    () => filteredScenes.find(scene => scene.id === selectedSceneId) || null,
-    [filteredScenes, selectedSceneId]
-  )
+  }, [activeNavSceneId, filteredScenes])
 
 
   const scriptPaginationByScene = useMemo(
@@ -1322,9 +1387,8 @@ export default function ShotlistTab({ containerRef }) {
 
   const rowHeight = DENSITY_ROW_HEIGHT[viewSettings.density] || DENSITY_ROW_HEIGHT.compact
 
-  const sortedShots = useMemo(() => {
-    if (!activeScene) return []
-    const shots = [...activeScene._filteredShots]
+  const sortShots = useCallback((rawShots) => {
+    const shots = [...rawShots]
     if (viewSettings.sortingMode === 'status') {
       shots.sort((a, b) => Number(!!a.checked) - Number(!!b.checked))
       return shots
@@ -1339,7 +1403,7 @@ export default function ShotlistTab({ containerRef }) {
     }
     shots.sort((a, b) => displayRank(a.displayId) - displayRank(b.displayId))
     return shots
-  }, [activeScene, viewSettings.sortingMode])
+  }, [viewSettings.sortingMode])
 
   const handleShotChange = useCallback((shotId, key, value) => {
     if (key.startsWith('specs.')) {
@@ -1364,6 +1428,55 @@ export default function ShotlistTab({ containerRef }) {
     if (!over || active.id === over.id) return
     reorderShots(sceneId, active.id, over.id)
   }, [reorderShots])
+
+  const [addShotModalSceneId, setAddShotModalSceneId] = useState(null)
+  const addShotModalScene = useMemo(
+    () => filteredScenes.find(scene => scene.id === addShotModalSceneId) || null,
+    [filteredScenes, addShotModalSceneId]
+  )
+  const allProjectShots = useMemo(
+    () => scenes.flatMap(scene => getShotsForScene(scene.id)),
+    [scenes, getShotsForScene]
+  )
+  const addExistingCandidates = useMemo(() => {
+    if (!addShotModalScene || !activeDay) return []
+    return allProjectShots.filter(shot => !activeDayShotIds.has(shot.id))
+  }, [addShotModalScene, activeDay, allProjectShots, activeDayShotIds])
+
+  useEffect(() => {
+    const root = mainPanelRef.current
+    if (!root || filteredScenes.length === 0) return
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+      if (visible?.target?.dataset?.sceneId) {
+        setActiveNavSceneId(visible.target.dataset.sceneId)
+      }
+    }, { root, threshold: [0.25, 0.5, 0.75] })
+    filteredScenes.forEach(scene => {
+      const node = sceneSectionRefs.current[scene.id]
+      if (node) observer.observe(node)
+    })
+    return () => observer.disconnect()
+  }, [filteredScenes])
+
+  const jumpToScene = useCallback((sceneId) => {
+    const root = mainPanelRef.current
+    const node = sceneSectionRefs.current[sceneId]
+    if (!root || !node) return
+    const rootRect = root.getBoundingClientRect()
+    const nodeRect = node.getBoundingClientRect()
+    const alreadyVisible = nodeRect.top >= rootRect.top + 40 && nodeRect.bottom <= rootRect.bottom - 40
+    if (alreadyVisible) {
+      setHighlightedSceneId(sceneId)
+      setTimeout(() => setHighlightedSceneId(prev => (prev === sceneId ? null : prev)), 900)
+      return
+    }
+    node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setHighlightedSceneId(sceneId)
+    setTimeout(() => setHighlightedSceneId(prev => (prev === sceneId ? null : prev)), 900)
+  }, [])
 
   // Close config panel when clicking outside
   useEffect(() => {
@@ -1519,7 +1632,7 @@ export default function ShotlistTab({ containerRef }) {
       )}
 
       {/* ── Table ── */}
-      {schedule.length > 0 && activeDay && filteredScenes.length > 0 && activeScene && (
+      {schedule.length > 0 && activeDay && filteredScenes.length > 0 && (
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         {viewSettings.showSidebar && (
           <aside style={{ width: 280, borderRight: `1px solid ${c.thickBorder}`, background: '#F8F5EF', overflow: 'auto' }}>
@@ -1529,11 +1642,11 @@ export default function ShotlistTab({ containerRef }) {
             {filteredScenes.map((scene) => (
               <button
                 key={scene.id}
-                onClick={() => setSelectedSceneId(scene.id)}
+                onClick={() => jumpToScene(scene.id)}
                 style={{
                   width: '100%',
                   border: 'none',
-                  background: selectedSceneId === scene.id ? 'rgba(0,0,0,0.06)' : 'transparent',
+                  background: activeNavSceneId === scene.id ? 'rgba(0,0,0,0.07)' : 'transparent',
                   textAlign: 'left',
                   padding: '10px 12px',
                   borderLeft: `3px solid ${scene._canonical?.color || scene.color || '#94a3b8'}`,
@@ -1550,181 +1663,149 @@ export default function ShotlistTab({ containerRef }) {
           </aside>
         )}
 
-        <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
-          <div
-            onDoubleClick={() => openScenePropertiesDialog('storyboard', activeScene.id)}
-            style={{
-              background: '#fff',
-              border: `1px solid ${c.thickBorder}`,
-              borderLeft: `4px solid ${activeScene._canonical?.color || activeScene.color || '#F2C250'}`,
-              borderRadius: 6,
-              padding: '8px 10px',
-              marginBottom: 10,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 800, fontFamily: 'monospace' }}>SC {activeScene._canonical?.sceneNumber || activeScene.sceneLabel}</span>
-                <span style={{ opacity: 0.45 }}>•</span>
-                <span>{activeScene._canonical?.titleSlugline || activeScene.slugline || activeScene.location}</span>
-                <span style={{ opacity: 0.45 }}>•</span>
-                <span>{activeScene._canonical?.location || activeScene.location}</span>
-                <span style={{ opacity: 0.45 }}>•</span>
-                <span>{activeScene._canonical?.intOrExt || activeScene.intOrExt}</span>
-                <span>{activeScene._canonical?.dayNight || activeScene.dayNight}</span>
-                <span style={{ opacity: 0.45 }}>•</span>
-                <span>
-                  {activeScene.linkedScriptSceneId && scriptPaginationByScene[activeScene.linkedScriptSceneId]
-                    ? `${scriptPaginationByScene[activeScene.linkedScriptSceneId].pageCount.toFixed(2)} pp`
-                    : '—'}
-                </span>
-                {(activeScene._canonical?.characters || []).map((character) => (
-                  <span key={character} style={{ fontSize: 10, border: `1px solid ${c.border}`, borderRadius: 999, padding: '1px 6px' }}>
-                    {character}
-                  </span>
-                ))}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, opacity: 0.65 }}>{sortedShots.length} shots</span>
-                <button
-                  onClick={() => setViewSettings(prev => ({ ...prev, showSceneDetails: !prev.showSceneDetails }))}
-                  style={{ border: `1px solid ${c.border}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 10, padding: '3px 7px' }}
-                >
-                  {viewSettings.showSceneDetails ? 'Hide details' : 'Show details'}
-                </button>
-              </div>
-            </div>
-            {viewSettings.showSceneDetails && (
-              <div style={{ marginTop: 8, borderTop: `1px solid ${c.border}`, paddingTop: 8 }}>
-                <ScenePropertiesPanel
-                  values={{
-                    sceneNumber: activeScene._canonical?.sceneNumber || activeScene.sceneLabel || '',
-                    titleSlugline: activeScene._canonical?.titleSlugline || activeScene.slugline || '',
-                    location: activeScene._canonical?.location || activeScene.location || '',
-                    intExt: activeScene._canonical?.intOrExt || activeScene.intOrExt || '',
-                    dayNight: activeScene._canonical?.dayNight || activeScene.dayNight || '',
-                    color: activeScene._canonical?.color || activeScene.color || null,
-                    characters: activeScene._canonical?.characters || [],
-                  }}
-                  estimatedPages={activeScene.linkedScriptSceneId && scriptPaginationByScene[activeScene.linkedScriptSceneId]
-                    ? `${scriptPaginationByScene[activeScene.linkedScriptSceneId].pageCount.toFixed(2)} pp · p${scriptPaginationByScene[activeScene.linkedScriptSceneId].startPage}–${scriptPaginationByScene[activeScene.linkedScriptSceneId].endPage}`
-                    : '—'}
-                />
-              </div>
-            )}
-          </div>
-
-          <table style={{
-            borderCollapse: 'collapse',
-            tableLayout: 'fixed',
-            width: totalTableWidth,
-            minWidth: '100%',
-            backgroundColor: c.tableBg,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08)',
-            fontSize: 11,
-            fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif',
-          }}>
-          <colgroup>
-            {/* Drag/delete utility column */}
-            <col style={{ width: DRAG_COL_WIDTH }} />
-            {visibleColumns.map(col => (
-              <col key={col.key} style={{ width: col.width }} />
-            ))}
-          </colgroup>
-
-          {/* ── Sticky column header ── */}
-          <thead>
-            <tr style={{ height: rowHeight }}>
-              {/* Drag col header (empty) */}
-              <th className="shotlist-ui-col" style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 10,
-                backgroundColor: c.headerBg,
-                borderBottom: `2px solid ${c.thickBorder}`,
-                borderRight: `1px solid ${c.thickBorder}`,
-                width: DRAG_COL_WIDTH,
-              }} />
-
-              {visibleColumns.map((col, i) => (
-                <th
-                  key={col.key}
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 10,
-                    backgroundColor: c.headerBg,
-                    color: '#FFFFFF',
-                    fontSize: 9,
-                    fontWeight: 700,
-                    fontFamily: 'Sora, sans-serif',
-                    letterSpacing: '0.07em',
-                    textTransform: 'uppercase',
-                    textAlign: col.type === 'checkbox' ? 'center' : 'left',
-                    padding: col.type === 'checkbox' ? 0 : '0 6px',
-                    borderBottom: `2px solid ${c.thickBorder}`,
-                    borderRight: i < visibleColumns.length - 1 ? `1px solid ${c.thickBorder}` : 'none',
-                    whiteSpace: 'nowrap',
-                    userSelect: 'none',
-                    overflow: 'hidden',
-                    boxSizing: 'border-box',
-                    // Make room for the resize handle
-                    paddingRight: col.type === 'checkbox' ? 0 : 14,
-                  }}
-                >
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{col.label}</span>
-                    {/* Resize handle */}
-                    <ColResizeHandle colKey={col.key} width={col.width} isDark={isDark} onResizeStart={handleResizeStart} />
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          {/* ── Body ── */}
-          <tbody>
-            <DndContext
-              sensors={rowSensors}
-              collisionDetection={closestCenter}
-              onDragEnd={(e) => handleRowDragEnd(e, activeScene.id)}
-            >
-              <SortableContext
-                items={sortedShots.map(s => s.id)}
-                strategy={verticalListSortingStrategy}
+        <div ref={mainPanelRef} style={{ flex: 1, overflow: 'auto', padding: '12px 16px 22px' }}>
+          {filteredScenes.map((scene) => {
+            const shots = sortShots(scene._filteredShots)
+            const showDetails = !!expandedSceneDetails[scene.id]
+            return (
+              <section
+                key={scene.id}
+                data-scene-id={scene.id}
+                ref={node => { sceneSectionRefs.current[scene.id] = node }}
+                style={{
+                  marginBottom: 14,
+                  borderRadius: 8,
+                  border: `1px solid ${highlightedSceneId === scene.id ? 'rgba(232,64,64,0.45)' : c.thickBorder}`,
+                  boxShadow: highlightedSceneId === scene.id ? '0 0 0 3px rgba(232,64,64,0.12)' : 'none',
+                  transition: 'box-shadow 0.25s, border-color 0.25s',
+                  background: '#fff',
+                  overflow: 'hidden',
+                }}
               >
-                {sortedShots.map((shot, idx) => (
-                  <SortableShotRow
-                    key={shot.id}
-                    shot={shot}
-                    shotIndex={idx}
-                    scene={activeScene}
-                    visibleColumns={visibleColumns}
-                    c={c}
-                    isDark={isDark}
-                    handleShotChange={handleShotChange}
-                    onDelete={deleteShot}
-                    rowHeight={rowHeight}
-                    sceneIntOrExt={activeScene._canonical?.intOrExt || activeScene.intOrExt}
-                    sceneDayNight={activeScene._canonical?.dayNight || activeScene.dayNight}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-            <tr className="shotlist-add-row">
-              <td colSpan={visibleColumns.length + 1} style={{ height: 30, padding: 0, borderBottom: `2px solid ${c.thickBorder}` }}>
-                <button
-                  onClick={() => handleAddShotForDay(activeScene.id)}
-                  style={{ width: '100%', height: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.05em', color: '#7c7468' }}
-                >
-                  + Add Shot
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <div onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)} style={{ padding: '10px 12px 8px', borderLeft: `4px solid ${scene._canonical?.color || scene.color || '#F2C250'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontWeight: 800, fontFamily: 'monospace' }}>SC {scene._canonical?.sceneNumber || scene.sceneLabel}</span>
+                        <span style={{ fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Untitled Scene'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span>{scene._canonical?.location || scene.location || 'Location'}</span>
+                        <span>•</span>
+                        <span>{scene._canonical?.intOrExt || scene.intOrExt || 'INT'}</span>
+                        <span>{scene._canonical?.dayNight || scene.dayNight || 'DAY'}</span>
+                        <span>•</span>
+                        <span>{scene.linkedScriptSceneId && scriptPaginationByScene[scene.linkedScriptSceneId] ? `${scriptPaginationByScene[scene.linkedScriptSceneId].pageCount.toFixed(2)} pages` : '—'}</span>
+                        <span>•</span>
+                        <span>{shots.length} shot{shots.length === 1 ? '' : 's'}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                      {(scene._canonical?.characters || []).slice(0, 4).map(character => (
+                        <span key={character} style={{ fontSize: 10, border: `1px solid ${c.border}`, borderRadius: 999, padding: '1px 6px' }}>{character}</span>
+                      ))}
+                      <button
+                        onClick={() => setExpandedSceneDetails(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
+                        style={{ border: `1px solid ${c.border}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 10, padding: '3px 7px' }}
+                      >
+                        {showDetails ? 'Hide details' : 'Show details'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {showDetails && (
+                  <div style={{ padding: '8px 12px', borderTop: `1px solid ${c.border}` }}>
+                    <ScenePropertiesPanel
+                      values={{
+                        sceneNumber: scene._canonical?.sceneNumber || scene.sceneLabel || '',
+                        titleSlugline: scene._canonical?.titleSlugline || scene.slugline || '',
+                        location: scene._canonical?.location || scene.location || '',
+                        intExt: scene._canonical?.intOrExt || scene.intOrExt || '',
+                        dayNight: scene._canonical?.dayNight || scene.dayNight || '',
+                        color: scene._canonical?.color || scene.color || null,
+                        characters: scene._canonical?.characters || [],
+                      }}
+                      estimatedPages={scene.linkedScriptSceneId && scriptPaginationByScene[scene.linkedScriptSceneId]
+                        ? `${scriptPaginationByScene[scene.linkedScriptSceneId].pageCount.toFixed(2)} pp · p${scriptPaginationByScene[scene.linkedScriptSceneId].startPage}–${scriptPaginationByScene[scene.linkedScriptSceneId].endPage}`
+                        : '—'}
+                    />
+                  </div>
+                )}
+
+                <div style={{ overflowX: 'auto', borderTop: `1px solid ${c.border}` }}>
+                  <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: Math.max(totalTableWidth, 980), minWidth: '100%', backgroundColor: c.tableBg, fontSize: 11, fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif' }}>
+                    <colgroup>
+                      <col style={{ width: DRAG_COL_WIDTH }} />
+                      {visibleColumns.map(col => <col key={col.key} style={{ width: col.width }} />)}
+                    </colgroup>
+                    <thead>
+                      <tr style={{ height: rowHeight + 2 }}>
+                        <th className="shotlist-ui-col" style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: c.headerBg, borderBottom: `2px solid ${c.thickBorder}`, borderRight: `1px solid ${c.thickBorder}`, width: DRAG_COL_WIDTH }} />
+                        {visibleColumns.map((col, i) => (
+                          <th key={col.key} style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: c.headerBg, color: '#FFFFFF', fontSize: 9, fontWeight: 700, fontFamily: 'Sora, sans-serif', letterSpacing: '0.07em', textTransform: 'uppercase', textAlign: 'left', padding: '0 8px', borderBottom: `2px solid ${c.thickBorder}`, borderRight: i < visibleColumns.length - 1 ? `1px solid ${c.thickBorder}` : 'none', whiteSpace: 'nowrap', userSelect: 'none', overflow: 'hidden', boxSizing: 'border-box', paddingRight: 16 }}>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{col.label}</span>
+                              <ColResizeHandle colKey={col.key} width={col.width} isDark={isDark} onResizeStart={handleResizeStart} />
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <DndContext sensors={rowSensors} collisionDetection={closestCenter} onDragEnd={(e) => handleRowDragEnd(e, scene.id)}>
+                        <SortableContext items={shots.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                          {shots.map((shot, idx) => (
+                            <SortableShotRow
+                              key={shot.id}
+                              shot={shot}
+                              shotIndex={idx}
+                              scene={scene}
+                              visibleColumns={visibleColumns}
+                              c={c}
+                              isDark={isDark}
+                              handleShotChange={handleShotChange}
+                              onDelete={deleteShot}
+                              rowHeight={rowHeight}
+                              sceneIntOrExt={scene._canonical?.intOrExt || scene.intOrExt}
+                              sceneDayNight={scene._canonical?.dayNight || scene.dayNight}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
+                      <tr className="shotlist-add-row">
+                        <td colSpan={visibleColumns.length + 1} style={{ height: 32, padding: 0, borderBottom: `2px solid ${c.thickBorder}` }}>
+                          <button onClick={() => setAddShotModalSceneId(scene.id)} style={{ width: '100%', height: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.04em', color: '#7c7468' }}>
+                            + Add Shot
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )
+          })}
         </div>
       </div>
+      )}
+
+      {addShotModalScene && (
+        <ShotlistAddShotModal
+          scene={addShotModalScene}
+          candidates={addExistingCandidates}
+          onClose={() => setAddShotModalSceneId(null)}
+          onCreateNew={() => {
+            handleAddShotForDay(addShotModalScene.id)
+            setAddShotModalSceneId(null)
+          }}
+          onAttachExisting={(shotId) => {
+            if (activeDay && shotId) addShotBlock(activeDay.id, shotId)
+            setAddShotModalSceneId(null)
+          }}
+        />
       )}
     </div>
   )
