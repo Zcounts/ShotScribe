@@ -1,15 +1,64 @@
 const HEADING_RE = /^(INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?)/i
 
-export const SCREENPLAY_FORMAT = {
-  pageLines: 55,
-  charsPerLine: {
-    heading: 63,
-    action: 63,
-    character: 38,
-    dialogue: 35,
-    parenthetical: 28,
-    transition: 24,
+const DPI = 96
+const INCH = DPI
+
+export const SCREENPLAY_LAYOUT = {
+  page: {
+    widthPx: 8.5 * INCH,
+    heightPx: 11 * INCH,
+    marginsPx: {
+      top: 1 * INCH,
+      right: 1 * INCH,
+      bottom: 1 * INCH,
+      left: 1.5 * INCH,
+    },
   },
+  typography: {
+    fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
+    fontSizePx: 15.2,
+    lineHeightPx: ((11 - 1 - 1) * INCH) / 55,
+  },
+  elementColumnsIn: {
+    heading: { left: 0, width: 6 },
+    action: { left: 0, width: 6 },
+    character: { left: 1.78, width: 2.2 },
+    parenthetical: { left: 1.38, width: 2.8 },
+    dialogue: { left: 1.0, width: 3.75 },
+    transition: { left: 4.2, width: 1.8 },
+  },
+  spacing: {
+    heading: { before: 0, after: 1 },
+    action: { before: 0, after: 0 },
+    character: { before: 1, after: 0 },
+    parenthetical: { before: 0, after: 0 },
+    dialogue: { before: 0, after: 0 },
+    transition: { before: 1, after: 1 },
+    blank: { before: 0, after: 0 },
+  },
+}
+
+const CONTENT_HEIGHT_PX = SCREENPLAY_LAYOUT.page.heightPx
+  - SCREENPLAY_LAYOUT.page.marginsPx.top
+  - SCREENPLAY_LAYOUT.page.marginsPx.bottom
+
+const CHAR_WIDTH_PX = SCREENPLAY_LAYOUT.typography.fontSizePx * 0.6
+
+const elementColumnsPx = Object.fromEntries(
+  Object.entries(SCREENPLAY_LAYOUT.elementColumnsIn).map(([type, cfg]) => ([
+    type,
+    {
+      leftPx: cfg.left * INCH,
+      widthPx: cfg.width * INCH,
+    },
+  ])),
+)
+
+export const SCREENPLAY_FORMAT = {
+  pageLines: Math.floor(CONTENT_HEIGHT_PX / SCREENPLAY_LAYOUT.typography.lineHeightPx),
+  charsPerLine: Object.fromEntries(
+    Object.entries(elementColumnsPx).map(([type, cfg]) => [type, Math.max(1, Math.floor(cfg.widthPx / CHAR_WIDTH_PX))]),
+  ),
 }
 
 export const SCENE_PAGINATION_MODES = {
@@ -23,6 +72,10 @@ function wrapCount(text, maxChars) {
   return value
     .split(/\r?\n/)
     .reduce((sum, segment) => sum + Math.max(1, Math.ceil(segment.length / maxChars)), 0)
+}
+
+export function getElementPrintLayout(type) {
+  return elementColumnsPx[type] || elementColumnsPx.action
 }
 
 export function parseScreenplayText(text) {
@@ -94,14 +147,23 @@ export function estimateScreenplayPagination(scenes = [], options = {}) {
     const elements = getSceneScreenplayElements(scene)
     const startLineUnits = totalLineUnits
 
-    elements.forEach(el => {
+    elements.forEach((el, idx) => {
+      const prevType = idx > 0 ? elements[idx - 1]?.type : null
+      const spacingRule = SCREENPLAY_LAYOUT.spacing[el.type] || SCREENPLAY_LAYOUT.spacing.action
+      if (spacingRule.before > 0 && prevType && prevType !== 'blank') totalLineUnits += spacingRule.before
+
       if (el.type === 'blank') {
         totalLineUnits += 1
         return
       }
+
       const width = SCREENPLAY_FORMAT.charsPerLine[el.type] || SCREENPLAY_FORMAT.charsPerLine.action
       totalLineUnits += wrapCount(el.text, width)
-      totalLineUnits += 0.15
+
+      if (spacingRule.after > 0) {
+        const nextType = elements[idx + 1]?.type
+        if (nextType && nextType !== 'blank') totalLineUnits += spacingRule.after
+      }
     })
 
     const sceneUnits = Math.max(1, totalLineUnits - startLineUnits)
