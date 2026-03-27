@@ -704,11 +704,11 @@ p {
 }
 
 .storyboard-preview-image-collapsed {
-  height: 118px;
+  height: 160px;
 }
 
 .storyboard-preview-image-expanded {
-  height: 184px;
+  height: 210px;
 }
 
 .storyboard-expanded-meta {
@@ -867,6 +867,213 @@ p {
 
 .quicksheet-grid p strong {
   font-size: 0.95rem;
+}
+
+/* ===================================
+   SHOTLIST TAB — compact row layout
+   =================================== */
+
+.sl-shot-item {
+  padding: 9px 10px 8px;
+  gap: 5px;
+}
+
+.sl-r1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sl-r1 h4 {
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sl-r1-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.sl-r1-right .status-chip {
+  padding: 3px 7px;
+  font-size: 0.67rem;
+}
+
+.sl-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 2px;
+  min-height: 0;
+}
+
+.sl-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sl-meta-dot {
+  color: #b09880;
+  font-size: 0.7rem;
+  margin: 0 2px;
+}
+
+.sl-meta-val {
+  font-size: 0.76rem;
+  color: #504336;
+  font-weight: 600;
+}
+
+.sl-notes {
+  font-size: 0.77rem;
+  color: #4a3e32;
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 7px;
+  border-left: 2px solid #c4ae92;
+}
+
+.sl-shot-item .shot-action-button {
+  min-height: 33px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+/* ===================================
+   SCHEDULE TAB — schedule view layout
+   =================================== */
+
+.sched-shot-item {
+  padding: 9px 10px 8px;
+  gap: 5px;
+}
+
+.sched-r1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sched-r1 h4 {
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sched-r1-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.sched-r1-right .status-chip {
+  padding: 3px 7px;
+  font-size: 0.67rem;
+}
+
+.sched-r2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+}
+
+.sched-timing {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.sched-time-unit {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-end;
+}
+
+.sched-time-lbl {
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7a6a58;
+  font-weight: 700;
+}
+
+.sched-time-val {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2f2f34;
+}
+
+.sched-unscheduled {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: #9a8a78;
+  font-style: italic;
+}
+
+.sched-shot-item .shot-action-button {
+  min-height: 33px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+/* ===================================
+   STORYBOARD TAB — visual card layout
+   =================================== */
+
+.sb-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.sb-shot-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  color: #2c2d33;
+}
+
+.sb-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.storyboard-card .storyboard-collapse-button {
+  gap: 4px;
+}
+
+.storyboard-card .shot-action-button {
+  min-height: 33px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
 }
 
 @media (min-width: 768px) {

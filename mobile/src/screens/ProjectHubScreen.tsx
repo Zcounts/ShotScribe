@@ -380,37 +380,33 @@ function renderSchedule(
           return (
             <article
               key={item.scheduleItemId}
-              className={`mobile-shot-card mobile-shot-card-compact schedule-shot-card shot-toggle-${actionState.tone} status-outline-${effectiveStatus}`}
+              className={`mobile-shot-card sched-shot-item status-outline-${effectiveStatus}`}
               onDoubleClick={() => onOpenDetails(item.shotId as string)}
             >
-              <div className="mobile-shot-row mobile-shot-row-top compact-row">
-                <p className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</p>
-                <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
-              </div>
-              <div className="mobile-shot-row compact-row">
+              <div className="sched-r1">
                 <h4>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</h4>
-                {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
+                <div className="sched-r1-right">
+                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
+                  <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+                </div>
               </div>
-              <div className="schedule-shot-meta-grid schedule-shot-meta-grid-compact">
+              <div className="sched-r2">
                 {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
-                <div className="schedule-time-grid">
+                <div className="sched-timing">
                   {setupTime ? (
-                    <p className="meta-chip">
-                      <span>Setup Time</span>
-                      <strong>{setupTime}</strong>
-                    </p>
+                    <span className="sched-time-unit">
+                      <span className="sched-time-lbl">Setup</span>
+                      <span className="sched-time-val">{setupTime}</span>
+                    </span>
                   ) : null}
                   {shotTime ? (
-                    <p className="meta-chip">
-                      <span>Shot Time</span>
-                      <strong>{shotTime}</strong>
-                    </p>
+                    <span className="sched-time-unit">
+                      <span className="sched-time-lbl">Shot</span>
+                      <span className="sched-time-val">{shotTime}</span>
+                    </span>
                   ) : null}
                   {!setupTime && !shotTime ? (
-                    <p className="meta-chip meta-chip-muted">
-                      <span>Timing</span>
-                      <strong>Not scheduled yet</strong>
-                    </p>
+                    <span className="sched-unscheduled">Unscheduled</span>
                   ) : null}
                 </div>
               </div>
@@ -487,66 +483,39 @@ function renderShotlist(
             const actionState = getShotActionState(effectiveStatus)
             const shot = shotLookup.get(shotId)
             const shotCode = shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'
-            const setupTime = formatTimeRange(item.plannedStartTime, item.plannedEndTime)
-            const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
-            const coreFields: LabeledValue[] = [
-              toCleanValue(shot?.shotSize) ? { label: 'Coverage', value: toCleanValue(shot?.shotSize) as string } : null,
-              toCleanValue(shot?.shotType) ? { label: 'Angle / Type', value: toCleanValue(shot?.shotType) as string } : null,
-              toCleanValue(shot?.shotMove) ? { label: 'Movement', value: toCleanValue(shot?.shotMove) as string } : null,
-              toCleanValue(shot?.shotEquipment) ? { label: 'Equipment', value: toCleanValue(shot?.shotEquipment) as string } : null,
-            ].filter((field): field is LabeledValue => Boolean(field))
+            const metaValues = [
+              toCleanValue(shot?.shotSize),
+              toCleanValue(shot?.shotType),
+              toCleanValue(shot?.shotMove),
+              toCleanValue(shot?.shotEquipment),
+            ].filter((v): v is string => Boolean(v))
 
             return (
               <article
                 key={item.scheduleItemId}
-                className={`mobile-shot-card mobile-shot-card-compact shotlist-card shotlist-structured-card shot-toggle-${actionState.tone}`}
+                className={`mobile-shot-card sl-shot-item shot-toggle-${actionState.tone}`}
                 onDoubleClick={() => onOpenDetails(shotId)}
               >
-                <div className="mobile-shot-row mobile-shot-row-top compact-row">
-                  <p className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</p>
-                  <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
-                </div>
-
-                <div className="mobile-shot-row compact-row">
+                <div className="sl-r1">
                   <h4>{shotCode}</h4>
-                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
+                  <div className="sl-r1-right">
+                    {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
+                    <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
+                  </div>
                 </div>
 
-                {(coreFields.length > 0 || shot?.focalLength || setupTime || shotTime) ? (
-                  <div className="shotlist-info-band">
-                    {coreFields.map((field) => (
-                      <p key={field.label} className="meta-chip">
-                        <span>{field.label}</span>
-                        <strong>{field.value}</strong>
-                      </p>
+                {metaValues.length > 0 ? (
+                  <div className="sl-meta-line">
+                    {metaValues.map((val, i) => (
+                      <span key={val} className="sl-meta-item">
+                        {i > 0 ? <span className="sl-meta-dot">·</span> : null}
+                        <span className="sl-meta-val">{val}</span>
+                      </span>
                     ))}
-                    {shot?.focalLength ? (
-                      <p className="meta-chip">
-                        <span>Lens</span>
-                        <strong>{shot.focalLength}</strong>
-                      </p>
-                    ) : null}
-                    {setupTime ? (
-                      <p className="meta-chip">
-                        <span>Setup Time</span>
-                        <strong>{setupTime}</strong>
-                      </p>
-                    ) : null}
-                    {shotTime ? (
-                      <p className="meta-chip">
-                        <span>Shot Time</span>
-                        <strong>{shotTime}</strong>
-                      </p>
-                    ) : null}
                   </div>
                 ) : null}
 
-                {shot?.notes ? (
-                  <p className="shot-production-notes">
-                    <span>Notes / Sound / Props</span>
-                    <strong>{shot.notes}</strong>
-                  </p>
-                ) : null}
+                {shot?.notes ? <p className="sl-notes">{shot.notes}</p> : null}
 
                 <ShotActions
                   actionLabel={actionState.label}
@@ -586,17 +555,16 @@ function renderStoryboard(
         const actionState = getShotActionState(effectiveStatus)
         const isExpanded = expandedShotId === ref.shotId
         return (
-          <article key={`${ref.shotId}-${ref.updatedAt}`} className="mobile-shot-card mobile-shot-card-compact storyboard-card">
+          <article key={`${ref.shotId}-${ref.updatedAt}`} className={`mobile-shot-card storyboard-card status-outline-${effectiveStatus}`}>
             <button type="button" className="storyboard-collapse-button" onClick={() => onToggleExpanded(ref.shotId)}>
-              <span className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</span>
-              <span className="mobile-shot-row compact-row">
-                <strong>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
-                {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
-              </span>
-              <span className="mobile-shot-subrow">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
-                <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
-              </span>
+              <div className="sb-header-row">
+                <strong className="sb-shot-name">{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
+                <div className="sb-header-right">
+                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
+                  <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
+                </div>
+              </div>
+              {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
             </button>
             {shot?.imageUrl ? (
               <img
