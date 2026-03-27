@@ -316,6 +316,11 @@ function getBlockLength(rows, startIndex, predicate) {
   return len
 }
 
+function countRowsOfTypes(rows, types) {
+  const match = new Set(types)
+  return rows.reduce((sum, row) => sum + (match.has(row.type) ? 1 : 0), 0)
+}
+
 function paginateRows(rows, options = {}) {
   const scenePaginationMode = options.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
   const pages = []
@@ -344,15 +349,29 @@ function paginateRows(rows, options = {}) {
       const headingLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
       const nextLen = getBlockLength(rows, i + headingLen, r => r.type === 'blank' || r.type === 'spacer')
       const actionLen = getBlockLength(rows, i + headingLen + nextLen, r => r.sceneId === row.sceneId && r.type !== 'blank' && r.type !== 'spacer')
-      const keepRows = headingLen + nextLen + Math.min(actionLen, 2)
+      const minAfterHeading = SCREENPLAY_LAYOUT.pagination?.minLinesAfterHeading ?? 2
+      const keepRows = headingLen + nextLen + Math.min(actionLen, minAfterHeading)
       if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
     }
 
     if (row.type === 'character' && row.isFirstChunk) {
       const cueLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
-      const nextLen = getBlockLength(rows, i + cueLen, r => r.type === 'parenthetical' || r.type === 'dialogue' || r.type === 'spacer')
-      const keepRows = cueLen + Math.max(1, nextLen)
+      const blockLen = getBlockLength(rows, i + cueLen, r => r.type === 'parenthetical' || r.type === 'dialogue' || r.type === 'spacer')
+      const blockRows = rows.slice(i, i + cueLen + blockLen)
+      const minDialogueAfterCue = SCREENPLAY_LAYOUT.pagination?.minDialogueLinesAfterCharacter ?? 2
+      const minDialogueAtPageTop = SCREENPLAY_LAYOUT.pagination?.minDialogueLinesAtPageTop ?? 2
+      const remaining = ROWS_PER_PAGE - page.lines.length
+      const keepRows = cueLen + Math.max(1, Math.min(blockLen, minDialogueAfterCue))
+
       if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+      if (page.lines.length > 0) {
+        if (remaining <= cueLen + minDialogueAfterCue - 1) startNewPageIfNeeded()
+        if (cueLen + blockLen > remaining && remaining > 0) {
+          const rowsOnNextPage = blockRows.slice(remaining)
+          const dialogueRowsOnNextPage = countRowsOfTypes(rowsOnNextPage, ['dialogue', 'parenthetical'])
+          if (dialogueRowsOnNextPage > 0 && dialogueRowsOnNextPage < minDialogueAtPageTop) startNewPageIfNeeded()
+        }
+      }
     }
 
     addLine(row)
@@ -775,7 +794,17 @@ export default function ScriptTab() {
           {pagedScript.map(page => (
             <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily, fontSize: SCREENPLAY_FONT_SIZE, lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`, position: 'relative', overflow: 'hidden' }}>
               {page.number > 1 && (
-                <div style={{ position: 'absolute', top: 20, right: 24, fontSize: 12, color: '#111827' }}>{page.number}.</div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: `${SCREENPLAY_LAYOUT.pageNumber.topPx}px`,
+                    right: `${SCREENPLAY_LAYOUT.pageNumber.rightPx}px`,
+                    fontSize: `${SCREENPLAY_LAYOUT.pageNumber.fontSizePx}px`,
+                    color: '#111827',
+                  }}
+                >
+                  {page.number}
+                </div>
               )}
               <div style={{ position: 'absolute', inset: `${PAGE_MARGIN.top}px ${PAGE_MARGIN.right}px ${PAGE_MARGIN.bottom}px ${PAGE_MARGIN.left}px`, overflow: 'hidden' }}>
                 {page.lines.map((row, idx) => {
