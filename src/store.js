@@ -1182,6 +1182,7 @@ const useStore = create((set, get) => ({
       intOrExt: scriptScene?.intExt ?? storyboardScene.intOrExt ?? '',
       dayNight: scriptScene?.dayNight ?? storyboardScene.dayNight ?? '',
       color: scriptScene?.color ?? storyboardScene.color ?? null,
+      characters: scriptScene?.characters ?? [],
     }
   },
 
