@@ -6,6 +6,9 @@ import SpecsTable from './SpecsTable'
 import ImportScriptModal from './ImportScriptModal'
 import SidebarPane from './SidebarPane'
 import {
+  createScreenplayElement,
+  EDITABLE_SCREENPLAY_TYPES,
+  ensureEditableScreenplayElements,
   estimateScreenplayPagination,
   getSceneScreenplayElements,
   SCREENPLAY_FORMAT,
@@ -434,6 +437,7 @@ export default function ScriptTab() {
   const updateShotImage = useStore(s => s.updateShotImage)
   const setActiveTab = useStore(s => s.setActiveTab)
   const updateScriptScene = useStore(s => s.updateScriptScene)
+  const updateScriptSceneScreenplay = useStore(s => s.updateScriptSceneScreenplay)
   const useDropdowns = useStore(s => s.useDropdowns)
   const scriptSettings = useStore(s => s.scriptSettings)
   const scriptFocusRequest = useStore(s => s.scriptFocusRequest)
@@ -450,6 +454,9 @@ export default function ScriptTab() {
   const [shotLinkDialog, setShotLinkDialog] = useState(null)
   const [pendingOpenShotDialog, setPendingOpenShotDialog] = useState(null)
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(Boolean(scriptViewState.isEditMode))
+  const [selectedBlock, setSelectedBlock] = useState(null)
+  const editorRefs = useRef({})
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
   const scenePaginationMode = scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
@@ -479,6 +486,86 @@ export default function ScriptTab() {
     })
     return map
   }, [scenes])
+
+  const getSceneById = useCallback((sceneId) => orderedScenes.find(scene => scene.id === sceneId), [orderedScenes])
+
+  const commitSceneBlocks = useCallback((sceneId, nextElements, focusBlockId = null) => {
+    const normalized = ensureEditableScreenplayElements(nextElements)
+    updateScriptSceneScreenplay(sceneId, normalized)
+    if (focusBlockId) {
+      requestAnimationFrame(() => {
+        const key = `${sceneId}:${focusBlockId}`
+        const node = editorRefs.current[key]
+        if (node) node.focus()
+      })
+    }
+  }, [updateScriptSceneScreenplay])
+
+  const updateBlock = useCallback((sceneId, blockId, updates) => {
+    const scene = getSceneById(sceneId)
+    if (!scene) return
+    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
+    const next = elements.map(element => element.id === blockId ? { ...element, ...updates } : element)
+    commitSceneBlocks(sceneId, next, blockId)
+  }, [commitSceneBlocks, getSceneById])
+
+  const splitBlock = useCallback((sceneId, blockId) => {
+    const scene = getSceneById(sceneId)
+    if (!scene) return
+    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
+    const index = elements.findIndex(element => element.id === blockId)
+    if (index === -1) return
+    const node = editorRefs.current[`${sceneId}:${blockId}`]
+    const rawText = String(elements[index].text || '')
+    const cursor = Number.isFinite(node?.selectionStart) ? node.selectionStart : rawText.length
+    const left = rawText.slice(0, cursor)
+    const right = rawText.slice(cursor)
+    const newBlock = createScreenplayElement(elements[index].type, right)
+    const next = [...elements]
+    next.splice(index, 1, { ...elements[index], text: left }, newBlock)
+    commitSceneBlocks(sceneId, next, newBlock.id)
+    setSelectedBlock({ sceneId, blockId: newBlock.id })
+  }, [commitSceneBlocks, getSceneById])
+
+  const mergeBlock = useCallback((sceneId, blockId, direction = 'up') => {
+    const scene = getSceneById(sceneId)
+    if (!scene) return
+    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
+    const index = elements.findIndex(element => element.id === blockId)
+    if (index === -1) return
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= elements.length) return
+    const current = elements[index]
+    const target = elements[targetIndex]
+    const mergedText = direction === 'up'
+      ? `${String(target.text || '')}${target.text ? '\n' : ''}${String(current.text || '')}`
+      : `${String(current.text || '')}${current.text ? '\n' : ''}${String(target.text || '')}`
+    const next = [...elements]
+    if (direction === 'up') {
+      next[targetIndex] = { ...target, text: mergedText }
+      next.splice(index, 1)
+      commitSceneBlocks(sceneId, next, target.id)
+      setSelectedBlock({ sceneId, blockId: target.id })
+    } else {
+      next[index] = { ...current, text: mergedText }
+      next.splice(targetIndex, 1)
+      commitSceneBlocks(sceneId, next, current.id)
+      setSelectedBlock({ sceneId, blockId: current.id })
+    }
+  }, [commitSceneBlocks, getSceneById])
+
+  const insertBlockAfter = useCallback((sceneId, blockId) => {
+    const scene = getSceneById(sceneId)
+    if (!scene) return
+    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
+    const index = elements.findIndex(element => element.id === blockId)
+    if (index === -1) return
+    const newBlock = createScreenplayElement('action', '')
+    const next = [...elements]
+    next.splice(index + 1, 0, newBlock)
+    commitSceneBlocks(sceneId, next, newBlock.id)
+    setSelectedBlock({ sceneId, blockId: newBlock.id })
+  }, [commitSceneBlocks, getSceneById])
 
   const screenplayBySceneId = useMemo(() => {
     const result = {}
@@ -527,8 +614,8 @@ export default function ScriptTab() {
   }, [orderedScenes])
 
   useEffect(() => {
-    setTabViewState('script', { activeSceneId })
-  }, [activeSceneId, setTabViewState])
+    setTabViewState('script', { activeSceneId, isEditMode })
+  }, [activeSceneId, isEditMode, setTabViewState])
 
   useEffect(() => {
     const node = rightRef.current
@@ -564,6 +651,10 @@ export default function ScriptTab() {
   }
 
   useEffect(() => {
+    if (isEditMode) {
+      setSelectionBar(null)
+      return undefined
+    }
     const onMouseUp = () => {
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
@@ -618,7 +709,7 @@ export default function ScriptTab() {
 
     document.addEventListener('mouseup', onMouseUp)
     return () => document.removeEventListener('mouseup', onMouseUp)
-  }, [scriptScenes, sceneFullTextById])
+  }, [isEditMode, scriptScenes, sceneFullTextById])
 
   const findStoryboardSceneForScriptScene = (scriptScene) => {
     if (!scriptScene) return null
@@ -812,7 +903,23 @@ export default function ScriptTab() {
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
-      <SidebarPane title={`Scenes · ${pagedScript.length} pp`} width={260}>
+      <SidebarPane
+        title={`Scenes · ${pagedScript.length} pp`}
+        width={260}
+        controls={(
+          <button
+            className="toolbar-btn"
+            onClick={() => setIsEditMode(value => !value)}
+            style={{
+              width: '100%',
+              borderColor: isEditMode ? '#2563eb' : undefined,
+              background: isEditMode ? 'rgba(37,99,235,0.08)' : undefined,
+            }}
+          >
+            {isEditMode ? 'Done Editing' : 'Edit Script'}
+          </button>
+        )}
+      >
           {orderedScenes.map(sc => (
             <button key={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: activeSceneId === sc.id ? 'rgba(232,64,64,0.08)' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -833,105 +940,164 @@ export default function ScriptTab() {
         onScroll={(e) => setTabViewState('script', { scrollTop: e.currentTarget.scrollTop })}
         style={{ flex: 1, overflowY: 'auto', padding: 18, position: 'relative' }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
-          {pagedScript.map(page => (
-            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily, fontSize: SCREENPLAY_FONT_SIZE, lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`, position: 'relative', overflow: 'hidden' }}>
-              {page.number > 1 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: `${SCREENPLAY_LAYOUT.pageNumber.topPx}px`,
-                    right: `${SCREENPLAY_LAYOUT.pageNumber.rightPx}px`,
-                    fontSize: `${SCREENPLAY_LAYOUT.pageNumber.fontSizePx}px`,
-                    color: '#111827',
-                  }}
-                >
-                  {page.number}
+        {isEditMode ? (
+          <div style={{ maxWidth: 980, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {orderedScenes.map(scene => {
+              const blocks = ensureEditableScreenplayElements(screenplayBySceneId[scene.id])
+              return (
+                <div key={scene.id} ref={el => { headingRefs.current[scene.id] = el }} data-sceneid={scene.id} style={{ background: '#fff', border: '1px solid rgba(74,85,104,0.22)', borderRadius: 10, padding: 12 }}>
+                  <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: 12, color: '#334155', fontWeight: 700 }}>SC {scene.sceneNumber || '—'} · {scene.slugline || 'Untitled scene'}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Screenplay-aware edit mode</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {blocks.map((block, index) => {
+                      const layout = ELEMENT_LAYOUT[block.type] || ELEMENT_LAYOUT.action
+                      const selected = selectedBlock?.sceneId === scene.id && selectedBlock?.blockId === block.id
+                      return (
+                        <div key={block.id} style={{ border: selected ? '1px solid rgba(59,130,246,0.55)' : '1px solid rgba(148,163,184,0.35)', borderRadius: 8, background: selected ? 'rgba(59,130,246,0.06)' : '#f8fafc', padding: 8 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                            <select value={block.type} onChange={(event) => updateBlock(scene.id, block.id, { type: event.target.value })} style={{ border: '1px solid rgba(100,116,139,0.4)', borderRadius: 6, padding: '4px 6px', fontSize: 11, fontWeight: 600, background: '#fff' }}>
+                              {EDITABLE_SCREENPLAY_TYPES.map(type => (
+                                <option key={type.value} value={type.value}>{type.label}</option>
+                              ))}
+                            </select>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                              <button className="toolbar-btn" onClick={() => mergeBlock(scene.id, block.id, 'up')} disabled={index === 0}>Merge ↑</button>
+                              <button className="toolbar-btn" onClick={() => mergeBlock(scene.id, block.id, 'down')} disabled={index === blocks.length - 1}>Merge ↓</button>
+                              <button className="toolbar-btn" onClick={() => splitBlock(scene.id, block.id)}>Split</button>
+                              <button className="toolbar-btn" onClick={() => insertBlockAfter(scene.id, block.id)}>+ Block</button>
+                            </div>
+                          </div>
+                          <div style={{ marginLeft: `${layout.leftPx}px`, width: `${layout.widthPx}px`, maxWidth: '100%', textAlign: layout.textAlign || 'left' }}>
+                            <textarea
+                              ref={node => { editorRefs.current[`${scene.id}:${block.id}`] = node }}
+                              value={String(block.text || '')}
+                              onFocus={() => setSelectedBlock({ sceneId: scene.id, blockId: block.id })}
+                              onChange={(event) => updateBlock(scene.id, block.id, { text: event.target.value })}
+                              style={{
+                                width: '100%',
+                                minHeight: 34,
+                                border: '1px solid rgba(148,163,184,0.35)',
+                                borderRadius: 4,
+                                padding: '6px 8px',
+                                resize: 'vertical',
+                                fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily,
+                                fontSize: SCREENPLAY_FONT_SIZE,
+                                lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`,
+                                textTransform: ['heading', 'character', 'transition'].includes(block.type) ? 'uppercase' : 'none',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              )}
-              <div style={{ position: 'absolute', inset: `${PAGE_MARGIN.top}px ${PAGE_MARGIN.right}px ${PAGE_MARGIN.bottom}px ${PAGE_MARGIN.left}px`, overflow: 'hidden' }}>
-                {page.lines.map((row, idx) => {
-                  const scene = orderedScenes.find(sc => sc.id === row.sceneId)
-                  const isSceneAnchor = row.type === 'heading' && row.isFirstChunk
-                  const layout = ELEMENT_LAYOUT[row.type] || ELEMENT_LAYOUT.action
-                  return (
-                    <div
-                      key={row.rowKey}
-                      data-sceneid={row.sceneId}
-                      style={{
-                        position: 'absolute',
-                        top: `${idx * SCREENPLAY_LINE_HEIGHT_PX}px`,
-                        left: 0,
-                        right: 0,
-                        height: `${SCREENPLAY_LINE_HEIGHT_PX}px`,
-                      }}
-                    >
-                      {isSceneAnchor && (
-                        <>
-                          <button
-                            ref={el => { headingRefs.current[row.sceneId] = el }}
-                            data-sceneid={row.sceneId}
-                            onDoubleClick={() => openScenePropertiesDialog('script', row.sceneId)}
-                            onClick={() => setActiveSceneId(row.sceneId)}
-                            title={`Scene ${scene?.sceneNumber || ''}`}
-                            style={{
-                              position: 'absolute',
-                              left: -132,
-                              top: -1,
-                              border: '1px solid rgba(74,85,104,0.3)',
-                              background: '#f8fafc',
-                              color: '#334155',
-                              borderRadius: 999,
-                              padding: '0 8px',
-                              fontSize: 10,
-                              fontFamily: 'Sora, sans-serif',
-                              lineHeight: '16px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            SC {scene?.sceneNumber || ''}
-                            {(shotCounts[row.sceneId] || 0) > 0 ? ` · ${shotCounts[row.sceneId]} shot${shotCounts[row.sceneId] === 1 ? '' : 's'}` : ''}
-                          </button>
-                          <span
-                            style={{
-                              position: 'absolute',
-                              left: -132,
-                              top: 16,
-                              maxWidth: 120,
-                              fontSize: 9,
-                              color: '#64748b',
-                              fontFamily: 'Sora, sans-serif',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              pointerEvents: 'none',
-                            }}
-                            title={scene?.slugline || ''}
-                          >
-                            {scene?.slugline || ''}
-                          </span>
-                        </>
-                      )}
+              )
+            })}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+            {pagedScript.map(page => (
+              <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily, fontSize: SCREENPLAY_FONT_SIZE, lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`, position: 'relative', overflow: 'hidden' }}>
+                {page.number > 1 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: `${SCREENPLAY_LAYOUT.pageNumber.topPx}px`,
+                      right: `${SCREENPLAY_LAYOUT.pageNumber.rightPx}px`,
+                      fontSize: `${SCREENPLAY_LAYOUT.pageNumber.fontSizePx}px`,
+                      color: '#111827',
+                    }}
+                  >
+                    {page.number}
+                  </div>
+                )}
+                <div style={{ position: 'absolute', inset: `${PAGE_MARGIN.top}px ${PAGE_MARGIN.right}px ${PAGE_MARGIN.bottom}px ${PAGE_MARGIN.left}px`, overflow: 'hidden' }}>
+                  {page.lines.map((row, idx) => {
+                    const scene = orderedScenes.find(sc => sc.id === row.sceneId)
+                    const isSceneAnchor = row.type === 'heading' && row.isFirstChunk
+                    const layout = ELEMENT_LAYOUT[row.type] || ELEMENT_LAYOUT.action
+                    return (
                       <div
+                        key={row.rowKey}
+                        data-sceneid={row.sceneId}
                         style={{
                           position: 'absolute',
-                          left: `${layout.leftPx}px`,
-                          width: `${layout.widthPx}px`,
-                          ...(layout.textAlign ? { textAlign: layout.textAlign } : {}),
+                          top: `${idx * SCREENPLAY_LINE_HEIGHT_PX}px`,
+                          left: 0,
+                          right: 0,
+                          height: `${SCREENPLAY_LINE_HEIGHT_PX}px`,
                         }}
                       >
-                        {renderRow(row)}
+                        {isSceneAnchor && (
+                          <>
+                            <button
+                              ref={el => { headingRefs.current[row.sceneId] = el }}
+                              data-sceneid={row.sceneId}
+                              onDoubleClick={() => openScenePropertiesDialog('script', row.sceneId)}
+                              onClick={() => setActiveSceneId(row.sceneId)}
+                              title={`Scene ${scene?.sceneNumber || ''}`}
+                              style={{
+                                position: 'absolute',
+                                left: -132,
+                                top: -1,
+                                border: '1px solid rgba(74,85,104,0.3)',
+                                background: '#f8fafc',
+                                color: '#334155',
+                                borderRadius: 999,
+                                padding: '0 8px',
+                                fontSize: 10,
+                                fontFamily: 'Sora, sans-serif',
+                                lineHeight: '16px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              SC {scene?.sceneNumber || ''}
+                              {(shotCounts[row.sceneId] || 0) > 0 ? ` · ${shotCounts[row.sceneId]} shot${shotCounts[row.sceneId] === 1 ? '' : 's'}` : ''}
+                            </button>
+                            <span
+                              style={{
+                                position: 'absolute',
+                                left: -132,
+                                top: 16,
+                                maxWidth: 120,
+                                fontSize: 9,
+                                color: '#64748b',
+                                fontFamily: 'Sora, sans-serif',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                pointerEvents: 'none',
+                              }}
+                              title={scene?.slugline || ''}
+                            >
+                              {scene?.slugline || ''}
+                            </span>
+                          </>
+                        )}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${layout.leftPx}px`,
+                            width: `${layout.widthPx}px`,
+                            ...(layout.textAlign ? { textAlign: layout.textAlign } : {}),
+                          }}
+                        >
+                          {renderRow(row)}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {selectionBar && (
+      {selectionBar && !isEditMode && (
         <div style={{ position: 'fixed', left: selectionBar.x, top: selectionBar.y, zIndex: 120, background: '#1c1c1e', color: '#fff', borderRadius: 8, padding: '6px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => openAddShotDialog(selectionBar.sceneId, selectionBar.text)} style={{ border: 'none', background: 'none', color: '#fff', cursor: 'pointer' }}>+ Add Shot to SC {selectionBar.sceneNumber}</button>
           <button onClick={() => {

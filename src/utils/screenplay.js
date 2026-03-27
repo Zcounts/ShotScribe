@@ -1,5 +1,6 @@
 const HEADING_RE = /^(INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?)/i
 const TRANSITION_RE = /^(FADE IN|FADE OUT|CUT TO|DISSOLVE TO|SMASH CUT TO|MATCH CUT(?: FORWARD)? TO|WIPE TO|BACK TO|JUMP CUT TO|INTERCUT)\b/i
+let screenplayElementCounter = 0
 
 const DPI = 96
 const INCH = DPI
@@ -216,6 +217,44 @@ export function parseScreenplayText(text) {
   }
 
   return elements
+}
+
+export const EDITABLE_SCREENPLAY_TYPES = [
+  { value: 'heading', label: 'Scene Heading' },
+  { value: 'action', label: 'Action' },
+  { value: 'character', label: 'Character' },
+  { value: 'dialogue', label: 'Dialogue' },
+  { value: 'parenthetical', label: 'Parenthetical' },
+  { value: 'transition', label: 'Transition' },
+]
+
+export const EDITABLE_SCREENPLAY_TYPE_SET = new Set(EDITABLE_SCREENPLAY_TYPES.map(type => type.value))
+
+export function createScreenplayElement(type = 'action', text = '') {
+  screenplayElementCounter += 1
+  return {
+    id: `sp_${Date.now()}_${screenplayElementCounter}`,
+    type: EDITABLE_SCREENPLAY_TYPE_SET.has(type) ? type : 'action',
+    text: String(text || ''),
+  }
+}
+
+export function ensureEditableScreenplayElements(elements = []) {
+  const normalized = Array.isArray(elements)
+    ? elements
+        .filter(Boolean)
+        .map((element) => {
+          const type = EDITABLE_SCREENPLAY_TYPE_SET.has(element?.type) ? element.type : 'action'
+          return {
+            id: element?.id || createScreenplayElement(type).id,
+            type,
+            text: String(element?.text || ''),
+          }
+        })
+    : []
+
+  if (normalized.length > 0) return normalized
+  return [createScreenplayElement('action', '')]
 }
 
 export function getSceneScreenplayElements(scene) {
