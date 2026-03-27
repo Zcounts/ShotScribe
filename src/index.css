@@ -387,6 +387,28 @@
     border-color: rgba(74,85,104,0.6);
   }
 
+  .toolbar-btn.script-edit-toggle {
+    background: #1f2937;
+    border-color: #475569;
+    color: #f8fafc;
+  }
+
+  .toolbar-btn.script-edit-toggle:hover {
+    background: #334155;
+    border-color: #64748b;
+  }
+
+  .toolbar-btn.script-edit-toggle.active {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #ffffff;
+  }
+
+  .toolbar-btn.script-edit-toggle.active:hover {
+    background: #1d4ed8;
+    border-color: #1e40af;
+  }
+
   .toolbar-btn.primary {
     background: #E84040;
     border-color: #c43030;
