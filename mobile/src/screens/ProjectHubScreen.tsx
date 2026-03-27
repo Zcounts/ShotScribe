@@ -88,6 +88,28 @@ function formatTimeRange(start?: string, end?: string): string | undefined {
   return formatTime(start ?? end)
 }
 
+function formatDuration(start?: string, end?: string): string | undefined {
+  if (!start || !end) {
+    return undefined
+  }
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+  const durationMs = endDate.getTime() - startDate.getTime()
+  if (Number.isNaN(durationMs) || durationMs <= 0) {
+    return undefined
+  }
+  const totalMinutes = Math.round(durationMs / 60000)
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m`
+  }
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (minutes === 0) {
+    return `${hours}h`
+  }
+  return `${hours}h ${minutes}m`
+}
+
 function toCleanValue(raw?: string): string | undefined {
   if (!raw) return undefined
   const value = raw.trim()
@@ -168,15 +190,17 @@ function ShotActions({
   onOpenDetails,
   onCycleStatus,
   detailsButtonLabel = 'Details',
+  stopPropagationOnActions = false,
 }: {
   actionLabel: string
   actionTone: 'neutral' | 'done' | 'skipped'
   onOpenDetails: () => void
   onCycleStatus: () => void
   detailsButtonLabel?: string
+  stopPropagationOnActions?: boolean
 }) {
   return (
-    <div className="mobile-shot-actions">
+    <div className="mobile-shot-actions" onClick={stopPropagationOnActions ? (event) => event.stopPropagation() : undefined}>
       <button type="button" className="shot-action-button shot-action-button-secondary" onClick={onOpenDetails}>
         {detailsButtonLabel}
       </button>
@@ -366,9 +390,13 @@ function renderSchedule(
   onCycleShotStatus: (shotId: string) => void
 ) {
   const sortedItems = [...day.dayPackage.scheduleItems].sort((a, b) => a.sortOrder - b.sortOrder)
+  const hasAnyShotTiming = sortedItems.some(
+    (item) => item.type === 'shot' && (item.plannedStartTime || item.plannedEndTime || item.actualStartTime || item.actualEndTime)
+  )
 
   return (
     <div className="stacked-list">
+      {!hasAnyShotTiming ? <p className="hint-text">No shot times are scheduled yet for this day.</p> : null}
       {sortedItems.map((item) => {
         const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
 
@@ -377,45 +405,64 @@ function renderSchedule(
           const actionState = getShotActionState(effectiveStatus)
           const setupTime = formatTimeRange(item.plannedStartTime, item.plannedEndTime)
           const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
+          const estimatedDuration = formatDuration(item.plannedStartTime, item.plannedEndTime)
+          const actualDuration = formatDuration(item.actualStartTime, item.actualEndTime)
           return (
             <article
               key={item.scheduleItemId}
               className={`mobile-shot-card sched-shot-item status-outline-${effectiveStatus}`}
-              onDoubleClick={() => onOpenDetails(item.shotId as string)}
+              onClick={() => onOpenDetails(item.shotId as string)}
             >
               <div className="sched-r1">
-                <h4>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</h4>
+                <div className="sched-title-stack">
+                  <h4>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</h4>
+                  {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
+                </div>
                 <div className="sched-r1-right">
-                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
                   <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
                 </div>
               </div>
-              <div className="sched-r2">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
-                <div className="sched-timing">
-                  {setupTime ? (
-                    <span className="sched-time-unit">
-                      <span className="sched-time-lbl">Setup</span>
-                      <span className="sched-time-val">{setupTime}</span>
-                    </span>
-                  ) : null}
-                  {shotTime ? (
-                    <span className="sched-time-unit">
-                      <span className="sched-time-lbl">Shot</span>
-                      <span className="sched-time-val">{shotTime}</span>
-                    </span>
-                  ) : null}
-                  {!setupTime && !shotTime ? (
-                    <span className="sched-unscheduled">Unscheduled</span>
-                  ) : null}
-                </div>
+              <div className="sched-time-grid">
+                {setupTime ? (
+                  <span className="sched-time-unit">
+                    <span className="sched-time-lbl">Setup</span>
+                    <span className="sched-time-val">{setupTime}</span>
+                  </span>
+                ) : null}
+                {shotTime ? (
+                  <span className="sched-time-unit">
+                    <span className="sched-time-lbl">Shot</span>
+                    <span className="sched-time-val">{shotTime}</span>
+                  </span>
+                ) : null}
+                {estimatedDuration ? (
+                  <span className="sched-time-unit">
+                    <span className="sched-time-lbl">Est.</span>
+                    <span className="sched-time-val">{estimatedDuration}</span>
+                  </span>
+                ) : null}
+                {actualDuration ? (
+                  <span className="sched-time-unit">
+                    <span className="sched-time-lbl">Actual</span>
+                    <span className="sched-time-val">{actualDuration}</span>
+                  </span>
+                ) : null}
+                {!setupTime && !shotTime && !estimatedDuration && !actualDuration ? (
+                  <span className="sched-empty-time">No schedule time assigned</span>
+                ) : null}
               </div>
-              <ShotActions
-                actionLabel={actionState.label}
-                actionTone={actionState.tone}
-                onOpenDetails={() => onOpenDetails(item.shotId as string)}
-                onCycleStatus={() => onCycleShotStatus(item.shotId as string)}
-              />
+              <div className="sched-r3">
+                {shot?.focalLength ? <span className="sched-lens-tag">Lens {shot.focalLength}</span> : null}
+                {!shot?.focalLength ? <span className="sched-lens-tag">Lens —</span> : null}
+              </div>
+              <div onClick={(event) => event.stopPropagation()}>
+                <ShotActions
+                  actionLabel={actionState.label}
+                  actionTone={actionState.tone}
+                  onOpenDetails={() => onOpenDetails(item.shotId as string)}
+                  onCycleStatus={() => onCycleShotStatus(item.shotId as string)}
+                />
+              </div>
             </article>
           )
         }
@@ -495,7 +542,7 @@ function renderShotlist(
                 <article
                   key={item.scheduleItemId}
                   className={`sl-shot-row shot-toggle-${actionState.tone}`}
-                  onDoubleClick={() => onOpenDetails(shotId)}
+                  onClick={() => onOpenDetails(shotId)}
                 >
                   <div className="sl-r1">
                     <h4 className="sl-shot-label">{shotCode}</h4>
@@ -507,12 +554,10 @@ function renderShotlist(
 
                   {metaValues.length > 0 ? (
                     <div className="sl-meta-line">
-                      {metaValues.map((meta, i) => (
+                      {metaValues.map((meta) => (
                         <span key={`${meta.label}-${meta.value}`} className="sl-meta-item">
-                          {i > 0 ? <span className="sl-meta-dot">·</span> : null}
-                          <span className="sl-meta-val">
-                            <span className="sl-meta-key">{meta.label}</span> {meta.value}
-                          </span>
+                          <span className="sl-meta-key">{meta.label}</span>
+                          <span className="sl-meta-val">{meta.value}</span>
                         </span>
                       ))}
                     </div>
@@ -520,12 +565,14 @@ function renderShotlist(
 
                   {shot?.notes ? <p className="sl-notes">{shot.notes}</p> : null}
 
-                  <ShotActions
-                    actionLabel={actionState.label}
-                    actionTone={actionState.tone}
-                    onOpenDetails={() => onOpenDetails(shotId)}
-                    onCycleStatus={() => onCycleShotStatus(shotId)}
-                  />
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <ShotActions
+                      actionLabel={actionState.label}
+                      actionTone={actionState.tone}
+                      onOpenDetails={() => onOpenDetails(shotId)}
+                      onCycleStatus={() => onCycleShotStatus(shotId)}
+                    />
+                  </div>
                 </article>
               )
             })}
@@ -550,47 +597,46 @@ function renderStoryboard(
   }
 
   return (
-    <div className="stacked-list">
+    <div className="storyboard-grid">
       {refs.map((ref) => {
         const shot = shotLookup.get(ref.shotId)
         const effectiveStatus: ShotStatus = overrides[`${project.projectId}::${day.dayId}::${ref.shotId}`] ?? 'todo'
         const actionState = getShotActionState(effectiveStatus)
         return (
-          <article key={`${ref.shotId}-${ref.updatedAt}`} className={`mobile-shot-card storyboard-card status-outline-${effectiveStatus}`}>
-            <button
-              type="button"
-              className="storyboard-collapsed-layout"
-              onClick={() => onOpenDetails(ref.shotId)}
-              aria-label={`Open details for ${shot?.displayName ?? shot?.shotNumberLabel ?? 'shot'}`}
-            >
-              <div className="storyboard-media-col">
-                {shot?.imageUrl ? (
-                  <img
-                    className="storyboard-preview-image storyboard-preview-image-thumb"
-                    src={shot.imageUrl}
-                    alt={`Storyboard frame for ${shot.displayName}`}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="storyboard-preview-fallback">
-                    <span>No thumbnail</span>
-                  </div>
-                )}
-              </div>
-              <div className="storyboard-info-col">
-                <div className="sb-header-row">
-                  <strong className="sb-shot-name">{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
-                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
-                </div>
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
-                <ShotActions
-                  actionLabel={actionState.label}
-                  actionTone={actionState.tone}
-                  onOpenDetails={() => onOpenDetails(ref.shotId)}
-                  onCycleStatus={() => onCycleShotStatus(ref.shotId)}
+          <article
+            key={`${ref.shotId}-${ref.updatedAt}`}
+            className={`mobile-shot-card storyboard-card status-outline-${effectiveStatus}`}
+            onClick={() => onOpenDetails(ref.shotId)}
+            aria-label={`Open details for ${shot?.displayName ?? shot?.shotNumberLabel ?? 'shot'}`}
+          >
+            <div className="storyboard-media-col">
+              {shot?.imageUrl ? (
+                <img
+                  className="storyboard-preview-image storyboard-preview-image-thumb"
+                  src={shot.imageUrl}
+                  alt={`Storyboard frame for ${shot.displayName}`}
+                  loading="lazy"
                 />
+              ) : (
+                <div className="storyboard-preview-fallback">
+                  <span>No thumbnail</span>
+                </div>
+              )}
+            </div>
+            <div className="storyboard-info-col">
+              <strong className="sb-shot-name">{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
+              <div className="sb-subline">
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
+                {shot?.focalLength ? <span className="sb-lens">{shot.focalLength}</span> : null}
               </div>
-            </button>
+              <ShotActions
+                actionLabel={actionState.label}
+                actionTone={actionState.tone}
+                onOpenDetails={() => onOpenDetails(ref.shotId)}
+                onCycleStatus={() => onCycleShotStatus(ref.shotId)}
+                stopPropagationOnActions
+              />
+            </div>
           </article>
         )
       })}
