@@ -182,46 +182,47 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
     <div className="page-header" onDoubleClick={onDoubleClick}>
       {/* Left: Scene Label */}
       <div className="page-header-scene">
-        <div className="page-header-row page-header-row-top">
-          <SceneColorPicker
-            value={currentPageColor}
-            onChange={setPageColor}
-            size={12}
-            title={`Set page ${pageNum} color`}
-          />
-          <input
-            type="text"
-            value={scene.sceneLabel}
-            onChange={e => set({ sceneLabel: e.target.value })}
-            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-scene-label"
-            style={{ minWidth: 80, width: `${Math.min(Math.max((scene.sceneLabel || '').length, 6), 20)}ch` }}
-            placeholder="SCENE 1"
-          />
+        <div className="page-header-row page-header-scene-top">
+          <div className="page-header-intdn">
+            <SceneColorPicker
+              value={currentPageColor}
+              onChange={setPageColor}
+              size={12}
+              title={`Set page ${pageNum} color`}
+            />
+            <input
+              type="text"
+              value={scene.sceneLabel}
+              onChange={e => set({ sceneLabel: e.target.value })}
+              className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-scene-label"
+              style={{ minWidth: 80, width: `${Math.min(Math.max((scene.sceneLabel || '').length, 6), 20)}ch` }}
+              placeholder="SCENE 1"
+            />
+            <span className="text-[19px] font-black">|</span>
+            <button
+              onClick={cycleIntExt}
+              className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
+            >
+              {displayIntExt}
+            </button>
+            <span className="text-[19px] font-black">·</span>
+            <button
+              onClick={cycleDayNight}
+              className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
+            >
+              {displayDayNight || 'DAY'}
+            </button>
+          </div>
         </div>
-        <div className="page-header-row page-header-row-bottom">
-          <span className="text-[19px] font-black">|</span>
+        <div className="page-header-row page-header-scene-bottom">
           <input
             type="text"
             value={displayLocation}
             onChange={e => set({ location: e.target.value })}
-            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input"
-            style={{ minWidth: 60, width: `${Math.min(Math.max((displayLocation || '').length, 4), 42)}ch` }}
+            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
+            style={{ minWidth: 60, width: `${Math.min(Math.max((displayLocation || '').length, 4), 40)}ch` }}
             placeholder="LOCATION"
           />
-          <span className="text-[19px] font-black">|</span>
-          <button
-            onClick={cycleIntExt}
-            className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
-          >
-            {displayIntExt}
-          </button>
-          <span className="text-[19px] font-black">·</span>
-          <button
-            onClick={cycleDayNight}
-            className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
-          >
-            {displayDayNight || 'DAY'}
-          </button>
         </div>
         {isContinuation && (
           <div className="text-xs text-gray-400 font-semibold tracking-wide">
