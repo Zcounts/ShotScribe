@@ -483,7 +483,7 @@ p {
 .scene-shot-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .scene-group-header {
@@ -493,7 +493,7 @@ p {
   border: 1px solid #d3c8ba;
   border-radius: 12px;
   background: #efe6d9;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .scene-group-header h4 {
@@ -659,22 +659,6 @@ p {
   color: #702731;
 }
 
-.storyboard-collapse-button {
-  border: none;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.chevron-indicator {
-  color: #4d5f8f;
-  font-size: 1.08rem;
-}
-
 .mobile-shot-detail {
   display: flex;
   flex-direction: column;
@@ -701,14 +685,6 @@ p {
   border: 1px solid #c8b9a4;
   object-fit: cover;
   background: #eee4d4;
-}
-
-.storyboard-preview-image-collapsed {
-  height: 160px;
-}
-
-.storyboard-preview-image-expanded {
-  height: 210px;
 }
 
 .storyboard-expanded-meta {
@@ -870,30 +846,50 @@ p {
 }
 
 /* ===================================
-   SHOTLIST TAB — compact row layout
+   SHOTLIST TAB — dense row layout
    =================================== */
 
-.sl-shot-item {
-  padding: 9px 10px 8px;
+.shotlist-row-stack {
+  border: 1px solid #d5cabd;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f7f2e9;
+}
+
+.sl-shot-row {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  border-bottom: 1px solid #ddd0c0;
+  padding: 8px 9px;
+  display: flex;
+  flex-direction: column;
   gap: 5px;
+}
+
+.sl-shot-row:last-child {
+  border-bottom: none;
 }
 
 .sl-r1 {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 
-.sl-r1 h4 {
+.sl-shot-label {
   font-size: 0.9rem;
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.16;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 700;
+  color: #2f2d31;
 }
 
 .sl-r1-right {
@@ -904,7 +900,7 @@ p {
 }
 
 .sl-r1-right .status-chip {
-  padding: 3px 7px;
+  padding: 2px 7px;
   font-size: 0.67rem;
 }
 
@@ -912,38 +908,42 @@ p {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 3px 2px;
+  gap: 5px;
   min-height: 0;
 }
 
 .sl-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.sl-meta-dot {
-  color: #b09880;
-  font-size: 0.7rem;
-  margin: 0 2px;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  gap: 4px;
+  align-items: baseline;
+  padding: 2px 0;
 }
 
 .sl-meta-val {
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   color: #504336;
-  font-weight: 600;
+  font-weight: 650;
+}
+
+.sl-meta-key {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: #7a6653;
 }
 
 .sl-notes {
-  font-size: 0.77rem;
+  font-size: 0.73rem;
   color: #4a3e32;
-  line-height: 1.45;
+  line-height: 1.35;
   margin: 0;
   padding-left: 7px;
   border-left: 2px solid #c4ae92;
 }
 
-.sl-shot-item .shot-action-button {
+.sl-shot-row .shot-action-button {
   min-height: 33px;
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -954,15 +954,22 @@ p {
    =================================== */
 
 .sched-shot-item {
-  padding: 9px 10px 8px;
+  padding: 8px 9px;
   gap: 5px;
 }
 
 .sched-r1 {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+}
+
+.sched-title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .sched-r1 h4 {
@@ -988,28 +995,25 @@ p {
   font-size: 0.67rem;
 }
 
-.sched-r2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 0;
-}
-
-.sched-timing {
-  display: flex;
-  gap: 12px;
-  margin-left: auto;
+.sched-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 8px;
+  border-top: 1px dashed #d7cbbd;
+  border-bottom: 1px dashed #d7cbbd;
+  padding: 6px 0;
 }
 
 .sched-time-unit {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  align-items: flex-end;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .sched-time-lbl {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #7a6a58;
@@ -1017,16 +1021,31 @@ p {
 }
 
 .sched-time-val {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #2f2f34;
+  line-height: 1.2;
 }
 
-.sched-unscheduled {
-  margin-left: auto;
+.sched-empty-time {
+  grid-column: 1 / -1;
   font-size: 0.72rem;
-  color: #9a8a78;
-  font-style: italic;
+  color: #8b7a67;
+}
+
+.sched-r3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+}
+
+.sched-lens-tag {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6f5e4d;
+  font-weight: 700;
 }
 
 .sched-shot-item .shot-action-button {
@@ -1039,41 +1058,95 @@ p {
    STORYBOARD TAB — visual card layout
    =================================== */
 
-.sb-header-row {
+.storyboard-card {
+  padding: 8px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.storyboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 8px;
+}
+
+.storyboard-media-col {
   width: 100%;
 }
 
-.sb-shot-name {
-  font-size: 0.9rem;
+.storyboard-preview-image-thumb,
+.storyboard-preview-fallback {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  border: 1px solid #c8b9a4;
+  background: #eee4d4;
+}
+
+.storyboard-preview-image-thumb {
+  object-fit: cover;
+  display: block;
+}
+
+.storyboard-preview-fallback {
+  display: grid;
+  place-items: center;
+}
+
+.storyboard-preview-fallback span {
+  font-size: 0.68rem;
+  color: #6d5f51;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   font-weight: 700;
-  flex: 1;
+}
+
+.storyboard-info-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sb-subline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 0;
+}
+
+.sb-shot-name {
+  font-size: 0.82rem;
+  font-weight: 700;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
   color: #2c2d33;
 }
 
-.sb-header-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+.storyboard-info-col .shot-scene-tag {
+  padding: 2px 7px;
+  font-size: 0.62rem;
 }
 
-.storyboard-card .storyboard-collapse-button {
-  gap: 4px;
+.sb-lens {
+  font-size: 0.68rem;
+  color: #5c4c3d;
+  font-weight: 700;
+}
+
+.storyboard-info-col .mobile-shot-actions {
+  margin-top: auto;
 }
 
 .storyboard-card .shot-action-button {
-  min-height: 33px;
-  padding: 6px 10px;
-  font-size: 0.78rem;
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 0.75rem;
 }
 
 @media (min-width: 768px) {
@@ -1155,6 +1228,11 @@ p {
   .shotlist-card,
   .schedule-shot-card {
     gap: 5px;
+  }
+
+  .storyboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .mobile-shot-subrow {
