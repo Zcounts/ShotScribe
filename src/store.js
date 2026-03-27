@@ -23,23 +23,26 @@ export const CARD_COLORS = [
 ]
 
 export const DEFAULT_COLUMN_CONFIG = [
-  { key: 'checked',        visible: true },
+  { key: 'status',         visible: true },
+  { key: 'thumbnail',      visible: true },
   { key: 'displayId',      visible: true },
-  { key: '__int__',        visible: true },
-  { key: '__dn__',         visible: true },
-  { key: 'cast',           visible: true },
-  { key: 'specs.type',     visible: true },
-  { key: 'focalLength',    visible: true },
-  { key: 'specs.equip',    visible: true },
-  { key: 'specs.move',     visible: true },
+  { key: 'description',    visible: true },
   { key: 'specs.size',     visible: true },
-  { key: 'notes',          visible: true },
+  { key: 'specs.type',     visible: true },
+  { key: 'specs.move',     visible: true },
+  { key: 'specs.equip',    visible: true },
+  { key: 'focalLength',    visible: true },
+  { key: 'frameRate',      visible: true },
   { key: 'sound',          visible: true },
   { key: 'props',          visible: true },
-  { key: 'scriptTime',     visible: true },
+  { key: 'notes',          visible: true },
   { key: 'setupTime',      visible: true },
-  { key: 'predictedTakes', visible: true },
   { key: 'shootTime',      visible: true },
+  { key: 'cast',           visible: true },
+  { key: '__int__',        visible: false },
+  { key: '__dn__',         visible: false },
+  { key: 'scriptTime',     visible: true },
+  { key: 'predictedTakes', visible: true },
   { key: 'takeNumber',     visible: true },
 ]
 
@@ -83,6 +86,7 @@ function cloneUndoSnapshot(snapshot) {
 function getUndoableSnapshot(state) {
   return {
     scenes: state.scenes,
+    storyboardSceneOrder: state.storyboardSceneOrder,
     scriptScenes: state.scriptScenes,
     schedule: state.schedule,
     callsheets: state.callsheets,
@@ -109,6 +113,29 @@ function applyUndoSnapshot(snapshot, state) {
     ...state,
     ...cloneUndoSnapshot(snapshot),
   }
+}
+
+function normalizeStoryboardSceneOrder(order, scenes) {
+  const sceneIds = scenes.map(scene => scene.id)
+  const validIds = new Set(sceneIds)
+  const normalized = []
+  const seen = new Set()
+
+  if (Array.isArray(order)) {
+    order.forEach((sceneId) => {
+      if (!validIds.has(sceneId) || seen.has(sceneId)) return
+      seen.add(sceneId)
+      normalized.push(sceneId)
+    })
+  }
+
+  sceneIds.forEach((sceneId) => {
+    if (seen.has(sceneId)) return
+    seen.add(sceneId)
+    normalized.push(sceneId)
+  })
+
+  return normalized
 }
 
 function deriveScriptSceneFromElements(scene, elements) {
@@ -210,6 +237,7 @@ function createShot(overrides = {}) {
     },
     notes: '',
     subject: '',
+    description: '',
     cast: '',
     checked: false,
     // Per-shot I/E and D/N (shotlist-only; scene heading uses scene.intOrExt/dayNight)
@@ -223,6 +251,7 @@ function createShot(overrides = {}) {
     takeNumber: '',
     sound: '',
     props: '',
+    frameRate: '',
     // Script scene link — references a scriptScene id (display-only, not enforced)
     linkedSceneId: null,
     linkedDialogueLine: null,
@@ -320,6 +349,7 @@ const useStore = create((set, get) => ({
 
   // Scenes (multi-scene support)
   scenes: [initialScene],
+  storyboardSceneOrder: [],
 
   // Global settings
   columnCount: 4,
@@ -1105,6 +1135,18 @@ const useStore = create((set, get) => ({
 
   getScene: (sceneId) => get().scenes.find(s => s.id === sceneId),
 
+  getStoryboardSceneOrder: () => {
+    const state = get()
+    return normalizeStoryboardSceneOrder(state.storyboardSceneOrder, state.scenes)
+  },
+
+  getStoryboardScenes: () => {
+    const state = get()
+    const order = normalizeStoryboardSceneOrder(state.storyboardSceneOrder, state.scenes)
+    const byId = new Map(state.scenes.map(scene => [scene.id, scene]))
+    return order.map(sceneId => byId.get(sceneId)).filter(Boolean)
+  },
+
   // Returns shots for a scene with computed displayIds.
   // Scene number is always derived from the scene's position in the scenes array
   // (index 0 → Scene 1, index 1 → Scene 2, etc.) — never from the sceneLabel text,
@@ -1166,6 +1208,17 @@ const useStore = create((set, get) => ({
     set(state => ({
       scenes: state.scenes.map(s => s.id === sceneId ? { ...s, ...updates } : s),
     }))
+    get()._scheduleAutoSave()
+  },
+
+  reorderStoryboardScenes: (activeId, overId) => {
+    set(state => {
+      const order = normalizeStoryboardSceneOrder(state.storyboardSceneOrder, state.scenes)
+      const oldIndex = order.findIndex(id => id === activeId)
+      const newIndex = order.findIndex(id => id === overId)
+      if (oldIndex === -1 || newIndex === -1) return state
+      return { storyboardSceneOrder: arrayMove(order, oldIndex, newIndex) }
+    })
     get()._scheduleAutoSave()
   },
 
@@ -1607,6 +1660,7 @@ const useStore = create((set, get) => ({
       castCrewNotes,
       scriptScenes, importedScripts, scriptSettings,
       shortcutBindings,
+      storyboardSceneOrder,
     } = get()
     return {
       version: 2,
@@ -1622,6 +1676,7 @@ const useStore = create((set, get) => ({
       shotlistColumnWidths: shotlistColumnWidths || {},
       customColumns,
       customDropdownOptions,
+      storyboardSceneOrder: normalizeStoryboardSceneOrder(storyboardSceneOrder, scenes),
       // Scenes and shots are reconstructed field-by-field so that any
       // non-serializable value that accidentally landed in state (e.g. a DOM
       // event object spread via an overrides parameter) is stripped before
@@ -1640,6 +1695,7 @@ const useStore = create((set, get) => ({
               : { size: '', type: '', move: '', equip: '' },
             notes: s.notes,
             subject: s.subject,
+            description: s.description || s.subject || '',
             cast: s.cast || '',
             checked: s.checked,
             intOrExt: s.intOrExt,
@@ -1651,6 +1707,7 @@ const useStore = create((set, get) => ({
             takeNumber: s.takeNumber,
             sound: s.sound || '',
             props: s.props || '',
+            frameRate: s.frameRate || '',
             linkedSceneId: s.linkedSceneId || null,
             linkedDialogueLine: s.linkedDialogueLine || null,
             linkedDialogueOffset: s.linkedDialogueOffset ?? null,
@@ -1884,6 +1941,7 @@ const useStore = create((set, get) => ({
       specs: s.specs || { size: '', type: '', move: '', equip: '' },
       notes: s.notes || '',
       subject: s.subject || '',
+      description: s.description || s.subject || '',
       cast: s.cast || '',
       checked: s.checked || false,
       // Per-shot I/E and D/N: use saved value if present, else inherit from scene (migration)
@@ -1896,6 +1954,7 @@ const useStore = create((set, get) => ({
       takeNumber: s.takeNumber || '',
       sound: s.sound || '',
       props: s.props || '',
+      frameRate: s.frameRate || '',
       linkedSceneId: s.linkedSceneId || null,
       linkedDialogueLine: s.linkedDialogueLine || null,
       linkedDialogueOffset: s.linkedDialogueOffset ?? null,
@@ -2013,8 +2072,13 @@ const useStore = create((set, get) => ({
           }
         }
         const base = didMigrate ? migrated : saved
-        // Migrate subject → cast column key
-        const migratedCast = base.map(c => c.key === 'subject' ? { ...c, key: 'cast' } : c)
+        // Migrate legacy keys
+        const migratedCast = base.map(c => {
+          if (c.key === 'subject') return { ...c, key: 'cast' }
+          if (c.key === 'checked') return { ...c, key: 'status' }
+          if (c.key === 'image') return { ...c, key: 'thumbnail' }
+          return c
+        })
         // Append any built-in columns not yet in saved config
         const savedKeys = new Set(migratedCast.map(c => c.key))
         const newBuiltin = DEFAULT_COLUMN_CONFIG.filter(c => !savedKeys.has(c.key))
@@ -2040,6 +2104,7 @@ const useStore = create((set, get) => ({
           sceneLabel: fallbackScriptScene.sceneNumber ? `SCENE ${fallbackScriptScene.sceneNumber}` : scene.sceneLabel,
         }
       }),
+      storyboardSceneOrder: normalizeStoryboardSceneOrder(data.storyboardSceneOrder, scenes),
       schedule: loadedSchedule,
       scheduleCollapseState: loadedCollapseState,
       scheduleColumnConfig: (() => {
@@ -2190,6 +2255,7 @@ const useStore = create((set, get) => ({
       projectName: name,
       projectEmoji: '🎬',
       scenes: [scene],
+      storyboardSceneOrder: [],
       schedule: [],
       callsheets: {},
       castRoster: [],
