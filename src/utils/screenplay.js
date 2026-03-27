@@ -2,6 +2,7 @@ const HEADING_RE = /^(INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?)/i
 
 const DPI = 96
 const INCH = DPI
+const TARGET_LINES_PER_PAGE = 54
 
 export const SCREENPLAY_LAYOUT = {
   page: {
@@ -17,13 +18,13 @@ export const SCREENPLAY_LAYOUT = {
   typography: {
     fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
     fontSizePx: 16,
-    lineHeightPx: ((11 - 1 - 1.05) * INCH) / 53.5,
+    lineHeightPx: ((11 - 1 - 1.05) * INCH) / TARGET_LINES_PER_PAGE,
   },
   elementColumnsIn: {
-    heading: { left: 0, width: 5.9 },
-    action: { left: 0, width: 5.9 },
+    heading: { left: 0, width: 6.0 },
+    action: { left: 0, width: 6.0 },
     character: { left: 2.6, width: 2.0 },
-    parenthetical: { left: 1.5, width: 1.7 },
+    parenthetical: { left: 1.8, width: 2.0 },
     dialogue: { left: 1.0, width: 3.5 },
     transition: { left: 4.5, width: 1.5 },
   },
@@ -35,6 +36,10 @@ export const SCREENPLAY_LAYOUT = {
     dialogue: { before: 0, after: 0 },
     transition: { before: 1, after: 1 },
     blank: { before: 0, after: 0 },
+    pairAfter: {
+      dialogue: { action: 1 },
+      parenthetical: { action: 1 },
+    },
   },
   pagination: {
     minLinesAfterHeading: 3,
@@ -159,6 +164,7 @@ export function estimateScreenplayPagination(scenes = [], options = {}) {
 
     elements.forEach((el, idx) => {
       const prevType = idx > 0 ? elements[idx - 1]?.type : null
+      const nextType = elements[idx + 1]?.type
       const spacingRule = SCREENPLAY_LAYOUT.spacing[el.type] || SCREENPLAY_LAYOUT.spacing.action
       if (spacingRule.before > 0 && prevType && prevType !== 'blank') totalLineUnits += spacingRule.before
 
@@ -171,9 +177,11 @@ export function estimateScreenplayPagination(scenes = [], options = {}) {
       totalLineUnits += wrapCount(el.text, width)
 
       if (spacingRule.after > 0) {
-        const nextType = elements[idx + 1]?.type
         if (nextType && nextType !== 'blank') totalLineUnits += spacingRule.after
       }
+
+      const pairSpacing = SCREENPLAY_LAYOUT.spacing.pairAfter?.[el.type]?.[nextType] ?? 0
+      if (pairSpacing > 0) totalLineUnits += pairSpacing
     })
 
     const sceneUnits = Math.max(1, totalLineUnits - startLineUnits)
