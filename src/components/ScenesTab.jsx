@@ -7,6 +7,17 @@ import SceneColorPicker from './SceneColorPicker'
 import ScenePropertiesPanel, { CharacterTagInput } from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 import SidebarPane from './SidebarPane'
+import ConfigureButton from './ConfigureButton'
+
+const COLUMN_OPTIONS = [1, 2, 3, 4]
+
+const SORT_OPTIONS = [
+  { value: 'sceneNumber', label: 'Scene Number' },
+  { value: 'pageCount', label: 'Estimated Page Count' },
+  { value: 'shotCount', label: 'Shot Count' },
+  { value: 'location', label: 'Location' },
+  { value: 'slugline', label: 'Title / Slugline' },
+]
 
 export default function ScenesTab() {
   const scriptScenes = useStore(s => s.scriptScenes)
@@ -23,6 +34,13 @@ export default function ScenesTab() {
   const setActiveTab = useStore(s => s.setActiveTab)
 
   const [activeScript, setActiveScript] = useState(scenesViewState.activeScript ?? null)
+  const [columnCount, setColumnCount] = useState(() => {
+    const value = Number(scenesViewState.columnCount)
+    return COLUMN_OPTIONS.includes(value) ? value : 1
+  })
+  const [sortBy, setSortBy] = useState(() => scenesViewState.sortBy || 'sceneNumber')
+  const [sortDirection, setSortDirection] = useState(() => scenesViewState.sortDirection || 'asc')
+  const [configureOpen, setConfigureOpen] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [expandedIds, setExpandedIds] = useState({})
   const [editingSceneNumberId, setEditingSceneNumberId] = useState(null)
@@ -48,19 +66,42 @@ export default function ScenesTab() {
     return map
   }, [scenes])
 
+  const pagination = useMemo(() => estimateScreenplayPagination(scriptScenes), [scriptScenes])
+
   const visibleScenes = useMemo(() => {
     const subset = !activeScript
       ? scriptScenes
       : scriptScenes.filter(s => s.importSource === (importedScripts.find(x => x.id === activeScript)?.filename))
-    return [...subset].sort(naturalSortSceneNumber)
-  }, [scriptScenes, activeScript, importedScripts])
+    const baseSorted = [...subset].sort(naturalSortSceneNumber)
+    const directionMultiplier = sortDirection === 'desc' ? -1 : 1
+    const safeTextCompare = (left, right) => String(left || '').localeCompare(String(right || ''), undefined, { sensitivity: 'base' })
+    const ordered = [...baseSorted].sort((left, right) => {
+      if (sortBy === 'sceneNumber') return naturalSortSceneNumber(left, right) * directionMultiplier
+      if (sortBy === 'pageCount') {
+        const leftPages = pagination.byScene[left.id]?.pageCount ?? 0
+        const rightPages = pagination.byScene[right.id]?.pageCount ?? 0
+        if (leftPages !== rightPages) return (leftPages - rightPages) * directionMultiplier
+      } else if (sortBy === 'shotCount') {
+        const leftShots = (linkedShotsMap[left.id] || []).length
+        const rightShots = (linkedShotsMap[right.id] || []).length
+        if (leftShots !== rightShots) return (leftShots - rightShots) * directionMultiplier
+      } else if (sortBy === 'location') {
+        const cmp = safeTextCompare(left.location, right.location)
+        if (cmp !== 0) return cmp * directionMultiplier
+      } else if (sortBy === 'slugline') {
+        const cmp = safeTextCompare(left.slugline, right.slugline)
+        if (cmp !== 0) return cmp * directionMultiplier
+      }
+      return naturalSortSceneNumber(left, right)
+    })
+    return ordered
+  }, [scriptScenes, activeScript, importedScripts, sortBy, sortDirection, linkedShotsMap, pagination])
 
   const allCharacters = useMemo(() => {
     const set = new Set()
     scriptScenes.forEach(s => (s.characters || []).forEach(c => set.add(c)))
     return [...set]
   }, [scriptScenes])
-  const pagination = useMemo(() => estimateScreenplayPagination(visibleScenes), [visibleScenes])
 
   const openEditor = (scene) => {
     setEditingSceneNumberId(scene.id)
@@ -129,8 +170,8 @@ export default function ScenesTab() {
   useEffect(() => { if (combineOpen && combineInit) setCombineForm(combineInit) }, [combineOpen, combineInit])
 
   useEffect(() => {
-    setTabViewState('scenes', { activeScript })
-  }, [activeScript, setTabViewState])
+    setTabViewState('scenes', { activeScript, columnCount, sortBy, sortDirection })
+  }, [activeScript, columnCount, sortBy, sortDirection, setTabViewState])
 
   useEffect(() => {
     const node = listRef.current
@@ -174,13 +215,33 @@ export default function ScenesTab() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setCtxMenu(null); setScriptCtxMenu(null) }}>
+    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setCtxMenu(null); setScriptCtxMenu(null); setConfigureOpen(false) }}>
       <SidebarPane
         width={240}
-        title="Imported Scripts"
-        controls={<button onClick={() => setActiveScript(null)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 12px', borderRadius: 4 }}>All Scenes</button>}
+        title={null}
         footer={<button onClick={() => setImportModalOpen(true)} style={{ width: '100%', background: '#E84040', color: '#fff', border: 'none', borderRadius: 5, padding: 7 }}>+ Import Script</button>}
       >
+          <div style={{ padding: 10, borderBottom: '1px solid rgba(74,85,104,0.12)' }}>
+            <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: 'rgba(255,255,255,0.65)', padding: 10 }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>Scene Organization</div>
+              <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>Sort By</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{ width: '100%', border: '1px solid rgba(128,128,128,0.3)', borderRadius: 4, padding: '6px 7px', fontSize: 12, marginBottom: 8 }}
+              >
+                {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <button
+                onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                style={{ width: '100%', border: '1px solid rgba(74,85,104,0.2)', background: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 11, color: '#334155' }}
+              >
+                {sortDirection === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
+              </button>
+            </div>
+          </div>
+          <div style={{ padding: '10px 12px 6px', fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>Imported Scripts</div>
+          <button onClick={() => setActiveScript(null)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 12px', borderRadius: 4 }}>All Scenes</button>
           {importedScripts.map(sc => (
             <div
               key={sc.id}
@@ -199,13 +260,42 @@ export default function ScenesTab() {
         onScroll={(e) => setTabViewState('scenes', { scrollTop: e.currentTarget.scrollTop })}
         style={{ flex: 1, padding: 14, overflowY: 'auto', position: 'relative' }}
       >
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, position: 'sticky', top: 0, zIndex: 5 }}>
+          <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+            <ConfigureButton label="Configure" active={configureOpen} onClick={() => setConfigureOpen(v => !v)} />
+            {configureOpen && (
+              <div style={{ position: 'absolute', right: 0, marginTop: 6, width: 190, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, background: '#fff', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', padding: 10 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 7 }}>Scene Layout</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+                  {COLUMN_OPTIONS.map(count => (
+                    <button
+                      key={count}
+                      onClick={() => setColumnCount(count)}
+                      style={{
+                        border: '1px solid rgba(74,85,104,0.2)',
+                        borderRadius: 4,
+                        padding: '6px 8px',
+                        background: columnCount === count ? 'rgba(232,64,64,0.12)' : '#fff',
+                        color: '#1f2937',
+                        fontSize: 11,
+                      }}
+                    >
+                      {count} Column{count > 1 ? 's' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
         {visibleScenes.map(scene => {
           const linkedShots = linkedShotsMap[scene.id] || []
           const confidence = computeConfidence(scene, linkedShots.length)
           const expanded = !!expandedIds[scene.id]
           const selected = selectedSceneIds.includes(scene.id)
           return (
-            <div key={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, marginBottom: 8, background: '#FAF8F4' }}>
+            <div key={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, background: '#FAF8F4' }}>
               <div
                 role="button"
                 tabIndex={0}
@@ -253,13 +343,21 @@ export default function ScenesTab() {
                       : '—'}
                     editable
                     allCharacters={allCharacters}
-                    onChange={(updates) => updateScriptScene(scene.id, updates)}
+                    onChange={(updates) => {
+                      const canonicalUpdates = {
+                        ...updates,
+                        ...(('titleSlugline' in updates) ? { slugline: updates.titleSlugline } : {}),
+                      }
+                      delete canonicalUpdates.titleSlugline
+                      updateScriptScene(scene.id, canonicalUpdates)
+                    }}
                   />
                 </div>
               )}
             </div>
           )
         })}
+        </div>
 
         {selectedSceneIds.length >= 2 && (
           <div style={{ position: 'sticky', bottom: 0, background: '#1c1c1e', color: '#fff', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
