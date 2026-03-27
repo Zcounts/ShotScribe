@@ -1,35 +1,21 @@
-import React, { useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import useStore from '../store'
+import {
+  NON_REBINDABLE_SHORTCUT_NOTES,
+  SHORTCUT_ACTIONS,
+  SHORTCUT_DEFAULTS,
+  bindingFromKeyboardEvent,
+  formatShortcutLabel,
+} from '../shortcuts'
 
-// ── Keyboard shortcuts per tab ────────────────────────────────────────────────
-
-const SHORTCUTS = {
-  storyboard: [
-    { keys: 'Ctrl + S',         desc: 'Save project' },
-    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
-    { keys: 'Drag card',        desc: 'Reorder shot within a scene' },
-  ],
-  shotlist: [
-    { keys: 'Ctrl + S',         desc: 'Save project' },
-    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
-    { keys: 'Click row header', desc: 'Select / deselect shot' },
-    { keys: 'Drag row',         desc: 'Reorder shots' },
-    { keys: 'Resize column',    desc: 'Drag column edge to resize' },
-  ],
-  schedule: [
-    { keys: 'Ctrl + S',         desc: 'Save project' },
-    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
-    { keys: 'Drag day header',  desc: 'Reorder shooting days' },
-    { keys: 'Drag shot block',  desc: 'Move shot between days or reorder' },
-    { keys: 'Click day header', desc: 'Collapse / expand day' },
-    { keys: 'Click block header', desc: 'Collapse / expand shot block' },
-    { keys: 'Ctrl + Click collapse', desc: 'Collapse or expand all shots simultaneously' },
-  ],
-  callsheet: [
-    { keys: 'Ctrl + S',         desc: 'Save project' },
-    { keys: 'Ctrl + Shift + S', desc: 'Save project as…' },
-    { keys: 'Drag section',     desc: 'Reorder callsheet sections' },
-  ],
+const TAB_LABELS = {
+  storyboard: 'Storyboard',
+  shotlist: 'Shotlist',
+  schedule: 'Schedule',
+  callsheet: 'Callsheet',
+  script: 'Script',
+  scenes: 'Scenes',
+  castcrew: 'Cast & Crew',
 }
 
 function SettingsRow({ label, children }) {
@@ -64,16 +50,75 @@ export default function SettingsPanel() {
   const autoSave = useStore(s => s.autoSave)
   const useDropdowns = useStore(s => s.useDropdowns)
   const activeTab = useStore(s => s.activeTab)
+  const shortcutBindings = useStore(s => s.shortcutBindings)
   const setColumnCount = useStore(s => s.setColumnCount)
   const setDefaultFocalLength = useStore(s => s.setDefaultFocalLength)
   const setTheme = useStore(s => s.setTheme)
   const setAutoSave = useStore(s => s.setAutoSave)
   const setUseDropdowns = useStore(s => s.setUseDropdowns)
+  const setShortcutBinding = useStore(s => s.setShortcutBinding)
+  const resetShortcutBinding = useStore(s => s.resetShortcutBinding)
+  const resetAllShortcutBindings = useStore(s => s.resetAllShortcutBindings)
   const scriptSettings = useStore(s => s.scriptSettings)
   const setScriptSettings = useStore(s => s.setScriptSettings)
 
-  const shortcuts = useMemo(() => SHORTCUTS[activeTab] || SHORTCUTS.storyboard, [activeTab])
-  const tabLabel = { storyboard: 'Storyboard', shotlist: 'Shotlist', schedule: 'Schedule', callsheet: 'Callsheet' }[activeTab] || activeTab
+  const [listeningActionId, setListeningActionId] = useState(null)
+  const [shortcutNotice, setShortcutNotice] = useState('')
+
+  const rebindableActions = useMemo(() => {
+    const tab = activeTab || 'storyboard'
+    return Object.values(SHORTCUT_ACTIONS).filter(action => action.sections.includes(tab))
+  }, [activeTab])
+
+  const staticShortcutNotes = useMemo(() => NON_REBINDABLE_SHORTCUT_NOTES[activeTab] || [], [activeTab])
+  const tabLabel = TAB_LABELS[activeTab] || activeTab
+
+  const handleShortcutCapture = useCallback((actionId, event) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (event.key === 'Escape') {
+      setListeningActionId(null)
+      setShortcutNotice('Rebinding cancelled.')
+      return
+    }
+
+    const candidate = bindingFromKeyboardEvent(event)
+    if (!candidate) {
+      setShortcutNotice('Shortcut must include a non-modifier key and Ctrl/Alt (or Cmd).')
+      return
+    }
+
+    const result = setShortcutBinding(actionId, candidate)
+    if (result.ok) {
+      setListeningActionId(null)
+      setShortcutNotice(`Updated: ${SHORTCUT_ACTIONS[actionId].label} → ${formatShortcutLabel(candidate)}`)
+      return
+    }
+
+    if (result.reason === 'conflict') {
+      const existingLabel = SHORTCUT_ACTIONS[result.conflictActionId]?.label || result.conflictActionId
+      const shouldReplace = window.confirm(
+        `${formatShortcutLabel(candidate)} is already assigned to "${existingLabel}". Replace it?`
+      )
+      if (!shouldReplace) return
+      const replaced = setShortcutBinding(actionId, candidate, { replaceActionId: result.conflictActionId })
+      if (replaced.ok) {
+        setListeningActionId(null)
+        setShortcutNotice(`Replaced binding on "${existingLabel}".`)
+      }
+      return
+    }
+
+    setShortcutNotice('That shortcut is not valid.')
+  }, [setShortcutBinding])
+
+  useEffect(() => {
+    if (!listeningActionId) return undefined
+    const handler = (event) => handleShortcutCapture(listeningActionId, event)
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [handleShortcutCapture, listeningActionId])
 
   return (
     <>
@@ -190,7 +235,6 @@ export default function SettingsPanel() {
           </div>
         </SettingsRow>
 
-        {/* Script & Estimation section */}
         <div style={{ borderTop: '1px solid #374151', paddingTop: 14, marginTop: 4, marginBottom: 14 }}>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
             Script & Estimation
@@ -282,31 +326,85 @@ export default function SettingsPanel() {
           </SettingsRow>
         </div>
 
-        {/* Keyboard Shortcuts — context-aware: shows shortcuts for active tab */}
         <div style={{ borderTop: '1px solid #374151', paddingTop: 16, marginTop: 4 }}>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-            Keyboard Shortcuts — {tabLabel}
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {shortcuts.map((s, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              Keyboard Shortcuts — {tabLabel}
+            </p>
+            <button
+              onClick={() => {
+                resetAllShortcutBindings()
+                setShortcutNotice('All shortcuts reset to defaults.')
+                setListeningActionId(null)
+              }}
+              className="text-[11px] text-gray-300 border border-gray-600 rounded px-2 py-1 hover:border-gray-400"
+            >
+              Reset all
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {rebindableActions.map(action => {
+              const activeBinding = shortcutBindings[action.id] || SHORTCUT_DEFAULTS[action.id]
+              const isListening = listeningActionId === action.id
+              return (
+                <div key={action.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.4 }}>{action.label}</span>
+                  <button
+                    onClick={() => {
+                      setShortcutNotice('')
+                      setListeningActionId(isListening ? null : action.id)
+                    }}
+                    className={`text-[11px] font-mono border rounded px-2 py-1 whitespace-nowrap transition-colors ${
+                      isListening
+                        ? 'bg-blue-600/20 border-blue-400 text-blue-100'
+                        : 'bg-gray-700 border-gray-600 text-gray-200 hover:border-gray-400'
+                    }`}
+                    title={isListening ? 'Press new shortcut, or Esc to cancel' : 'Click to rebind'}
+                  >
+                    {isListening ? 'Press new shortcut…' : formatShortcutLabel(activeBinding)}
+                  </button>
+                  <button
+                    onClick={() => {
+                      resetShortcutBinding(action.id)
+                      setShortcutNotice(`Reset "${action.label}" to default.`)
+                      setListeningActionId(null)
+                    }}
+                    className="text-[11px] text-gray-300 border border-gray-600 rounded px-2 py-1 hover:border-gray-400"
+                    title="Reset this shortcut"
+                  >
+                    Reset
+                  </button>
+                </div>
+              )
+            })}
+
+            {staticShortcutNotes.map((note, index) => (
+              <div key={`${note.desc}-${index}`} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                 <kbd style={{
                   flexShrink: 0,
                   fontSize: 10,
                   fontFamily: 'monospace',
-                  background: '#374151',
-                  color: '#d1d5db',
-                  border: '1px solid #4b5563',
+                  background: '#1f2937',
+                  color: '#9ca3af',
+                  border: '1px solid #374151',
                   borderRadius: 3,
                   padding: '2px 5px',
                   whiteSpace: 'nowrap',
                 }}>
-                  {s.keys}
+                  {note.keys}
                 </kbd>
-                <span style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.4 }}>{s.desc}</span>
+                <span style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.4 }}>{note.desc}</span>
               </div>
             ))}
           </div>
+
+          {shortcutNotice && (
+            <p className="text-xs text-blue-300 mt-3">{shortcutNotice}</p>
+          )}
+          {listeningActionId && (
+            <p className="text-xs text-gray-400 mt-2">Press Esc to cancel rebinding.</p>
+          )}
         </div>
       </div>
     </>
