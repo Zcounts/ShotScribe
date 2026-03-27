@@ -237,6 +237,7 @@ function createScene(overrides = {}) {
   return {
     id: `scene_${Date.now()}_${sceneIdCounter}`,
     sceneLabel: 'SCENE',
+    slugline: '',
     location: 'LOCATION',
     intOrExt: 'INT',
     dayNight: 'DAY',
@@ -258,6 +259,7 @@ function mapScriptSceneToStoryboardMetadata(scriptScene) {
   if (!scriptScene) return null
   return {
     sceneLabel: scriptScene.sceneNumber ? `SCENE ${scriptScene.sceneNumber}` : 'SCENE',
+    slugline: scriptScene.slugline || '',
     location: scriptScene.location || '',
     intOrExt: scriptScene.intExt || '',
     dayNight: scriptScene.dayNight || '',
@@ -1175,7 +1177,7 @@ const useStore = create((set, get) => ({
       linkedScriptSceneId: storyboardScene.linkedScriptSceneId || null,
       scriptSceneId: scriptScene?.id || null,
       sceneNumber: scriptScene?.sceneNumber ?? storyboardScene.sceneLabel ?? '',
-      titleSlugline: scriptScene?.slugline ?? '',
+      titleSlugline: scriptScene?.slugline ?? storyboardScene.slugline ?? '',
       location: scriptScene?.location ?? storyboardScene.location ?? '',
       intOrExt: scriptScene?.intExt ?? storyboardScene.intOrExt ?? '',
       dayNight: scriptScene?.dayNight ?? storyboardScene.dayNight ?? '',
@@ -1204,6 +1206,7 @@ const useStore = create((set, get) => ({
 
     const sceneUpdates = {
       ...(('sceneNumber' in updates) ? { sceneLabel: updates.sceneNumber } : {}),
+      ...(('titleSlugline' in updates) ? { slugline: updates.titleSlugline || '' } : {}),
       ...(('location' in updates) ? { location: updates.location } : {}),
       ...(('intOrExt' in updates) ? { intOrExt: updates.intOrExt } : {}),
       ...(('dayNight' in updates) ? { dayNight: updates.dayNight } : {}),
@@ -1659,6 +1662,7 @@ const useStore = create((set, get) => ({
         return {
           id: scene.id,
           sceneLabel: scene.sceneLabel,
+          slugline: scene.slugline || '',
           location: scene.location,
           intOrExt: scene.intOrExt,
           dayNight: scene.dayNight,
@@ -1904,6 +1908,7 @@ const useStore = create((set, get) => ({
       scenes = data.scenes.map(scene => ({
         id: scene.id || `scene_${Date.now()}_${++sceneIdCounter}`,
         sceneLabel: scene.sceneLabel || 'SCENE 1',
+        slugline: scene.slugline || '',
         location: scene.location || 'LOCATION',
         intOrExt: scene.intOrExt || 'INT',
         dayNight: scene.dayNight || 'DAY',
@@ -1921,6 +1926,7 @@ const useStore = create((set, get) => ({
       scenes = [createScene({
         id: 'scene_1',
         sceneLabel: data.sceneLabel || 'SCENE 1',
+        slugline: data.slugline || '',
         location: data.location || 'LOCATION',
         intOrExt: data.intOrExt || 'INT',
         dayNight: data.dayNight || 'DAY',

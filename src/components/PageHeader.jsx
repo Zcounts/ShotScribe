@@ -105,9 +105,7 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
   const set = (updates) => updateScene(scene.id, updates)
   const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
   const displaySceneNumber = canonical?.sceneNumber || ''
-  const displayLocation = canonical?.location || ''
-  const displayIntExt = canonical?.intOrExt || 'INT'
-  const displayDayNight = canonical?.dayNight || 'DAY'
+  const displaySlugline = canonical?.titleSlugline || ''
 
   // Per-page notes: pageNotes is stored as an array (one element per page).
   // Legacy projects saved it as a plain string — treat that as page 0.
@@ -119,16 +117,6 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
     while (updated.length <= pageIndex) updated.push('')
     updated[pageIndex] = val
     set({ pageNotes: updated })
-  }
-
-  const cycleIntExt = () => {
-    const next = { INT: 'EXT', EXT: 'INT/EXT', 'INT/EXT': 'INT' }
-    updateCanonicalStoryboardSceneMetadata(scene.id, { intOrExt: next[displayIntExt] || 'INT' })
-  }
-
-  const cycleDayNight = () => {
-    const next = { DAY: 'NIGHT', NIGHT: 'DAY/NIGHT', 'DAY/NIGHT': 'DAY' }
-    updateCanonicalStoryboardSceneMetadata(scene.id, { dayNight: next[displayDayNight] || 'DAY' })
   }
 
   const cameras = scene.cameras || [{ name: scene.cameraName || 'Camera 1', body: scene.cameraBody || 'fx30' }]
@@ -182,30 +170,16 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
               style={{ minWidth: 80, width: `${Math.min(Math.max((displaySceneNumber || '').length, 6), 20)}ch` }}
               placeholder="1"
             />
-            <span className="text-[19px] font-black">|</span>
-            <button
-              onClick={cycleIntExt}
-              className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
-            >
-              {displayIntExt}
-            </button>
-            <span className="text-[19px] font-black">·</span>
-            <button
-              onClick={cycleDayNight}
-              className="text-[19px] font-black bg-transparent border-none outline-none cursor-pointer hover:opacity-70 p-0 page-header-token"
-            >
-              {displayDayNight || 'DAY'}
-            </button>
           </div>
         </div>
         <div className="page-header-row page-header-scene-bottom">
-            <input
-              type="text"
-              value={displayLocation}
-              onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { location: e.target.value })}
-              className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
-            style={{ minWidth: 60, width: `${Math.min(Math.max((displayLocation || '').length, 4), 40)}ch` }}
-            placeholder="LOCATION"
+          <input
+            type="text"
+            value={displaySlugline}
+            onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { titleSlugline: e.target.value })}
+            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
+            style={{ minWidth: 60, width: `${Math.min(Math.max((displaySlugline || '').length, 4), 48)}ch` }}
+            placeholder="TITLE / SLUGLINE"
           />
         </div>
         {isContinuation && (

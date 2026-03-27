@@ -90,6 +90,8 @@ function SceneSection({
   const reorderShots = useStore(s => s.reorderShots)
   const deleteScene = useStore(s => s.deleteScene)
   const scenes = useStore(s => s.scenes)
+  const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
+  const updateCanonicalStoryboardSceneMetadata = useStore(s => s.updateCanonicalStoryboardSceneMetadata)
 
   const [activeId, setActiveId] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -115,6 +117,8 @@ function SceneSection({
   )
 
   const shotsWithIds = getShotsForScene(scene.id)
+  const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
+  const canonicalSceneColor = canonical?.color || scene.color || null
   const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
   const pages = chunkArray(shotsWithIds, cardsPerPage)
   const allShotIds = shotsWithIds.map(s => s.id)
@@ -144,8 +148,6 @@ function SceneSection({
           const globalPageNum = pageIndexOffset + pageIdx + 1
           const isContinuation = pageIdx > 0
           const isLastPage = pageIdx === pages.length - 1
-          const pageColor = (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || null
-
           return (
             <div
               key={`${scene.id}_page_${pageIdx}`}
@@ -157,7 +159,7 @@ function SceneSection({
               }}
               data-outline-id={`${scene.id}__page_${pageIdx}`}
               className="page-document"
-              style={{ borderLeft: `5px solid ${pageColor || 'rgba(74,85,104,0.18)'}` }}
+              style={{ borderLeft: `5px solid ${canonicalSceneColor || 'rgba(74,85,104,0.18)'}` }}
             >
               <PageHeader
                 scene={scene}
@@ -179,15 +181,10 @@ function SceneSection({
               <div className="page-footer">
                 <div style={{ position: 'absolute', right: 12, top: 8 }}>
                   <SceneColorPicker
-                    value={pageColor}
+                    value={canonicalSceneColor}
                     size={12}
-                    title={`Set color for page ${globalPageNum}`}
-                    onChange={(color) => {
-                      const nextColors = [...(Array.isArray(scene.pageColors) ? scene.pageColors : [])]
-                      while (nextColors.length <= pageIdx) nextColors.push(null)
-                      nextColors[pageIdx] = color
-                      useStore.getState().updateScene(scene.id, { pageColors: nextColors })
-                    }}
+                    title="Set scene color"
+                    onChange={(color) => updateCanonicalStoryboardSceneMetadata(scene.id, { color })}
                   />
                 </div>
                 {/* Delete scene button — lower-left of footer, first page only, subtle trash icon */}
@@ -406,14 +403,15 @@ export default function App() {
     const label = canonical?.sceneNumber
       ? `SC ${canonical.sceneNumber}`
       : (scene.sceneLabel || 'SCENE')
-    const subtitle = canonical?.location
-      || `${canonical?.intOrExt || scene.intOrExt || ''} ${canonical?.dayNight || scene.dayNight || ''}`
+    const subtitle = canonical?.titleSlugline
+      || canonical?.location
+      || ''
     return {
       id: scene.id,
       label,
       subtitle,
       linkedSceneId: linkedScene?.id || null,
-      color: canonical?.color || scene.color || (Array.isArray(scene.pageColors) ? scene.pageColors.find(Boolean) : null) || linkedScene?.color || '#94a3b8',
+      color: canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
     }
   })
 
@@ -502,8 +500,8 @@ export default function App() {
     return Array.from({ length: count }).map((_, pageIdx) => ({
       id: `${scene.id}__page_${pageIdx}`,
       label: `Page ${scenePageOffsets[sceneIdx] + pageIdx + 1}`,
-      subtitle: `SC ${canonical?.sceneNumber || scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${canonical?.location || scene.location || ''}`,
-      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
+      subtitle: `SC ${canonical?.sceneNumber || scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${canonical?.titleSlugline || canonical?.location || scene.slugline || scene.location || ''}`,
+      sceneColor: canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
     }))
   })
 
