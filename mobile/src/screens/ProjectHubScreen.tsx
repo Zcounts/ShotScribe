@@ -34,6 +34,11 @@ interface MobileShotDetail {
   imageUrl?: string
 }
 
+interface LabeledValue {
+  label: string
+  value: string
+}
+
 const TAB_ITEMS: Array<{ key: MobileTabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'schedule', label: 'Schedule' },
@@ -71,6 +76,38 @@ function formatTime(iso?: string): string {
     return '—'
   }
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatTimeRange(start?: string, end?: string): string | undefined {
+  if (!start && !end) {
+    return undefined
+  }
+  if (start && end) {
+    return `${formatTime(start)} – ${formatTime(end)}`
+  }
+  return formatTime(start ?? end)
+}
+
+function toCleanValue(raw?: string): string | undefined {
+  if (!raw) return undefined
+  const value = raw.trim()
+  if (!value) return undefined
+  if (value === '—' || value === '-') return undefined
+  return value
+}
+
+function inferInteriorExterior(shot: MobileShotDetail): string | undefined {
+  const source = `${shot.displayName} ${shot.shotType} ${shot.notes}`.toLowerCase()
+  if (/\b(ext|exterior)\b/.test(source)) return 'E'
+  if (/\b(int|interior)\b/.test(source)) return 'I'
+  return undefined
+}
+
+function inferDayNight(shot: MobileShotDetail): string | undefined {
+  const source = `${shot.displayName} ${shot.shotType} ${shot.notes}`.toLowerCase()
+  if (/\bnight|n\/?t\b/.test(source)) return 'N'
+  if (/\bday|d\/?t\b/.test(source)) return 'D'
+  return undefined
 }
 
 function getEffectiveStatus(
@@ -177,19 +214,25 @@ function ShotDetailCard({
   shot,
   status,
   onCycleStatus,
+  hideHeader = false,
+  hideImage = false,
 }: {
   shot: MobileShotDetail
   status?: ShotStatus
   onCycleStatus?: () => void
+  hideHeader?: boolean
+  hideImage?: boolean
 }) {
   const actionState = status ? getShotActionState(status) : null
   return (
     <article className="mobile-shot-detail">
-      <header className="mobile-shot-detail-header">
-        <h3>{shot.displayName}</h3>
-        <strong className="focal-pill">{shot.focalLength}</strong>
-      </header>
-      {shot.imageUrl ? <img src={shot.imageUrl} alt={`Storyboard frame for ${shot.displayName}`} loading="lazy" /> : null}
+      {!hideHeader ? (
+        <header className="mobile-shot-detail-header">
+          <h3>{shot.displayName}</h3>
+          <strong className="focal-pill">{shot.focalLength}</strong>
+        </header>
+      ) : null}
+      {!hideImage && shot.imageUrl ? <img src={shot.imageUrl} alt={`Storyboard frame for ${shot.displayName}`} loading="lazy" /> : null}
 
       <div className="shot-spec-grid">
         <p>
@@ -320,14 +363,28 @@ function renderSchedule(
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
               </div>
               <div className="schedule-shot-meta-grid">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
-                <p className="meta-chip">
-                  <span>Window</span>
-                  <strong>
-                    {formatTime(item.actualStartTime || item.plannedStartTime)} –{' '}
-                    {formatTime(item.actualEndTime || item.plannedEndTime)}
-                  </strong>
-                </p>
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-tag shot-scene-tag-muted">Scene TBD</span>}
+                <div className="schedule-time-grid">
+                  {formatTimeRange(item.plannedStartTime, item.plannedEndTime) ? (
+                    <p className="meta-chip">
+                      <span>Setup Time</span>
+                      <strong>{formatTimeRange(item.plannedStartTime, item.plannedEndTime)}</strong>
+                    </p>
+                  ) : null}
+                  {formatTimeRange(item.actualStartTime, item.actualEndTime) ? (
+                    <p className="meta-chip">
+                      <span>Shot Time</span>
+                      <strong>{formatTimeRange(item.actualStartTime, item.actualEndTime)}</strong>
+                    </p>
+                  ) : null}
+                  {!formatTimeRange(item.plannedStartTime, item.plannedEndTime) &&
+                  !formatTimeRange(item.actualStartTime, item.actualEndTime) ? (
+                    <p className="meta-chip meta-chip-muted">
+                      <span>Timing</span>
+                      <strong>Not scheduled yet</strong>
+                    </p>
+                  ) : null}
+                </div>
               </div>
               <div className="mobile-shot-actions">
                 <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(item.shotId as string)}>
@@ -408,8 +465,18 @@ function renderShotlist(
             const actionState = getShotActionState(effectiveStatus)
             const shot = shotLookup.get(shotId)
             const shotCode = shot?.displayName ?? 'Shot'
-            const interiorExterior = /ext/i.test(shotCode) ? 'E' : /int/i.test(shotCode) ? 'I' : 'I/E'
-            const dayNight = /night/i.test((shot?.notes ?? '') + shotCode) ? 'N' : /day/i.test((shot?.notes ?? '') + shotCode) ? 'D' : 'D/N'
+            const ie = shot ? inferInteriorExterior(shot) : undefined
+            const dn = shot ? inferDayNight(shot) : undefined
+            const setupTime = formatTimeRange(item.plannedStartTime, item.plannedEndTime)
+            const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
+            const coreFields: LabeledValue[] = [
+              ie ? { label: 'I/E', value: ie } : null,
+              dn ? { label: 'D/N', value: dn } : null,
+              toCleanValue(shot?.shotSize) ? { label: 'Coverage', value: toCleanValue(shot?.shotSize) as string } : null,
+              toCleanValue(shot?.shotType) ? { label: 'Angle / Type', value: toCleanValue(shot?.shotType) as string } : null,
+              toCleanValue(shot?.shotMove) ? { label: 'Movement', value: toCleanValue(shot?.shotMove) as string } : null,
+              toCleanValue(shot?.shotEquipment) ? { label: 'Equipment', value: toCleanValue(shot?.shotEquipment) as string } : null,
+            ].filter((field): field is LabeledValue => Boolean(field))
 
             return (
               <article
@@ -427,47 +494,35 @@ function renderShotlist(
                   <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
                 </div>
 
-                <div className="shotlist-meta-grid">
+                <div className="shotlist-info-band">
+                  {coreFields.map((field) => (
+                    <p key={field.label} className="meta-chip">
+                      <span>{field.label}</span>
+                      <strong>{field.value}</strong>
+                    </p>
+                  ))}
                   <p className="meta-chip">
-                    <span>I/E</span>
-                    <strong>{interiorExterior}</strong>
+                    <span>Lens</span>
+                    <strong>{toCleanValue(shot?.focalLength) ?? 'TBD'}</strong>
                   </p>
-                  <p className="meta-chip">
-                    <span>D/N</span>
-                    <strong>{dayNight}</strong>
-                  </p>
-                  <p className="meta-chip">
-                    <span>Coverage</span>
-                    <strong>{shot?.shotSize ?? '—'}</strong>
-                  </p>
-                  <p className="meta-chip">
-                    <span>Type</span>
-                    <strong>{shot?.shotType ?? '—'}</strong>
-                  </p>
-                  <p className="meta-chip">
-                    <span>Move</span>
-                    <strong>{shot?.shotMove ?? '—'}</strong>
-                  </p>
-                  <p className="meta-chip">
-                    <span>Equipment</span>
-                    <strong>{shot?.shotEquipment ?? '—'}</strong>
-                  </p>
-                  <p className="meta-chip">
-                    <span>Camera</span>
-                    <strong>{shot?.cameraName ?? 'Camera'}</strong>
-                  </p>
-                  <p className="meta-chip">
-                    <span>Planned</span>
-                    <strong>
-                      {formatTime(item.plannedStartTime)} – {formatTime(item.plannedEndTime)}
-                    </strong>
-                  </p>
+                  {setupTime ? (
+                    <p className="meta-chip">
+                      <span>Setup Time</span>
+                      <strong>{setupTime}</strong>
+                    </p>
+                  ) : null}
+                  {shotTime ? (
+                    <p className="meta-chip">
+                      <span>Shot Time</span>
+                      <strong>{shotTime}</strong>
+                    </p>
+                  ) : null}
                 </div>
 
-                {shot?.notes ? (
+                {toCleanValue(shot?.notes) ? (
                   <p className="shot-production-notes">
                     <span>Notes / Sound / Props</span>
-                    <strong>{shot.notes}</strong>
+                    <strong>{toCleanValue(shot?.notes)}</strong>
                   </p>
                 ) : null}
 
@@ -530,7 +585,15 @@ function renderStoryboard(
                 <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
               </span>
             </button>
-            {isExpanded && shot ? <ShotDetailCard shot={shot} /> : null}
+            {shot?.imageUrl ? (
+              <img
+                className={`storyboard-preview-image ${isExpanded ? 'storyboard-preview-image-expanded' : 'storyboard-preview-image-collapsed'}`}
+                src={shot.imageUrl}
+                alt={`Storyboard frame for ${shot.displayName}`}
+                loading="lazy"
+              />
+            ) : null}
+            {isExpanded && shot ? <ShotDetailCard shot={shot} hideHeader hideImage /> : null}
             <div className="mobile-shot-actions">
               <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(ref.shotId)}>
                 Details
