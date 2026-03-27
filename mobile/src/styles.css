@@ -429,6 +429,11 @@ p {
   gap: 7px;
 }
 
+.mobile-shot-card-compact {
+  padding: 10px;
+  gap: 6px;
+}
+
 .shotlist-card {
   padding: 10px 10px 9px;
   gap: 7px;
@@ -447,6 +452,10 @@ p {
 
 .mobile-shot-row-top {
   align-items: flex-start;
+}
+
+.compact-row {
+  gap: 8px;
 }
 
 .shot-number-label {
@@ -527,6 +536,10 @@ p {
   gap: 8px;
 }
 
+.schedule-shot-meta-grid-compact {
+  gap: 6px;
+}
+
 .schedule-time-grid {
   flex: 1;
   display: grid;
@@ -568,6 +581,13 @@ p {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+@media (max-width: 420px) {
+  .shotlist-info-band,
+  .schedule-time-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .shot-production-notes {

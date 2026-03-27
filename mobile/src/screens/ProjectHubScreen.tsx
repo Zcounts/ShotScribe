@@ -96,20 +96,6 @@ function toCleanValue(raw?: string): string | undefined {
   return value
 }
 
-function inferInteriorExterior(shot: MobileShotDetail): string | undefined {
-  const source = `${shot.displayName} ${shot.shotType} ${shot.notes}`.toLowerCase()
-  if (/\b(ext|exterior)\b/.test(source)) return 'E'
-  if (/\b(int|interior)\b/.test(source)) return 'I'
-  return undefined
-}
-
-function inferDayNight(shot: MobileShotDetail): string | undefined {
-  const source = `${shot.displayName} ${shot.shotType} ${shot.notes}`.toLowerCase()
-  if (/\bnight|n\/?t\b/.test(source)) return 'N'
-  if (/\bday|d\/?t\b/.test(source)) return 'D'
-  return undefined
-}
-
 function getEffectiveStatus(
   projectId: string,
   dayId: string,
@@ -158,6 +144,31 @@ function getShotActionState(status: ShotStatus): { label: string; tone: 'neutral
     return { label: 'Skipped', tone: 'skipped' }
   }
   return { label: 'Mark Done', tone: 'neutral' }
+}
+
+function ShotActions({
+  actionLabel,
+  actionTone,
+  onOpenDetails,
+  onCycleStatus,
+  detailsButtonLabel = 'Details',
+}: {
+  actionLabel: string
+  actionTone: 'neutral' | 'done' | 'skipped'
+  onOpenDetails: () => void
+  onCycleStatus: () => void
+  detailsButtonLabel?: string
+}) {
+  return (
+    <div className="mobile-shot-actions">
+      <button type="button" className="shot-action-button shot-action-button-secondary" onClick={onOpenDetails}>
+        {detailsButtonLabel}
+      </button>
+      <button type="button" className={`shot-action-button shot-action-button-${actionTone}`} onClick={onCycleStatus}>
+        {actionLabel}
+      </button>
+    </div>
+  )
 }
 
 function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
@@ -348,37 +359,38 @@ function renderSchedule(
         if (item.type === 'shot' && item.shotId) {
           const shot = shotLookup.get(item.shotId)
           const actionState = getShotActionState(effectiveStatus)
+          const setupTime = formatTimeRange(item.plannedStartTime, item.plannedEndTime)
+          const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
           return (
             <article
               key={item.scheduleItemId}
-              className={`mobile-shot-card schedule-shot-card shot-toggle-${actionState.tone} status-outline-${effectiveStatus}`}
+              className={`mobile-shot-card mobile-shot-card-compact schedule-shot-card shot-toggle-${actionState.tone} status-outline-${effectiveStatus}`}
               onDoubleClick={() => onOpenDetails(item.shotId as string)}
             >
-              <div className="mobile-shot-row mobile-shot-row-top">
+              <div className="mobile-shot-row mobile-shot-row-top compact-row">
                 <p className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</p>
                 <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
               </div>
-              <div className="mobile-shot-row">
+              <div className="mobile-shot-row compact-row">
                 <h4>{shot?.displayName ?? 'Shot'}</h4>
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
               </div>
-              <div className="schedule-shot-meta-grid">
+              <div className="schedule-shot-meta-grid schedule-shot-meta-grid-compact">
                 {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-tag shot-scene-tag-muted">Scene TBD</span>}
                 <div className="schedule-time-grid">
-                  {formatTimeRange(item.plannedStartTime, item.plannedEndTime) ? (
+                  {setupTime ? (
                     <p className="meta-chip">
                       <span>Setup Time</span>
-                      <strong>{formatTimeRange(item.plannedStartTime, item.plannedEndTime)}</strong>
+                      <strong>{setupTime}</strong>
                     </p>
                   ) : null}
-                  {formatTimeRange(item.actualStartTime, item.actualEndTime) ? (
+                  {shotTime ? (
                     <p className="meta-chip">
                       <span>Shot Time</span>
-                      <strong>{formatTimeRange(item.actualStartTime, item.actualEndTime)}</strong>
+                      <strong>{shotTime}</strong>
                     </p>
                   ) : null}
-                  {!formatTimeRange(item.plannedStartTime, item.plannedEndTime) &&
-                  !formatTimeRange(item.actualStartTime, item.actualEndTime) ? (
+                  {!setupTime && !shotTime ? (
                     <p className="meta-chip meta-chip-muted">
                       <span>Timing</span>
                       <strong>Not scheduled yet</strong>
@@ -386,18 +398,12 @@ function renderSchedule(
                   ) : null}
                 </div>
               </div>
-              <div className="mobile-shot-actions">
-                <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(item.shotId as string)}>
-                  Details
-                </button>
-                <button
-                  type="button"
-                  className={`shot-action-button shot-action-button-${actionState.tone}`}
-                  onClick={() => onCycleShotStatus(item.shotId as string)}
-                >
-                  {actionState.label}
-                </button>
-              </div>
+              <ShotActions
+                actionLabel={actionState.label}
+                actionTone={actionState.tone}
+                onOpenDetails={() => onOpenDetails(item.shotId as string)}
+                onCycleStatus={() => onCycleShotStatus(item.shotId as string)}
+              />
             </article>
           )
         }
@@ -465,13 +471,9 @@ function renderShotlist(
             const actionState = getShotActionState(effectiveStatus)
             const shot = shotLookup.get(shotId)
             const shotCode = shot?.displayName ?? 'Shot'
-            const ie = shot ? inferInteriorExterior(shot) : undefined
-            const dn = shot ? inferDayNight(shot) : undefined
             const setupTime = formatTimeRange(item.plannedStartTime, item.plannedEndTime)
             const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
             const coreFields: LabeledValue[] = [
-              ie ? { label: 'I/E', value: ie } : null,
-              dn ? { label: 'D/N', value: dn } : null,
               toCleanValue(shot?.shotSize) ? { label: 'Coverage', value: toCleanValue(shot?.shotSize) as string } : null,
               toCleanValue(shot?.shotType) ? { label: 'Angle / Type', value: toCleanValue(shot?.shotType) as string } : null,
               toCleanValue(shot?.shotMove) ? { label: 'Movement', value: toCleanValue(shot?.shotMove) as string } : null,
@@ -481,15 +483,15 @@ function renderShotlist(
             return (
               <article
                 key={item.scheduleItemId}
-                className={`mobile-shot-card shotlist-card shotlist-structured-card shot-toggle-${actionState.tone}`}
+                className={`mobile-shot-card mobile-shot-card-compact shotlist-card shotlist-structured-card shot-toggle-${actionState.tone}`}
                 onDoubleClick={() => onOpenDetails(shotId)}
               >
-                <div className="mobile-shot-row mobile-shot-row-top">
+                <div className="mobile-shot-row mobile-shot-row-top compact-row">
                   <p className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</p>
                   <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
                 </div>
 
-                <div className="mobile-shot-row">
+                <div className="mobile-shot-row compact-row">
                   <h4>{shotCode}</h4>
                   <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
                 </div>
@@ -526,22 +528,12 @@ function renderShotlist(
                   </p>
                 ) : null}
 
-                <div className="mobile-shot-actions">
-                  <button
-                    type="button"
-                    className="shot-action-button shot-action-button-secondary"
-                    onClick={() => onOpenDetails(shotId)}
-                  >
-                    Details
-                  </button>
-                  <button
-                    type="button"
-                    className={`shot-action-button shot-action-button-${actionState.tone}`}
-                    onClick={() => onCycleShotStatus(shotId)}
-                  >
-                    {actionState.label}
-                  </button>
-                </div>
+                <ShotActions
+                  actionLabel={actionState.label}
+                  actionTone={actionState.tone}
+                  onOpenDetails={() => onOpenDetails(shotId)}
+                  onCycleStatus={() => onCycleShotStatus(shotId)}
+                />
               </article>
             )
           })}
@@ -574,9 +566,9 @@ function renderStoryboard(
         const actionState = getShotActionState(effectiveStatus)
         const isExpanded = expandedShotId === ref.shotId
         return (
-          <article key={`${ref.shotId}-${ref.updatedAt}`} className="mobile-shot-card storyboard-card">
+          <article key={`${ref.shotId}-${ref.updatedAt}`} className="mobile-shot-card mobile-shot-card-compact storyboard-card">
             <button type="button" className="storyboard-collapse-button" onClick={() => onToggleExpanded(ref.shotId)}>
-              <span className="mobile-shot-row">
+              <span className="mobile-shot-row compact-row">
                 <strong>{shot?.displayName ?? 'Shot'}</strong>
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
               </span>
@@ -594,18 +586,12 @@ function renderStoryboard(
               />
             ) : null}
             {isExpanded && shot ? <ShotDetailCard shot={shot} hideHeader hideImage /> : null}
-            <div className="mobile-shot-actions">
-              <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(ref.shotId)}>
-                Details
-              </button>
-              <button
-                type="button"
-                className={`shot-action-button shot-action-button-${actionState.tone}`}
-                onClick={() => onCycleShotStatus(ref.shotId)}
-              >
-                {actionState.label}
-              </button>
-            </div>
+            <ShotActions
+              actionLabel={actionState.label}
+              actionTone={actionState.tone}
+              onOpenDetails={() => onOpenDetails(ref.shotId)}
+              onCycleStatus={() => onCycleShotStatus(ref.shotId)}
+            />
           </article>
         )
       })}
