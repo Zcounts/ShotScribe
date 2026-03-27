@@ -99,11 +99,15 @@ function CameraColorSwatch({ color, onChange }) {
 
 export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0, onDoubleClick }) {
   const updateScene = useStore(s => s.updateScene)
+  const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
+  const updateCanonicalStoryboardSceneMetadata = useStore(s => s.updateCanonicalStoryboardSceneMetadata)
 
   const set = (updates) => updateScene(scene.id, updates)
-  const displayLocation = scene.location || ''
-  const displayIntExt = scene.intOrExt || 'INT'
-  const displayDayNight = scene.dayNight || 'DAY'
+  const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
+  const displaySceneNumber = canonical?.sceneNumber || ''
+  const displayLocation = canonical?.location || ''
+  const displayIntExt = canonical?.intOrExt || 'INT'
+  const displayDayNight = canonical?.dayNight || 'DAY'
 
   // Per-page notes: pageNotes is stored as an array (one element per page).
   // Legacy projects saved it as a plain string — treat that as page 0.
@@ -119,12 +123,12 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
 
   const cycleIntExt = () => {
     const next = { INT: 'EXT', EXT: 'INT/EXT', 'INT/EXT': 'INT' }
-    set({ intOrExt: next[scene.intOrExt] || 'INT' })
+    updateCanonicalStoryboardSceneMetadata(scene.id, { intOrExt: next[displayIntExt] || 'INT' })
   }
 
   const cycleDayNight = () => {
     const next = { DAY: 'NIGHT', NIGHT: 'DAY/NIGHT', 'DAY/NIGHT': 'DAY' }
-    set({ dayNight: next[scene.dayNight] || 'DAY' })
+    updateCanonicalStoryboardSceneMetadata(scene.id, { dayNight: next[displayDayNight] || 'DAY' })
   }
 
   const cameras = scene.cameras || [{ name: scene.cameraName || 'Camera 1', body: scene.cameraBody || 'fx30' }]
@@ -172,11 +176,11 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
           <div className="page-header-intdn">
             <input
               type="text"
-              value={scene.sceneLabel}
-              onChange={e => set({ sceneLabel: e.target.value })}
+              value={displaySceneNumber}
+              onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { sceneNumber: e.target.value })}
               className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-scene-label"
-              style={{ minWidth: 80, width: `${Math.min(Math.max((scene.sceneLabel || '').length, 6), 20)}ch` }}
-              placeholder="SCENE 1"
+              style={{ minWidth: 80, width: `${Math.min(Math.max((displaySceneNumber || '').length, 6), 20)}ch` }}
+              placeholder="1"
             />
             <span className="text-[19px] font-black">|</span>
             <button
@@ -195,11 +199,11 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
           </div>
         </div>
         <div className="page-header-row page-header-scene-bottom">
-          <input
-            type="text"
-            value={displayLocation}
-            onChange={e => set({ location: e.target.value })}
-            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
+            <input
+              type="text"
+              value={displayLocation}
+              onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { location: e.target.value })}
+              className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
             style={{ minWidth: 60, width: `${Math.min(Math.max((displayLocation || '').length, 4), 40)}ch` }}
             placeholder="LOCATION"
           />

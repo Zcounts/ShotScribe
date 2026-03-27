@@ -205,6 +205,22 @@ function createScene(overrides = {}) {
   }
 }
 
+function getStoryboardCanonicalScriptScene(state, storyboardScene) {
+  if (!storyboardScene?.linkedScriptSceneId) return null
+  return state.scriptScenes.find(scene => scene.id === storyboardScene.linkedScriptSceneId) || null
+}
+
+function mapScriptSceneToStoryboardMetadata(scriptScene) {
+  if (!scriptScene) return null
+  return {
+    sceneLabel: scriptScene.sceneNumber ? `SCENE ${scriptScene.sceneNumber}` : 'SCENE',
+    location: scriptScene.location || '',
+    intOrExt: scriptScene.intExt || '',
+    dayNight: scriptScene.dayNight || '',
+    color: scriptScene.color || null,
+  }
+}
+
 // Valid shot letters: A-Z excluding I (confused with 1), O (confused with 0), S (confused with 5)
 export const VALID_SHOT_LETTERS = 'ABCDEFGHJKLMNPQRTUVWXYZ' // 23 letters
 
@@ -379,10 +395,7 @@ const useStore = create((set, get) => ({
             return {
               ...storyScene,
               linkedScriptSceneId: fallback.id,
-              sceneLabel: fallback.sceneNumber ? `SCENE ${fallback.sceneNumber}` : storyScene.sceneLabel,
-              location: fallback.location || storyScene.location,
-              intOrExt: fallback.intExt || storyScene.intOrExt,
-              dayNight: fallback.dayNight || storyScene.dayNight,
+              ...(mapScriptSceneToStoryboardMetadata(fallback) || {}),
             }
           }),
         }
@@ -406,10 +419,7 @@ const useStore = create((set, get) => ({
             return {
               ...storyScene,
               linkedScriptSceneId: fallback.id,
-              sceneLabel: fallback.sceneNumber ? `SCENE ${fallback.sceneNumber}` : storyScene.sceneLabel,
-              location: fallback.location || storyScene.location,
-              intOrExt: fallback.intExt || storyScene.intOrExt,
-              dayNight: fallback.dayNight || storyScene.dayNight,
+              ...(mapScriptSceneToStoryboardMetadata(fallback) || {}),
             }
           }),
         }
@@ -449,10 +459,7 @@ const useStore = create((set, get) => ({
             if (storyScene.linkedScriptSceneId !== sceneId) return storyScene
             return {
               ...storyScene,
-              sceneLabel: updatedScriptScene.sceneNumber ? `SCENE ${updatedScriptScene.sceneNumber}` : storyScene.sceneLabel,
-              location: updatedScriptScene.location || storyScene.location,
-              intOrExt: updatedScriptScene.intExt || storyScene.intOrExt,
-              dayNight: updatedScriptScene.dayNight || storyScene.dayNight,
+              ...(mapScriptSceneToStoryboardMetadata(updatedScriptScene) || {}),
             }
           }),
       }
@@ -486,10 +493,7 @@ const useStore = create((set, get) => ({
             if (storyScene.linkedScriptSceneId !== sceneId) return storyScene
             return {
               ...storyScene,
-              sceneLabel: updatedScene.sceneNumber ? `SCENE ${updatedScene.sceneNumber}` : storyScene.sceneLabel,
-              location: updatedScene.location || storyScene.location,
-              intOrExt: updatedScene.intExt || storyScene.intOrExt,
-              dayNight: updatedScene.dayNight || storyScene.dayNight,
+              ...(mapScriptSceneToStoryboardMetadata(updatedScene) || {}),
             }
           }),
       }
@@ -1113,6 +1117,53 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
+  getCanonicalStoryboardSceneMetadata: (sceneId) => {
+    const state = get()
+    const storyboardScene = state.scenes.find(scene => scene.id === sceneId)
+    if (!storyboardScene) return null
+    const scriptScene = getStoryboardCanonicalScriptScene(state, storyboardScene)
+    return {
+      sceneId: storyboardScene.id,
+      linkedScriptSceneId: storyboardScene.linkedScriptSceneId || null,
+      scriptSceneId: scriptScene?.id || null,
+      sceneNumber: scriptScene?.sceneNumber ?? storyboardScene.sceneLabel ?? '',
+      titleSlugline: scriptScene?.slugline ?? '',
+      location: scriptScene?.location ?? storyboardScene.location ?? '',
+      intOrExt: scriptScene?.intExt ?? storyboardScene.intOrExt ?? '',
+      dayNight: scriptScene?.dayNight ?? storyboardScene.dayNight ?? '',
+      color: scriptScene?.color ?? storyboardScene.color ?? null,
+    }
+  },
+
+  updateCanonicalStoryboardSceneMetadata: (sceneId, updates) => {
+    const state = get()
+    const storyboardScene = state.scenes.find(scene => scene.id === sceneId)
+    if (!storyboardScene) return
+    const linkedScriptScene = getStoryboardCanonicalScriptScene(state, storyboardScene)
+
+    if (linkedScriptScene) {
+      const scriptUpdates = {
+        ...(('sceneNumber' in updates) ? { sceneNumber: updates.sceneNumber } : {}),
+        ...(('titleSlugline' in updates) ? { slugline: updates.titleSlugline || '' } : {}),
+        ...(('location' in updates) ? { location: updates.location || '' } : {}),
+        ...(('intOrExt' in updates) ? { intExt: updates.intOrExt || '' } : {}),
+        ...(('dayNight' in updates) ? { dayNight: updates.dayNight || '' } : {}),
+        ...(('color' in updates) ? { color: updates.color || null } : {}),
+      }
+      get().updateScriptScene(linkedScriptScene.id, scriptUpdates)
+      return
+    }
+
+    const sceneUpdates = {
+      ...(('sceneNumber' in updates) ? { sceneLabel: updates.sceneNumber } : {}),
+      ...(('location' in updates) ? { location: updates.location } : {}),
+      ...(('intOrExt' in updates) ? { intOrExt: updates.intOrExt } : {}),
+      ...(('dayNight' in updates) ? { dayNight: updates.dayNight } : {}),
+      ...(('color' in updates) ? { color: updates.color } : {}),
+    }
+    get().updateScene(sceneId, sceneUpdates)
+  },
+
   linkStoryboardSceneToScriptScene: (storyboardSceneId, scriptSceneId) => {
     set(state => {
       const scriptScene = scriptSceneId
@@ -1125,10 +1176,7 @@ const useStore = create((set, get) => ({
           return {
             ...scene,
             linkedScriptSceneId: scriptSceneId,
-            sceneLabel: scriptScene?.sceneNumber ? `SCENE ${scriptScene.sceneNumber}` : scene.sceneLabel,
-            location: scriptScene?.location || scene.location,
-            intOrExt: scriptScene?.intExt || scene.intOrExt,
-            dayNight: scriptScene?.dayNight || scene.dayNight,
+            ...(mapScriptSceneToStoryboardMetadata(scriptScene) || {}),
           }
         }),
       }

@@ -282,6 +282,7 @@ export default function App() {
   const documentSession = useStore(s => s.documentSession)
   const scriptScenes = useStore(s => s.scriptScenes)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
+  const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
 
   const projectName = useStore(s => s.projectName)
   const saveProject = useStore(s => s.saveProject)
@@ -396,23 +397,25 @@ export default function App() {
     const linkedScene = scene.linkedScriptSceneId
       ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
       : null
-    const label = linkedScene?.sceneNumber
-      ? `SC ${linkedScene.sceneNumber}`
+    const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
+    const label = canonical?.sceneNumber
+      ? `SC ${canonical.sceneNumber}`
       : (scene.sceneLabel || 'SCENE')
-    const subtitle = linkedScene?.location
-      || scene.location
-      || `${scene.intOrExt || ''} ${scene.dayNight || ''}`
+    const subtitle = canonical?.location
+      || `${canonical?.intOrExt || scene.intOrExt || ''} ${canonical?.dayNight || scene.dayNight || ''}`
     return {
       id: scene.id,
       label,
       subtitle,
       linkedSceneId: linkedScene?.id || null,
-      color: scene.color || (Array.isArray(scene.pageColors) ? scene.pageColors.find(Boolean) : null) || linkedScene?.color || '#94a3b8',
+      color: canonical?.color || scene.color || (Array.isArray(scene.pageColors) ? scene.pageColors.find(Boolean) : null) || linkedScene?.color || '#94a3b8',
     }
   })
 
   const jumpToStoryboardScene = (sceneId) => {
     const node = storyboardSceneRefs.current[sceneId]
+      || document.getElementById(sceneId)
+      || document.querySelector(`[data-outline-id="${sceneId}"]`)
     if (node) {
       node.scrollIntoView({ behavior: 'smooth', block: 'start' })
       setActiveOutlineItem(sceneId)
@@ -488,13 +491,14 @@ export default function App() {
     const linkedScene = scene.linkedScriptSceneId
       ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
       : null
+    const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
     const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
     const count = Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
     return Array.from({ length: count }).map((_, pageIdx) => ({
       id: `${scene.id}__page_${pageIdx}`,
       label: `Page ${scenePageOffsets[sceneIdx] + pageIdx + 1}`,
-      subtitle: `${scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${scene.location || ''}`,
-      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || scene.color || linkedScene?.color || '#94a3b8',
+      subtitle: `SC ${canonical?.sceneNumber || scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${canonical?.location || scene.location || ''}`,
+      sceneColor: (Array.isArray(scene.pageColors) ? scene.pageColors[pageIdx] : null) || canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
     }))
   })
 
