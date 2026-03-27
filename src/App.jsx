@@ -7,7 +7,13 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable'
+import {
+  SortableContext,
+  rectSortingStrategy,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import useStore from './store'
 import Toolbar from './components/Toolbar'
 import PageHeader from './components/PageHeader'
@@ -73,6 +79,48 @@ function getOutlineItemStyle(color, isActive = false) {
     cursor: 'pointer',
     marginBottom: -1,
   }
+}
+
+function SortableStoryboardSceneNavItem({
+  item,
+  isActive,
+  onClick,
+  onDoubleClick,
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } = useSortable({ id: item.id })
+
+  return (
+    <button
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onDoubleClick={onDoubleClick}
+      onClick={onClick}
+      style={{
+        ...getOutlineItemStyle(item.color, isActive),
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.45 : 1,
+        boxShadow: isDragging ? '0 8px 20px rgba(0,0,0,0.18)' : 'none',
+        borderTopWidth: isOver && !isDragging ? 2 : 1,
+        borderTopColor: isOver && !isDragging ? '#E84040' : undefined,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 10, height: 10, borderRadius: 999, background: item.color, border: '1px solid rgba(0,0,0,0.1)' }} />
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div>
+      </div>
+      <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
+    </button>
+  )
 }
 
 /** One scene rendered as one or more page-document divs inside a single DnD context */
@@ -281,6 +329,8 @@ export default function App() {
   const scriptScenes = useStore(s => s.scriptScenes)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
+  const getStoryboardScenes = useStore(s => s.getStoryboardScenes)
+  const reorderStoryboardScenes = useStore(s => s.reorderStoryboardScenes)
 
   const projectName = useStore(s => s.projectName)
   const shortcutBindings = useStore(s => s.shortcutBindings)
@@ -297,6 +347,7 @@ export default function App() {
   const [storyboardConfigOpen, setStoryboardConfigOpen] = useState(false)
   const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
+  const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
   const storyboardScrollRef = useRef(null)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
@@ -306,7 +357,12 @@ export default function App() {
   const shotlistRef = useRef(null)
 
   // Reset refs array size on render so stale refs don't linger
-  const totalPages = scenes.reduce((acc, scene) => {
+  const storyboardScenes = getStoryboardScenes()
+  const outlineSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  )
+
+  const totalPages = storyboardScenes.reduce((acc, scene) => {
     const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
     return acc + Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }, 0)
@@ -389,13 +445,13 @@ export default function App() {
   // Compute page offset for each scene (for global page numbering)
   const scenePageOffsets = []
   let runningOffset = 0
-  for (const scene of scenes) {
+  for (const scene of storyboardScenes) {
     scenePageOffsets.push(runningOffset)
     const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
     runningOffset += Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }
 
-  const sceneNavItems = scenes.map(scene => {
+  const sceneNavItems = storyboardScenes.map(scene => {
     const linkedScene = scene.linkedScriptSceneId
       ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
       : null
@@ -488,9 +544,9 @@ export default function App() {
     }
 
     return () => observer.disconnect()
-  }, [activeTab, storyboardOutlineTab, scenes, columnCount])
+  }, [activeTab, storyboardOutlineTab, storyboardScenes, columnCount])
 
-  const storyboardPageItems = scenes.flatMap((scene, sceneIdx) => {
+  const storyboardPageItems = storyboardScenes.flatMap((scene, sceneIdx) => {
     const linkedScene = scene.linkedScriptSceneId
       ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
       : null
@@ -504,6 +560,22 @@ export default function App() {
       sceneColor: canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
     }))
   })
+
+  const handleOutlineSceneDragStart = useCallback((event) => {
+    setActiveOutlineDragId(event.active?.id || null)
+  }, [])
+
+  const handleOutlineSceneDragEnd = useCallback((event) => {
+    const activeId = event.active?.id
+    const overId = event.over?.id
+    setActiveOutlineDragId(null)
+    if (!activeId || !overId || activeId === overId) return
+    reorderStoryboardScenes(activeId, overId)
+  }, [reorderStoryboardScenes])
+
+  const activeOutlineDragItem = activeOutlineDragId
+    ? sceneNavItems.find(item => item.id === activeOutlineDragId) || null
+    : null
 
   return (
     <div
@@ -612,14 +684,40 @@ export default function App() {
                     </div>
                   )}
                 >
-                  {storyboardOutlineTab === 'Scenes' ? sceneNavItems.map(item => {
-                  return (
-                    <button key={item.id} onDoubleClick={() => openScenePropertiesDialog('storyboard', item.id)} onClick={() => jumpToStoryboardScene(item.id)} style={getOutlineItemStyle(item.color, activeOutlineItem === item.id)}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 999, background: item.color, border: '1px solid rgba(0,0,0,0.1)' }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
-                      <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
-                    </button>
-                  )
-                }) : storyboardPageItems.map(item => (
+                  {storyboardOutlineTab === 'Scenes' ? (
+                    <DndContext
+                      sensors={outlineSensors}
+                      collisionDetection={closestCenter}
+                      onDragStart={handleOutlineSceneDragStart}
+                      onDragEnd={handleOutlineSceneDragEnd}
+                      onDragCancel={() => setActiveOutlineDragId(null)}
+                    >
+                      <SortableContext items={sceneNavItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
+                        {sceneNavItems.map(item => (
+                          <SortableStoryboardSceneNavItem
+                            key={item.id}
+                            item={item}
+                            isActive={activeOutlineItem === item.id}
+                            onDoubleClick={() => openScenePropertiesDialog('storyboard', item.id)}
+                            onClick={() => jumpToStoryboardScene(item.id)}
+                          />
+                        ))}
+                      </SortableContext>
+                      <DragOverlay>
+                        {activeOutlineDragItem ? (
+                          <div style={{ width: 240 }}>
+                            <div style={{ ...getOutlineItemStyle(activeOutlineDragItem.color, true), boxShadow: '0 10px 24px rgba(0,0,0,0.2)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 10, height: 10, borderRadius: 999, background: activeOutlineDragItem.color }} />
+                                <div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{activeOutlineDragItem.label}</div>
+                              </div>
+                              <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeOutlineDragItem.subtitle}</div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </DragOverlay>
+                    </DndContext>
+                  ) : storyboardPageItems.map(item => (
                   <button key={item.id} onClick={() => jumpToStoryboardPage(item.id)} style={getOutlineItemStyle(item.sceneColor, activeOutlineItem === item.id)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div style={{ fontSize: 11, fontWeight: 700, color: '#2C2C2C' }}>{item.label}</div></div>
                     <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
@@ -629,7 +727,7 @@ export default function App() {
               </div>
             )}
             <div className="pages-container" style={{ flex: 1 }}>
-              {scenes.map((scene, sceneIdx) => (
+              {storyboardScenes.map((scene, sceneIdx) => (
                 <div
                   key={scene.id}
                   ref={el => {
