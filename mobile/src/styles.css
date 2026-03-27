@@ -744,6 +744,11 @@ p {
   color: #6f6254;
 }
 
+.shot-notes strong,
+.shot-production-notes strong {
+  white-space: pre-line;
+}
+
 .callsheet-roster-grid {
   display: grid;
   gap: 8px;
@@ -886,6 +891,85 @@ p {
 }
 
 @media (max-width: 767px) {
+  .screen {
+    padding: 10px 10px calc(env(safe-area-inset-bottom, 0px) + 14px);
+    gap: 10px;
+  }
+
+  .project-hub-screen {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+    gap: 10px;
+  }
+
+  .project-header {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .project-header-top {
+    gap: 10px;
+  }
+
+  .day-select {
+    min-height: 46px;
+    padding: 8px 10px;
+  }
+
+  .tab-strip {
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+
+  .tab-button {
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 0.76rem;
+  }
+
+  .stacked-list,
+  .project-switch-list {
+    gap: 8px;
+  }
+
+  .hero-card,
+  .project-card,
+  .timeline-card,
+  .storyboard-card,
+  .mobile-shot-card {
+    padding: 10px;
+  }
+
+  .scene-group-header {
+    padding: 8px 10px;
+  }
+
+  .mobile-shot-card,
+  .mobile-shot-card-compact,
+  .shotlist-card,
+  .schedule-shot-card {
+    gap: 5px;
+  }
+
+  .mobile-shot-subrow {
+    min-height: 22px;
+  }
+
+  .shot-action-button {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 0.78rem;
+  }
+
+  .meta-chip,
+  .shot-production-notes,
+  .quicksheet-grid p {
+    padding: 6px 8px;
+  }
+
+  .shot-spec-grid {
+    gap: 6px;
+  }
+
   .mobile-shot-modal-backdrop {
     padding: 0;
   }

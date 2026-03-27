@@ -21,14 +21,14 @@ type ShotStatus = 'todo' | 'in_progress' | 'done' | 'skipped'
 interface MobileShotDetail {
   shotId: string
   shotNumberLabel: string
-  displayName: string
-  cameraName: string
-  focalLength: string
-  shotSize: string
-  shotType: string
-  shotMove: string
-  shotEquipment: string
-  notes: string
+  displayName?: string
+  cameraName?: string
+  focalLength?: string
+  shotSize?: string
+  shotType?: string
+  shotMove?: string
+  shotEquipment?: string
+  notes?: string
   sceneTag?: string
   color?: string
   imageUrl?: string
@@ -93,7 +93,19 @@ function toCleanValue(raw?: string): string | undefined {
   const value = raw.trim()
   if (!value) return undefined
   if (value === '—' || value === '-') return undefined
+  if (/^(tbd|na|n\/a|none)$/i.test(value)) return undefined
   return value
+}
+
+function toCleanNotes(raw?: string): string | undefined {
+  if (!raw) return undefined
+  const cleaned = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+  return cleaned || undefined
 }
 
 function getEffectiveStatus(
@@ -114,8 +126,12 @@ function getEffectiveStatus(
 }
 
 function toHumanShotName(raw?: string, fallbackNumber = 1, cameraName = 'Camera 1'): string {
-  if (raw && !raw.toLowerCase().startsWith('shot_')) {
-    return raw
+  const cleanRaw = toCleanValue(raw)
+  if (!cleanRaw) {
+    return `${fallbackNumber} - ${cameraName}`
+  }
+  if (!cleanRaw.toLowerCase().startsWith('shot_')) {
+    return cleanRaw
   }
   return `${fallbackNumber} - ${cameraName}`
 }
@@ -179,19 +195,19 @@ function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
 
   orderedShotItems.forEach((item, index) => {
     if (!item.shotId) return
-    const cameraName = item.shotCameraName ?? 'Camera 1'
+    const cameraName = toCleanValue(item.shotCameraName)
     const displayName = toHumanShotName(item.shotDisplayName, index + 1, cameraName)
     shotMap.set(item.shotId, {
       shotId: item.shotId,
       shotNumberLabel: `Shot ${index + 1}`,
       displayName,
       cameraName,
-      focalLength: item.focalLength ?? '—',
-      shotSize: item.shotSize ?? '—',
-      shotType: item.shotType ?? '—',
-      shotMove: item.shotMove ?? '—',
-      shotEquipment: item.shotEquipment ?? '—',
-      notes: item.shotNotes ?? '',
+      focalLength: toCleanValue(item.focalLength),
+      shotSize: toCleanValue(item.shotSize),
+      shotType: toCleanValue(item.shotType),
+      shotMove: toCleanValue(item.shotMove),
+      shotEquipment: toCleanValue(item.shotEquipment),
+      notes: toCleanNotes(item.shotNotes),
       sceneTag: toSceneTag(item.sceneId),
       color: item.shotColor,
       imageUrl: item.shotImageUrl,
@@ -200,18 +216,19 @@ function buildShotDetails(day: StoredDayEntry): Map<string, MobileShotDetail> {
 
   day.dayPackage.storyboardRefs.forEach((ref, index) => {
     const existing = shotMap.get(ref.shotId)
-    const displayName = toHumanShotName(ref.shotDisplayName, index + 1, ref.shotCameraName ?? 'Camera 1')
+    const cameraName = toCleanValue(ref.shotCameraName) ?? existing?.cameraName
+    const displayName = toHumanShotName(ref.shotDisplayName, index + 1, cameraName)
     shotMap.set(ref.shotId, {
       shotId: ref.shotId,
       shotNumberLabel: existing?.shotNumberLabel ?? `Shot ${index + 1}`,
       displayName,
-      cameraName: ref.shotCameraName ?? existing?.cameraName ?? 'Camera 1',
-      focalLength: ref.focalLength ?? existing?.focalLength ?? '—',
-      shotSize: ref.shotSize ?? existing?.shotSize ?? '—',
-      shotType: ref.shotType ?? existing?.shotType ?? '—',
-      shotMove: ref.shotMove ?? existing?.shotMove ?? '—',
-      shotEquipment: ref.shotEquipment ?? existing?.shotEquipment ?? '—',
-      notes: ref.shotNotes ?? existing?.notes ?? '',
+      cameraName,
+      focalLength: toCleanValue(ref.focalLength) ?? existing?.focalLength,
+      shotSize: toCleanValue(ref.shotSize) ?? existing?.shotSize,
+      shotType: toCleanValue(ref.shotType) ?? existing?.shotType,
+      shotMove: toCleanValue(ref.shotMove) ?? existing?.shotMove,
+      shotEquipment: toCleanValue(ref.shotEquipment) ?? existing?.shotEquipment,
+      notes: toCleanNotes(ref.shotNotes) ?? existing?.notes,
       sceneTag: existing?.sceneTag,
       color: ref.shotColor ?? existing?.color,
       imageUrl: ref.thumbnailUrl ?? existing?.imageUrl,
@@ -235,34 +252,33 @@ function ShotDetailCard({
   hideImage?: boolean
 }) {
   const actionState = status ? getShotActionState(status) : null
+  const metadata = [
+    shot.shotSize ? { label: 'Size', value: shot.shotSize } : null,
+    shot.shotType ? { label: 'Type', value: shot.shotType } : null,
+    shot.shotMove ? { label: 'Move', value: shot.shotMove } : null,
+    shot.shotEquipment ? { label: 'Equip', value: shot.shotEquipment } : null,
+  ].filter((entry): entry is { label: string; value: string } => Boolean(entry))
+
   return (
     <article className="mobile-shot-detail">
       {!hideHeader ? (
         <header className="mobile-shot-detail-header">
-          <h3>{shot.displayName}</h3>
-          <strong className="focal-pill">{shot.focalLength}</strong>
+          <h3>{shot.displayName ?? shot.shotNumberLabel}</h3>
+          {shot.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
         </header>
       ) : null}
       {!hideImage && shot.imageUrl ? <img src={shot.imageUrl} alt={`Storyboard frame for ${shot.displayName}`} loading="lazy" /> : null}
 
-      <div className="shot-spec-grid">
-        <p>
-          <span>Size</span>
-          <strong>{shot.shotSize}</strong>
-        </p>
-        <p>
-          <span>Type</span>
-          <strong>{shot.shotType}</strong>
-        </p>
-        <p>
-          <span>Move</span>
-          <strong>{shot.shotMove}</strong>
-        </p>
-        <p>
-          <span>Equip</span>
-          <strong>{shot.shotEquipment}</strong>
-        </p>
-      </div>
+      {metadata.length > 0 ? (
+        <div className="shot-spec-grid">
+          {metadata.map((item) => (
+            <p key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       {shot.notes ? (
         <p className="shot-notes">
@@ -372,11 +388,11 @@ function renderSchedule(
                 <span className={`status-chip status-${effectiveStatus}`}>{effectiveStatus.replace('_', ' ')}</span>
               </div>
               <div className="mobile-shot-row compact-row">
-                <h4>{shot?.displayName ?? 'Shot'}</h4>
-                <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
+                <h4>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</h4>
+                {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
               </div>
               <div className="schedule-shot-meta-grid schedule-shot-meta-grid-compact">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-tag shot-scene-tag-muted">Scene TBD</span>}
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
                 <div className="schedule-time-grid">
                   {setupTime ? (
                     <p className="meta-chip">
@@ -412,7 +428,7 @@ function renderSchedule(
           <article key={item.scheduleItemId} className={`timeline-card status-outline-${effectiveStatus}`}>
             <div>
               <p className="timeline-type">{item.type.toUpperCase()}</p>
-              <h4>{item.title ?? item.scheduleItemId}</h4>
+              <h4>{toCleanValue(item.title) ?? item.type}</h4>
               <p className="hint-text">
                 {formatTime(item.actualStartTime || item.plannedStartTime)} – {formatTime(item.actualEndTime || item.plannedEndTime)}
               </p>
@@ -461,7 +477,7 @@ function renderShotlist(
       {orderedGroups.map(([sceneKey, sceneShots]) => (
         <section key={sceneKey} className="scene-shot-group">
           <header className="scene-group-header">
-            <h4>{toSceneTag(sceneKey) ?? 'Scene pending'}</h4>
+            <h4>{toSceneTag(sceneKey) ?? 'Unassigned scene'}</h4>
             <span>{sceneShots.length} shot(s)</span>
           </header>
 
@@ -470,7 +486,7 @@ function renderShotlist(
             const effectiveStatus = getEffectiveStatus(project.projectId, day.dayId, item, overrides)
             const actionState = getShotActionState(effectiveStatus)
             const shot = shotLookup.get(shotId)
-            const shotCode = shot?.displayName ?? 'Shot'
+            const shotCode = shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'
             const setupTime = formatTimeRange(item.plannedStartTime, item.plannedEndTime)
             const shotTime = formatTimeRange(item.actualStartTime, item.actualEndTime)
             const coreFields: LabeledValue[] = [
@@ -493,38 +509,42 @@ function renderShotlist(
 
                 <div className="mobile-shot-row compact-row">
                   <h4>{shotCode}</h4>
-                  <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
+                  {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
                 </div>
 
-                <div className="shotlist-info-band">
-                  {coreFields.map((field) => (
-                    <p key={field.label} className="meta-chip">
-                      <span>{field.label}</span>
-                      <strong>{field.value}</strong>
-                    </p>
-                  ))}
-                  <p className="meta-chip">
-                    <span>Lens</span>
-                    <strong>{toCleanValue(shot?.focalLength) ?? 'TBD'}</strong>
-                  </p>
-                  {setupTime ? (
-                    <p className="meta-chip">
-                      <span>Setup Time</span>
-                      <strong>{setupTime}</strong>
-                    </p>
-                  ) : null}
-                  {shotTime ? (
-                    <p className="meta-chip">
-                      <span>Shot Time</span>
-                      <strong>{shotTime}</strong>
-                    </p>
-                  ) : null}
-                </div>
+                {(coreFields.length > 0 || shot?.focalLength || setupTime || shotTime) ? (
+                  <div className="shotlist-info-band">
+                    {coreFields.map((field) => (
+                      <p key={field.label} className="meta-chip">
+                        <span>{field.label}</span>
+                        <strong>{field.value}</strong>
+                      </p>
+                    ))}
+                    {shot?.focalLength ? (
+                      <p className="meta-chip">
+                        <span>Lens</span>
+                        <strong>{shot.focalLength}</strong>
+                      </p>
+                    ) : null}
+                    {setupTime ? (
+                      <p className="meta-chip">
+                        <span>Setup Time</span>
+                        <strong>{setupTime}</strong>
+                      </p>
+                    ) : null}
+                    {shotTime ? (
+                      <p className="meta-chip">
+                        <span>Shot Time</span>
+                        <strong>{shotTime}</strong>
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
-                {toCleanValue(shot?.notes) ? (
+                {shot?.notes ? (
                   <p className="shot-production-notes">
                     <span>Notes / Sound / Props</span>
-                    <strong>{toCleanValue(shot?.notes)}</strong>
+                    <strong>{shot.notes}</strong>
                   </p>
                 ) : null}
 
@@ -570,11 +590,11 @@ function renderStoryboard(
             <button type="button" className="storyboard-collapse-button" onClick={() => onToggleExpanded(ref.shotId)}>
               <span className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</span>
               <span className="mobile-shot-row compact-row">
-                <strong>{shot?.displayName ?? 'Shot'}</strong>
-                <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
+                <strong>{shot?.displayName ?? shot?.shotNumberLabel ?? 'Shot'}</strong>
+                {shot?.focalLength ? <strong className="focal-pill">{shot.focalLength}</strong> : null}
               </span>
               <span className="mobile-shot-subrow">
-                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-tag shot-scene-tag-muted">Scene TBD</span>}
+                {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : null}
                 <span className="chevron-indicator">{isExpanded ? '▾' : '▸'}</span>
               </span>
             </button>
@@ -602,22 +622,24 @@ function renderStoryboard(
 
 function StoryboardExpandedMeta({ shot }: { shot: MobileShotDetail }) {
   const metadata = [
-    { label: 'Size', value: shot.shotSize },
-    { label: 'Type', value: shot.shotType },
-    { label: 'Move', value: shot.shotMove },
-    { label: 'Equip', value: shot.shotEquipment },
-  ]
+    shot.shotSize ? { label: 'Size', value: shot.shotSize } : null,
+    shot.shotType ? { label: 'Type', value: shot.shotType } : null,
+    shot.shotMove ? { label: 'Move', value: shot.shotMove } : null,
+    shot.shotEquipment ? { label: 'Equip', value: shot.shotEquipment } : null,
+  ].filter((entry): entry is { label: string; value: string } => Boolean(entry))
 
   return (
     <div className="storyboard-expanded-meta">
-      <div className="shot-spec-grid">
-        {metadata.map((item) => (
-          <p key={item.label}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </p>
-        ))}
-      </div>
+      {metadata.length > 0 ? (
+        <div className="shot-spec-grid">
+          {metadata.map((item) => (
+            <p key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </p>
+          ))}
+        </div>
+      ) : null}
       {shot.notes ? (
         <p className="shot-notes">
           <span>Notes</span>
