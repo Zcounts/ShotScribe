@@ -625,6 +625,11 @@ p {
   text-align: center;
 }
 
+.storyboard-card .shot-action-button {
+  min-height: 35px;
+  padding: 7px 12px;
+}
+
 .mobile-shot-actions-modal .shot-action-button {
   flex: 0 0 auto;
   width: 100%;
@@ -699,11 +704,17 @@ p {
 }
 
 .storyboard-preview-image-collapsed {
-  height: 86px;
+  height: 118px;
 }
 
 .storyboard-preview-image-expanded {
-  height: 168px;
+  height: 184px;
+}
+
+.storyboard-expanded-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .shot-spec-grid {
