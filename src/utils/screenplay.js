@@ -5,16 +5,24 @@ let screenplayElementCounter = 0
 const DPI = 96
 const INCH = DPI
 const TARGET_LINES_PER_PAGE = 54
+const SCREENPLAY_PAGE = {
+  widthPx: 816,
+  heightPx: 1056,
+  marginTopPx: 96,
+  marginRightPx: 96,
+  marginBottomPx: 96,
+  marginLeftPx: 144,
+}
 
 export const SCREENPLAY_LAYOUT = {
   page: {
-    widthPx: 8.5 * INCH,
-    heightPx: 11 * INCH,
+    widthPx: SCREENPLAY_PAGE.widthPx,
+    heightPx: SCREENPLAY_PAGE.heightPx,
     marginsPx: {
-      top: 1 * INCH,
-      right: 1 * INCH,
-      bottom: 1 * INCH,
-      left: 1.5 * INCH,
+      top: SCREENPLAY_PAGE.marginTopPx,
+      right: SCREENPLAY_PAGE.marginRightPx,
+      bottom: SCREENPLAY_PAGE.marginBottomPx,
+      left: SCREENPLAY_PAGE.marginLeftPx,
     },
   },
   typography: {
@@ -30,6 +38,7 @@ export const SCREENPLAY_LAYOUT = {
     parenthetical: { left: 1.8958, width: 2.4583 },
     dialogue: { left: 1.3958, width: 3.7083 },
     transition: { left: 0, width: 6.0 },
+    centered: { left: 0, width: 6.0 },
   },
   spacing: {
     heading: { before: 0, after: 1 },

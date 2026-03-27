@@ -17,25 +17,39 @@ const defaultBlock = {
   letterSpacingPx: 0,
 }
 
+const PAGE_DEFAULTS = {
+  widthPx: 816,
+  heightPx: 1056,
+  marginTopPx: 96,
+  marginRightPx: 96,
+  marginBottomPx: 96,
+  marginLeftPx: 144,
+}
+
+function blockFromAbsolute(leftOffsetPx, widthPx, align = 'left') {
+  const contentWidthPx = PAGE_DEFAULTS.widthPx - PAGE_DEFAULTS.marginLeftPx - PAGE_DEFAULTS.marginRightPx
+  const relativeLeft = Math.max(0, leftOffsetPx - PAGE_DEFAULTS.marginLeftPx)
+  const relativeRight = Math.max(0, contentWidthPx - relativeLeft - widthPx)
+  return {
+    ...defaultBlock,
+    marginLeftPx: relativeLeft,
+    marginRightPx: relativeRight,
+    align,
+  }
+}
+
 export const DEFAULT_SCRIPT_DOCUMENT_SETTINGS = {
-  page: {
-    widthPx: SCREENPLAY_LAYOUT.page.widthPx,
-    heightPx: SCREENPLAY_LAYOUT.page.heightPx,
-    marginTopPx: SCREENPLAY_LAYOUT.page.marginsPx.top,
-    marginRightPx: SCREENPLAY_LAYOUT.page.marginsPx.right,
-    marginBottomPx: SCREENPLAY_LAYOUT.page.marginsPx.bottom,
-    marginLeftPx: SCREENPLAY_LAYOUT.page.marginsPx.left,
-  },
+  page: PAGE_DEFAULTS,
   blockStyles: {
-    heading: { ...defaultBlock, align: 'left' },
-    action: { ...defaultBlock, align: 'left' },
-    section: { ...defaultBlock, align: 'center' },
-    character: { ...defaultBlock, marginLeftPx: 258, marginRightPx: 66, align: 'left' },
-    parenthetical: { ...defaultBlock, marginLeftPx: 182, marginRightPx: 158, align: 'left' },
-    dialogue: { ...defaultBlock, marginLeftPx: 134, marginRightPx: 86, align: 'left' },
-    transition: { ...defaultBlock, align: 'right' },
-    shot: { ...defaultBlock, align: 'left' },
-    centered: { ...defaultBlock, align: 'center' },
+    heading: blockFromAbsolute(144, 576, 'left'),
+    action: blockFromAbsolute(144, 576, 'left'),
+    section: blockFromAbsolute(144, 576, 'center'),
+    character: blockFromAbsolute(402, 252, 'left'),
+    parenthetical: blockFromAbsolute(326, 236, 'left'),
+    dialogue: blockFromAbsolute(278, 356, 'left'),
+    transition: blockFromAbsolute(144, 576, 'right'),
+    shot: blockFromAbsolute(144, 576, 'left'),
+    centered: blockFromAbsolute(144, 576, 'center'),
   },
 }
 
