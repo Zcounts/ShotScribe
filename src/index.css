@@ -285,8 +285,9 @@
   /* Page header */
   .page-header {
     display: grid;
-    grid-template-columns: minmax(420px, 640px) minmax(260px, 1fr) auto;
-    gap: 8px;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    column-gap: 20px;
+    row-gap: 8px;
     align-items: start;
     padding: 8px 12px;
     border-bottom: 2px solid #1A1A1A;
