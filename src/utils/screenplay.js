@@ -17,13 +17,21 @@ export const SCREENPLAY_LAYOUT = {
   typography: {
     fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
     fontSizePx: 16,
+<<<<<<< codex/fix-script-tab-for-screenplay-formatting-zvqtiv
     lineHeightPx: ((11 - 1 - 1.05) * INCH) / 53.5,
+=======
+    lineHeightPx: ((11 - 1 - 1) * INCH) / 54,
+>>>>>>> main
   },
   elementColumnsIn: {
     heading: { left: 0, width: 5.9 },
     action: { left: 0, width: 5.9 },
     character: { left: 2.6, width: 2.0 },
+<<<<<<< codex/fix-script-tab-for-screenplay-formatting-zvqtiv
     parenthetical: { left: 1.5, width: 1.7 },
+=======
+    parenthetical: { left: 1.5, width: 1.5 },
+>>>>>>> main
     dialogue: { left: 1.0, width: 3.5 },
     transition: { left: 4.5, width: 1.5 },
   },
@@ -37,7 +45,11 @@ export const SCREENPLAY_LAYOUT = {
     blank: { before: 0, after: 0 },
   },
   pagination: {
+<<<<<<< codex/fix-script-tab-for-screenplay-formatting-zvqtiv
     minLinesAfterHeading: 3,
+=======
+    minLinesAfterHeading: 2,
+>>>>>>> main
     minDialogueLinesAfterCharacter: 2,
     minDialogueLinesAtPageTop: 2,
   },
