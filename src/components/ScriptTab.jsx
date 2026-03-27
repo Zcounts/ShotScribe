@@ -9,26 +9,22 @@ import {
   estimateScreenplayPagination,
   getSceneScreenplayElements,
   SCREENPLAY_FORMAT,
+  SCREENPLAY_LAYOUT,
   SCENE_PAGINATION_MODES,
+  getElementPrintLayout,
 } from '../utils/screenplay'
 
-const PAGE_SIZE = { width: 816, height: 1056 } // 8.5x11 @96dpi
-const PAGE_MARGIN = { top: 96, right: 96, bottom: 96, left: 144 } // 1"/1"/1"/1.5"
-const SCREENPLAY_FONT_SIZE = 12
-const SCREENPLAY_LINE_HEIGHT = 1.44
-const SCREENPLAY_LINE_HEIGHT_PX = SCREENPLAY_FONT_SIZE * SCREENPLAY_LINE_HEIGHT
-const ROWS_PER_PAGE = Math.floor((PAGE_SIZE.height - PAGE_MARGIN.top - PAGE_MARGIN.bottom) / SCREENPLAY_LINE_HEIGHT_PX)
-const INCH = 96
-const CONTENT_WIDTH = PAGE_SIZE.width - PAGE_MARGIN.left - PAGE_MARGIN.right
-const CHAR_PX = 9.6
-const ELEMENT_LAYOUT = {
-  heading: { leftPx: 0, widthPx: CONTENT_WIDTH, textTransform: 'uppercase', fontWeight: 700 },
-  action: { leftPx: 0, widthPx: CONTENT_WIDTH },
-  character: { leftPx: INCH * 2, widthPx: INCH * 2, textTransform: 'uppercase', textAlign: 'center' },
-  dialogue: { leftPx: INCH, widthPx: INCH * 3 },
-  parenthetical: { leftPx: INCH * 1.35, widthPx: INCH * 2.45 },
-  transition: { leftPx: INCH * 4.5, widthPx: INCH * 1.5, textAlign: 'right', textTransform: 'uppercase', fontWeight: 700 },
+const PAGE_SIZE = {
+  width: SCREENPLAY_LAYOUT.page.widthPx,
+  height: SCREENPLAY_LAYOUT.page.heightPx,
 }
+const PAGE_MARGIN = SCREENPLAY_LAYOUT.page.marginsPx
+const SCREENPLAY_FONT_SIZE = SCREENPLAY_LAYOUT.typography.fontSizePx
+const SCREENPLAY_LINE_HEIGHT_PX = SCREENPLAY_LAYOUT.typography.lineHeightPx
+const ROWS_PER_PAGE = SCREENPLAY_FORMAT.pageLines
+const ELEMENT_LAYOUT = Object.fromEntries(
+  Object.keys(SCREENPLAY_FORMAT.charsPerLine).map(type => [type, getElementPrintLayout(type)]),
+)
 
 function AddShotModal({ scene, shots, onClose, onConfirm }) {
   const [mode, setMode] = useState('new')
@@ -248,9 +244,32 @@ function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
     const elements = screenplayBySceneId[scene.id] || []
     let sceneCharOffset = 0
     let isSceneStart = true
+
+    const pushSpacerRows = (count, idx) => {
+      for (let spacerIdx = 0; spacerIdx < count; spacerIdx += 1) {
+        rows.push({
+          sceneId: scene.id,
+          rowKey: `${scene.id}-${idx}-sp-${spacerIdx}-${rows.length}`,
+          type: 'spacer',
+          text: '',
+          sceneCharStart: sceneCharOffset,
+          sceneCharEnd: sceneCharOffset,
+          sourceIndex: idx,
+        })
+      }
+    }
+
     elements.forEach((line, idx) => {
       const lineText = String(line.text || '')
       const nextOffset = sceneCharOffset + lineText.length + 1
+      const prevType = idx > 0 ? elements[idx - 1]?.type : null
+      const nextType = elements[idx + 1]?.type
+      const spacingRule = SCREENPLAY_LAYOUT.spacing[line.type] || SCREENPLAY_LAYOUT.spacing.action
+
+      if (spacingRule.before > 0 && prevType && prevType !== 'blank') {
+        pushSpacerRows(spacingRule.before, idx)
+      }
+
       if (line.type === 'blank') {
         rows.push({
           sceneId: scene.id,
@@ -279,6 +298,11 @@ function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
           })
         })
       }
+
+      if (spacingRule.after > 0 && nextType && nextType !== 'blank') {
+        pushSpacerRows(spacingRule.after, idx)
+      }
+
       isSceneStart = false
       sceneCharOffset = nextOffset
     })
@@ -318,15 +342,15 @@ function paginateRows(rows, options = {}) {
     const isHeading = row.type === 'heading' && row.isFirstChunk
     if (isHeading) {
       const headingLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
-      const nextLen = getBlockLength(rows, i + headingLen, r => r.type === 'blank')
-      const actionLen = getBlockLength(rows, i + headingLen + nextLen, r => r.sceneId === row.sceneId && r.type !== 'blank')
+      const nextLen = getBlockLength(rows, i + headingLen, r => r.type === 'blank' || r.type === 'spacer')
+      const actionLen = getBlockLength(rows, i + headingLen + nextLen, r => r.sceneId === row.sceneId && r.type !== 'blank' && r.type !== 'spacer')
       const keepRows = headingLen + nextLen + Math.min(actionLen, 2)
       if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
     }
 
     if (row.type === 'character' && row.isFirstChunk) {
       const cueLen = getBlockLength(rows, i, r => r.sceneId === row.sceneId && r.sourceIndex === row.sourceIndex)
-      const nextLen = getBlockLength(rows, i + cueLen, r => r.type === 'parenthetical' || r.type === 'dialogue')
+      const nextLen = getBlockLength(rows, i + cueLen, r => r.type === 'parenthetical' || r.type === 'dialogue' || r.type === 'spacer')
       const keepRows = cueLen + Math.max(1, nextLen)
       if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
     }
@@ -640,6 +664,7 @@ export default function ScriptTab() {
     }
 
     if (lineType === 'heading') return { ...style, textTransform: 'uppercase', fontWeight: 700 }
+    if (lineType === 'spacer') return { ...style, color: 'transparent' }
     if (lineType === 'action') return { ...style }
     if (lineType === 'character') return { ...style, textAlign: 'center', textTransform: 'uppercase' }
     if (lineType === 'parenthetical') return { ...style, color: '#374151' }
@@ -649,7 +674,7 @@ export default function ScriptTab() {
   }
 
   const renderRow = (row) => {
-    if (row.type === 'blank') {
+    if (row.type === 'blank' || row.type === 'spacer') {
       return <div key={row.rowKey} data-row-start={row.sceneCharStart} data-row-end={row.sceneCharEnd} style={{ height: `${SCREENPLAY_LINE_HEIGHT_PX}px`, width: '100%' }} />
     }
 
@@ -748,7 +773,7 @@ export default function ScriptTab() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
           {pagedScript.map(page => (
-            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', fontFamily: '"Courier Prime", "Courier New", Courier, monospace', fontSize: SCREENPLAY_FONT_SIZE, lineHeight: SCREENPLAY_LINE_HEIGHT, position: 'relative', overflow: 'hidden' }}>
+            <div key={page.id} style={{ width: `${PAGE_SIZE.width}px`, height: `${PAGE_SIZE.height}px`, background: '#fff', border: '1px solid rgba(74,85,104,0.28)', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily, fontSize: SCREENPLAY_FONT_SIZE, lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`, position: 'relative', overflow: 'hidden' }}>
               {page.number > 1 && (
                 <div style={{ position: 'absolute', top: 20, right: 24, fontSize: 12, color: '#111827' }}>{page.number}.</div>
               )}
@@ -818,8 +843,8 @@ export default function ScriptTab() {
                       <div
                         style={{
                           position: 'absolute',
-                          left: `${layout.leftPx ?? ((layout.left || 0) * CHAR_PX)}px`,
-                          width: `${layout.widthPx ?? ((layout.width || 63) * CHAR_PX)}px`,
+                          left: `${layout.leftPx}px`,
+                          width: `${layout.widthPx}px`,
                           ...(layout.textAlign ? { textAlign: layout.textAlign } : {}),
                         }}
                       >

@@ -360,10 +360,6 @@ p {
   flex: 1 1 auto;
 }
 
-.shot-toggle-open {
-  border-left: 5px solid #b9964c;
-}
-
 .shot-toggle-neutral {
   border-left: 5px solid #b9964c;
 }
@@ -376,40 +372,6 @@ p {
 .shot-toggle-skipped {
   border-left: 5px solid #bb737c;
   background: #f5e6e7;
-}
-
-.shot-state {
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  border-radius: 999px;
-  padding: 8px 12px;
-  min-width: 66px;
-  text-align: center;
-  align-self: center;
-}
-
-.shot-state-open {
-  background: #e9dcc3;
-  border: 1px solid #c9af76;
-  color: #624716;
-}
-
-.shot-state-done {
-  background: #d4e8db;
-  border: 1px solid #89af98;
-  color: #215139;
-}
-
-.shot-state-neutral {
-  background: #e9dcc3;
-  border: 1px solid #c9af76;
-  color: #624716;
-}
-
-.shot-state-skipped {
-  background: #efd9dc;
-  border: 1px solid #c89098;
-  color: #64212a;
 }
 
 .storyboard-card summary {
@@ -464,6 +426,11 @@ p {
   padding: 12px;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.shotlist-card {
+  padding: 12px 12px 10px;
   gap: 10px;
 }
 
@@ -475,14 +442,17 @@ p {
 }
 
 .mobile-shot-row h4 {
-  font-size: 1.08rem;
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.25;
 }
 
 .mobile-shot-subrow {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   align-items: center;
+  min-height: 28px;
 }
 
 .focal-pill {
@@ -497,39 +467,50 @@ p {
 
 .mobile-shot-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: stretch;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
+}
+
+.shotlist-card .mobile-shot-actions {
+  margin-top: 2px;
 }
 
 .shot-action-button {
-  border: 1px solid #9cb4d3;
-  background: #d9e5f7;
-  color: #1f3b59;
+  flex: 1 1 0;
+  border: 1px solid #b1a493;
+  background: #f6efe5;
+  color: #443626;
   border-radius: 12px;
   min-height: 44px;
   padding: 11px 16px;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.shot-action-button-secondary {
+  border-color: #b1a493;
+  background: #f6efe5;
+  color: #443626;
 }
 
 .shot-action-button-neutral {
-  border-color: #9cb4d3;
-  background: #d9e5f7;
-  color: #1f3b59;
+  border-color: #b1a493;
+  background: #f6efe5;
+  color: #443626;
 }
 
 .shot-action-button-done {
-  border-color: #86b796;
-  background: #cfe7d7;
+  border-color: #75ab88;
+  background: #d2eadb;
   color: #1f5535;
 }
 
 .shot-action-button-skipped {
-  border-color: #cd9098;
-  background: #efd7da;
+  border-color: #c8868f;
+  background: #f2dadd;
   color: #702731;
 }
 

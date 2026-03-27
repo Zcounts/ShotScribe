@@ -347,19 +347,20 @@ function renderShotlist(
         return (
           <article
             key={item.scheduleItemId}
-            className={`mobile-shot-card shot-toggle-${actionState.tone}`}
+            className={`mobile-shot-card shotlist-card shot-toggle-${actionState.tone}`}
             onDoubleClick={() => onOpenDetails(shotId)}
           >
             <div className="mobile-shot-row">
               <h4>{shot?.displayName ?? 'Shot'}</h4>
               <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
             </div>
-            <div className="mobile-shot-subrow">
-              {shot?.sceneTag ? <span className="shot-scene-tag">{shot.sceneTag}</span> : <span className="shot-scene-spacer" aria-hidden="true" />}
-              <strong className={`shot-state shot-state-${actionState.tone}`}>{actionState.label.toUpperCase()}</strong>
-            </div>
+            {shot?.sceneTag ? (
+              <div className="mobile-shot-subrow">
+                <span className="shot-scene-tag">{shot.sceneTag}</span>
+              </div>
+            ) : null}
             <div className="mobile-shot-actions">
-              <button type="button" className="shot-action-button shot-action-button-neutral" onClick={() => onOpenDetails(shotId)}>
+              <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => onOpenDetails(shotId)}>
                 Details
               </button>
               <button
