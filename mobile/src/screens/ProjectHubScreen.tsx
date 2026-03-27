@@ -568,6 +568,7 @@ function renderStoryboard(
         return (
           <article key={`${ref.shotId}-${ref.updatedAt}`} className="mobile-shot-card mobile-shot-card-compact storyboard-card">
             <button type="button" className="storyboard-collapse-button" onClick={() => onToggleExpanded(ref.shotId)}>
+              <span className="shot-number-label">{shot?.shotNumberLabel ?? 'Shot'}</span>
               <span className="mobile-shot-row compact-row">
                 <strong>{shot?.displayName ?? 'Shot'}</strong>
                 <strong className="focal-pill">{shot?.focalLength ?? '—'}</strong>
@@ -585,7 +586,7 @@ function renderStoryboard(
                 loading="lazy"
               />
             ) : null}
-            {isExpanded && shot ? <ShotDetailCard shot={shot} hideHeader hideImage /> : null}
+            {isExpanded && shot ? <StoryboardExpandedMeta shot={shot} /> : null}
             <ShotActions
               actionLabel={actionState.label}
               actionTone={actionState.tone}
@@ -595,6 +596,34 @@ function renderStoryboard(
           </article>
         )
       })}
+    </div>
+  )
+}
+
+function StoryboardExpandedMeta({ shot }: { shot: MobileShotDetail }) {
+  const metadata = [
+    { label: 'Size', value: shot.shotSize },
+    { label: 'Type', value: shot.shotType },
+    { label: 'Move', value: shot.shotMove },
+    { label: 'Equip', value: shot.shotEquipment },
+  ]
+
+  return (
+    <div className="storyboard-expanded-meta">
+      <div className="shot-spec-grid">
+        {metadata.map((item) => (
+          <p key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </p>
+        ))}
+      </div>
+      {shot.notes ? (
+        <p className="shot-notes">
+          <span>Notes</span>
+          <strong>{shot.notes}</strong>
+        </p>
+      ) : null}
     </div>
   )
 }
