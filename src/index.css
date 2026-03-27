@@ -285,10 +285,10 @@
   /* Page header */
   .page-header {
     display: grid;
-    grid-template-columns: minmax(360px, 620px) minmax(240px, 1fr) auto;
-    gap: 10px;
+    grid-template-columns: minmax(420px, 640px) minmax(260px, 1fr) auto;
+    gap: 8px;
     align-items: start;
-    padding: 10px 14px;
+    padding: 8px 12px;
     border-bottom: 2px solid #1A1A1A;
     background: #FAF8F4;
   }
@@ -299,7 +299,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: 0;
   }
 
   .page-header-meta {
@@ -310,17 +310,30 @@
     width: 100%;
   }
 
-  .page-header-row {
+  .page-header-row { min-width: 0; }
+
+  .page-header-scene-top {
     display: inline-flex;
-    align-items: baseline;
-    justify-content: flex-start;
+    align-items: center;
     gap: 6px;
-    flex-wrap: nowrap;
-    min-width: 0;
+    line-height: 1;
+    margin-bottom: 2px;
   }
 
-  .page-header-row-bottom {
-    gap: 8px;
+  .page-header-scene-bottom {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 16px;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .page-header-intdn {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    white-space: nowrap;
+    justify-self: start;
   }
 
   .page-header-scene-label {
@@ -329,6 +342,12 @@
 
   .page-header-input {
     max-width: 100%;
+  }
+
+  .page-header-slugline {
+    min-width: 0;
+    max-width: min(40ch, 100%);
+    flex: 0 1 auto;
   }
 
   .page-header-token {
@@ -443,6 +462,43 @@
     align-items: center;
     gap: 8px;
     color: #2C2C2C;
+  }
+
+  .shot-time-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-top: 1px solid rgba(74,85,104,0.12);
+  }
+
+  .shot-time-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 6px 5px;
+    border-right: 1px solid rgba(74,85,104,0.12);
+  }
+
+  .shot-time-field:last-child {
+    border-right: none;
+  }
+
+  .shot-time-field span {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #4A5568;
+  }
+
+  .shot-time-field input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 0;
+    font-size: 10px;
+    color: #2C2C2C;
+    font-family: 'Sora', sans-serif;
   }
 
   .context-menu-item:hover {

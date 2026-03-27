@@ -203,6 +203,14 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
     updateShot(shot.id, { cameraName: e.target.value })
   }, [shot.id, updateShot])
 
+  const handleSetupTimeChange = useCallback((e) => {
+    updateShot(shot.id, { setupTime: e.target.value })
+  }, [shot.id, updateShot])
+
+  const handleShotTimeChange = useCallback((e) => {
+    updateShot(shot.id, { shootTime: e.target.value })
+  }, [shot.id, updateShot])
+
   return (
     <div
       ref={setNodeRef}
@@ -304,6 +312,27 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
       {/* Notes Area */}
       <div className="border-t border-gray-200">
         <NotesArea shotId={shot.id} value={shot.notes} />
+      </div>
+
+      <div className="shot-time-fields">
+        <label className="shot-time-field">
+          <span>SETUP TIME</span>
+          <input
+            type="text"
+            value={shot.setupTime || ''}
+            onChange={handleSetupTimeChange}
+            placeholder="e.g. 15"
+          />
+        </label>
+        <label className="shot-time-field">
+          <span>SHOT TIME</span>
+          <input
+            type="text"
+            value={shot.shootTime || ''}
+            onChange={handleShotTimeChange}
+            placeholder="e.g. 10"
+          />
+        </label>
       </div>
 
       {/* Delete button — bottom-right corner, avoids focal length field */}
