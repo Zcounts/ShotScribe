@@ -22,12 +22,10 @@ import {
   resetBlockStyle,
 } from '../utils/scriptDocumentFormatting'
 
-const SCREENPLAY_FONT_SIZE = SCREENPLAY_LAYOUT.typography.fontSizePx
-const SCREENPLAY_LINE_HEIGHT_PX = SCREENPLAY_LAYOUT.typography.lineHeightPx
-const ROWS_PER_PAGE = SCREENPLAY_FORMAT.pageLines
 const EDIT_BAR_HEIGHT_PX = 42
 const RULER_HEIGHT_PX = 30
 const RULER_PAGE_GAP_PX = 8
+const SCREENPLAY_CHAR_WIDTH_RATIO = 0.6
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
@@ -245,7 +243,23 @@ function splitToWrappedChunks(text, maxChars) {
   return chunks.length ? chunks : [{ text: '', start: 0, end: 0 }]
 }
 
-function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
+function getRowsPerPage(pageSettings, lineHeightPx) {
+  const contentHeightPx = Math.max(1, pageSettings.heightPx - pageSettings.marginTopPx - pageSettings.marginBottomPx)
+  return Math.max(1, Math.floor(contentHeightPx / Math.max(1, lineHeightPx)))
+}
+
+function getCharsPerLineByType(documentSettings) {
+  const page = documentSettings.page
+  const contentWidthPx = Math.max(1, page.widthPx - page.marginLeftPx - page.marginRightPx)
+  return Object.entries(documentSettings.blockStyles).reduce((acc, [type, style]) => {
+    const availableWidth = Math.max(1, contentWidthPx - style.marginLeftPx - style.marginRightPx - style.paddingLeftPx - style.paddingRightPx)
+    const charWidth = Math.max(1, style.fontSizePx * SCREENPLAY_CHAR_WIDTH_RATIO)
+    acc[type] = Math.max(1, Math.floor(availableWidth / charWidth))
+    return acc
+  }, {})
+}
+
+function buildScreenplayRows(orderedScenes, screenplayBySceneId, charsPerLineByType = SCREENPLAY_FORMAT.charsPerLine) {
   const rows = []
   orderedScenes.forEach(scene => {
     const elements = screenplayBySceneId[scene.id] || []
@@ -290,7 +304,7 @@ function buildScreenplayRows(orderedScenes, screenplayBySceneId) {
           isSceneStart,
         })
       } else {
-        const width = SCREENPLAY_FORMAT.charsPerLine[line.type] || SCREENPLAY_FORMAT.charsPerLine.action
+        const width = charsPerLineByType[line.type] || charsPerLineByType.action || SCREENPLAY_FORMAT.charsPerLine.action
         const chunks = splitToWrappedChunks(lineText, width)
         chunks.forEach((chunk, chunkIdx) => {
           rows.push({
@@ -337,6 +351,7 @@ function countRowsOfTypes(rows, types) {
 
 function paginateRows(rows, options = {}) {
   const scenePaginationMode = options.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
+  const rowsPerPage = Math.max(1, options.rowsPerPage || SCREENPLAY_FORMAT.pageLines)
   const pages = []
   let page = { id: 'sp_1', number: 1, lines: [] }
 
@@ -348,7 +363,7 @@ function paginateRows(rows, options = {}) {
     if (page.lines.length > 0) pushPage()
   }
   const addLine = (line) => {
-    if (page.lines.length >= ROWS_PER_PAGE) pushPage()
+    if (page.lines.length >= rowsPerPage) pushPage()
     page.lines.push(line)
   }
   const previousContentRow = (index) => {
@@ -372,7 +387,7 @@ function paginateRows(rows, options = {}) {
       const actionLen = getBlockLength(rows, i + headingLen + nextLen, r => r.sceneId === row.sceneId && r.type !== 'blank' && r.type !== 'spacer')
       const minAfterHeading = SCREENPLAY_LAYOUT.pagination?.minLinesAfterHeading ?? 2
       const keepRows = headingLen + nextLen + Math.min(actionLen, minAfterHeading)
-      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+      if (page.lines.length > 0 && page.lines.length + keepRows > rowsPerPage) startNewPageIfNeeded()
     }
 
     if (row.type === 'character' && row.isFirstChunk) {
@@ -381,10 +396,10 @@ function paginateRows(rows, options = {}) {
       const blockRows = rows.slice(i, i + cueLen + blockLen)
       const minDialogueAfterCue = SCREENPLAY_LAYOUT.pagination?.minDialogueLinesAfterCharacter ?? 2
       const minDialogueAtPageTop = SCREENPLAY_LAYOUT.pagination?.minDialogueLinesAtPageTop ?? 2
-      const remaining = ROWS_PER_PAGE - page.lines.length
+      const remaining = rowsPerPage - page.lines.length
       const keepRows = cueLen + Math.max(1, Math.min(blockLen, minDialogueAfterCue))
 
-      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+      if (page.lines.length > 0 && page.lines.length + keepRows > rowsPerPage) startNewPageIfNeeded()
       if (page.lines.length > 0) {
         if (remaining <= cueLen + minDialogueAfterCue - 1) startNewPageIfNeeded()
         if (cueLen + blockLen > remaining && remaining > 0) {
@@ -401,7 +416,7 @@ function paginateRows(rows, options = {}) {
       const nextBlockLen = getBlockLength(rows, i + transitionLen + gapLen, r => r.type !== 'blank' && r.type !== 'spacer')
       const minAfterTransition = SCREENPLAY_LAYOUT.pagination?.minLinesAfterTransition ?? 2
       const keepRows = transitionLen + gapLen + Math.min(nextBlockLen, minAfterTransition)
-      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+      if (page.lines.length > 0 && page.lines.length + keepRows > rowsPerPage) startNewPageIfNeeded()
     }
 
     if (row.type === 'section' && row.isFirstChunk) {
@@ -410,7 +425,7 @@ function paginateRows(rows, options = {}) {
       const nextBlockLen = getBlockLength(rows, i + sectionLen + gapLen, r => r.type !== 'blank' && r.type !== 'spacer')
       const minAfterSection = SCREENPLAY_LAYOUT.pagination?.minLinesAfterSection ?? 1
       const keepRows = sectionLen + gapLen + Math.min(nextBlockLen, minAfterSection)
-      if (page.lines.length > 0 && page.lines.length + keepRows > ROWS_PER_PAGE) startNewPageIfNeeded()
+      if (page.lines.length > 0 && page.lines.length + keepRows > rowsPerPage) startNewPageIfNeeded()
     }
 
     if (row.type === 'action' && row.isFirstChunk) {
@@ -419,7 +434,7 @@ function paginateRows(rows, options = {}) {
       if (
         page.lines.length > 0
         && (prevContent?.type === 'dialogue' || prevContent?.type === 'parenthetical')
-        && (ROWS_PER_PAGE - page.lines.length) < minActionLinesAfterDialogue
+        && (rowsPerPage - page.lines.length) < minActionLinesAfterDialogue
       ) {
         startNewPageIfNeeded()
       }
@@ -477,6 +492,11 @@ export default function ScriptTab() {
     [scriptSettings?.documentSettings],
   )
   const pageSettings = documentSettings.page
+  const charsPerLineByType = useMemo(() => getCharsPerLineByType(documentSettings), [documentSettings])
+  const baseBlockStyle = documentSettings.blockStyles.action || DEFAULT_SCRIPT_DOCUMENT_SETTINGS.blockStyles.action
+  const screenplayLineHeightPx = baseBlockStyle.lineHeightPx
+  const screenplayFontSizePx = baseBlockStyle.fontSizePx
+  const rowsPerPage = useMemo(() => getRowsPerPage(pageSettings, screenplayLineHeightPx), [pageSettings, screenplayLineHeightPx])
 
   const updateDocumentSettings = useCallback((updater) => {
     const current = normalizeDocumentSettings(scriptSettings?.documentSettings || DEFAULT_SCRIPT_DOCUMENT_SETTINGS)
@@ -599,10 +619,13 @@ export default function ScriptTab() {
     return result
   }, [orderedScenes])
 
-  const screenplayRows = useMemo(() => buildScreenplayRows(orderedScenes, screenplayBySceneId), [orderedScenes, screenplayBySceneId])
+  const screenplayRows = useMemo(
+    () => buildScreenplayRows(orderedScenes, screenplayBySceneId, charsPerLineByType),
+    [charsPerLineByType, orderedScenes, screenplayBySceneId],
+  )
   const pagedScript = useMemo(
-    () => paginateRows(screenplayRows, { scenePaginationMode }),
-    [screenplayRows, scenePaginationMode],
+    () => paginateRows(screenplayRows, { scenePaginationMode, rowsPerPage }),
+    [screenplayRows, scenePaginationMode, rowsPerPage],
   )
   const scenePageStats = useMemo(() => {
     const stats = {}
@@ -762,13 +785,14 @@ export default function ScriptTab() {
   }, [blockLeftPx, draggingMarker, isBlockSelectedForEdit, pageContentWidthPx, pageSettings.marginLeftPx, pageSettings.marginRightPx, pageSettings.widthPx, selectedStyle.firstLineIndentPx, selectedStyle.marginLeftPx, selectedStyle.marginRightPx, selectedStyleType, updateBlockStyle])
 
   const DocumentRuler = () => {
-    const totalInches = pageSettings.widthPx / 96
+    const contentWidthPx = Math.max(1, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
+    const totalInches = contentWidthPx / 96
     const quarterTicks = Math.round(totalInches * 4)
     const ticks = Array.from({ length: quarterTicks + 1 }, (_, idx) => {
       const isInch = idx % 4 === 0
       const isHalf = idx % 2 === 0
       return {
-        x: (idx / quarterTicks) * pageSettings.widthPx,
+        x: pageSettings.marginLeftPx + ((idx / quarterTicks) * contentWidthPx),
         height: isInch ? 12 : isHalf ? 8 : 5,
         label: isInch ? String(idx / 4) : null,
       }
@@ -966,8 +990,8 @@ export default function ScriptTab() {
                     border: '1px solid rgba(148,163,184,0.42)',
                     boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
                     fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily,
-                    fontSize: SCREENPLAY_FONT_SIZE,
-                    lineHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px`,
+                    fontSize: screenplayFontSizePx,
+                    lineHeight: `${screenplayLineHeightPx}px`,
                     paddingTop: `${pageSettings.marginTopPx}px`,
                     paddingRight: `${pageSettings.marginRightPx}px`,
                     paddingBottom: `${pageSettings.marginBottomPx}px`,
@@ -1016,7 +1040,7 @@ export default function ScriptTab() {
                           if (row.blockId) setSelectedBlock({ sceneId: row.sceneId, blockId: row.blockId })
                           setActiveSceneId(row.sceneId)
                         }}
-                        style={{ minHeight: `${SCREENPLAY_LINE_HEIGHT_PX}px` }}
+                        style={{ minHeight: `${screenplayLineHeightPx}px` }}
                       >
                         <div style={textStyle}>{isSpacer ? '\u00a0' : String(row.text || '')}</div>
                       </div>
