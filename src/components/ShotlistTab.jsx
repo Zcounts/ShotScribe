@@ -17,6 +17,8 @@ import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import ConfigureButton from './ConfigureButton'
+import ScenePropertiesPanel from './ScenePropertiesPanel'
+import { estimateScreenplayPagination } from '../utils/screenplay'
 
 // ── Scene link badge (chain icon + SC badge) for the SHOT# column ────────────
 function ShotlistSceneBadge({ shot }) {
@@ -1130,6 +1132,12 @@ export default function ShotlistTab({ containerRef }) {
       .filter(scene => scene._filteredShots.length > 0)
   }, [scenes, scriptScenes, activeDay, activeDayShotIds, getShotsForScene, getCanonicalStoryboardSceneMetadata])
 
+
+  const scriptPaginationByScene = useMemo(
+    () => estimateScreenplayPagination(scriptScenes).byScene,
+    [scriptScenes]
+  )
+
   // ── Column resize state ────────────────────────────────────────────────────
   // Track active resize: { key, startX, startWidth }
   const resizingRef = useRef(null)
@@ -1580,6 +1588,32 @@ export default function ShotlistTab({ containerRef }) {
                           {timeTotal ? ` · ${timeTotal} TOTAL` : ''}
                         </span>
                       </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td
+                      colSpan={totalCols}
+                      style={{
+                        padding: '8px 12px 10px',
+                        background: 'rgba(255,255,255,0.5)',
+                        borderBottom: '1px solid rgba(74,85,104,0.12)',
+                      }}
+                    >
+                      <ScenePropertiesPanel
+                        values={{
+                          sceneNumber: scene._canonical?.sceneNumber || scene.sceneLabel || '',
+                          titleSlugline: scene._canonical?.titleSlugline || scene.slugline || '',
+                          location: scene._canonical?.location || scene.location || '',
+                          intExt: scene._canonical?.intOrExt || scene.intOrExt || '',
+                          dayNight: scene._canonical?.dayNight || scene.dayNight || '',
+                          color: scene._canonical?.color || scene.color || null,
+                          characters: scene._canonical?.characters || [],
+                        }}
+                        estimatedPages={scene.linkedScriptSceneId && scriptPaginationByScene[scene.linkedScriptSceneId]
+                          ? `${scriptPaginationByScene[scene.linkedScriptSceneId].pageCount.toFixed(2)} pp · p${scriptPaginationByScene[scene.linkedScriptSceneId].startPage}–${scriptPaginationByScene[scene.linkedScriptSceneId].endPage}`
+                          : '—'}
+                      />
                     </td>
                   </tr>
 
