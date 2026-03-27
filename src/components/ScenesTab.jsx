@@ -4,66 +4,14 @@ import { computeConfidence } from '../utils/scriptParser'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 import ImportScriptModal from './ImportScriptModal'
 import SceneColorPicker from './SceneColorPicker'
+import ScenePropertiesPanel, { CharacterTagInput } from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 import SidebarPane from './SidebarPane'
-
-function CharacterTagInput({ scene, allCharacters, onChange }) {
-  const [input, setInput] = useState('')
-  const filtered = useMemo(() => {
-    const q = input.trim().toLowerCase()
-    if (!q) return []
-    return allCharacters.filter(name => name.toLowerCase().includes(q) && !(scene.characters || []).includes(name)).slice(0, 8)
-  }, [allCharacters, input, scene.characters])
-
-  const addTag = (raw) => {
-    const value = raw.trim()
-    if (!value) return
-    const exists = (scene.characters || []).some(c => c.toLowerCase() === value.toLowerCase())
-    if (exists) return
-    onChange([...(scene.characters || []), value])
-    setInput('')
-  }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, border: '1px solid rgba(128,128,128,0.25)', borderRadius: 4, padding: 6, background: 'rgba(128,128,128,0.08)' }}>
-        {(scene.characters || []).map(name => (
-          <span key={name} style={{ fontSize: 10, background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.45)', color: '#93c5fd', borderRadius: 10, padding: '2px 6px', display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            {name}
-            <button onClick={() => onChange((scene.characters || []).filter(c => c !== name))} style={{ border: 'none', background: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0 }}>×</button>
-          </span>
-        ))}
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-              e.preventDefault()
-              addTag(input)
-            }
-          }}
-          placeholder="+ add"
-          style={{ border: 'none', outline: 'none', background: 'transparent', color: '#ddd', fontSize: 11, minWidth: 80 }}
-        />
-      </div>
-      {filtered.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, background: '#1e1e2e', border: '1px solid #444', borderRadius: 4, marginTop: 4, maxHeight: 140, overflowY: 'auto' }}>
-          {filtered.map(name => (
-            <button key={name} onClick={() => addTag(name)} style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', color: '#ddd', fontSize: 11, padding: '5px 8px', cursor: 'pointer' }}>
-              {name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function ScenesTab() {
   const scriptScenes = useStore(s => s.scriptScenes)
   const importedScripts = useStore(s => s.importedScripts)
   const scenes = useStore(s => s.scenes)
-  const scriptSettings = useStore(s => s.scriptSettings)
   const updateScriptScene = useStore(s => s.updateScriptScene)
   const deleteScriptScene = useStore(s => s.deleteScriptScene)
   const importScriptScenes = useStore(s => s.importScriptScenes)
@@ -258,32 +206,55 @@ export default function ScenesTab() {
           const selected = selectedSceneIds.includes(scene.id)
           return (
             <div key={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, marginBottom: 8, background: '#FAF8F4' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
-                <input type="checkbox" checked={selected} onChange={(e) => setSelectedSceneIds(prev => e.target.checked ? [...new Set([...prev, scene.id])] : prev.filter(id => id !== scene.id))} style={{ opacity: selectedSceneIds.length > 0 || selected ? 1 : 0.2 }} />
-                <SceneColorPicker value={scene.color || null} onChange={(color) => updateScriptScene(scene.id, { color })} />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpandedIds(p => ({ ...p, [scene.id]: !p[scene.id] }))}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedIds(p => ({ ...p, [scene.id]: !p[scene.id] })) } }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer' }}
+              >
+                <input type="checkbox" checked={selected} onChange={(e) => setSelectedSceneIds(prev => e.target.checked ? [...new Set([...prev, scene.id])] : prev.filter(id => id !== scene.id))} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} style={{ opacity: selectedSceneIds.length > 0 || selected ? 1 : 0.2 }} />
+                <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}><SceneColorPicker value={scene.color || null} onChange={(color) => updateScriptScene(scene.id, { color })} /></div>
                 {editingSceneNumberId === scene.id ? (
                   <input
                     autoFocus
                     value={editSceneNumberValue}
                     onChange={e => setEditSceneNumberValue(e.target.value)}
                     onBlur={commitEditor}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onKeyDown={e => { if (e.key === 'Enter') commitEditor(); if (e.key === 'Escape') setEditingSceneNumberId(null) }}
                     style={{ width: 88, fontSize: 11, borderRadius: 3, border: invalidEdit ? '1px solid #ef4444' : '1px solid rgba(128,128,128,0.3)', padding: '3px 6px' }}
                   />
                 ) : (
-                  <button onClick={() => openEditor(scene)} style={{ border: 'none', background: 'none', fontFamily: 'monospace', fontWeight: 700, cursor: 'text' }}>SC {scene.sceneNumber || '—'}</button>
+                  <button onClick={(e) => { e.stopPropagation(); openEditor(scene) }} onPointerDown={(e) => e.stopPropagation()} style={{ border: 'none', background: 'none', fontFamily: 'monospace', fontWeight: 700, cursor: 'text' }}>SC {scene.sceneNumber || '—'}</button>
                 )}
-                <span style={{ color: '#4A5568', flex: 1, fontSize: 11 }}>{scene.location || scene.slugline}</span>
+                <span style={{ color: '#4A5568', flex: 1, fontSize: 11, pointerEvents: 'none' }}>{scene.location || scene.slugline}</span>
                 <span style={{ color: '#718096', fontSize: 10 }}>{linkedShots.length} shots</span>
                 <span style={{ color: '#718096', fontSize: 10 }}>{pagination.byScene[scene.id]?.pageCount?.toFixed(2) || '0.00'} pp</span>
                 <span style={{ fontSize: 10, color: confidence === 'low' ? '#f87171' : confidence === 'medium' ? '#f59e0b' : '#22c55e' }}>● {confidence}</span>
-                <button onClick={() => setExpandedIds(p => ({ ...p, [scene.id]: !p[scene.id] }))} style={{ border: 'none', background: 'none' }}>{expanded ? '▴' : '▾'}</button>
+                <button onClick={(e) => { e.stopPropagation(); setExpandedIds(p => ({ ...p, [scene.id]: !p[scene.id] })) }} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>{expanded ? '▴' : '▾'}</button>
               </div>
 
               {expanded && (
                 <div style={{ padding: '0 12px 12px' }}>
-                  <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', marginBottom: 4 }}>Characters</div>
-                  <CharacterTagInput scene={scene} allCharacters={allCharacters} onChange={(chars) => updateScriptScene(scene.id, { characters: chars })} />
+                  <ScenePropertiesPanel
+                    values={{
+                      sceneNumber: scene.sceneNumber || '',
+                      titleSlugline: scene.slugline || '',
+                      location: scene.location || '',
+                      intExt: scene.intExt || '',
+                      dayNight: scene.dayNight || '',
+                      color: scene.color || null,
+                      characters: scene.characters || [],
+                    }}
+                    estimatedPages={pagination.byScene[scene.id]
+                      ? `${pagination.byScene[scene.id].pageCount.toFixed(2)} pp · p${pagination.byScene[scene.id].startPage}–${pagination.byScene[scene.id].endPage}`
+                      : '—'}
+                    editable
+                    allCharacters={allCharacters}
+                    onChange={(updates) => updateScriptScene(scene.id, updates)}
+                  />
                 </div>
               )}
             </div>
@@ -331,7 +302,7 @@ export default function ScenesTab() {
             <label className="dialog-label">New slugline</label>
             <input className="dialog-input" value={combineForm.slugline} onChange={e => setCombineForm(f => ({ ...f, slugline: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
             <label className="dialog-label">Merged characters</label>
-            <CharacterTagInput scene={{ characters: combineForm.characters }} allCharacters={allCharacters} onChange={(chars) => setCombineForm(f => ({ ...f, characters: chars }))} />
+            <CharacterTagInput characters={combineForm.characters} allCharacters={allCharacters} onChange={(chars) => setCombineForm(f => ({ ...f, characters: chars }))} />
             <div className="dialog-actions">
               <button className="dialog-button-secondary" onClick={() => setCombineOpen(false)}>Cancel</button>
               <button className="dialog-button-primary" onClick={doCombine}>Combine Scenes</button>

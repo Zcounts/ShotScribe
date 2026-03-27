@@ -1,6 +1,7 @@
 import React from 'react'
 import useStore from '../store'
 import SceneColorPicker from './SceneColorPicker'
+import { CharacterTagInput, CharacterChip } from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 
 export default function ScenePropertiesDialog() {
@@ -25,6 +26,14 @@ export default function ScenePropertiesDialog() {
     : null
 
   if (!scene) return null
+
+  const allCharacters = scriptScenes.reduce((acc, scriptScene) => {
+    ;(scriptScene.characters || []).forEach(name => acc.add(name))
+    return acc
+  }, new Set())
+  const storyboardCharacters = canonicalStoryboardScene?.scriptSceneId
+    ? (scriptScenes.find(s => s.id === canonicalStoryboardScene.scriptSceneId)?.characters || [])
+    : []
 
   const pagination = isScript
     ? estimateScreenplayPagination(scriptScenes, {
@@ -63,6 +72,21 @@ export default function ScenePropertiesDialog() {
 
           <label className="dialog-label">DAY / NIGHT</label>
           <input value={isScript ? (scene.dayNight || '') : (canonicalStoryboardScene?.dayNight || '')} onChange={(e) => update({ dayNight: e.target.value })} />
+
+          <label className="dialog-label">Characters</label>
+          {isScript ? (
+            <CharacterTagInput
+              characters={scene.characters || []}
+              allCharacters={[...allCharacters]}
+              onChange={(characters) => updateScriptScene(scene.id, { characters })}
+            />
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 22 }}>
+              {storyboardCharacters.length > 0
+                ? storyboardCharacters.map(name => <CharacterChip key={name} name={name} />)
+                : <span style={{ fontSize: 13, color: '#718096' }}>—</span>}
+            </div>
+          )}
 
           <label className="dialog-label">Color</label>
           <SceneColorPicker value={isScript ? (scene.color || null) : (canonicalStoryboardScene?.color || null)} onChange={(color) => update({ color })} size={16} />
