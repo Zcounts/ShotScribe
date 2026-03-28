@@ -108,12 +108,12 @@ function formatDate(isoDate) {
   }
 }
 
-const LIST_GRID_TEMPLATE = '76px minmax(240px,1.8fr) 96px 130px 170px 74px 90px 90px 34px 34px'
+const LIST_GRID_TEMPLATE = '92px minmax(360px,2.7fr) 104px 140px minmax(180px,1.4fr) 78px 94px 96px 30px 30px'
 const LIST_HEADER_COLUMNS = [
   'Scene #',
-  'Set / Title',
+  'Set',
   'I/E & Day',
-  'Cast',
+  'Cast ID',
   'Shoot Location',
   'Pages',
   'Est. Time',
@@ -341,8 +341,8 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
   const [hovered, setHovered] = useState(false)
 
-  const borderColor = isDark ? '#2a2a2a' : '#d9d3c7'
-  const sceneTint = colorWithAlpha(shotData?.linkedSceneData?.color || '#94a3b8', isDark ? 0.2 : 0.18)
+  const borderColor = isDark ? '#2a2a2a' : 'rgba(148,131,104,0.45)'
+  const sceneTint = colorWithAlpha(shotData?.linkedSceneData?.color || '#94a3b8', isDark ? 0.34 : 0.36)
   const sceneEdge = shotData?.linkedSceneData?.color || (isDark ? '#64748b' : '#94a3b8')
   const title = shotData?.sceneLabel || 'Untitled scene'
   const secondary = shotData?.notes || shotData?.location || '—'
@@ -378,41 +378,45 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
         display: 'grid',
         gridTemplateColumns: LIST_GRID_TEMPLATE,
         alignItems: 'center',
-        columnGap: 8,
-        minHeight: isCollapsed ? 34 : 42,
-        padding: isCollapsed ? '4px 10px' : '5px 10px',
-        borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
-        borderLeft: `4px solid ${sceneEdge}`,
+        columnGap: 10,
+        minHeight: isCollapsed ? 44 : 56,
+        padding: isCollapsed ? '6px 10px' : '8px 10px',
+        borderTop: `1px solid ${borderColor}`,
+        borderBottom: `1px solid ${borderColor}`,
+        borderLeft: `6px solid ${sceneEdge}`,
         background: sceneTint,
         boxShadow: isOverlay ? '0 12px 30px rgba(0,0,0,0.28)' : 'none',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <div {...(dragHandleProps || {})} style={{ color: '#6b7280', cursor: dragHandleProps ? 'grab' : 'default', opacity: isOverlay ? 0 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 8, borderRight: '1px solid rgba(0,0,0,0.18)' }}>
+        <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 800, color: '#111827', letterSpacing: '0.03em', minWidth: 42 }}>{shotData.displayId}</span>
+        <div {...(dragHandleProps || {})} style={{ marginLeft: 'auto', color: '#6b7280', cursor: dragHandleProps ? 'grab' : 'default', opacity: isOverlay ? 0 : 0.7 }}>
           <DragHandleIcon color="#6b7280" />
         </div>
-        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 800, color: '#111827' }}>{shotData.displayId}</span>
       </div>
 
       <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
           {shotData.linkedSceneData && (
             <SceneScheduleBadge linkedSceneData={shotData.linkedSceneData} onNavigate={() => setActiveTab('scenes')} />
           )}
         </div>
         {!isCollapsed && (
-          <div style={{ fontSize: 10, color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+          <div style={{ fontSize: 11, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
             {secondary}
           </div>
         )}
       </div>
 
-      <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#4b5563' }}>{[shotData.intOrExt, shotData.dayNight].filter(Boolean).join(' · ') || '—'}</span>
+      <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#1f2937', lineHeight: 1.25 }}>
+        <strong style={{ display: 'block', fontSize: 10 }}>{shotData.intOrExt || '—'}</strong>
+        <span style={{ opacity: 0.85 }}>{shotData.dayNight || '—'}</span>
+      </span>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
         {castPills.length ? castPills.map((pill, idx) => (
-          <span key={`${pill}_${idx}`} style={{ fontSize: 9, fontFamily: 'monospace', fontWeight: 700, color: '#334155', border: '1px solid rgba(51,65,85,0.25)', background: 'rgba(255,255,255,0.62)', borderRadius: 999, padding: '1px 6px' }}>{pill}</span>
+          <span key={`${pill}_${idx}`} style={{ fontSize: 9, fontFamily: 'monospace', fontWeight: 700, color: '#1e293b', border: '1px solid rgba(30,41,59,0.25)', background: 'rgba(255,255,255,0.75)', borderRadius: 999, padding: '2px 7px' }}>{pill}</span>
         )) : <span style={{ fontSize: 10, color: '#6b7280' }}>—</span>}
       </div>
 
@@ -425,7 +429,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
         onClick={e => { e.stopPropagation(); if (e.ctrlKey && onCtrlToggleAll) { onCtrlToggleAll() } else { onToggleCollapse?.() } }}
         onPointerDown={e => e.stopPropagation()}
         title={isCollapsed ? 'Expand' : 'Collapse'}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: 2, display: isOverlay ? 'none' : 'inline-flex', opacity: 0.65 }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569', padding: 2, display: isOverlay ? 'none' : 'inline-flex', opacity: 0.45 }}
       >
         <ChevronIcon collapsed={isCollapsed} color="#6b7280" size={10} />
       </button>
@@ -435,7 +439,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
         onPointerDown={e => e.stopPropagation()}
         title="Remove from schedule"
         style={{
-          border: 'none', background: 'rgba(15,23,42,0.08)', color: '#334155', borderRadius: 4,
+          border: 'none', background: hovered ? 'rgba(15,23,42,0.2)' : 'transparent', color: '#334155', borderRadius: 4,
           width: 22, height: 22, cursor: 'pointer', display: isOverlay ? 'none' : 'inline-flex',
           alignItems: 'center', justifyContent: 'center', opacity: hovered ? 1 : 0.25,
         }}
@@ -583,12 +587,13 @@ function DayDropZone({ dayId, isDark }) {
     <div
       ref={setNodeRef}
       style={{
-        margin: '10px 14px',
+        margin: '8px 10px',
         padding: '16px 12px',
         border: `1.5px dashed ${borderColor}`,
-        borderRadius: 4,
+        borderRadius: 2,
         textAlign: 'center',
         transition: 'border-color 0.15s',
+        background: isDark ? 'rgba(17,17,17,0.4)' : 'rgba(255,255,255,0.6)',
       }}
     >
       <span style={{ fontSize: 11, fontFamily: 'monospace', color: mutedFg }}>
@@ -612,7 +617,7 @@ function DayEndDropZone({ dayId }) {
       style={{
         height: isOver ? 32 : 6,
         transition: 'height 0.15s',
-        margin: '0 14px',
+        margin: '0 10px',
       }}
     />
   )
@@ -1098,19 +1103,20 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
       display: 'grid',
       gridTemplateColumns: LIST_GRID_TEMPLATE,
       alignItems: 'center',
-      columnGap: 8,
-      minHeight: 34,
-      padding: '4px 10px',
-      background: isDark ? '#252525' : '#323740',
+      columnGap: 10,
+      minHeight: 42,
+      padding: '6px 10px',
+      background: isDark ? '#252525' : '#2f3640',
       color: '#e5e7eb',
-      borderBottom: isOverlay ? 'none' : '1px solid rgba(255,255,255,0.09)',
+      borderTop: '1px solid rgba(255,255,255,0.08)',
+      borderBottom: '1px solid rgba(255,255,255,0.09)',
       boxShadow: isOverlay ? '0 12px 30px rgba(0,0,0,0.28)' : 'none',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <div {...(dragHandleProps || {})} style={{ color: '#cbd5e1', cursor: dragHandleProps ? 'grab' : 'default', opacity: isOverlay ? 0 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 8, borderRight: '1px solid rgba(255,255,255,0.2)' }}>
+        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 800, minWidth: 42 }}>BREAK</span>
+        <div {...(dragHandleProps || {})} style={{ color: '#cbd5e1', cursor: dragHandleProps ? 'grab' : 'default', opacity: isOverlay ? 0 : 0.7, marginLeft: 'auto' }}>
           <DragHandleIcon color="#cbd5e1" />
         </div>
-        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>BREAK</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <span style={{ fontSize: 12 }}>⏸</span>
@@ -1384,8 +1390,9 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
 
   return (
     <div style={{
-      padding: '8px 14px',
+      padding: '6px 10px 10px',
       borderTop: `1px solid ${borderColor}`,
+      background: isDark ? '#1f1f1f' : '#f1ede5',
     }}>
       {pickerOpen && (
         <ShotPickerPanel
@@ -1433,18 +1440,17 @@ function ScheduleListColumnHeader() {
       position: 'sticky',
       top: 104,
       zIndex: 24,
-      background: '#f4f1ea',
-      border: '1px solid #d5d0c4',
-      borderBottom: '1px solid #bfb8a9',
-      borderRadius: 4,
-      marginBottom: 8,
+      background: '#d7d0c2',
+      borderTop: '1px solid #b8ae9d',
+      borderBottom: '1px solid #9d9381',
+      marginBottom: 0,
     }}>
       <div style={{
         display: 'grid',
         gridTemplateColumns: LIST_GRID_TEMPLATE,
         alignItems: 'center',
-        columnGap: 8,
-        padding: '6px 10px',
+        columnGap: 10,
+        padding: '8px 10px',
       }}>
         {LIST_HEADER_COLUMNS.map((label) => (
           <span
@@ -1452,9 +1458,9 @@ function ScheduleListColumnHeader() {
             style={{
               fontSize: 10,
               fontWeight: 700,
-              letterSpacing: '0.09em',
+              letterSpacing: '0.1em',
               textTransform: 'uppercase',
-              color: '#6b7280',
+              color: '#374151',
               fontFamily: 'monospace',
             }}
           >
@@ -1529,11 +1535,10 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.45 : 1,
-        marginBottom: 10,
-        border: '1px solid #d5cfc2',
-        borderRadius: 4,
+        marginBottom: 0,
+        borderBottom: '1px solid #c8bfaf',
         overflow: 'hidden',
-        background: '#f7f4ed',
+        background: '#f5f2ea',
       }}
     >
       <div
@@ -1545,8 +1550,9 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
           alignItems: 'center',
           gap: 10,
           padding: '6px 10px',
-          background: '#ece7db',
-          borderBottom: collapsed ? 'none' : '1px solid #cfc7b8',
+          background: '#dfd7c9',
+          borderTop: dayIndex === 0 ? 'none' : '1px solid #bcb19f',
+          borderBottom: collapsed ? 'none' : '1px solid #c5bcab',
           cursor: isDragging ? 'grabbing' : 'grab',
           userSelect: 'none',
         }}
@@ -1581,10 +1587,10 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
           placeholder="Basecamp"
           style={{ fontFamily: 'monospace', fontSize: 11, border: '1px solid #d2cbbb', borderRadius: 3, background: '#fff', color: '#111827', padding: '1px 4px', width: 120 }}
         />
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#6b7280', fontFamily: 'monospace' }}>{shotCount} strips · {breakCount} breaks</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#4b5563', fontFamily: 'monospace', fontWeight: 700 }}>{shotCount} strips · {breakCount} breaks</span>
         <button
           onClick={(e) => { e.stopPropagation(); removeShootingDay(day.id) }}
-          style={{ border: 'none', background: 'rgba(15,23,42,0.08)', color: '#334155', borderRadius: 4, width: 24, height: 24, cursor: 'pointer' }}
+          style={{ border: 'none', background: 'transparent', color: '#334155', borderRadius: 4, width: 24, height: 24, cursor: 'pointer', opacity: 0.55 }}
           title="Day actions"
         >
           ⋯
@@ -1623,12 +1629,13 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
             gridTemplateColumns: '1fr auto auto auto auto',
             gap: 10,
             alignItems: 'center',
-            padding: '6px 10px',
-            background: '#1f2937',
+            padding: '8px 10px',
+            background: '#111827',
             color: '#e5e7eb',
             borderTop: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
           }}>
-            <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>End of Day {dayIndex + 1} of {totalDays}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em' }}>End of Day {dayIndex + 1} of {totalDays}</span>
             <span style={{ fontSize: 10, fontFamily: 'monospace' }}>Shoot {formatMins(totalShootMins)}</span>
             <span style={{ fontSize: 10, fontFamily: 'monospace' }}>Break {formatMins(totalBreakMins)}</span>
             <span style={{ fontSize: 10, fontFamily: 'monospace' }}>Pages {totalPages > 0 ? totalPages.toFixed(2) : '—'}</span>
@@ -3266,7 +3273,7 @@ export default function ScheduleTab({
           onJumpToDay={handleJumpToDay}
         />
       ) : scheduleView === 'list' ? (
-        <>
+        <div style={{ background: '#f5f2ea', border: '1px solid #c8bfaf' }}>
           <ScheduleListColumnHeader />
           <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
             <DayTabBar
@@ -3331,7 +3338,7 @@ export default function ScheduleTab({
             ) : null}
             </DragOverlay>
           </DndContext>
-        </>
+        </div>
       ) : (
         // ── Stripboard view ────────────────────────────────────────────────────
         <DndContext
