@@ -1809,6 +1809,7 @@ const useStore = create((set, get) => ({
       shortcutBindings,
       storyboardSceneOrder,
       storyboardDisplayConfig,
+      tabViewState,
     } = get()
     return {
       version: 2,
@@ -1954,6 +1955,9 @@ const useStore = create((set, get) => ({
         documentSettings: DEFAULT_SCRIPT_DOCUMENT_SETTINGS,
       },
       shortcutBindings: getActiveBindings(shortcutBindings || SHORTCUT_DEFAULTS),
+      scenesTabPreferences: {
+        ...(tabViewState?.scenes || {}),
+      },
       exportedAt: new Date().toISOString(),
     }
   },
@@ -2201,6 +2205,10 @@ const useStore = create((set, get) => ({
       ),
     }
 
+    const loadedScenesTabPreferences = (typeof data.scenesTabPreferences === 'object' && data.scenesTabPreferences !== null)
+      ? data.scenesTabPreferences
+      : {}
+
     set({
       projectName: projectName || 'Untitled Shotlist',
       projectEmoji: projectEmoji || '🎬',
@@ -2311,7 +2319,27 @@ const useStore = create((set, get) => ({
       documentSession: get().documentSession + 1,
       tabViewState: {
         script: {},
-        scenes: {},
+        scenes: {
+          sceneViewMode: loadedScenesTabPreferences.sceneViewMode || 'compactGrid',
+          sceneColumnCount: Number(loadedScenesTabPreferences.sceneColumnCount) || 4,
+          sortBy: loadedScenesTabPreferences.sortBy || 'sceneNumber',
+          sortDirection: loadedScenesTabPreferences.sortDirection || 'asc',
+          groupBy: loadedScenesTabPreferences.groupBy || 'none',
+          activeScript: loadedScenesTabPreferences.activeScript ?? null,
+          metadataVisibility: {
+            showLocation: loadedScenesTabPreferences.metadataVisibility?.showLocation ?? true,
+            showIntExtDayNight: loadedScenesTabPreferences.metadataVisibility?.showIntExtDayNight ?? true,
+            showCastCount: loadedScenesTabPreferences.metadataVisibility?.showCastCount ?? true,
+            showScheduleBadge: loadedScenesTabPreferences.metadataVisibility?.showScheduleBadge ?? true,
+            showStoryboardThumb: loadedScenesTabPreferences.metadataVisibility?.showStoryboardThumb ?? true,
+          },
+          sidebarPanelCollapsed: {
+            viewOptions: loadedScenesTabPreferences.sidebarPanelCollapsed?.viewOptions ?? false,
+            sceneOrganization: loadedScenesTabPreferences.sidebarPanelCollapsed?.sceneOrganization ?? false,
+            importedScripts: loadedScenesTabPreferences.sidebarPanelCollapsed?.importedScripts ?? false,
+          },
+          scrollTop: typeof loadedScenesTabPreferences.scrollTop === 'number' ? loadedScenesTabPreferences.scrollTop : 0,
+        },
         storyboard: {},
         shotlist: {},
         castcrew: {},
