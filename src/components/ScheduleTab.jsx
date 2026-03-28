@@ -3451,21 +3451,7 @@ export default function ScheduleTab({
           pageCountByScene={pageCountByScene}
         />
       ) : scheduleView === 'list' ? (
-        <div style={{ background: '#f5f2ea', border: '1px solid #c8bfaf' }}>
-          <ScheduleListColumnHeader />
-          <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
-            <DayTabBar
-              days={dayTabs}
-              activeDay={listActiveDayId}
-              onSelect={(dayId) => {
-                setListActiveDayId(dayId)
-                const el = document.getElementById(`sched-day-${dayId}`)
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }}
-              onAddDay={() => addShootingDay()}
-            />
-          ) : scheduleView === 'list' ? (
-            <div>
+        <div>
               <ScheduleListColumnHeader />
               <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
                 <DayTabBar
@@ -3580,37 +3566,9 @@ export default function ScheduleTab({
                   onStripClick={handleStripClick}
                   pageCountByScene={pageCountByScene}
                 />
-              )}
-
-              {/* Horizontally scrolling board */}
-              <SortableContext items={dayIds} strategy={horizontalListSortingStrategy}>
-                <div style={{
-                  display: 'flex',
-                  gap: 8,
-                  overflowX: 'auto',
-                  paddingBottom: 16,
-                  alignItems: 'flex-start',
-                  // Extend past the padded container so columns reach the edge
-                  marginLeft: -4,
-                  marginRight: -4,
-                  paddingLeft: 4,
-                  paddingRight: 4,
-                }}>
-                  {schedule.map((day, dayIndex) => (
-                    <SortableStripboardColumn
-                      key={day.id}
-                      day={day}
-                      dayIndex={dayIndex}
-                      blocks={getBlocksForDay(day.id)}
-                      enrichedBlockMap={enrichedBlockMap}
-                      shotColorMap={shotColorMap}
-                      isDark={isDark}
-                      height={stripHeight}
-                      onStripClick={handleStripClick}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
+              ))}
+            </div>
+          </SortableContext>
 
               <DragOverlay dropAnimation={null}>
                 {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (() => {
@@ -3646,9 +3604,6 @@ export default function ScheduleTab({
                 })() : null}
               </DragOverlay>
             </DndContext>
-          )}
-          </div>
-        </div>
       )}
       </div>
     </div>
