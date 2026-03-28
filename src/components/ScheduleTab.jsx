@@ -49,6 +49,36 @@ import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import SidebarPane from './SidebarPane'
 
+class ScheduleSubviewBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error) {
+    // Keep Schedule shell visible even if a subview throws.
+    // eslint-disable-next-line no-console
+    console.error('Schedule subview render error:', error)
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false })
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || null
+    }
+    return this.props.children
+  }
+}
+
 // ── Time Utilities ────────────────────────────────────────────────────────────
 
 /** Parse a plain-number string (minutes) into a float. Returns 0 for empty/invalid. */
@@ -813,6 +843,9 @@ function isColVisible(config, key) {
 // ── ScheduleColumnConfigList ──────────────────────────────────────────────────
 
 function ScheduleColumnConfigList({ config, onChange }) {
+  if (!Array.isArray(config) || config.length === 0) {
+    return <div style={{ fontSize: 11, color: '#64748b' }}>No list column options available.</div>
+  }
   return (
     <div style={{ display: 'grid', gap: 5 }}>
       <div style={{ fontSize: 10, color: '#64748b', letterSpacing: '0.04em', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -848,11 +881,13 @@ function ScheduleColumnConfigList({ config, onChange }) {
 function DayTotals({ blocks, enrichedBlockMap, isDark }) {
   const scriptScenes = useStore(s => s.scriptScenes)
   const scriptSettings = useStore(s => s.scriptSettings)
+  const safeScriptScenes = Array.isArray(scriptScenes) ? scriptScenes : []
+  const safeBlocks = Array.isArray(blocks) ? blocks : []
 
-  if (blocks.length === 0) return null
+  if (safeBlocks.length === 0) return null
 
-  const shotBlocks = blocks.filter(b => b.type !== 'break')
-  const breakBlocks = blocks.filter(b => b.type === 'break')
+  const shotBlocks = safeBlocks.filter(b => b.type !== 'break')
+  const breakBlocks = safeBlocks.filter(b => b.type === 'break')
   // Feature 1: use the shot's own shootTime/setupTime (via enrichedBlockMap) as the source of truth
   const totalShootMins = shotBlocks.reduce((sum, b) => {
     const sd = enrichedBlockMap ? enrichedBlockMap[b.id] : null
@@ -877,7 +912,7 @@ function DayTotals({ blocks, enrichedBlockMap, isDark }) {
           const sd = enrichedBlockMap ? enrichedBlockMap[b.id] : null
           if (sd?.linkedSceneId && !sceneIds.has(sd.linkedSceneId)) {
             sceneIds.add(sd.linkedSceneId)
-            const ss = scriptScenes.find(s => s.id === sd.linkedSceneId)
+            const ss = safeScriptScenes.find(s => s.id === sd.linkedSceneId)
             if (ss) {
               // Count shots linked to this scene across all blocks in this day
               const linkedCount = shotBlocks.filter(bb => {
@@ -978,6 +1013,9 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
   const scenes = useStore(s => s.scenes)
   const getShotsForScene = useStore(s => s.getShotsForScene)
   const addShotBlock = useStore(s => s.addShotBlock)
+  const safeScenes = Array.isArray(scenes) ? scenes : []
+  const safeGetShotsForScene = typeof getShotsForScene === 'function' ? getShotsForScene : () => []
+  const safeExistingShotIds = Array.isArray(existingShotIds) ? existingShotIds : []
   const panelRef = useRef(null)
   const [pos, setPos] = useState({ top: 'auto', bottom: 'auto', left: 0 })
 
@@ -1025,7 +1063,7 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
   const groupHeaderBg = isDark ? '#161616' : '#f3f1ec'
   const hoverBg = isDark ? '#252525' : '#f7f5f0'
 
-  const totalShots = scenes.reduce((n, sc) => n + sc.shots.length, 0)
+  const totalShots = safeScenes.reduce((n, sc) => n + (Array.isArray(sc.shots) ? sc.shots.length : 0), 0)
 
   return (
     <div
@@ -1086,8 +1124,8 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
           No shots in project yet.
         </div>
       ) : (
-        scenes.map((scene, sceneIdx) => {
-          const shots = getShotsForScene(scene.id)
+        safeScenes.map((scene, sceneIdx) => {
+          const shots = safeGetShotsForScene(scene.id)
           if (shots.length === 0) return null
           return (
             <div key={scene.id}>
@@ -1117,7 +1155,7 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
               </div>
 
               {shots.map(shot => {
-                const alreadyAdded = existingShotIds.includes(shot.id)
+                const alreadyAdded = safeExistingShotIds.includes(shot.id)
                 const intExt = shot.intOrExt || scene.intOrExt
                 const dn = shot.dayNight || scene.dayNight
                 return (
@@ -3074,9 +3112,9 @@ export default function ScheduleTab({
   configureOpen = false,
   onConfigureOpenChange = () => {},
 }) {
-  const schedule = useStore(s => s.schedule)
-  const scenes = useStore(s => s.scenes)
-  const scriptScenes = useStore(s => s.scriptScenes)
+  const scheduleRaw = useStore(s => s.schedule)
+  const scenesRaw = useStore(s => s.scenes)
+  const scriptScenesRaw = useStore(s => s.scriptScenes)
   const theme = useStore(s => s.theme)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const addShootingDay = useStore(s => s.addShootingDay)
@@ -3087,6 +3125,11 @@ export default function ScheduleTab({
   const scheduleViewState = useStore(s => s.tabViewState?.schedule || {})
   const setTabViewState = useStore(s => s.setTabViewState)
 
+  const schedule = Array.isArray(scheduleRaw) ? scheduleRaw : []
+  const scenes = Array.isArray(scenesRaw) ? scenesRaw : []
+  const scriptScenes = Array.isArray(scriptScenesRaw) ? scriptScenesRaw : []
+  const safeGetScheduleWithShots = typeof getScheduleWithShots === 'function' ? getScheduleWithShots : () => []
+  const safeColumnConfig = Array.isArray(scheduleColumnConfig) ? scheduleColumnConfig : []
   const isDark = theme === 'dark'
 
   // ── Sub-view state ───────────────────────────────────────────────────────────
@@ -3116,7 +3159,8 @@ export default function ScheduleTab({
   const shotColorMap = useMemo(() => {
     const map = {}
     scenes.forEach(scene => {
-      scene.shots.forEach(shot => { map[shot.id] = shot.color })
+      const shots = Array.isArray(scene?.shots) ? scene.shots : []
+      shots.forEach(shot => { map[shot.id] = shot.color })
     })
     return map
   }, [scenes])
@@ -3153,29 +3197,29 @@ export default function ScheduleTab({
 
   const blockMap = useMemo(() => {
     const map = {}
-    schedule.forEach(d => d.blocks.forEach(b => { map[b.id] = b }))
+    schedule.forEach(d => (Array.isArray(d?.blocks) ? d.blocks : []).forEach(b => { map[b.id] = b }))
     return map
   }, [schedule])
 
   const enrichedBlockMap = useMemo(() => {
     const map = {}
-    getScheduleWithShots().forEach(d => {
-      d.blocks.forEach(b => { map[b.id] = b.shotData })
+    safeGetScheduleWithShots().forEach(d => {
+      ;(Array.isArray(d?.blocks) ? d.blocks : []).forEach(b => { map[b.id] = b.shotData })
     })
     return map
-  }, [schedule, scenes]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [schedule, scenes, safeGetScheduleWithShots]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBlocksForDay = useCallback((dayId) => {
     const ids = localBlocksByDay
       ? (localBlocksByDay[dayId] || [])
-      : (schedule.find(d => d.id === dayId)?.blocks.map(b => b.id) || [])
+      : ((schedule.find(d => d.id === dayId)?.blocks || []).map(b => b.id) || [])
     return ids.map(id => blockMap[id]).filter(Boolean)
   }, [localBlocksByDay, schedule, blockMap])
 
-  const dayIds = schedule.map(d => d.id)
+  const dayIds = schedule.map(d => d.id).filter(Boolean)
   const dayTabs = useMemo(
     () => schedule.map((day, idx) => ({
-      id: day.id,
+      id: day.id || `day-${idx + 1}`,
       label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}`,
     })),
     [schedule]
@@ -3193,7 +3237,7 @@ export default function ScheduleTab({
 
     if (type === 'block') {
       const order = {}
-      schedule.forEach(d => { order[d.id] = d.blocks.map(b => b.id) })
+      schedule.forEach(d => { order[d.id] = (Array.isArray(d?.blocks) ? d.blocks : []).map(b => b.id) })
       setLocalBlocksByDay(order)
     }
   }, [schedule])
@@ -3296,22 +3340,22 @@ export default function ScheduleTab({
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  const totalShots = schedule.reduce((n, d) => n + d.blocks.length, 0)
-  const totalBreaks = schedule.reduce((n, d) => n + d.blocks.filter(b => b.type === 'break').length, 0)
+  const totalShots = schedule.reduce((n, d) => n + (Array.isArray(d?.blocks) ? d.blocks.length : 0), 0)
+  const totalBreaks = schedule.reduce((n, d) => n + (Array.isArray(d?.blocks) ? d.blocks.filter(b => b.type === 'break').length : 0), 0)
   const totalStrips = totalShots - totalBreaks
   const totalPages = schedule.reduce((sum, day) => (
-    sum + day.blocks.reduce((daySum, block) => {
+    sum + (Array.isArray(day?.blocks) ? day.blocks : []).reduce((daySum, block) => {
       if (block.type === 'break') return daySum
       return daySum + (pageCountByScene[block.sceneId] ?? 0)
     }, 0)
   ), 0)
   const totalShootMins = schedule.reduce((sum, day) => (
-    sum + day.blocks.reduce((daySum, block) => (
+    sum + (Array.isArray(day?.blocks) ? day.blocks : []).reduce((daySum, block) => (
       block.type === 'break' ? daySum : daySum + parseMinutes(enrichedBlockMap[block.id]?.shootTime)
     ), 0)
   ), 0)
   const totalBreakMins = schedule.reduce((sum, day) => (
-    sum + day.blocks.reduce((daySum, block) => (
+    sum + (Array.isArray(day?.blocks) ? day.blocks : []).reduce((daySum, block) => (
       block.type === 'break' ? daySum + parseMinutes(block.duration) : daySum
     ), 0)
   ), 0)
@@ -3347,11 +3391,13 @@ export default function ScheduleTab({
   }, [schedule, listActiveDayId])
 
   const selectedDayIndex = selectedDay ? schedule.findIndex(day => day.id === selectedDay.id) : -1
-  const selectedDayShotBlocks = selectedDay ? selectedDay.blocks.filter(block => block.type !== 'break') : []
-  const selectedDayBreakBlocks = selectedDay ? selectedDay.blocks.filter(block => block.type === 'break') : []
+  const selectedDayBlocks = Array.isArray(selectedDay?.blocks) ? selectedDay.blocks : []
+  const selectedDayShotBlocks = selectedDayBlocks.filter(block => block.type !== 'break')
+  const selectedDayBreakBlocks = selectedDayBlocks.filter(block => block.type === 'break')
   const selectedDayPages = selectedDayShotBlocks.reduce((sum, block) => sum + (pageCountByScene[block.sceneId] ?? 0), 0)
   const selectedDayShootMins = selectedDayShotBlocks.reduce((sum, block) => sum + parseMinutes(enrichedBlockMap[block.id]?.shootTime), 0)
   const selectedDayBreakMins = selectedDayBreakBlocks.reduce((sum, block) => sum + parseMinutes(block.duration), 0)
+  const resetKey = `${scheduleView}-${schedule.length}-${selectedDay?.id || 'none'}`
 
   return (
     <div
@@ -3360,10 +3406,64 @@ export default function ScheduleTab({
       onScroll={(e) => setTabViewState('schedule', { scrollTop: e.currentTarget.scrollTop })}
     >
       <div className="pb-6 pt-0">
+        <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520 }}>
+          <SidebarPane
+            width={258}
+            title="Schedule"
+            controls={
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+                {[
+                  { key: 'list', label: 'List' },
+                  { key: 'stripboard', label: 'Strip' },
+                  { key: 'calendar', label: 'Cal' },
+                ].map(view => (
+                  <button
+                    key={view.key}
+                    onClick={() => setScheduleView(view.key)}
+                    style={{
+                      border: `1px solid ${scheduleView === view.key ? '#334155' : 'rgba(100,116,139,0.35)'}`,
+                      background: scheduleView === view.key ? '#e2e8f0' : '#fff',
+                      color: '#334155',
+                      borderRadius: 4,
+                      padding: '6px 4px',
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {view.label}
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            <AccordionSection title="Selected Day" isOpen={sectionOpen.selectedDay} onToggle={() => setSectionOpen(prev => ({ ...prev, selectedDay: !prev.selectedDay }))}>
+              <div style={{ display: 'grid', gap: 6, fontSize: 12, color: '#334155' }}>
+                <div>{selectedDay ? `Day ${selectedDayIndex + 1}` : 'No day selected'}</div>
+                <div style={{ color: '#64748b', fontSize: 11 }}>{selectedDay?.date ? formatDate(selectedDay.date) : 'No date set'}</div>
+              </div>
+            </AccordionSection>
+            <AccordionSection title="Summary" isOpen={sectionOpen.summary} onToggle={() => setSectionOpen(prev => ({ ...prev, summary: !prev.summary }))}>
+              <div style={{ display: 'grid', gap: 5, fontSize: 11, color: '#334155' }}>
+                <div>Total: {totalStrips} strips · {schedule.length} days</div>
+                <div>Pages: {totalPages > 0 ? totalPages.toFixed(2) : '0.00'}</div>
+                <div>Time: {totalShootMins > 0 ? formatMins(totalShootMins) : '0m'} + breaks {totalBreakMins > 0 ? formatMins(totalBreakMins) : '0m'}</div>
+                <div>Selected: {selectedDayShotBlocks.length} strips · {selectedDayPages > 0 ? selectedDayPages.toFixed(2) : '0.00'} pgs · {selectedDayShootMins > 0 ? formatMins(selectedDayShootMins) : '0m'}</div>
+              </div>
+            </AccordionSection>
+            <AccordionSection title="Configure" isOpen={sectionOpen.configure} onToggle={() => setSectionOpen(prev => ({ ...prev, configure: !prev.configure }))}>
+              {scheduleView === 'list'
+                ? <ScheduleColumnConfigList config={safeColumnConfig} onChange={setScheduleColumnConfig} />
+                : <div style={{ fontSize: 11, color: '#64748b' }}>No additional options for this view.</div>}
+            </AccordionSection>
+          </SidebarPane>
+          <div style={{ flex: 1, minWidth: 0, paddingLeft: 10 }}>
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
       ) : scheduleView === 'calendar' ? (
         // ── Calendar view ──────────────────────────────────────────────────
+        <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>Calendar view is temporarily unavailable for this data. Switch to List or Stripboard.</div>}>
         <CalendarView
           schedule={schedule}
           scenes={scenes}
@@ -3372,7 +3472,9 @@ export default function ScheduleTab({
           enrichedBlockMap={enrichedBlockMap}
           pageCountByScene={pageCountByScene}
         />
+        </ScheduleSubviewBoundary>
       ) : scheduleView === 'list' ? (
+        <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>List view failed to render for current data. Try another view.</div>}>
         <div>
               <ScheduleListColumnHeader />
               <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
@@ -3438,8 +3540,10 @@ export default function ScheduleTab({
                 </DragOverlay>
               </DndContext>
             </div>
+        </ScheduleSubviewBoundary>
           ) : (
         // ── Stripboard view ────────────────────────────────────────────────────
+        <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>Stripboard view is temporarily unavailable for this data. Switch to List or Calendar.</div>}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -3526,7 +3630,10 @@ export default function ScheduleTab({
                 })() : null}
               </DragOverlay>
             </DndContext>
+        </ScheduleSubviewBoundary>
       )}
+          </div>
+        </div>
       </div>
     </div>
   )
