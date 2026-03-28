@@ -44,16 +44,34 @@ function formatDayNightDisplay(value) {
   return upper.slice(0, 4)
 }
 
-function Card({ title, children, tone = 'default' }) {
+function Card({ title, subtitle, actions = null, children, tone = 'default' }) {
   const bg = tone === 'alert' ? '#FFF5F5' : '#FAF8F4'
   const border = tone === 'alert' ? '1px solid #FECACA' : '1px solid #E2E8F0'
   return (
     <section style={{ background: bg, border, borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--app-panel-shadow)' }}>
-      <header style={{ padding: '9px 12px', borderBottom: '1px solid #EEF2F7', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: '#475569' }}>
-        {title}
+      <header style={{ padding: '9px 12px', borderBottom: '1px solid #EEF2F7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: '#475569' }}>{title}</div>
+          {subtitle ? <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{subtitle}</div> : null}
+        </div>
+        {actions}
       </header>
       <div style={{ padding: 12 }}>{children}</div>
     </section>
+  )
+}
+
+function CompactIconButton({ label, onClick, icon = '+', title }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title || label}
+      aria-label={label}
+      style={{ border: '1px solid #CBD5E1', borderRadius: 6, padding: '3px 7px', background: '#fff', color: '#334155', fontSize: 12, lineHeight: 1.2, cursor: 'pointer' }}
+    >
+      {icon}
+    </button>
   )
 }
 
@@ -257,6 +275,7 @@ export default function CallsheetTab({ configureOpen = true }) {
   const scriptScenes = useStore(s => s.scriptScenes)
   const castRoster = useStore(s => s.castRoster)
   const crewRoster = useStore(s => s.crewRoster)
+  const openPersonDialog = useStore(s => s.openPersonDialog)
   const callsheetViewState = useStore(s => s.tabViewState?.callsheet || {})
   const setTabViewState = useStore(s => s.setTabViewState)
 
@@ -264,6 +283,9 @@ export default function CallsheetTab({ configureOpen = true }) {
   const [emailPreflightOpen, setEmailPreflightOpen] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [highlightTargetKey, setHighlightTargetKey] = useState('')
+  const [showCastPicker, setShowCastPicker] = useState(false)
+  const [showCrewPicker, setShowCrewPicker] = useState(false)
+  const [showKeyContactPicker, setShowKeyContactPicker] = useState(false)
   const collapseState = callsheetViewState.sidebarCollapseState || { actions: false, visibleSections: false, missingInfo: false }
   const setCollapseState = useCallback((nextValue) => {
     const next = typeof nextValue === 'function' ? nextValue(collapseState) : nextValue
@@ -301,6 +323,27 @@ export default function CallsheetTab({ configureOpen = true }) {
   const crewRows = useMemo(() => (
     activeDay ? deriveDayCrewRows({ callsheet, crewRoster, day: activeDay }) : []
   ), [activeDay, callsheet, crewRoster])
+
+  const keyContactCrewIds = useMemo(() => (
+    Array.isArray(callsheet?.keyContactCrewIds) ? callsheet.keyContactCrewIds.filter(Boolean) : []
+  ), [callsheet?.keyContactCrewIds])
+
+  const keyContactRows = useMemo(() => {
+    const rosterById = new Map((crewRoster || []).map(entry => [entry.id, entry]))
+    const linkedRows = keyContactCrewIds
+      .map(id => rosterById.get(id))
+      .filter(Boolean)
+      .map(entry => ({
+        id: entry.id,
+        name: entry.name || '',
+        role: entry.role || '',
+        department: entry.department || '',
+        phone: entry.phone || '',
+        email: entry.email || '',
+      }))
+    const hasLegacyText = !linkedRows.length && String(callsheet?.keyContacts || '').trim()
+    return { linkedRows, hasLegacyText }
+  }, [callsheet?.keyContacts, crewRoster, keyContactCrewIds])
 
   const warnings = useMemo(() => (
     activeDay ? buildCallsheetWarnings({ day: activeDay, callsheet, scheduleRows, castRows, crewRows }) : []
@@ -342,6 +385,62 @@ export default function CallsheetTab({ configureOpen = true }) {
     if (!activeDay) return
     updateShootingDay(activeDay.id, updates)
   }, [activeDay, updateShootingDay])
+
+  const addCastToDay = useCallback((castId) => {
+    const selected = (castRoster || []).find(entry => entry.id === castId)
+    if (!selected) return
+    const nextCast = updateRowValue(callsheet.cast, selected.id, null, {
+      name: selected.name || '',
+      character: selected.character || selected.characterIds?.[0] || '',
+    })
+    const existingExcluded = new Set(Array.isArray(callsheet.castExcludedRosterIds) ? callsheet.castExcludedRosterIds : [])
+    existingExcluded.delete(selected.id)
+    onDayUpdate({ cast: nextCast, castExcludedRosterIds: Array.from(existingExcluded) })
+    setShowCastPicker(false)
+  }, [callsheet.cast, callsheet.castExcludedRosterIds, castRoster, onDayUpdate])
+
+  const addCrewToDay = useCallback((crewId) => {
+    const selected = (crewRoster || []).find(entry => entry.id === crewId)
+    if (!selected) return
+    const nextCrew = updateRowValue(callsheet.crew, selected.id, null, {
+      name: selected.name || '',
+      role: selected.role || selected.department || '',
+    })
+    const existingExcluded = new Set(Array.isArray(callsheet.crewExcludedRosterIds) ? callsheet.crewExcludedRosterIds : [])
+    existingExcluded.delete(selected.id)
+    onDayUpdate({ crew: nextCrew, crewExcludedRosterIds: Array.from(existingExcluded) })
+    setShowCrewPicker(false)
+  }, [callsheet.crew, callsheet.crewExcludedRosterIds, crewRoster, onDayUpdate])
+
+  const removeCastFromDay = useCallback((row) => {
+    if (!row?.rosterId) return
+    const hidden = new Set(Array.isArray(callsheet.castExcludedRosterIds) ? callsheet.castExcludedRosterIds : [])
+    hidden.add(row.rosterId)
+    onDayUpdate({ castExcludedRosterIds: Array.from(hidden) })
+  }, [callsheet.castExcludedRosterIds, onDayUpdate])
+
+  const removeCrewFromDay = useCallback((row) => {
+    if (!row?.rosterId) return
+    const hidden = new Set(Array.isArray(callsheet.crewExcludedRosterIds) ? callsheet.crewExcludedRosterIds : [])
+    hidden.add(row.rosterId)
+    onDayUpdate({ crewExcludedRosterIds: Array.from(hidden) })
+  }, [callsheet.crewExcludedRosterIds, onDayUpdate])
+
+  const addKeyContactCrew = useCallback((crewId) => {
+    if (!crewId) return
+    const next = Array.from(new Set([...(callsheet.keyContactCrewIds || []), crewId]))
+    onDayUpdate({ keyContactCrewIds: next })
+    setShowKeyContactPicker(false)
+  }, [callsheet.keyContactCrewIds, onDayUpdate])
+
+  const removeKeyContactCrew = useCallback((crewId) => {
+    onDayUpdate({ keyContactCrewIds: (callsheet.keyContactCrewIds || []).filter(id => id !== crewId) })
+  }, [callsheet.keyContactCrewIds, onDayUpdate])
+
+  const availableKeyContacts = useMemo(() => {
+    const selected = new Set(keyContactCrewIds)
+    return (crewRoster || []).filter(entry => entry.name?.trim() && !selected.has(entry.id))
+  }, [crewRoster, keyContactCrewIds])
 
   const exportFileName = useMemo(() => {
     const dateLabel = activeDay?.date || 'TBD'
@@ -480,10 +579,54 @@ export default function CallsheetTab({ configureOpen = true }) {
 
             {visibleSections.includes('generalInfo') && (
               <div data-callsheet-target="generalInfo" style={{ borderRadius: 10, outline: highlightTargetKey === 'generalInfo' ? '2px solid #2563EB' : 'none', outlineOffset: 2 }}>
-              <Card title="Day logistics and emergency">
+              <Card title="Day logistics and emergency" subtitle="Linked profile contacts update globally; notes below are day-specific.">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
                   <div style={{ display: 'grid', gap: 7, alignContent: 'start' }}>
-                    <div data-callsheet-target="keyContacts" style={{ borderRadius: 8, background: highlightTargetKey === 'keyContacts' ? '#DBEAFE' : 'transparent' }}><EditableField label="Key production contacts" value={callsheet.keyContacts} onChange={(value) => onDayUpdate({ keyContacts: value })} placeholder="1st AD — phone, PM — phone, transport captain — phone" multiline rows={1} /></div>
+                    <div data-callsheet-target="keyContacts" style={{ borderRadius: 8, background: highlightTargetKey === 'keyContacts' ? '#DBEAFE' : 'transparent' }}>
+                      <div style={{ border: '1px solid #CBD5E1', borderRadius: 6, padding: 8, background: '#F8FAFC', display: 'grid', gap: 7 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700 }}>Key production contacts</div>
+                            <div style={{ fontSize: 11, color: '#64748B' }}>Linked crew profiles · live phone/email</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <CompactIconButton label="Add existing crew contact" icon="+ Crew" onClick={() => setShowKeyContactPicker(prev => !prev)} />
+                            <CompactIconButton label="Create crew profile" icon="＋New" onClick={() => openPersonDialog('crew', null)} />
+                          </div>
+                        </div>
+
+                        {showKeyContactPicker ? (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <select defaultValue="" onChange={(e) => addKeyContactCrew(e.target.value)} style={{ flex: 1, border: '1px solid #CBD5E1', borderRadius: 5, padding: '4px 6px', fontSize: 12, background: '#fff' }}>
+                              <option value="">Select existing crew…</option>
+                              {availableKeyContacts.map(entry => (
+                                <option key={entry.id} value={entry.id}>{entry.name}{entry.role ? ` — ${entry.role}` : ''}</option>
+                              ))}
+                            </select>
+                            <button type="button" onClick={() => setShowKeyContactPicker(false)} style={{ border: '1px solid #CBD5E1', borderRadius: 5, background: '#fff', fontSize: 11, padding: '0 8px', cursor: 'pointer' }}>Close</button>
+                          </div>
+                        ) : null}
+
+                        {keyContactRows.linkedRows.length > 0 ? (
+                          <div style={{ display: 'grid', gap: 6 }}>
+                            {keyContactRows.linkedRows.map(entry => (
+                              <div key={entry.id} style={{ border: '1px solid #E2E8F0', borderRadius: 6, background: '#fff', padding: '6px 8px', display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(120px, 1fr) auto', gap: 8, alignItems: 'center' }}>
+                                <div data-person-type="crew" data-person-id={entry.id} style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>{entry.name || 'Unnamed crew'}</div>
+                                <div style={{ fontSize: 12, color: '#334155' }}>{[entry.department, entry.role].filter(Boolean).join(' · ') || '—'}</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ fontSize: 12, color: '#475569', textAlign: 'right' }}>{[entry.phone, entry.email].filter(Boolean).join(' · ') || '—'}</div>
+                                  <CompactIconButton label={`Remove ${entry.name || 'crew'} from key contacts`} icon="✕" onClick={() => removeKeyContactCrew(entry.id)} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#64748B' }}>
+                            {keyContactRows.hasLegacyText ? 'Legacy text exists but this section now uses linked crew entries. Add crew contacts above to keep profile sync.' : 'No linked key contacts yet.'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     <div data-callsheet-target="emergencyContacts" style={{ borderRadius: 8, background: highlightTargetKey === 'emergencyContacts' ? '#DBEAFE' : 'transparent' }}><EditableField label="Emergency contacts" value={callsheet.emergencyContacts} onChange={(value) => onDayUpdate({ emergencyContacts: value })} placeholder="Police, fire, medic, on-site safety" multiline rows={1} /></div>
                     <div data-callsheet-target="parkingNotes" style={{ borderRadius: 8, background: highlightTargetKey === 'parkingNotes' ? '#DBEAFE' : 'transparent' }}><EditableField label="Parking / arrival notes" value={callsheet.parkingNotes} onChange={(value) => onDayUpdate({ parkingNotes: value })} placeholder="Gate access, lot notes, load-in route" multiline rows={1} /></div>
                     <div data-callsheet-target="directions" style={{ borderRadius: 8, background: highlightTargetKey === 'directions' ? '#DBEAFE' : 'transparent' }}><EditableField label="Directions / access notes" value={callsheet.directions} onChange={(value) => onDayUpdate({ directions: value })} placeholder="Nearest cross street, gate entry, elevator/floor details" multiline rows={1} /></div>
@@ -510,7 +653,7 @@ export default function CallsheetTab({ configureOpen = true }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Scene #', 'Slugline / Scene', 'Location', 'I/E', 'D/N', 'Start', 'End', 'Pages', 'Shots', 'Cast Involved', 'Notes'].map(label => (
+                      {['Scene #', 'Slugline / Scene', 'Location', 'I/E', 'D/N', 'Start', 'End', 'Pages', 'Shots', 'Notes'].map(label => (
                         <th
                           key={label}
                           style={{
@@ -533,7 +676,7 @@ export default function CallsheetTab({ configureOpen = true }) {
                   </thead>
                   <tbody>
                     {scheduleRows.scenes.length === 0 && (
-                      <tr><td colSpan={11} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No scenes scheduled for this day.</td></tr>
+                      <tr><td colSpan={10} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No scenes scheduled for this day.</td></tr>
                     )}
                     {scheduleRows.scenes.map((scene, idx) => (
                       <tr
@@ -551,7 +694,6 @@ export default function CallsheetTab({ configureOpen = true }) {
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{formatMinuteOfDay(scene.end)}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{Number(scene.pageCount || 0).toFixed(2)}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.shotCount}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.castInvolved || '—'}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.notes || '—'}</td>
                       </tr>
                     ))}
@@ -573,17 +715,37 @@ export default function CallsheetTab({ configureOpen = true }) {
 
             {visibleSections.includes('castList') && (
               <div data-callsheet-target="castList" style={{ borderRadius: 10, outline: highlightTargetKey === 'castList' ? '2px solid #2563EB' : 'none', outlineOffset: 2 }}>
-              <Card title="Cast list (day-derived)">
+              <Card
+                title="Cast list (day-derived)"
+                subtitle="Profile-linked columns: Actor, Character, Contact. Day-only columns: Pickup, Makeup, Set."
+                actions={
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <CompactIconButton label="Add cast from roster" icon="+ Cast" onClick={() => setShowCastPicker(prev => !prev)} />
+                    <CompactIconButton label="Create cast profile" icon="＋New" onClick={() => openPersonDialog('cast', null)} />
+                  </div>
+                }
+              >
+                {showCastPicker ? (
+                  <div style={{ marginBottom: 8, display: 'flex', gap: 6 }}>
+                    <select defaultValue="" onChange={(e) => addCastToDay(e.target.value)} style={{ width: 320, maxWidth: '100%', border: '1px solid #CBD5E1', borderRadius: 5, padding: '5px 6px', fontSize: 12, background: '#fff' }}>
+                      <option value="">Select existing cast…</option>
+                      {castRoster.filter(entry => entry.name?.trim()).map(entry => (
+                        <option key={entry.id} value={entry.id}>{entry.name}{entry.character ? ` — ${entry.character}` : ''}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setShowCastPicker(false)} style={{ border: '1px solid #CBD5E1', borderRadius: 5, background: '#fff', fontSize: 11, padding: '0 8px', cursor: 'pointer' }}>Close</button>
+                  </div>
+                ) : null}
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Actor', 'Character', 'SC(DAY) scenes', 'PG(DAY) pages', 'Pickup', 'Makeup', 'Set', 'Contact'].map(label => (
+                      {['Actor ↗', 'Character ↗', 'SC(DAY) scenes', 'PG(DAY) pages', 'Pickup • day', 'Makeup • day', 'Set • day', 'Contact ↗', '⋯'].map(label => (
                         <th key={label} style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {castRows.length === 0 && <tr><td colSpan={8} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No cast mapped to scheduled scenes.</td></tr>}
+                    {castRows.length === 0 && <tr><td colSpan={9} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No cast mapped to scheduled scenes.</td></tr>}
                     {castRows.map((row, idx) => (
                       <tr key={row.id} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
                         <td
@@ -600,6 +762,12 @@ export default function CallsheetTab({ configureOpen = true }) {
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.makeupCall} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, makeupCall: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.setCall} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, setCall: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.contact || '—'}</td>
+                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', width: 74 }}>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            {row.rosterId ? <CompactIconButton label={`Edit ${row.name || 'cast'} profile`} icon="✎" onClick={() => openPersonDialog('cast', row.rosterId)} /> : null}
+                            {row.rosterId ? <CompactIconButton label={`Remove ${row.name || 'cast'} from this day`} icon="–" onClick={() => removeCastFromDay(row)} /> : null}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -610,17 +778,37 @@ export default function CallsheetTab({ configureOpen = true }) {
 
             {visibleSections.includes('crewList') && (
               <div data-callsheet-target="crewList" style={{ borderRadius: 10, outline: highlightTargetKey === 'crewList' ? '2px solid #2563EB' : 'none', outlineOffset: 2 }}>
-              <Card title="Crew list">
+              <Card
+                title="Crew list"
+                subtitle="Profile-linked columns: Name, Department/Role, Contact. Day-only columns: Call time, Notes."
+                actions={
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <CompactIconButton label="Add crew from roster" icon="+ Crew" onClick={() => setShowCrewPicker(prev => !prev)} />
+                    <CompactIconButton label="Create crew profile" icon="＋New" onClick={() => openPersonDialog('crew', null)} />
+                  </div>
+                }
+              >
+                {showCrewPicker ? (
+                  <div style={{ marginBottom: 8, display: 'flex', gap: 6 }}>
+                    <select defaultValue="" onChange={(e) => addCrewToDay(e.target.value)} style={{ width: 320, maxWidth: '100%', border: '1px solid #CBD5E1', borderRadius: 5, padding: '5px 6px', fontSize: 12, background: '#fff' }}>
+                      <option value="">Select existing crew…</option>
+                      {crewRoster.filter(entry => entry.name?.trim()).map(entry => (
+                        <option key={entry.id} value={entry.id}>{entry.name}{entry.role ? ` — ${entry.role}` : ''}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setShowCrewPicker(false)} style={{ border: '1px solid #CBD5E1', borderRadius: 5, background: '#fff', fontSize: 11, padding: '0 8px', cursor: 'pointer' }}>Close</button>
+                  </div>
+                ) : null}
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Name', 'Department / Role', 'Call time', 'Notes', 'Contact'].map(label => (
+                      {['Name ↗', 'Department / Role ↗', 'Call time • day', 'Notes • day', 'Contact ↗', '⋯'].map(label => (
                         <th key={label} style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {crewRows.length === 0 && <tr><td colSpan={5} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No crew in Cast/Crew roster. Add crew there to populate this list.</td></tr>}
+                    {crewRows.length === 0 && <tr><td colSpan={6} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No crew in Cast/Crew roster. Add crew there to populate this list.</td></tr>}
                     {crewRows.map((row, idx) => (
                       <tr key={row.id} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
                         <td
@@ -638,6 +826,12 @@ export default function CallsheetTab({ configureOpen = true }) {
                           <input value={row.notes} onChange={(e) => onDayUpdate({ crew: updateRowValue(callsheet.crew, row.rosterId, row.id, { name: row.name, role: row.role, notes: e.target.value }) })} style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} />
                         </td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.contact || '—'}</td>
+                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', width: 74 }}>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            {row.rosterId ? <CompactIconButton label={`Edit ${row.name || 'crew'} profile`} icon="✎" onClick={() => openPersonDialog('crew', row.rosterId)} /> : null}
+                            {row.rosterId ? <CompactIconButton label={`Remove ${row.name || 'crew'} from this day`} icon="–" onClick={() => removeCrewFromDay(row)} /> : null}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

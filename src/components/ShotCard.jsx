@@ -1,162 +1,49 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useMemo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
+import CustomDropdown from './CustomDropdown'
+import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 
-// Small scene link badge + picker for linking a shot to a script scene
-function SceneLinkBadge({ shot }) {
-  const scriptScenes = useStore(s => s.scriptScenes)
-  const linkShotToScene = useStore(s => s.linkShotToScene)
-  const requestScriptFocus = useStore(s => s.requestScriptFocus)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [search, setSearch] = useState('')
-
-  const linked = shot.linkedSceneId
-    ? scriptScenes.find(s => s.id === shot.linkedSceneId)
-    : null
-
-  const isStale = shot.linkedSceneId && !linked
-  const isDialogueLinked = !!(linked && shot.linkedDialogueLine)
-  const filteredScenes = scriptScenes.filter(ss => {
-    const q = search.trim().toLowerCase()
-    if (!q) return true
-    return (`${ss.sceneNumber || ''}`.toLowerCase().includes(q)
-      || `${ss.location || ''}`.toLowerCase().includes(q)
-      || (ss.characters || []).join(' ').toLowerCase().includes(q))
-  })
-
-  if (scriptScenes.length === 0) return null
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <button
-        onPointerDown={e => e.stopPropagation()}
-        onClick={e => {
-          e.stopPropagation()
-          if (isDialogueLinked) {
-            requestScriptFocus(linked.id, shot.id)
-            return
-          }
-          setPickerOpen(!pickerOpen)
-        }}
-        title={isDialogueLinked
-          ? (shot.linkedDialogueLine || '').slice(0, 60)
-          : linked ? `Linked to SC ${linked.sceneNumber} — click to change` : 'Link to scene'}
-        style={{
-          background: linked
-            ? (linked.color ? linked.color + '30' : 'rgba(59,130,246,0.15)')
-            : 'transparent',
-          border: linked
-            ? `1px solid ${linked.color || 'rgba(59,130,246,0.4)'}`
-            : isStale
-              ? '1px dashed rgba(248,113,113,0.5)'
-              : '1px dashed rgba(128,128,128,0.3)',
-          borderRadius: 3,
-          padding: '1px 5px',
-          cursor: 'pointer',
-          fontSize: 9,
-          fontFamily: 'monospace',
-          fontWeight: 700,
-          color: linked
-            ? (linked.color || '#93c5fd')
-            : isStale ? '#f87171' : '#666',
-          lineHeight: 1.4,
-          display: 'inline-flex', alignItems: 'center', gap: 2,
-          flexShrink: 0,
-        }}
-      >
-        {linked
-          ? `SC ${linked.sceneNumber}${shot.linkedDialogueLine ? ' 🔖' : ''}`
-          : isStale ? '⚠' : '⛓'}
-      </button>
-
-      {pickerOpen && (
-        <div
-          onPointerDown={e => e.stopPropagation()}
-          style={{
-            position: 'absolute', top: 18, right: 0, zIndex: 50,
-            background: '#1e1e2e', border: '1px solid #444', borderRadius: 6,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-            minWidth: 180, maxHeight: 220, overflowY: 'auto',
-            padding: 4,
-          }}
-        >
-          <div className="p-2 border-b border-slate/15">
-            <input
-              autoFocus
-              placeholder="Search by number, location, or cast..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full bg-[#2C2C2E] text-white text-sm px-2 py-1.5 rounded outline-none placeholder-slate/50 focus:ring-1 focus:ring-[#E84040]/50"
-            />
-          </div>
-          {/* Unlink option */}
-          {linked && (
-            <button
-              onClick={() => { linkShotToScene(shot.id, null); setPickerOpen(false) }}
-              style={{
-                width: '100%', textAlign: 'left', padding: '5px 8px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 10, fontFamily: 'monospace', color: '#f87171',
-                borderRadius: 3,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-            >
-              Unlink scene
-            </button>
-          )}
-
-          {/* Scene options */}
-          {filteredScenes.map(ss => (
-            <button
-              key={ss.id}
-              onClick={() => { linkShotToScene(shot.id, ss.id); setPickerOpen(false) }}
-              style={{
-                width: '100%', textAlign: 'left', padding: '5px 8px',
-                background: ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none',
-                border: 'none', cursor: 'pointer',
-                fontSize: 10, fontFamily: 'monospace',
-                color: ss.id === shot.linkedSceneId ? '#93c5fd' : '#ccc',
-                borderRadius: 3,
-                display: 'flex', alignItems: 'center', gap: 5,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.3)' : 'rgba(128,128,128,0.1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none')}
-            >
-              {ss.color && (
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
-              )}
-              <span style={{ fontWeight: 700 }}>SC {ss.sceneNumber}</span>
-              {ss.location && <span style={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>· {ss.location}</span>}
-              {(ss.characters || []).length > 0 && (
-                <span style={{ opacity: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
-                  · {(ss.characters || []).join(', ')}
-                </span>
-              )}
-            </button>
-          ))}
-          {filteredScenes.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#718096', padding: '10px 8px', fontSize: 11 }}>
-              No scenes match
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
+function parseAspectRatioValue(value) {
+  if (value === '2.39:1') return '239 / 100'
+  const [left, right] = String(value || '16:9').split(':')
+  const leftNum = Number(left)
+  const rightNum = Number(right)
+  if (!leftNum || !rightNum) return '16 / 9'
+  return `${leftNum} / ${rightNum}`
 }
 
-export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
+const SHOT_ASPECT_RATIO_PRESETS = ['1:1', '4:3', '16:9', '3:2', '2.39:1']
+
+function sanitizeNumericInput(value) {
+  if (value == null) return ''
+  const cleaned = String(value).replace(/[^0-9.]/g, '')
+  const firstDot = cleaned.indexOf('.')
+  if (firstDot === -1) return cleaned
+  const integerPart = cleaned.slice(0, firstDot + 1)
+  const decimalPart = cleaned.slice(firstDot + 1).replace(/\./g, '')
+  return `${integerPart}${decimalPart}`
+}
+
+export default function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
+  const customDropdownOptions = useStore(s => s.customDropdownOptions)
+  const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
   const fileInputRef = useRef(null)
+  const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
+  const visibleInfo = displayConfig.visibleInfo
+  const visibleSpecKeys = useMemo(
+    () => ['size', 'type', 'move', 'equip'].filter(key => visibleInfo[key] !== false),
+    [visibleInfo]
+  )
 
   const {
     attributes,
@@ -198,12 +85,30 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
   }, [shot.id, updateShot])
 
   const handleSetupTimeChange = useCallback((e) => {
-    updateShot(shot.id, { setupTime: e.target.value })
+    updateShot(shot.id, { setupTime: sanitizeNumericInput(e.target.value) })
   }, [shot.id, updateShot])
 
   const handleShotTimeChange = useCallback((e) => {
-    updateShot(shot.id, { shootTime: e.target.value })
+    updateShot(shot.id, { shootTime: sanitizeNumericInput(e.target.value) })
   }, [shot.id, updateShot])
+
+  const handleShotAspectRatioChange = useCallback((value) => {
+    updateShot(shot.id, { shotAspectRatio: value })
+  }, [shot.id, updateShot])
+
+  const shotAspectRatioOptions = useMemo(
+    () => [...new Set([...SHOT_ASPECT_RATIO_PRESETS, ...(customDropdownOptions?.shotAspectRatio || [])])],
+    [customDropdownOptions?.shotAspectRatio]
+  )
+
+  const timeMetadataColumns = useMemo(
+    () => [
+      visibleInfo.shotAspectRatio !== false ? { key: 'shotAspectRatio', label: 'ASPECT RATIO' } : null,
+      visibleInfo.setupTime !== false ? { key: 'setupTime', label: 'SETUP TIME' } : null,
+      visibleInfo.shotTime !== false ? { key: 'shotTime', label: 'SHOT TIME' } : null,
+    ].filter(Boolean),
+    [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
+  )
 
   return (
     <div
@@ -244,37 +149,39 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
         {/* Shot ID + Camera name */}
         <div className="flex-1 flex items-center gap-1 min-w-0" style={{ alignItems: 'center' }}>
           <span className="font-bold text-xs whitespace-nowrap" style={{ verticalAlign: 'middle', lineHeight: 1 }}>{displayId} -</span>
-          <input
-            type="text"
-            value={shot.cameraName}
-            onChange={handleCameraNameChange}
-            onPointerDown={e => e.stopPropagation()}
-            className="text-xs bg-transparent border-none outline-none p-0 min-w-0 flex-1"
-            style={{ maxWidth: 80 }}
-            placeholder="Camera 1"
-          />
+          {visibleInfo.camera !== false && (
+            <input
+              type="text"
+              value={shot.cameraName}
+              onChange={handleCameraNameChange}
+              onPointerDown={e => e.stopPropagation()}
+              className="text-xs bg-transparent border-none outline-none p-0 min-w-0 flex-1"
+              style={{ maxWidth: 80 }}
+              placeholder="Camera 1"
+            />
+          )}
         </div>
 
         {/* Focal length — right-aligned, never covered */}
-        <input
-          type="text"
-          value={shot.focalLength}
-          onChange={handleFocalLengthChange}
-          onPointerDown={e => e.stopPropagation()}
-          className="text-xs bg-transparent border-none outline-none text-right p-0 flex-shrink-0"
-          style={{ width: 46 }}
-          placeholder="85mm"
-        />
+        {visibleInfo.lens !== false && (
+          <input
+            type="text"
+            value={shot.focalLength}
+            onChange={handleFocalLengthChange}
+            onPointerDown={e => e.stopPropagation()}
+            className="text-xs bg-transparent border-none outline-none text-right p-0 flex-shrink-0"
+            style={{ width: 46 }}
+            placeholder="85mm"
+          />
+        )}
 
-        {/* Scene link badge — only when script scenes exist */}
-        <SceneLinkBadge shot={shot} />
       </div>
 
       {/* Image Area */}
       <div
         className="image-placeholder"
         onClick={handleImageClick}
-        style={{ border: `2px solid ${shot.color}`, aspectRatio: '16/9' }}
+        style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
       >
         {shot.image ? (
           <img src={shot.image} alt="Shot frame" />
@@ -298,37 +205,87 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
       </div>
 
       {/* Specs Table */}
-      <SpecsTable
-        shotId={shot.id}
-        specs={shot.specs}
-        useDropdowns={useDropdowns}
-      />
+      {visibleSpecKeys.length > 0 && (
+        <SpecsTable
+          shotId={shot.id}
+          specs={shot.specs}
+          useDropdowns={useDropdowns}
+          visibleSpecKeys={visibleSpecKeys}
+        />
+      )}
 
       {/* Notes Area */}
-      <div className="border-t border-gray-200">
-        <NotesArea shotId={shot.id} value={shot.notes} />
-      </div>
+      {visibleInfo.notes !== false && (
+        <div className="border-t border-gray-200">
+          <NotesArea shotId={shot.id} value={shot.notes} />
+        </div>
+      )}
 
-      <div className="shot-time-fields">
-        <label className="shot-time-field">
-          <span>SETUP TIME</span>
-          <input
-            type="text"
-            value={shot.setupTime || ''}
-            onChange={handleSetupTimeChange}
-            placeholder="e.g. 15"
-          />
-        </label>
-        <label className="shot-time-field">
-          <span>SHOT TIME</span>
-          <input
-            type="text"
-            value={shot.shootTime || ''}
-            onChange={handleShotTimeChange}
-            placeholder="e.g. 10"
-          />
-        </label>
-      </div>
+      {timeMetadataColumns.length > 0 && (
+        <div className="shot-time-fields-wrapper">
+          <table className="shot-time-fields">
+            <caption>Shot timing and aspect ratio metadata</caption>
+            <thead>
+              <tr>
+                {timeMetadataColumns.map(column => (
+                  <th key={column.key}>{column.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {timeMetadataColumns.map(column => (
+                  <td key={column.key} className="shot-time-field-cell">
+                    {column.key === 'setupTime' ? (
+                      <input
+                        className="shot-time-number"
+                        type="text"
+                        inputMode="decimal"
+                        value={sanitizeNumericInput(shot.setupTime || '')}
+                        onChange={handleSetupTimeChange}
+                        placeholder="15"
+                      />
+                    ) : null}
+                    {column.key === 'shotTime' ? (
+                      <input
+                        className="shot-time-number"
+                        type="text"
+                        inputMode="decimal"
+                        value={sanitizeNumericInput(shot.shootTime || '')}
+                        onChange={handleShotTimeChange}
+                        placeholder="10"
+                      />
+                    ) : null}
+                    {column.key === 'shotAspectRatio' ? (
+                      <div className="shot-time-aspect-dropdown">
+                        <CustomDropdown
+                          value={shot.shotAspectRatio || ''}
+                          options={shotAspectRatioOptions}
+                          onChange={handleShotAspectRatioChange}
+                          onAddCustomOption={(option) => addCustomDropdownOption('shotAspectRatio', option)}
+                          inputStyle={{
+                            width: '100%',
+                            border: 'none',
+                            background: 'transparent',
+                            textAlign: 'center',
+                            fontSize: 10,
+                            padding: 0,
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            cursor: 'pointer',
+                            boxSizing: 'border-box',
+                          }}
+                          placeholder="—"
+                        />
+                      </div>
+                    ) : null}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Delete button — bottom-right corner, avoids focal length field */}
       {hovered && (

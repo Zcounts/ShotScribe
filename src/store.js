@@ -11,6 +11,10 @@ import {
   normalizeShortcutBinding,
   saveShortcutBindings,
 } from './shortcuts'
+import {
+  DEFAULT_STORYBOARD_DISPLAY_CONFIG,
+  normalizeStoryboardDisplayConfig,
+} from './storyboardDisplayConfig'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -265,6 +269,7 @@ function createShot(overrides = {}) {
     // AD-specific shotlist fields (not shown in storyboard view)
     scriptTime: '',
     setupTime: '',
+    shotAspectRatio: '',
     predictedTakes: '',
     shootTime: '',
     takeNumber: '',
@@ -409,6 +414,7 @@ const useStore = create((set, get) => ({
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
+  storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
 
   // Per-column width overrides for the shotlist table (key → px width).
   // Saved with the project so widths are restored on reload.
@@ -1000,6 +1006,9 @@ const useStore = create((set, get) => ({
       weather: '',
       cast: [],
       crew: [],
+      keyContactCrewIds: [],
+      castExcludedRosterIds: [],
+      crewExcludedRosterIds: [],
       locationAddress: '',
       parkingNotes: '',
       directions: '',
@@ -1286,6 +1295,36 @@ const useStore = create((set, get) => ({
     return scene.id
   },
 
+  addSceneAtStoryboardPosition: (afterSceneId, overrides = {}) => {
+    const currentScenes = get().scenes
+    const storyboardOrder = get().getStoryboardSceneOrder()
+    const sceneNum = currentScenes.length + 1
+    const scriptScenes = get().scriptScenes
+    const usedScriptSceneIds = new Set(currentScenes.map(s => s.linkedScriptSceneId).filter(Boolean))
+    const nextSuggestedScriptScene = scriptScenes.find(s => !usedScriptSceneIds.has(s.id)) || scriptScenes[0] || null
+    const scene = createScene({
+      sceneLabel: `SCENE ${sceneNum}`,
+      linkedScriptSceneId: nextSuggestedScriptScene?.id || null,
+      location: nextSuggestedScriptScene?.location || undefined,
+      intOrExt: nextSuggestedScriptScene?.intExt || undefined,
+      dayNight: nextSuggestedScriptScene?.dayNight || undefined,
+      ...overrides,
+    })
+
+    const normalizedOrder = normalizeStoryboardSceneOrder(storyboardOrder, currentScenes)
+    const anchorIndex = normalizedOrder.findIndex(id => id === afterSceneId)
+    const insertIndex = anchorIndex >= 0 ? anchorIndex + 1 : normalizedOrder.length
+    const nextOrder = [...normalizedOrder]
+    nextOrder.splice(insertIndex, 0, scene.id)
+
+    set(state => ({
+      scenes: [...state.scenes, scene],
+      storyboardSceneOrder: nextOrder,
+    }))
+    get()._scheduleAutoSave()
+    return scene.id
+  },
+
   deleteScene: (sceneId) => {
     set(state => {
       if (state.scenes.length <= 1) return state
@@ -1402,6 +1441,7 @@ const useStore = create((set, get) => ({
       color: DEFAULT_COLOR,
       intOrExt: scene.intOrExt || '',
       dayNight: scene.dayNight || '',
+      linkedSceneId: scene.linkedScriptSceneId || null,
     })
     set(state => ({
       scenes: state.scenes.map(s =>
@@ -1472,6 +1512,88 @@ const useStore = create((set, get) => ({
       }),
     }))
     get()._scheduleAutoSave()
+  },
+
+  moveShotToScene: (shotId, targetSceneId, options = {}) => {
+    const { beforeShotId = null } = options || {}
+    set(state => {
+      const sourceSceneIndex = state.scenes.findIndex(scene => scene.shots.some(shot => shot.id === shotId))
+      const targetSceneIndex = state.scenes.findIndex(scene => scene.id === targetSceneId)
+      if (sourceSceneIndex === -1 || targetSceneIndex === -1) return state
+
+      const sourceScene = state.scenes[sourceSceneIndex]
+      const targetScene = state.scenes[targetSceneIndex]
+      const sourceShotIndex = sourceScene.shots.findIndex(shot => shot.id === shotId)
+      if (sourceShotIndex === -1) return state
+
+      const shotToMove = {
+        ...sourceScene.shots[sourceShotIndex],
+        linkedSceneId: targetScene.linkedScriptSceneId || null,
+      }
+
+      const nextScenes = state.scenes.map(scene => ({ ...scene, shots: [...scene.shots] }))
+      nextScenes[sourceSceneIndex].shots.splice(sourceShotIndex, 1)
+
+      const destinationShots = nextScenes[targetSceneIndex].shots
+      const destinationIndex = beforeShotId
+        ? destinationShots.findIndex(shot => shot.id === beforeShotId)
+        : -1
+      if (destinationIndex === -1) {
+        destinationShots.push(shotToMove)
+      } else {
+        destinationShots.splice(destinationIndex, 0, shotToMove)
+      }
+
+      return { scenes: nextScenes }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  moveShotToScriptScene: (shotId, targetScriptSceneId) => {
+    if (!targetScriptSceneId) return null
+    let destinationSceneId = null
+
+    set(state => {
+      const sourceSceneIndex = state.scenes.findIndex(scene => scene.shots.some(shot => shot.id === shotId))
+      if (sourceSceneIndex === -1) return state
+      const sourceScene = state.scenes[sourceSceneIndex]
+      const shotIndex = sourceScene.shots.findIndex(shot => shot.id === shotId)
+      if (shotIndex === -1) return state
+      const shot = sourceScene.shots[shotIndex]
+
+      const scenesWithScriptLink = state.scenes
+        .map((scene, index) => ({ scene, index }))
+        .filter(entry => entry.scene.linkedScriptSceneId === targetScriptSceneId)
+      const targetSceneEntry = scenesWithScriptLink[scenesWithScriptLink.length - 1] || null
+
+      const nextScenes = state.scenes.map(scene => ({ ...scene, shots: [...scene.shots] }))
+      nextScenes[sourceSceneIndex].shots.splice(shotIndex, 1)
+
+      const movedShot = { ...shot, linkedSceneId: targetScriptSceneId }
+      if (targetSceneEntry) {
+        nextScenes[targetSceneEntry.index].shots.push(movedShot)
+        destinationSceneId = targetSceneEntry.scene.id
+        return { scenes: nextScenes }
+      }
+
+      const scriptScene = state.scriptScenes.find(scene => scene.id === targetScriptSceneId) || null
+      const newScene = createScene({
+        sceneLabel: scriptScene?.sceneNumber ? `SCENE ${scriptScene.sceneNumber}` : `SCENE ${nextScenes.length + 1}`,
+        linkedScriptSceneId: targetScriptSceneId,
+        location: scriptScene?.location || 'LOCATION',
+        slugline: scriptScene?.slugline || '',
+        intOrExt: scriptScene?.intExt || 'INT',
+        dayNight: scriptScene?.dayNight || 'DAY',
+        shots: [movedShot],
+      })
+      destinationSceneId = newScene.id
+      return { scenes: [...nextScenes, newScene] }
+    })
+
+    if (destinationSceneId) {
+      get()._scheduleAutoSave()
+    }
+    return destinationSceneId
   },
 
   updateShot: (shotId, updates) => {
@@ -1554,6 +1676,15 @@ const useStore = create((set, get) => ({
         },
       },
     }))
+  },
+  updateStoryboardDisplayConfig: (patch) => {
+    set(state => ({
+      storyboardDisplayConfig: normalizeStoryboardDisplayConfig({
+        ...state.storyboardDisplayConfig,
+        ...(patch || {}),
+      }),
+    }))
+    get()._scheduleAutoSave()
   },
   resetTabViewState: () => set({
     tabViewState: {
@@ -1763,6 +1894,8 @@ const useStore = create((set, get) => ({
       scriptScenes, importedScripts, scriptSettings,
       shortcutBindings,
       storyboardSceneOrder,
+      storyboardDisplayConfig,
+      tabViewState,
     } = get()
     return {
       version: 2,
@@ -1779,6 +1912,7 @@ const useStore = create((set, get) => ({
       customColumns,
       customDropdownOptions,
       storyboardSceneOrder: normalizeStoryboardSceneOrder(storyboardSceneOrder, scenes),
+      storyboardDisplayConfig: normalizeStoryboardDisplayConfig(storyboardDisplayConfig),
       // Scenes and shots are reconstructed field-by-field so that any
       // non-serializable value that accidentally landed in state (e.g. a DOM
       // event object spread via an overrides parameter) is stripped before
@@ -1804,6 +1938,7 @@ const useStore = create((set, get) => ({
             dayNight: s.dayNight,
             scriptTime: s.scriptTime,
             setupTime: s.setupTime,
+            shotAspectRatio: s.shotAspectRatio || '',
             predictedTakes: s.predictedTakes,
             shootTime: s.shootTime,
             takeNumber: s.takeNumber,
@@ -1906,6 +2041,9 @@ const useStore = create((set, get) => ({
         documentSettings: DEFAULT_SCRIPT_DOCUMENT_SETTINGS,
       },
       shortcutBindings: getActiveBindings(shortcutBindings || SHORTCUT_DEFAULTS),
+      scenesTabPreferences: {
+        ...(tabViewState?.scenes || {}),
+      },
       exportedAt: new Date().toISOString(),
     }
   },
@@ -2052,6 +2190,7 @@ const useStore = create((set, get) => ({
       dayNight: s.dayNight !== undefined ? s.dayNight : (sceneDayNight || ''),
       scriptTime: s.scriptTime || '',
       setupTime: s.setupTime || '',
+      shotAspectRatio: s.shotAspectRatio || '',
       predictedTakes: s.predictedTakes || '',
       shootTime: s.shootTime || '',
       takeNumber: s.takeNumber || '',
@@ -2104,6 +2243,14 @@ const useStore = create((set, get) => ({
       })]
     }
 
+    scenes = scenes.map(scene => ({
+      ...scene,
+      shots: (scene.shots || []).map(shot => ({
+        ...shot,
+        linkedSceneId: scene.linkedScriptSceneId || shot.linkedSceneId || null,
+      })),
+    }))
+
     const loadedSchedule = Array.isArray(data.schedule)
       ? data.schedule.map(day => ({
           id: day.id || `day_${Date.now()}_${++dayIdCounter}`,
@@ -2151,6 +2298,10 @@ const useStore = create((set, get) => ({
         loadedSchedule.flatMap(day => (day.blocks || []).map(block => [block.id, true]))
       ),
     }
+
+    const loadedScenesTabPreferences = (typeof data.scenesTabPreferences === 'object' && data.scenesTabPreferences !== null)
+      ? data.scenesTabPreferences
+      : {}
 
     set({
       projectName: projectName || 'Untitled Shotlist',
@@ -2209,6 +2360,7 @@ const useStore = create((set, get) => ({
         }
       }),
       storyboardSceneOrder: normalizeStoryboardSceneOrder(data.storyboardSceneOrder, scenes),
+      storyboardDisplayConfig: normalizeStoryboardDisplayConfig(data.storyboardDisplayConfig),
       schedule: loadedSchedule,
       scheduleCollapseState: loadedCollapseState,
       scheduleColumnConfig: (() => {
@@ -2261,7 +2413,27 @@ const useStore = create((set, get) => ({
       documentSession: get().documentSession + 1,
       tabViewState: {
         script: {},
-        scenes: {},
+        scenes: {
+          sceneViewMode: loadedScenesTabPreferences.sceneViewMode || 'compactGrid',
+          sceneColumnCount: Number(loadedScenesTabPreferences.sceneColumnCount) || 4,
+          sortBy: loadedScenesTabPreferences.sortBy || 'sceneNumber',
+          sortDirection: loadedScenesTabPreferences.sortDirection || 'asc',
+          groupBy: loadedScenesTabPreferences.groupBy || 'none',
+          activeScript: loadedScenesTabPreferences.activeScript ?? null,
+          metadataVisibility: {
+            showLocation: loadedScenesTabPreferences.metadataVisibility?.showLocation ?? true,
+            showIntExtDayNight: loadedScenesTabPreferences.metadataVisibility?.showIntExtDayNight ?? true,
+            showCastCount: loadedScenesTabPreferences.metadataVisibility?.showCastCount ?? true,
+            showScheduleBadge: loadedScenesTabPreferences.metadataVisibility?.showScheduleBadge ?? true,
+            showStoryboardThumb: loadedScenesTabPreferences.metadataVisibility?.showStoryboardThumb ?? true,
+          },
+          sidebarPanelCollapsed: {
+            viewOptions: loadedScenesTabPreferences.sidebarPanelCollapsed?.viewOptions ?? false,
+            sceneOrganization: loadedScenesTabPreferences.sidebarPanelCollapsed?.sceneOrganization ?? false,
+            importedScripts: loadedScenesTabPreferences.sidebarPanelCollapsed?.importedScripts ?? false,
+          },
+          scrollTop: typeof loadedScenesTabPreferences.scrollTop === 'number' ? loadedScenesTabPreferences.scrollTop : 0,
+        },
         storyboard: {},
         shotlist: {},
         castcrew: {},
@@ -2362,6 +2534,7 @@ const useStore = create((set, get) => ({
       projectEmoji: '🎬',
       scenes: [scene],
       storyboardSceneOrder: [],
+      storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
       schedule: [],
       callsheets: {},
       castRoster: [],

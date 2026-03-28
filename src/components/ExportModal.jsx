@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import useStore, { getShotLetter } from '../store'
+import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,10 +52,16 @@ function getCellValue(colKey, shot, scene) {
 // No reference to the live app DOM.
 
 function buildStoryboardPrintHtml() {
-  const { getStoryboardScenes, columnCount, projectName } = useStore.getState()
+  const { getStoryboardScenes, columnCount, projectName, storyboardDisplayConfig } = useStore.getState()
   const scenes = getStoryboardScenes()
   const cols = Math.max(2, Math.min(4, columnCount || 4))
   const cardsPerPage = cols * 2  // two rows of cards per page
+  const config = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
+  const useDisplayConfig = !!config.useVisibilitySettingsInPdf
+  const visibleInfo = config.visibleInfo || {}
+  const cardAspectRatio = config.aspectRatio === '2.39:1'
+    ? '2.39 / 1'
+    : String(config.aspectRatio || '16:9').replace(':', ' / ')
 
   const pageDivs = []
 
@@ -94,22 +101,29 @@ function buildStoryboardPrintHtml() {
           ? `<img src="${shot.image}" alt="${escapeHtml(shot.displayId)}">`
           : `<div class="no-img">No image</div>`
 
+        const specColumns = ['size', 'type', 'move', 'equip'].filter(key => !useDisplayConfig || visibleInfo[key] !== false)
+        const specHeaderHtml = specColumns.map(key => `<th>${escapeHtml(key.toUpperCase())}</th>`).join('')
+        const specValueHtml = specColumns.map(key => `<td>${escapeHtml(shot.specs?.[key] || '')}</td>`).join('')
+        const showCamera = !useDisplayConfig || visibleInfo.camera !== false
+        const showLens = !useDisplayConfig || visibleInfo.lens !== false
+        const showNotes = !useDisplayConfig || visibleInfo.notes !== false
+        const showSetup = !useDisplayConfig || visibleInfo.setupTime !== false
+        const showShotTime = !useDisplayConfig || visibleInfo.shotTime !== false
+
         return `<div class="shot-card" style="border-color:${escapeHtml(shot.color || '#4ade80')};">
   <div class="card-hdr">
-    <span class="sid">${escapeHtml(shot.displayId)} &mdash; ${escapeHtml(shot.cameraName || '')}</span>
-    <span class="fl">${escapeHtml(shot.focalLength || '')}</span>
+    <span class="sid">${escapeHtml(shot.displayId)}${showCamera ? ` &mdash; ${escapeHtml(shot.cameraName || '')}` : ''}</span>
+    ${showLens ? `<span class="fl">${escapeHtml(shot.focalLength || '')}</span>` : ''}
   </div>
-  <div class="card-img" style="border-color:${escapeHtml(shot.color || '#4ade80')};">${imgHtml}</div>
-  <table class="specs-tbl">
-    <thead><tr><th>SIZE</th><th>TYPE</th><th>MOVE</th><th>EQUIP</th></tr></thead>
+  <div class="card-img" style="border-color:${escapeHtml(shot.color || '#4ade80')};${useDisplayConfig ? `aspect-ratio:${escapeHtml(cardAspectRatio)};` : ''}">${imgHtml}</div>
+  ${specColumns.length ? `<table class="specs-tbl">
+    <thead><tr>${specHeaderHtml}</tr></thead>
     <tbody><tr>
-      <td>${escapeHtml(shot.specs?.size || '')}</td>
-      <td>${escapeHtml(shot.specs?.type || '')}</td>
-      <td>${escapeHtml(shot.specs?.move || '')}</td>
-      <td>${escapeHtml(shot.specs?.equip || '')}</td>
+      ${specValueHtml}
     </tr></tbody>
-  </table>
-  <div class="card-notes">${escapeHtml(shot.notes || '')}</div>
+  </table>` : ''}
+  ${showNotes ? `<div class="card-notes">${escapeHtml(shot.notes || '')}</div>` : ''}
+  ${(showSetup || showShotTime) ? `<div class="card-time-row">${showSetup ? `<span>SETUP ${escapeHtml(shot.setupTime || '')}</span>` : ''}${showShotTime ? `<span>SHOT ${escapeHtml(shot.shootTime || '')}</span>` : ''}</div>` : ''}
 </div>`
       })
 
@@ -321,6 +335,18 @@ html, body {
   color: #333;
   overflow: hidden;
   min-height: 0;
+}
+.card-time-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid #ddd;
+  padding: 4px 6px 3px;
+  font-size: 6.8pt;
+  font-weight: 700;
+  color: #5f6368;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 </style>
 </head>

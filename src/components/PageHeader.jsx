@@ -104,7 +104,7 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
 
   const set = (updates) => updateScene(scene.id, updates)
   const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
-  const displaySceneNumber = canonical?.sceneNumber || ''
+  const displaySceneNumber = String(canonical?.sceneNumber || '').trim()
   const displaySlugline = canonical?.titleSlugline || ''
 
   // Per-page notes: pageNotes is stored as an array (one element per page).
@@ -158,27 +158,20 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
 
   return (
     <div className="page-header" onDoubleClick={onDoubleClick}>
-      {/* Left: Scene Label */}
+      {/* Scene identifier + slugline */}
       <div className="page-header-scene">
-        <div className="page-header-row page-header-scene-top">
-          <div className="page-header-intdn">
-            <input
-              type="text"
-              value={displaySceneNumber}
-              onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { sceneNumber: e.target.value })}
-              className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-scene-label"
-              style={{ minWidth: 80, width: `${Math.min(Math.max((displaySceneNumber || '').length, 6), 20)}ch` }}
-              placeholder="1"
-            />
-          </div>
-        </div>
         <div className="page-header-row page-header-scene-bottom">
+          <span className="page-header-scene-primary">
+            {`SCENE ${displaySceneNumber || '—'}`}
+          </span>
+        </div>
+        <div className="page-header-row page-header-scene-top page-header-scene-tag">
           <input
             type="text"
             value={displaySlugline}
             onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { titleSlugline: e.target.value })}
-            className="text-[19px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
-            style={{ minWidth: 60, width: `${Math.min(Math.max((displaySlugline || '').length, 4), 48)}ch` }}
+            className="bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
+            style={{ minWidth: 50, width: `${Math.min(Math.max((displaySlugline || '').length, 4), 38)}ch` }}
             placeholder="TITLE / SLUGLINE"
           />
         </div>
@@ -189,15 +182,15 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
         )}
       </div>
 
-      {/* Center: Notes block (per-page) */}
-      <div className="text-xs leading-relaxed border-l border-r border-gray-200 px-4">
+      {/* Notes block (per-page) */}
+      <div className="page-header-notes">
         <textarea
           value={currentPageNotes}
           onChange={e => setPageNotes(e.target.value)}
-          className="w-full border-none outline-none resize-none text-xs leading-relaxed bg-transparent font-sans"
-          rows={3}
+          className="page-header-notes-input"
+          rows={2}
           placeholder="*NOTE: &#10;*SHOOT ORDER: "
-          style={{ minHeight: 60 }}
+          style={{ minHeight: 42 }}
           onInput={e => {
             e.target.style.height = 'auto'
             e.target.style.height = e.target.scrollHeight + 'px'
@@ -205,11 +198,11 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
         />
       </div>
 
-      {/* Right: Camera lines */}
-      <div className="flex flex-col items-end flex-shrink-0" style={{ gap: 4 }}>
-        <div className="flex flex-col items-end gap-0.5">
+      {/* Camera legend */}
+      <div className="page-header-cameras">
+        <div className="page-header-cameras-list">
           {cameras.map((cam, idx) => (
-            <div key={idx} className="flex items-center gap-1 text-xs font-semibold">
+            <div key={idx} className="page-header-camera-row">
               <CameraColorSwatch
                 color={cam.color || null}
                 onChange={color => updateCamera(idx, 'color', color)}
@@ -219,17 +212,17 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
                 value={cam.name}
                 onChange={e => updateCamera(idx, 'name', e.target.value)}
                 onKeyDown={e => handleCameraKeyDown(e, idx, 'name')}
-                className="bg-transparent border-none outline-none text-xs font-semibold text-right p-0"
+                className="page-header-camera-input page-header-camera-name"
                 style={{ minWidth: 40, width: `${Math.max((cam.name || '').length, 8)}ch` }}
                 placeholder="Camera 1"
               />
-              <span>=</span>
+              <span className="page-header-camera-equals">=</span>
               <input
                 type="text"
                 value={cam.body}
                 onChange={e => updateCamera(idx, 'body', e.target.value)}
                 onKeyDown={e => handleCameraKeyDown(e, idx, 'body')}
-                className="bg-transparent border-none outline-none text-xs font-semibold p-0"
+                className="page-header-camera-input"
                 style={{ minWidth: 20, width: `${Math.max((cam.body || '').length, 4)}ch` }}
                 placeholder="fx30"
               />
