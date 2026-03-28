@@ -348,6 +348,7 @@ export default function App() {
   const [scenesConfigOpen, setScenesConfigOpen] = useState(false)
   const [shotlistConfigOpen, setShotlistConfigOpen] = useState(false)
   const [scheduleConfigOpen, setScheduleConfigOpen] = useState(false)
+  const [callsheetConfigOpen, setCallsheetConfigOpen] = useState(true)
   const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
@@ -599,7 +600,10 @@ export default function App() {
     },
     script: { isActive: false, onToggle: () => {} },
     castcrew: { isActive: false, onToggle: () => {} },
-    callsheet: { isActive: false, onToggle: () => {} },
+    callsheet: {
+      isActive: callsheetConfigOpen,
+      onToggle: () => setCallsheetConfigOpen(o => !o),
+    },
   }
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
 
@@ -828,7 +832,11 @@ export default function App() {
         </div>
       ) : activeTab === 'callsheet' ? (
         <div className="flex-1 flex flex-col overflow-hidden canvas-texture">
-          <CallsheetTab key={`callsheet-${documentSession}`} />
+          <CallsheetTab
+            key={`callsheet-${documentSession}`}
+            configureOpen={callsheetConfigOpen}
+            onConfigureOpenChange={setCallsheetConfigOpen}
+          />
         </div>
       ) : activeTab === 'castcrew' ? (
         <div className="flex-1 overflow-hidden canvas-texture">
