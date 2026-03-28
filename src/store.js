@@ -794,17 +794,31 @@ const useStore = create((set, get) => ({
           // Null when the referenced shot has been deleted
           shotData: found ? {
             displayId: found.displayId,
+            shotId: found.shot.id,
+            cameraName: found.shot.cameraName || '',
+            focalLength: found.shot.focalLength || '',
+            specs: found.shot.specs || {},
             cast: found.shot.cast || '',
             notes: found.shot.notes,
+            subject: found.shot.subject || '',
+            description: found.shot.description || '',
             intOrExt: found.shot.intOrExt || found.scene.intOrExt,
             dayNight: found.shot.dayNight || found.scene.dayNight,
             sceneLabel: found.scene.sceneLabel,
+            sceneSlugline: scriptScene?.slugline || found.scene.slugline || '',
+            sceneTitle: scriptScene?.slugline || found.scene.slugline || found.scene.location || found.scene.sceneLabel || '',
+            sceneNotes: scriptScene?.notes || '',
             location: found.scene.location,
             image: found.shot.image || null,
             // Shared time fields — source of truth lives on the shot
             shootTime: found.shot.shootTime || '',
             setupTime: found.shot.setupTime || '',
             scriptTime: found.shot.scriptTime || '',
+            predictedTakes: found.shot.predictedTakes || '',
+            takeNumber: found.shot.takeNumber || '',
+            sound: found.shot.sound || '',
+            props: found.shot.props || '',
+            frameRate: found.shot.frameRate || '',
             // Script scene link (display only)
             linkedSceneId: resolvedLinkedSceneId,
             linkedSceneData: scriptScene ? {
@@ -814,6 +828,10 @@ const useStore = create((set, get) => ({
               dayNight: scriptScene.dayNight,
               color: scriptScene.color,
             } : null,
+            sceneShotSummaries: found.scene.shots.map((sceneShot, sceneShotIdx) => ({
+              id: sceneShot.id,
+              cameraName: sceneShot.cameraName || `Camera ${sceneShotIdx + 1}`,
+            })),
             castRosterEntries,
           } : null,
         }
