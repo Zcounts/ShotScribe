@@ -3362,164 +3362,18 @@ export default function ScheduleTab({
       <div className="pb-6 pt-0">
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
-      ) : (
-        <div style={{ display: 'flex', minHeight: 'calc(100vh - 96px)', borderTop: '1px solid #c8bfaf', borderBottom: '1px solid #c8bfaf', background: '#f5f2ea' }}>
-          <SidebarPane width={284}>
-            <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-              <AccordionSection title="Schedule Views" isOpen={sectionOpen.views} onToggle={() => setSectionOpen(prev => ({ ...prev, views: !prev.views }))}>
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {[
-                    { id: 'list', label: 'List' },
-                    { id: 'stripboard', label: 'Stripboard' },
-                    { id: 'calendar', label: 'Calendar' },
-                  ].map(view => {
-                    const active = scheduleView === view.id
-                    return (
-                      <button
-                        key={view.id}
-                        onClick={() => setScheduleView(view.id)}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '9px 10px',
-                          borderRadius: 5,
-                          border: active ? '1px solid rgba(15,23,42,0.18)' : '1px solid rgba(74,85,104,0.14)',
-                          background: active ? '#e8e2d5' : '#fbfaf7',
-                          color: active ? '#0f172a' : '#475569',
-                          fontSize: 12,
-                          fontWeight: active ? 700 : 600,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {view.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </AccordionSection>
-
-              <AccordionSection title="Actions" isOpen={sectionOpen.actions} onToggle={() => setSectionOpen(prev => ({ ...prev, actions: !prev.actions }))}>
-                <button
-                  onClick={() => addShootingDay()}
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    fontFamily: 'Sora, sans-serif',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    border: 'none',
-                    borderRadius: 4,
-                    background: '#E84040',
-                    color: '#ffffff',
-                    cursor: 'pointer',
-                  }}
-                >
-                  + Add Day
-                </button>
-              </AccordionSection>
-
-              <AccordionSection title="Selected Day" isOpen={sectionOpen.selectedDay} onToggle={() => setSectionOpen(prev => ({ ...prev, selectedDay: !prev.selectedDay }))}>
-                {selectedDay ? (
-                  <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 10, display: 'grid', rowGap: 6 }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>Day {selectedDayIndex + 1}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>{formatDate(selectedDay.date) || 'Date not set'}</div>
-                    <div style={{ borderTop: '1px solid rgba(74,85,104,0.15)', marginTop: 2, paddingTop: 6, display: 'grid', gap: 4 }}>
-                      {[
-                        ['Call Time', selectedDay.startTime || '—'],
-                        ['Basecamp', selectedDay.basecamp || '—'],
-                        ['Strips', selectedDayShotBlocks.length],
-                        ['Breaks', selectedDayBreakBlocks.length],
-                        ['Pages', selectedDayPages.toFixed(2).replace(/\.00$/, '') || '0'],
-                        ['Est. Day', formatMins(selectedDayShootMins + selectedDayBreakMins)],
-                      ].map(([label, value]) => (
-                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11 }}>
-                          <span style={{ color: '#64748b' }}>{label}</span>
-                          <span style={{ color: '#0f172a', fontWeight: 600 }}>{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#718096' }}>No day selected.</div>
-                )}
-              </AccordionSection>
-
-              <AccordionSection title="Display" isOpen={sectionOpen.display} onToggle={() => setSectionOpen(prev => ({ ...prev, display: !prev.display }))}>
-                {scheduleView === 'stripboard' ? (
-                  <div style={{ display: 'grid', gap: 6 }}>
-                    {['compact', 'comfortable'].map(mode => (
-                      <button
-                        key={mode}
-                        onClick={() => setStripDensity(mode)}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '8px 10px',
-                          borderRadius: 4,
-                          border: '1px solid rgba(74,85,104,0.2)',
-                          background: stripDensity === mode ? '#ede9e1' : '#fff',
-                          color: stripDensity === mode ? '#0f172a' : '#64748b',
-                          fontSize: 11,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {mode === 'compact' ? 'Compact strips (24px)' : 'Comfortable strips (36px)'}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#718096' }}>
-                    {scheduleView === 'list' ? 'Display settings are configured below.' : 'No extra display controls for this view.'}
-                  </div>
-                )}
-              </AccordionSection>
-
-              <AccordionSection title="Configure" isOpen={sectionOpen.configure} onToggle={() => setSectionOpen(prev => ({ ...prev, configure: !prev.configure }))}>
-                {scheduleView === 'list' ? (
-                  <ScheduleColumnConfigList
-                    config={scheduleColumnConfig}
-                    onChange={setScheduleColumnConfig}
-                  />
-                ) : (
-                  <div style={{ fontSize: 11, color: '#718096' }}>
-                    Configure options are available in List view.
-                  </div>
-                )}
-              </AccordionSection>
-
-              <AccordionSection title="Summary" isOpen={sectionOpen.summary} onToggle={() => setSectionOpen(prev => ({ ...prev, summary: !prev.summary }))} grow>
-                <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {[
-                    [schedule.length, 'Shoot Days'],
-                    [totalStrips, 'Strips'],
-                    [totalBreaks, 'Break Strips'],
-                    [totalPages.toFixed(2).replace(/\.00$/, '') || '0', 'Pages'],
-                    [formatMins(totalShootMins), 'Est. Shoot'],
-                    [formatMins(totalShootMins + totalBreakMins), 'Shoot + Break'],
-                  ].map(([value, label]) => (
-                    <div key={label} style={{ border: '1px solid rgba(74,85,104,0.1)', borderRadius: 5, padding: '8px 7px', background: '#fcfcfd' }}>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{value}</div>
-                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{label}</div>
-                    </div>
-                  ))}
-                </div>
-              </AccordionSection>
-            </div>
-          </SidebarPane>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-          {scheduleView === 'calendar' ? (
-            // ── Calendar view ──────────────────────────────────────────────────
-            <CalendarView
-              schedule={schedule}
-              scenes={scenes}
-              isDark={isDark}
-              onJumpToDay={handleJumpToDay}
-            />
-          ) : scheduleView === 'list' ? (
-            <div>
+      ) : scheduleView === 'calendar' ? (
+        // ── Calendar view ──────────────────────────────────────────────────
+        <CalendarView
+          schedule={schedule}
+          scenes={scenes}
+          isDark={isDark}
+          onOpenDayInList={handleJumpToDay}
+          enrichedBlockMap={enrichedBlockMap}
+          pageCountByScene={pageCountByScene}
+        />
+      ) : scheduleView === 'list' ? (
+        <div>
               <ScheduleListColumnHeader />
               <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
                 <DayTabBar
@@ -3634,37 +3488,9 @@ export default function ScheduleTab({
                   onStripClick={handleStripClick}
                   pageCountByScene={pageCountByScene}
                 />
-              )}
-
-              {/* Horizontally scrolling board */}
-              <SortableContext items={dayIds} strategy={horizontalListSortingStrategy}>
-                <div style={{
-                  display: 'flex',
-                  gap: 8,
-                  overflowX: 'auto',
-                  paddingBottom: 16,
-                  alignItems: 'flex-start',
-                  // Extend past the padded container so columns reach the edge
-                  marginLeft: -4,
-                  marginRight: -4,
-                  paddingLeft: 4,
-                  paddingRight: 4,
-                }}>
-                  {schedule.map((day, dayIndex) => (
-                    <SortableStripboardColumn
-                      key={day.id}
-                      day={day}
-                      dayIndex={dayIndex}
-                      blocks={getBlocksForDay(day.id)}
-                      enrichedBlockMap={enrichedBlockMap}
-                      shotColorMap={shotColorMap}
-                      isDark={isDark}
-                      height={stripHeight}
-                      onStripClick={handleStripClick}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
+              ))}
+            </div>
+          </SortableContext>
 
               <DragOverlay dropAnimation={null}>
                 {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (() => {
@@ -3700,9 +3526,6 @@ export default function ScheduleTab({
                 })() : null}
               </DragOverlay>
             </DndContext>
-          )}
-          </div>
-        </div>
       )}
       </div>
     </div>
