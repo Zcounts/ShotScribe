@@ -697,27 +697,38 @@
   }
 
   .shot-properties-dialog {
-    padding: 24px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .shot-props-scroll {
+    padding: 22px 26px 18px;
+    overflow-y: auto;
+  }
+
+  .shot-props-dialog-description {
+    margin-bottom: 16px;
   }
 
   .shot-props-identity {
     display: grid;
-    grid-template-columns: minmax(240px, 1.05fr) minmax(280px, 1fr);
-    gap: 16px;
-    margin-bottom: 18px;
+    grid-template-columns: minmax(320px, 1.05fr) minmax(360px, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
     align-items: stretch;
   }
 
   .shot-props-image {
-    border: 2px solid #cbd5e1;
-    border-radius: 10px;
-    background: #e2e8f0;
-    min-height: 200px;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    background: linear-gradient(160deg, #f1f5f9, #e2e8f0);
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     aspect-ratio: 16 / 9;
+    min-height: 240px;
   }
 
   .shot-props-image img {
@@ -730,7 +741,7 @@
     text-align: center;
     color: #475569;
     display: grid;
-    gap: 4px;
+    gap: 6px;
     justify-items: center;
     font-size: 14px;
     font-weight: 600;
@@ -748,14 +759,35 @@
   }
 
   .shot-props-identity-meta {
-    border: 1px solid rgba(55,65,81,0.18);
-    border-radius: 10px;
-    background: rgba(255,255,255,0.78);
-    padding: 12px;
+    border: 1px solid rgba(148,163,184,0.28);
+    border-radius: 14px;
+    background: linear-gradient(170deg, rgba(255,255,255,0.95), rgba(248,250,252,0.88));
+    padding: 16px;
     display: grid;
-    gap: 12px;
+    gap: 14px;
     align-content: start;
+  }
+
+  .shot-props-hero-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .shot-props-hero-summary {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(241,245,249,0.85);
+    border: 1px solid rgba(148,163,184,0.25);
+  }
+
+  .shot-props-hero-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 
   .shot-props-meta-label {
@@ -777,19 +809,29 @@
 
   .shot-props-layout {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 14px 18px;
   }
 
   .shot-props-section {
-    border: 1px solid rgba(55,65,81,0.16);
-    background: rgba(255,255,255,0.7);
-    border-radius: 10px;
-    padding: 12px;
+    border-top: 1px solid rgba(203,213,225,0.8);
+    padding-top: 10px;
+  }
+
+  .shot-props-section-primary {
+    grid-column: span 7;
+  }
+
+  .shot-props-section-compact {
+    grid-column: span 5;
+  }
+
+  .shot-props-section-notes {
+    grid-column: 1 / -1;
   }
 
   .shot-props-section-title {
-    margin: 0 0 10px;
+    margin: 0 0 12px;
     font-size: 12px;
     font-weight: 700;
     color: #1f2937;
@@ -800,7 +842,7 @@
   .shot-props-fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 10px 12px;
   }
 
   .shot-props-field {
@@ -812,11 +854,12 @@
   }
 
   .shot-props-debug {
-    margin-top: 12px;
-    border: 1px solid rgba(55,65,81,0.2);
+    margin-top: 14px;
+    border: 1px solid rgba(148,163,184,0.28);
     border-radius: 8px;
-    background: rgba(255,255,255,0.68);
-    padding: 8px 10px;
+    background: rgba(248,250,252,0.88);
+    padding: 8px 12px;
+    opacity: 0.88;
   }
 
   .shot-props-debug summary {
@@ -840,7 +883,12 @@
   }
 
   .shot-props-footer {
-    margin-top: 12px;
+    margin-top: 0;
+    padding: 12px 26px;
+    border-top: 1px solid rgba(148,163,184,0.26);
+    background: rgba(255,255,255,0.92);
+    position: sticky;
+    bottom: 0;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
@@ -848,21 +896,27 @@
 
   .shot-props-autosave-pill {
     font-size: 12px;
-    color: #166534;
-    background: rgba(187,247,208,0.55);
-    border: 1px solid rgba(22,101,52,0.2);
-    padding: 6px 10px;
+    color: #0f766e;
+    background: rgba(204,251,241,0.7);
+    border: 1px solid rgba(13,148,136,0.24);
+    padding: 6px 12px;
     border-radius: 999px;
     font-weight: 600;
   }
 
   @media (max-width: 900px) {
     .shot-props-identity,
-    .shot-props-layout {
+    .shot-props-layout,
+    .shot-props-hero-summary,
+    .shot-props-hero-controls {
       grid-template-columns: 1fr;
     }
 
-    .shot-props-identity-meta,
+    .shot-props-section-primary,
+    .shot-props-section-compact {
+      grid-column: 1 / -1;
+    }
+
     .shot-props-fields {
       grid-template-columns: 1fr;
     }
@@ -870,6 +924,11 @@
     .shot-props-footer {
       flex-direction: column;
       align-items: stretch;
+      padding: 12px 18px;
+    }
+
+    .shot-props-scroll {
+      padding: 18px;
     }
 
     .shot-props-footer .dialog-button-primary {
