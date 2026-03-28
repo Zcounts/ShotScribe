@@ -150,6 +150,46 @@ function hasReadableValue(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
 }
 
+function getCastChipStyle() {
+  return {
+    fontSize: 9,
+    fontFamily: 'monospace',
+    fontWeight: 700,
+    color: '#1e293b',
+    border: '1px solid rgba(30,41,59,0.25)',
+    background: 'rgba(255,255,255,0.75)',
+    borderRadius: 999,
+    padding: '2px 7px',
+    letterSpacing: '0.04em',
+  }
+}
+
+function getTimeTextStyle(hasValue = true) {
+  return {
+    fontSize: 12,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+    fontVariantNumeric: 'tabular-nums',
+    color: hasValue ? '#0f172a' : '#94a3b8',
+    fontWeight: hasValue ? 800 : 600,
+    letterSpacing: hasValue ? '0.02em' : '0.05em',
+  }
+}
+
+function summarizeDay(blocks = [], pageCountByScene = {}, enrichedBlockMap = {}) {
+  const shotBlocks = blocks.filter(b => !!b.shotId)
+  const shotCount = shotBlocks.length
+  const breakCount = blocks.filter(b => b.type === 'break').length
+  const totalPages = shotBlocks.reduce((sum, b) => {
+    const sid = enrichedBlockMap[b.id]?.linkedSceneId
+    return sum + (sid && pageCountByScene[sid] ? Number(pageCountByScene[sid]) : 0)
+  }, 0)
+  const totalMins = shotBlocks.reduce(
+    (sum, b) => sum + parseMinutes(enrichedBlockMap[b.id]?.shootTime) + parseMinutes(enrichedBlockMap[b.id]?.setupTime),
+    0
+  )
+  return { shotCount, breakCount, totalPages, totalMins }
+}
+
 // ── Small shared UI ───────────────────────────────────────────────────────────
 
 function IconButton({ onClick, title, children, danger, small, onPointerDown }) {
@@ -386,6 +426,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
     hasReadableValue(shotData?.props) ? { label: 'Props', value: shotData.props } : null,
     hasReadableValue(shotData?.takeNumber) ? { label: 'Take', value: shotData.takeNumber } : null,
   ].filter(Boolean)
+  const castChipStyle = getCastChipStyle()
 
   const handleConfirmRemove = useCallback(() => {
     removeShotBlock(dayId, block.id)
@@ -450,32 +491,16 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
         {castPills.length ? castPills.map((pill, idx) => (
-          <span key={`${pill}_${idx}`} style={{ fontSize: 9, fontFamily: 'monospace', fontWeight: 700, color: '#1e293b', border: '1px solid rgba(30,41,59,0.25)', background: 'rgba(255,255,255,0.75)', borderRadius: 999, padding: '2px 7px' }}>{pill}</span>
+          <span key={`${pill}_${idx}`} style={castChipStyle}>{pill}</span>
         )) : <span style={{ fontSize: 10, color: '#6b7280' }}>—</span>}
       </div>
 
       <span style={{ fontSize: 10, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationLabel || '—'}</span>
       <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#111827' }}>{pageVal}</span>
-      <span style={{
-        fontSize: 12,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-        fontVariantNumeric: 'tabular-nums',
-        color: hasEstTime ? '#0f172a' : '#94a3b8',
-        fontWeight: hasEstTime ? 800 : 600,
-        letterSpacing: hasEstTime ? '0.02em' : '0.05em',
-        textAlign: 'left',
-      }}>
+      <span style={{ ...getTimeTextStyle(hasEstTime), textAlign: 'left' }}>
         {hasEstTime ? formatMins(estMins) : '—'}
       </span>
-      <span style={{
-        fontSize: 12,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-        fontVariantNumeric: 'tabular-nums',
-        color: hasStartTime ? '#0b3a2f' : '#94a3b8',
-        fontWeight: hasStartTime ? 800 : 600,
-        letterSpacing: hasStartTime ? '0.01em' : '0.05em',
-        textAlign: 'left',
-      }}>
+      <span style={{ ...getTimeTextStyle(hasStartTime), color: hasStartTime ? '#0b3a2f' : '#94a3b8', textAlign: 'left' }}>
         {hasStartTime ? formatTimeOfDay(projectedTime) : '—'}
       </span>
 
@@ -512,8 +537,13 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
           display: 'grid',
           gap: 8,
         }}>
-          {(hasReadableValue(shotData?.sceneTitle) || hasReadableValue(sceneDescription)) && (
+          {(hasReadableValue(shotData?.sceneSlugline) || hasReadableValue(shotData?.sceneTitle) || hasReadableValue(sceneDescription)) && (
             <div style={{ display: 'grid', gap: 4 }}>
+              {hasReadableValue(shotData?.sceneSlugline) && (
+                <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#334155' }}>
+                  {shotData.sceneSlugline}
+                </div>
+              )}
               {hasReadableValue(shotData?.sceneTitle) && (
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
                   {shotData.sceneTitle}
@@ -1580,10 +1610,11 @@ function ScheduleListColumnHeader() {
       position: 'sticky',
       top: 104,
       zIndex: 24,
-      background: '#d7d0c2',
+      background: '#d3c9b8',
       borderTop: '1px solid #b8ae9d',
-      borderBottom: '1px solid #9d9381',
+      borderBottom: '1px solid #8f8573',
       marginBottom: 0,
+      boxShadow: '0 2px 0 rgba(17,24,39,0.06)',
     }}>
       <div style={{
         display: 'grid',
@@ -1862,7 +1893,7 @@ const STRIP_COLUMN_WIDTH = 210
 
 // ── StripDetailPopover ────────────────────────────────────────────────────────
 
-function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRect }) {
+function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRect, pageCountByScene }) {
   const updateShotBlock = useStore(s => s.updateShotBlock)
   const updateShot = useStore(s => s.updateShot)
   const removeShotBlock = useStore(s => s.removeShotBlock)
@@ -1873,11 +1904,17 @@ function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRec
   const borderColor = isDark ? '#333' : '#d4cfc6'
   const fg = isDark ? '#ddd' : '#1a1a1a'
   const mutedFg = isDark ? '#666' : '#888'
+  const castNames = splitCastNames(shotData?.cast)
+  const linkedShots = (shotData?.sceneShotSummaries || []).filter(item => item.id !== shotData?.shotId)
+  const pageVal = (shotData?.linkedSceneId && pageCountByScene?.[shotData.linkedSceneId] !== undefined)
+    ? Number(pageCountByScene[shotData.linkedSceneId]).toFixed(2)
+    : null
+  const estMins = parseMinutes(shotData?.shootTime) + parseMinutes(shotData?.setupTime)
 
   useLayoutEffect(() => {
     if (!anchorRect || !popoverRef.current) return
-    const pw = 280
-    const ph = popoverRef.current.offsetHeight || 320
+    const pw = 360
+    const ph = popoverRef.current.offsetHeight || 420
     let left = anchorRect.right + 10
     if (left + pw > window.innerWidth - 12) left = anchorRect.left - pw - 10
     left = Math.max(8, Math.min(left, window.innerWidth - pw - 8))
@@ -1909,7 +1946,7 @@ function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRec
         top: pos.top,
         left: pos.left,
         zIndex: 1500,
-        width: 280,
+        width: 360,
         background: bg,
         border: `1px solid ${borderColor}`,
         borderRadius: 6,
@@ -1949,15 +1986,18 @@ function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRec
       {shotData ? (
         <>
           {/* Body */}
-          <div style={{ padding: '10px 12px' }}>
-            <div style={{ marginBottom: 6, fontSize: 11, color: fg }}>
-              <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{shotData.sceneLabel}</span>
-              {shotData.location && (
-                <>
-                  <span style={{ color: mutedFg, margin: '0 4px' }}>·</span>
-                  <span style={{ color: mutedFg }}>{shotData.location}</span>
-                </>
-              )}
+          <div style={{ padding: '10px 12px', maxHeight: 420, overflowY: 'auto', display: 'grid', gap: 8 }}>
+            {shotData.image && (
+              <img
+                src={shotData.image}
+                alt={`${shotData.displayId} storyboard`}
+                style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 4, border: `1px solid ${borderColor}` }}
+              />
+            )}
+            <div style={{ fontSize: 12, color: fg, fontWeight: 700 }}>{shotData.sceneSlugline || shotData.sceneTitle || shotData.sceneLabel}</div>
+            <div style={{ marginBottom: 2, fontSize: 11, color: mutedFg }}>
+              <span style={{ fontWeight: 600, fontFamily: 'monospace', color: fg }}>{shotData.sceneLabel}</span>
+              {shotData.location && <><span style={{ margin: '0 4px' }}>·</span><span>{shotData.location}</span></>}
             </div>
             {shotData.notes && (
               <div style={{
@@ -1976,13 +2016,15 @@ function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRec
                 {shotData.notes}
               </div>
             )}
-            <InlineField
-              value={shotData.cast || ''}
-              onChange={(val) => updateShot(block.shotId, { cast: val })}
-              placeholder="Cast…"
-              isDark={isDark}
-              label="CAST"
-            />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {pageVal ? <Badge label={`Pages ${pageVal}`} /> : null}
+              {estMins > 0 ? <Badge label={`Est ${formatMins(estMins)}`} /> : null}
+              {shotData.intOrExt ? <Badge label={shotData.intOrExt} /> : null}
+              {shotData.dayNight ? <Badge label={shotData.dayNight} /> : null}
+            </div>
+            {castNames.length > 0 && <div style={{ fontSize: 11, color: fg }}><strong>Cast:</strong> {castNames.join(', ')}</div>}
+            {linkedShots.length > 0 && <div style={{ fontSize: 11, color: fg }}><strong>Linked shots:</strong> {linkedShots.map(s => s.cameraName || s.id).join(', ')}</div>}
+            <InlineField value={shotData.cast || ''} onChange={(val) => updateShot(block.shotId, { cast: val })} placeholder="Cast…" isDark={isDark} label="CAST" />
             <InlineField
               value={block.shootingLocation || ''}
               onChange={(val) => updateShotBlock(dayId, block.id, { shootingLocation: val })}
@@ -2004,10 +2046,17 @@ function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRec
                 onChange={(val) => updateShot(block.shotId, { setupTime: val })}
                 placeholder="—"
                 isDark={isDark}
-                label="SETUP"
-                inputWidth={40}
-              />
-            </div>
+              label="SETUP"
+              inputWidth={40}
+            />
+            <InlineField
+              value={shotData.cameraName || ''}
+              onChange={(val) => updateShot(block.shotId, { cameraName: val })}
+              placeholder="Camera package…"
+              isDark={isDark}
+              label="CAMERA"
+            />
+          </div>
           </div>
 
           {/* Footer */}
@@ -2303,7 +2352,7 @@ function StripboardColumnDropZone({ dayId, isDark }) {
 
 // ── SortableStripboardColumn ──────────────────────────────────────────────────
 
-function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, shotColorMap, isDark, height, onStripClick }) {
+function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, shotColorMap, isDark, height, onStripClick, pageCountByScene }) {
   const updateShootingDay = useStore(s => s.updateShootingDay)
   const [editingDate, setEditingDate] = useState(false)
   const dateInputRef = useRef(null)
@@ -2319,7 +2368,7 @@ function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, sho
   const fg = isDark ? '#ddd' : '#111'
   const mutedFg = isDark ? '#555' : '#777'
 
-  const shotCount = blocks.filter(b => !!b.shotId).length
+  const { shotCount, totalPages, totalMins } = summarizeDay(blocks, pageCountByScene, enrichedBlockMap)
   const blockIds = blocks.map(b => b.id)
   const formattedDate = formatDate(day.date)
   const startMins = parseStartTime(day.startTime)
@@ -2344,7 +2393,7 @@ function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, sho
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.4 : 1,
-        width: STRIP_COLUMN_WIDTH,
+        width: Math.max(STRIP_COLUMN_WIDTH, 230),
         flexShrink: 0,
         border: `1px solid ${borderColor}`,
         borderRadius: 5,
@@ -2423,16 +2472,18 @@ function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, sho
           )}
         </div>
 
-        {/* Call time + shot count */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3 }}>
+        {/* Call time + day summary */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, flexWrap: 'wrap' }}>
           {callStr && (
-            <span style={{ fontFamily: 'monospace', fontSize: 9, color: mutedFg }}>
+            <span style={{ ...getTimeTextStyle(true), fontSize: 10, color: mutedFg }}>
               CALL {callStr}
             </span>
           )}
           <span style={{ fontFamily: 'monospace', fontSize: 9, color: mutedFg }}>
             {shotCount} shot{shotCount !== 1 ? 's' : ''}
           </span>
+          {totalPages > 0 && <span style={{ fontFamily: 'monospace', fontSize: 9, color: mutedFg }}>{totalPages.toFixed(2)} pgs</span>}
+          {totalMins > 0 && <span style={{ fontFamily: 'monospace', fontSize: 9, color: mutedFg }}>{formatMins(totalMins)}</span>}
         </div>
       </div>
 
@@ -2474,7 +2525,7 @@ function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, sho
 
 const CAL_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
+function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlockMap, pageCountByScene }) {
   const addShootingDay = useStore(s => s.addShootingDay)
   const updateShootingDay = useStore(s => s.updateShootingDay)
 
@@ -2593,6 +2644,8 @@ function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
   // ── Native HTML5 drag-and-drop for calendar ───────────────────────────────
   const [draggingId, setDraggingId] = useState(null)
   const [dragOverDate, setDragOverDate] = useState(null)
+  const [detailDayId, setDetailDayId] = useState(null)
+  const detailDay = detailDayId ? schedule.find(d => d.id === detailDayId) : null
 
   const handleCardDragStart = useCallback((e, dayId) => {
     e.dataTransfer.effectAllowed = 'move'
@@ -2813,8 +2866,8 @@ function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
                     draggable
                     onDragStart={(e) => handleCardDragStart(e, day.id)}
                     onDragEnd={handleCardDragEnd}
-                    onClick={(e) => { e.stopPropagation(); onJumpToDay(day.id) }}
-                    title={`Day ${dayNum_} — click to jump to list view`}
+                    onClick={(e) => { e.stopPropagation(); setDetailDayId(day.id) }}
+                    title={`Day ${dayNum_} details`}
                     style={{
                       marginBottom: 3,
                       padding: '5px 6px',
@@ -2854,6 +2907,15 @@ function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
                           <span>CALL {callStr}</span>
                         </>
                       )}
+                    </div>
+                    <div style={{ marginTop: 3, fontSize: 9, color: isDark ? '#999' : '#525252' }}>
+                      {(() => {
+                        const summary = summarizeDay(day.blocks, pageCountByScene, enrichedBlockMap)
+                        const parts = []
+                        if (summary.totalPages > 0) parts.push(`${summary.totalPages.toFixed(2)} pgs`)
+                        if (summary.totalMins > 0) parts.push(formatMins(summary.totalMins))
+                        return parts.join(' · ')
+                      })()}
                     </div>
 
                     {/* Scene color dots */}
@@ -3024,9 +3086,46 @@ function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
           fontSize: 10,
           color: mutedFg,
         }}>
-          Drag a day card to a new date to reschedule · Click to jump to list
+          Drag a day card to a new date to reschedule · Click a day card for details
         </span>
       </div>
+      {detailDay && (
+        <div
+          onMouseDown={() => setDetailDayId(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1800, display: 'grid', placeItems: 'center' }}
+        >
+          <div onMouseDown={(e) => e.stopPropagation()} style={{ width: 460, maxWidth: '92vw', maxHeight: '82vh', overflow: 'auto', background: isDark ? '#1e1e1e' : '#fff', borderRadius: 8, border: `1px solid ${borderColor}`, padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'monospace', fontWeight: 800, color: fg }}>Day {getDayNumber(detailDay.id)} · {formatDate(detailDay.date) || 'No date set'}</div>
+              <button onClick={() => setDetailDayId(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: mutedFg, fontSize: 18 }}>×</button>
+            </div>
+            <div style={{ fontSize: 11, color: mutedFg, marginBottom: 8 }}>
+              {detailDay.startTime ? `Call ${formatTimeOfDay(parseStartTime(detailDay.startTime))}` : 'Call not set'}
+            </div>
+            {(() => {
+              const summary = summarizeDay(detailDay.blocks, pageCountByScene, enrichedBlockMap)
+              return <div style={{ fontSize: 11, color: fg, marginBottom: 8 }}>{summary.shotCount} strips · {summary.totalPages > 0 ? `${summary.totalPages.toFixed(2)} pgs` : 'No pages'} · {summary.totalMins > 0 ? formatMins(summary.totalMins) : 'No est. time'}</div>
+            })()}
+            <div style={{ display: 'grid', gap: 6 }}>
+              {detailDay.blocks.filter(b => b.shotId).map((block) => {
+                const shotData = enrichedBlockMap[block.id]
+                if (!shotData) return null
+                return (
+                  <div key={block.id} style={{ border: `1px solid ${borderColor}`, borderRadius: 4, padding: '6px 8px', fontSize: 11 }}>
+                    <div style={{ fontWeight: 700, color: fg }}>{shotData.displayId} · {shotData.sceneSlugline || shotData.sceneTitle || shotData.sceneLabel}</div>
+                    <div style={{ color: mutedFg }}>{block.shootingLocation || shotData.location || 'No location'}{shotData.cast ? ` · ${shotData.cast}` : ''}</div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => { onOpenDayInList?.(detailDay.id); setDetailDayId(null) }} style={{ padding: '5px 10px', fontFamily: 'monospace', fontSize: 11, borderRadius: 4, border: `1px solid ${borderColor}`, background: isDark ? '#262626' : '#f4f1ea', color: fg, cursor: 'pointer' }}>
+                Open in List View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -3059,7 +3158,7 @@ export default function ScheduleTab({
   const [stripDensity, setStripDensity] = useState(scheduleViewState.stripDensity || 'comfortable') // 'compact' | 'comfortable'
   const [stripPopover, setStripPopover] = useState(null) // { block, shotData, dayId, rect }
 
-  // Jump to a specific day in the List view (used by CalendarView cards)
+  // Open a specific day in the List view (used by CalendarView dialog action)
   const handleJumpToDay = useCallback((dayId) => {
     setScheduleView('list')
     // Allow React to re-render the list view before scrolling
@@ -3341,162 +3440,29 @@ export default function ScheduleTab({
       <div className="px-6 pb-6 pt-3">
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
-      ) : (
-        <div style={{ display: 'flex', border: '1px solid #c8bfaf', background: '#f5f2ea' }}>
-          <SidebarPane width={276} title="Schedule Controls">
-            <div style={{ padding: '10px 12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <section>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
-                  View
-                </div>
-                <SubTabNav
-                  tabs={['List', 'Stripboard', 'Calendar']}
-                  active={activeSubTab}
-                  onChange={(tab) => {
-                    if (tab === 'List') setScheduleView('list')
-                    if (tab === 'Stripboard') setScheduleView('stripboard')
-                    if (tab === 'Calendar') setScheduleView('calendar')
-                  }}
-                />
-              </section>
-
-              <section>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
-                  Actions
-                </div>
-                <button
-                  onClick={() => addShootingDay()}
-                  style={{
-                    width: '100%',
-                    padding: '8px 14px',
-                    fontFamily: 'Sora, sans-serif',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    border: 'none',
-                    borderRadius: 4,
-                    background: '#E84040',
-                    color: '#ffffff',
-                    cursor: 'pointer',
-                    transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#d03838' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#E84040' }}
-                >
-                  + Add Day
-                </button>
-              </section>
-
-              <section>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
-                  Selected Day
-                </div>
-                {selectedDay ? (
-                  <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 9, display: 'grid', rowGap: 6 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937' }}>Day {selectedDayIndex + 1}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>{formatDate(selectedDay.date) || 'Date not set'}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>Call: {selectedDay.startTime || '—'}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>Basecamp: {selectedDay.basecamp || '—'}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>Strips: {selectedDayShotBlocks.length}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>Breaks: {selectedDayBreakBlocks.length}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>Pages: {selectedDayPages.toFixed(2).replace(/\.00$/, '')}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563' }}>Est. day: {formatMins(selectedDayShootMins + selectedDayBreakMins)}</div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#718096' }}>No day selected.</div>
-                )}
-              </section>
-
-              <section>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
-                  Display
-                </div>
-                {scheduleView === 'stripboard' ? (
-                  <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1' }}>
-                    <button
-                      onClick={() => setStripDensity('compact')}
-                      title="Compact strips (24px)"
-                      style={{
-                        textAlign: 'center',
-                        padding: '5px 12px',
-                        fontFamily: 'Sora, sans-serif',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        letterSpacing: '0.04em',
-                        border: 'none',
-                        borderRadius: 3,
-                        background: stripDensity === 'compact' ? '#FAF8F4' : 'transparent',
-                        color: stripDensity === 'compact' ? '#E84040' : '#718096',
-                        cursor: 'pointer',
-                        flex: 1,
-                      }}
-                    >
-                      Compact
-                    </button>
-                    <button
-                      onClick={() => setStripDensity('comfortable')}
-                      title="Comfortable strips (36px)"
-                      style={{
-                        textAlign: 'center',
-                        padding: '5px 12px',
-                        fontFamily: 'Sora, sans-serif',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        letterSpacing: '0.04em',
-                        border: 'none',
-                        borderRadius: 3,
-                        background: stripDensity === 'comfortable' ? '#FAF8F4' : 'transparent',
-                        color: stripDensity === 'comfortable' ? '#E84040' : '#718096',
-                        cursor: 'pointer',
-                        flex: 1,
-                      }}
-                    >
-                      Comfortable
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#718096' }}>
-                    {scheduleView === 'list' ? 'Use Configure to manage List columns.' : 'No extra display controls for this view.'}
-                  </div>
-                )}
-                {schedule.length > 0 && scheduleView === 'list' && (
-                  <div ref={configPanelRef} style={{ position: 'relative', marginTop: 8 }}>
-                    {configureOpen && (
-                      <ScheduleColumnConfigPanel
-                        config={scheduleColumnConfig}
-                        onChange={setScheduleColumnConfig}
-                        onClose={() => onConfigureOpenChange(false)}
-                      />
-                    )}
-                  </div>
-                )}
-              </section>
-
-              <section>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
-                  Schedule Summary
-                </div>
-                <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 9, display: 'grid', rowGap: 6 }}>
-                  <div style={{ fontSize: 11, color: '#4b5563' }}>Shoot days: {schedule.length}</div>
-                  <div style={{ fontSize: 11, color: '#4b5563' }}>Scheduled strips: {totalStrips}</div>
-                  <div style={{ fontSize: 11, color: '#4b5563' }}>Break strips: {totalBreaks}</div>
-                  <div style={{ fontSize: 11, color: '#4b5563' }}>Pages: {totalPages.toFixed(2).replace(/\.00$/, '')}</div>
-                  <div style={{ fontSize: 11, color: '#4b5563' }}>Estimated shoot: {formatMins(totalShootMins)}</div>
-                  <div style={{ fontSize: 11, color: '#4b5563' }}>Estimated day+break: {formatMins(totalShootMins + totalBreakMins)}</div>
-                </div>
-              </section>
-            </div>
-          </SidebarPane>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-          {scheduleView === 'calendar' ? (
-            // ── Calendar view ──────────────────────────────────────────────────
-            <CalendarView
-              schedule={schedule}
-              scenes={scenes}
-              isDark={isDark}
-              onJumpToDay={handleJumpToDay}
+      ) : scheduleView === 'calendar' ? (
+        // ── Calendar view ──────────────────────────────────────────────────
+        <CalendarView
+          schedule={schedule}
+          scenes={scenes}
+          isDark={isDark}
+          onOpenDayInList={handleJumpToDay}
+          enrichedBlockMap={enrichedBlockMap}
+          pageCountByScene={pageCountByScene}
+        />
+      ) : scheduleView === 'list' ? (
+        <div style={{ background: '#f5f2ea', border: '1px solid #c8bfaf' }}>
+          <ScheduleListColumnHeader />
+          <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
+            <DayTabBar
+              days={dayTabs}
+              activeDay={listActiveDayId}
+              onSelect={(dayId) => {
+                setListActiveDayId(dayId)
+                const el = document.getElementById(`sched-day-${dayId}`)
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+              onAddDay={() => addShootingDay()}
             />
           ) : scheduleView === 'list' ? (
             <div>
@@ -3566,23 +3532,53 @@ export default function ScheduleTab({
             </div>
           ) : (
         // ── Stripboard view ────────────────────────────────────────────────────
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDragEnd={handleDragEnd}
-              onDragCancel={handleDragCancel}
-            >
-              {/* Strip detail popover */}
-              {stripPopover && (
-                <StripDetailPopover
-                  block={stripPopover.block}
-                  shotData={stripPopover.shotData}
-                  dayId={stripPopover.dayId}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          {/* Strip detail popover */}
+          {stripPopover && (
+            <StripDetailPopover
+              block={stripPopover.block}
+              shotData={stripPopover.shotData}
+              dayId={stripPopover.dayId}
+              isDark={isDark}
+              onClose={() => setStripPopover(null)}
+              anchorRect={stripPopover.rect}
+              pageCountByScene={pageCountByScene}
+            />
+          )}
+
+          {/* Horizontally scrolling board */}
+          <SortableContext items={dayIds} strategy={horizontalListSortingStrategy}>
+            <div style={{
+              display: 'flex',
+              gap: 12,
+              overflowX: 'auto',
+              paddingBottom: 16,
+              alignItems: 'flex-start',
+              // Extend past the padded container so columns reach the edge
+              marginLeft: -4,
+              marginRight: -4,
+              paddingLeft: 4,
+              paddingRight: 4,
+            }}>
+              {schedule.map((day, dayIndex) => (
+                <SortableStripboardColumn
+                  key={day.id}
+                  day={day}
+                  dayIndex={dayIndex}
+                  blocks={getBlocksForDay(day.id)}
+                  enrichedBlockMap={enrichedBlockMap}
+                  shotColorMap={shotColorMap}
                   isDark={isDark}
-                  onClose={() => setStripPopover(null)}
-                  anchorRect={stripPopover.rect}
+                  height={stripHeight}
+                  onStripClick={handleStripClick}
+                  pageCountByScene={pageCountByScene}
                 />
               )}
 
