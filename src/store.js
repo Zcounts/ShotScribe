@@ -386,7 +386,7 @@ const useStore = create((set, get) => ({
 
   // UI state
   settingsOpen: false,
-  contextMenu: null, // { shotId, sceneId, x, y }
+  contextMenu: null, // { entityType: 'shot'|'scene', entityId, x, y }
   activeTab: 'script', // 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
@@ -1553,7 +1553,7 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
-  showContextMenu: (shotId, sceneId, x, y) => set({ contextMenu: { shotId, sceneId, x, y } }),
+  showContextMenu: (entityType, entityId, x, y) => set({ contextMenu: { entityType, entityId, x, y } }),
   hideContextMenu: () => set({ contextMenu: null }),
 
   setShortcutBinding: (actionId, binding, opts = {}) => {

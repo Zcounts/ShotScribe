@@ -34,7 +34,11 @@ import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
-import { resolveEntityTarget, shouldSuppressEntityOpen } from './utils/entityDialog'
+import {
+  resolveEntityTarget,
+  shouldSuppressEntityContextMenu,
+  shouldSuppressEntityOpen,
+} from './utils/entityDialog'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -324,6 +328,7 @@ export default function App() {
   const autoSave = useStore(s => s.autoSave)
   const getProjectData = useStore(s => s.getProjectData)
   const hideContextMenu = useStore(s => s.hideContextMenu)
+  const showContextMenu = useStore(s => s.showContextMenu)
   const addScene = useStore(s => s.addScene)
   const activeTab = useStore(s => s.activeTab)
   const setActiveTab = useStore(s => s.setActiveTab)
@@ -616,9 +621,12 @@ export default function App() {
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
     const target = event.target
-    if (shouldSuppressEntityOpen(target)) return
     const entity = resolveEntityTarget(target)
     if (!entity) return
+    const entityNode = target instanceof Element ? target.closest('[data-entity-type][data-entity-id]') : null
+    if (shouldSuppressEntityOpen(target, entityNode)) return
+    event.preventDefault()
+    event.stopPropagation()
     if (entity.entityType === 'scene') {
       openSceneDialog(entity.entityId)
       return
@@ -628,11 +636,24 @@ export default function App() {
     }
   }, [openSceneDialog, openShotDialog])
 
+  const handleEntityContextMenuCapture = useCallback((event) => {
+    const target = event.target
+    const entity = resolveEntityTarget(target)
+    if (!entity) return
+    const entityNode = target instanceof Element ? target.closest('[data-entity-type][data-entity-id]') : null
+    if (shouldSuppressEntityContextMenu(target, entityNode)) return
+    if (entity.entityType !== 'shot' && entity.entityType !== 'scene') return
+    event.preventDefault()
+    event.stopPropagation()
+    showContextMenu(entity.entityType, entity.entityId, event.clientX, event.clientY)
+  }, [showContextMenu])
+
   return (
     <div
       className="flex flex-col"
       style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#F5F2EC' }}
       onClick={() => hideContextMenu()}
+      onContextMenuCapture={handleEntityContextMenuCapture}
       onDoubleClickCapture={handleEntityDoubleClickCapture}
     >
       {/* Toolbar */}
@@ -811,6 +832,8 @@ export default function App() {
             <div className="add-scene-row">
               <button
                 className="add-scene-btn"
+                data-add-scene-control="true"
+                data-suppress-entity-context-menu="true"
                 onClick={() => addScene()}
                 title="Add a new page"
               >

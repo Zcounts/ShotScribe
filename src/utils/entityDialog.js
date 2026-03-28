@@ -4,15 +4,27 @@ const INTERACTIVE_SELECTOR = [
   'select',
   'button',
   'a',
+  'label',
   'summary',
   '[role="button"]',
   '[role="link"]',
   '[role="menuitem"]',
+  '[role="textbox"]',
+  '[role="combobox"]',
+  '[role="listbox"]',
   '[contenteditable=""]',
   '[contenteditable="true"]',
   '[data-suppress-entity-open="true"]',
+  '[data-suppress-entity-context-menu="true"]',
   '[data-no-entity-open="true"]',
+  '[data-no-entity-context-menu="true"]',
+  '[data-upload-control]',
+  '[data-dropdown-trigger]',
   '[data-drag-handle]',
+  '[data-resize-handle]',
+  '[data-add-scene-control]',
+  '[data-add-shot-control]',
+  '[data-expand-toggle]',
   '[draggable="true"]',
 ].join(',')
 
@@ -21,9 +33,25 @@ export function isInteractiveElement(target) {
   return !!target.closest(INTERACTIVE_SELECTOR)
 }
 
-export function shouldSuppressEntityOpen(target) {
+function getNearestInteractiveElement(target) {
+  if (!(target instanceof Element)) return null
+  return target.closest(INTERACTIVE_SELECTOR)
+}
+
+export function shouldSuppressEntityOpen(target, entityNode = null) {
   if (!(target instanceof Element)) return true
-  return isInteractiveElement(target)
+  const interactiveNode = getNearestInteractiveElement(target)
+  if (!interactiveNode) return false
+  if (entityNode && interactiveNode === entityNode) return false
+  return true
+}
+
+export function shouldSuppressEntityContextMenu(target, entityNode = null) {
+  if (!(target instanceof Element)) return true
+  const interactiveNode = getNearestInteractiveElement(target)
+  if (!interactiveNode) return false
+  if (entityNode && interactiveNode === entityNode) return false
+  return true
 }
 
 export function resolveEntityTarget(target) {

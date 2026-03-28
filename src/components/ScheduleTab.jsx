@@ -1198,7 +1198,10 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
           if (shots.length === 0) return null
           return (
             <div key={scene.id}>
-              <div style={{
+              <div
+                data-entity-type="scene"
+                data-entity-id={scene.id}
+                style={{
                 padding: '5px 12px',
                 fontSize: 10,
                 fontFamily: 'monospace',
@@ -1227,6 +1230,8 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
                 return (
                   <button
                     key={shot.id}
+                    data-entity-type="shot"
+                    data-entity-id={shot.id}
                     onClick={() => addShotBlock(dayId, shot.id)}
                     title={alreadyAdded ? 'Already scheduled — click to add again' : 'Add to this day'}
                     style={{
@@ -2413,6 +2418,8 @@ function SortableStrip({ block, shotData, color, dayId, isDark, height, onStripC
   return (
     <div
       ref={setNodeRef}
+      data-entity-type={isShotBlock ? 'shot' : undefined}
+      data-entity-id={isShotBlock ? block.shotId : undefined}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
