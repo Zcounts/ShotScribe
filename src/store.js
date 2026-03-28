@@ -269,6 +269,7 @@ function createShot(overrides = {}) {
     // AD-specific shotlist fields (not shown in storyboard view)
     scriptTime: '',
     setupTime: '',
+    shotAspectRatio: '',
     predictedTakes: '',
     shootTime: '',
     takeNumber: '',
@@ -1850,6 +1851,7 @@ const useStore = create((set, get) => ({
             dayNight: s.dayNight,
             scriptTime: s.scriptTime,
             setupTime: s.setupTime,
+            shotAspectRatio: s.shotAspectRatio || '',
             predictedTakes: s.predictedTakes,
             shootTime: s.shootTime,
             takeNumber: s.takeNumber,
@@ -2098,6 +2100,7 @@ const useStore = create((set, get) => ({
       dayNight: s.dayNight !== undefined ? s.dayNight : (sceneDayNight || ''),
       scriptTime: s.scriptTime || '',
       setupTime: s.setupTime || '',
+      shotAspectRatio: s.shotAspectRatio || '',
       predictedTakes: s.predictedTakes || '',
       shootTime: s.shootTime || '',
       takeNumber: s.takeNumber || '',

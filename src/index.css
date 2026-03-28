@@ -303,11 +303,11 @@
   /* Page header */
   .page-header {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr) max-content;
-    column-gap: 20px;
-    row-gap: 8px;
+    grid-template-columns: minmax(180px, max-content) minmax(220px, 1fr) max-content;
+    column-gap: 10px;
+    row-gap: 4px;
     align-items: start;
-    padding: 8px 12px;
+    padding: 6px 10px 5px;
     border-bottom: 2px solid #1A1A1A;
     background: #FAF8F4;
   }
@@ -318,7 +318,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0;
+    gap: 1px;
   }
 
   .page-header-meta {
@@ -334,9 +334,9 @@
   .page-header-scene-top {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     line-height: 1;
-    margin-bottom: 2px;
+    margin-bottom: 0;
   }
 
   .page-header-scene-bottom {
@@ -354,8 +354,12 @@
     white-space: nowrap;
   }
 
-  .page-header-scene-label {
-    font-size: 30px;
+  .page-header-scene-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #4A5568;
+    text-transform: uppercase;
   }
 
   .page-header-input {
@@ -364,13 +368,76 @@
 
   .page-header-slugline {
     min-width: 0;
-    max-width: min(40ch, 100%);
+    max-width: min(36ch, 100%);
     flex: 0 1 auto;
+    font-size: 16px;
+    line-height: 1.05;
   }
 
   .page-header-token {
     line-height: 1.1;
     white-space: nowrap;
+  }
+
+  .page-header-notes {
+    border-left: 1px solid rgba(74,85,104,0.2);
+    border-right: 1px solid rgba(74,85,104,0.2);
+    padding: 2px 8px;
+    min-width: 0;
+  }
+
+  .page-header-notes-input {
+    width: 100%;
+    border: none;
+    outline: none;
+    resize: none;
+    background: transparent;
+    font-size: 11px;
+    line-height: 1.35;
+    font-family: 'Sora', sans-serif;
+    color: #2C2C2C;
+  }
+
+  .page-header-cameras {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    opacity: 0.84;
+  }
+
+  .page-header-cameras-list {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+  }
+
+  .page-header-camera-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #4A5568;
+  }
+
+  .page-header-camera-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 10px;
+    font-weight: 600;
+    color: #374151;
+    padding: 0;
+  }
+
+  .page-header-camera-name {
+    text-align: right;
+  }
+
+  .page-header-camera-equals {
+    color: #718096;
   }
 
   /* ── Toolbar (app chrome) ────────────────────────────────────────────────── */
@@ -505,40 +572,102 @@
   }
 
   .shot-time-fields {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    border-top: 1px solid rgba(74,85,104,0.12);
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+    font-family: 'Sora', sans-serif;
   }
 
-  .shot-time-field {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px 6px 5px;
-    border-right: 1px solid rgba(74,85,104,0.12);
-  }
-
-  .shot-time-field:last-child {
-    border-right: none;
-  }
-
-  .shot-time-field span {
-    font-size: 9px;
+  .shot-time-fields thead th {
     font-weight: 700;
-    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 4px;
+    text-align: center;
+    vertical-align: middle;
+    border: 1px solid rgba(74,85,104,0.12);
+    background: #EDE9E1;
+    font-size: 10px;
+    letter-spacing: 0.04em;
     color: #4A5568;
   }
 
-  .shot-time-field input {
-    width: 100%;
-    border: none;
-    outline: none;
-    background: transparent;
-    padding: 0;
+  .shot-time-fields tbody td {
+    padding: 2px 4px;
+    text-align: center;
+    vertical-align: middle;
+    border: 1px solid rgba(74,85,104,0.12);
     font-size: 10px;
     color: #2C2C2C;
-    font-family: 'Sora', sans-serif;
+  }
+
+  .shot-time-fields td input,
+  .shot-time-fields td select {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-size: 10px;
+    padding: 0;
+    outline: none;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  .shot-time-fields td input {
+    cursor: text;
+  }
+
+  .shot-time-fields td select {
+    cursor: pointer;
+  }
+
+  .shot-time-fields .shot-time-field-empty {
+    color: #9CA3AF;
+  }
+
+  .shot-time-fields .shot-time-field-cell {
+    min-height: 18px;
+  }
+
+  .shot-time-fields .shot-time-field-cell > div {
+    height: 100%;
+  }
+
+  .shot-time-fields .shot-time-field-cell .shot-time-number {
+    text-align: center;
+  }
+
+  .shot-time-fields .shot-time-field-cell .shot-time-number::placeholder {
+    color: #B5BDC7;
+  }
+
+  .shot-time-fields .shot-time-field-cell .shot-time-aspect-dropdown {
+    cursor: pointer;
+  }
+
+  .shot-time-fields .shot-time-field-cell .shot-time-aspect-dropdown input {
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .shot-time-fields .shot-time-field-cell .shot-time-aspect-dropdown button {
+    padding-right: 0;
+  }
+
+  .shot-time-fields caption {
+    display: none;
+  }
+
+  .shot-time-field-empty {
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .shot-time-fields-wrapper {
+    display: block;
+    border-top: 1px solid rgba(74,85,104,0.12);
   }
 
   .context-menu-item:hover {

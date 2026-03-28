@@ -5,6 +5,7 @@ import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
+import CustomDropdown from './CustomDropdown'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 
 function parseAspectRatioValue(value) {
@@ -14,6 +15,18 @@ function parseAspectRatioValue(value) {
   const rightNum = Number(right)
   if (!leftNum || !rightNum) return '16 / 9'
   return `${leftNum} / ${rightNum}`
+}
+
+const SHOT_ASPECT_RATIO_PRESETS = ['1:1', '4:3', '16:9', '3:2', '2.39:1']
+
+function sanitizeNumericInput(value) {
+  if (value == null) return ''
+  const cleaned = String(value).replace(/[^0-9.]/g, '')
+  const firstDot = cleaned.indexOf('.')
+  if (firstDot === -1) return cleaned
+  const integerPart = cleaned.slice(0, firstDot + 1)
+  const decimalPart = cleaned.slice(firstDot + 1).replace(/\./g, '')
+  return `${integerPart}${decimalPart}`
 }
 
 // Small scene link badge + picker for linking a shot to a script scene
@@ -233,6 +246,8 @@ function SceneLinkBadge({ shot }) {
 export default function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
+  const customDropdownOptions = useStore(s => s.customDropdownOptions)
+  const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
@@ -284,12 +299,30 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
   }, [shot.id, updateShot])
 
   const handleSetupTimeChange = useCallback((e) => {
-    updateShot(shot.id, { setupTime: e.target.value })
+    updateShot(shot.id, { setupTime: sanitizeNumericInput(e.target.value) })
   }, [shot.id, updateShot])
 
   const handleShotTimeChange = useCallback((e) => {
-    updateShot(shot.id, { shootTime: e.target.value })
+    updateShot(shot.id, { shootTime: sanitizeNumericInput(e.target.value) })
   }, [shot.id, updateShot])
+
+  const handleShotAspectRatioChange = useCallback((value) => {
+    updateShot(shot.id, { shotAspectRatio: value })
+  }, [shot.id, updateShot])
+
+  const shotAspectRatioOptions = useMemo(
+    () => [...new Set([...SHOT_ASPECT_RATIO_PRESETS, ...(customDropdownOptions?.shotAspectRatio || [])])],
+    [customDropdownOptions?.shotAspectRatio]
+  )
+
+  const timeMetadataColumns = useMemo(
+    () => [
+      visibleInfo.setupTime !== false ? { key: 'setupTime', label: 'SETUP TIME' } : null,
+      visibleInfo.shotTime !== false ? { key: 'shotTime', label: 'SHOT TIME' } : null,
+      visibleInfo.shotAspectRatio !== false ? { key: 'shotAspectRatio', label: 'ASPECT RATIO' } : null,
+    ].filter(Boolean),
+    [visibleInfo.setupTime, visibleInfo.shotTime, visibleInfo.shotAspectRatio]
+  )
 
   return (
     <div
@@ -404,30 +437,69 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
         </div>
       )}
 
-      {(visibleInfo.setupTime !== false || visibleInfo.shotTime !== false) && (
-        <div className="shot-time-fields">
-          {visibleInfo.setupTime !== false && (
-            <label className="shot-time-field">
-              <span>SETUP TIME</span>
-              <input
-                type="text"
-                value={shot.setupTime || ''}
-                onChange={handleSetupTimeChange}
-                placeholder="e.g. 15"
-              />
-            </label>
-          )}
-          {visibleInfo.shotTime !== false && (
-            <label className="shot-time-field">
-              <span>SHOT TIME</span>
-              <input
-                type="text"
-                value={shot.shootTime || ''}
-                onChange={handleShotTimeChange}
-                placeholder="e.g. 10"
-              />
-            </label>
-          )}
+      {timeMetadataColumns.length > 0 && (
+        <div className="shot-time-fields-wrapper">
+          <table className="shot-time-fields">
+            <caption>Shot timing and aspect ratio metadata</caption>
+            <thead>
+              <tr>
+                {timeMetadataColumns.map(column => (
+                  <th key={column.key}>{column.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {timeMetadataColumns.map(column => (
+                  <td key={column.key} className="shot-time-field-cell">
+                    {column.key === 'setupTime' ? (
+                      <input
+                        className="shot-time-number"
+                        type="text"
+                        inputMode="decimal"
+                        value={sanitizeNumericInput(shot.setupTime || '')}
+                        onChange={handleSetupTimeChange}
+                        placeholder="15"
+                      />
+                    ) : null}
+                    {column.key === 'shotTime' ? (
+                      <input
+                        className="shot-time-number"
+                        type="text"
+                        inputMode="decimal"
+                        value={sanitizeNumericInput(shot.shootTime || '')}
+                        onChange={handleShotTimeChange}
+                        placeholder="10"
+                      />
+                    ) : null}
+                    {column.key === 'shotAspectRatio' ? (
+                      <div className="shot-time-aspect-dropdown">
+                        <CustomDropdown
+                          value={shot.shotAspectRatio || ''}
+                          options={shotAspectRatioOptions}
+                          onChange={handleShotAspectRatioChange}
+                          onAddCustomOption={(option) => addCustomDropdownOption('shotAspectRatio', option)}
+                          inputStyle={{
+                            width: '100%',
+                            border: 'none',
+                            background: 'transparent',
+                            textAlign: 'center',
+                            fontSize: 10,
+                            padding: 0,
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            cursor: 'pointer',
+                            boxSizing: 'border-box',
+                          }}
+                          placeholder="—"
+                        />
+                      </div>
+                    ) : null}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
 
