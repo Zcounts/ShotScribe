@@ -289,13 +289,13 @@ export default function ScenesTab({
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
-        {visibleScenes.map(scene => {
+          {visibleScenes.map(scene => {
           const linkedShots = linkedShotsMap[scene.id] || []
           const confidence = computeConfidence(scene, linkedShots.length)
           const expanded = !!expandedIds[scene.id]
           const selected = selectedSceneIds.includes(scene.id)
           return (
-            <div className="app-surface-card" key={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ borderRadius: 6 }}>
+            <div className="app-surface-card" key={scene.id} data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ borderRadius: 6 }}>
               <div
                 role="button"
                 tabIndex={0}

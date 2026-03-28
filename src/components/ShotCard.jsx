@@ -216,6 +216,8 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
       ref={setNodeRef}
       style={style}
       id={`storyboard-shot-${shot.id}`}
+      data-entity-type="shot"
+      data-entity-id={shot.id}
       className={`shot-card ${isDragging ? 'is-dragging' : ''}`}
       onContextMenu={handleContextMenu}
       onMouseEnter={() => setHovered(true)}

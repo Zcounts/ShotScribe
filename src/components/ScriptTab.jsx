@@ -922,7 +922,7 @@ export default function ScriptTab() {
         controls={null}
       >
           {orderedScenes.map(sc => (
-            <button key={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: activeSceneId === sc.id ? 'rgba(232,64,64,0.08)' : 'none' }}>
+            <button key={sc.id} data-entity-type="scene" data-entity-id={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: activeSceneId === sc.id ? 'rgba(232,64,64,0.08)' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <SceneColorPicker value={sc.color || null} onChange={(color) => updateScriptScene(sc.id, { color })} title="Scene color" />
                 <span style={{ fontWeight: 700, fontSize: 11 }}>SC {sc.sceneNumber}</span>
@@ -1036,6 +1036,8 @@ export default function ScriptTab() {
                           if (row.isSceneStart) headingRefs.current[row.sceneId] = el
                         }}
                         data-sceneid={row.sceneId}
+                        data-entity-type="scene"
+                        data-entity-id={row.sceneId}
                         onClick={() => {
                           if (row.blockId) setSelectedBlock({ sceneId: row.sceneId, blockId: row.blockId })
                           setActiveSceneId(row.sceneId)

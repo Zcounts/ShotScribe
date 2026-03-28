@@ -403,6 +403,7 @@ const useStore = create((set, get) => ({
   scheduleCollapseState: { days: {}, blocks: {} },
   scriptFocusRequest: null, // { sceneId, shotId, at }
   scenePropertiesDialog: null, // { source: 'storyboard'|'script', sceneId }
+  shotPropertiesDialog: null, // { shotId }
   tabViewState: {
     script: {},
     scenes: {},
@@ -667,6 +668,33 @@ const useStore = create((set, get) => ({
     set({ scenePropertiesDialog: { source, sceneId } })
   },
   closeScenePropertiesDialog: () => set({ scenePropertiesDialog: null }),
+  openSceneDialog: (sceneId) => {
+    const state = get()
+    const isScriptScene = state.scriptScenes.some(scene => scene.id === sceneId)
+    set({ scenePropertiesDialog: { source: isScriptScene ? 'script' : 'storyboard', sceneId } })
+  },
+  openShotDialog: (shotId) => {
+    set({ shotPropertiesDialog: { shotId } })
+  },
+  closeShotDialog: () => set({ shotPropertiesDialog: null }),
+  getShotDialogData: (shotId) => {
+    const state = get()
+    for (let sceneIdx = 0; sceneIdx < state.scenes.length; sceneIdx += 1) {
+      const scene = state.scenes[sceneIdx]
+      const shotIdx = (scene.shots || []).findIndex(item => item.id === shotId)
+      if (shotIdx === -1) continue
+      const shot = scene.shots[shotIdx]
+      const canonical = state.getCanonicalStoryboardSceneMetadata(scene.id)
+      return {
+        shot,
+        scene,
+        sceneId: scene.id,
+        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        sceneTitle: canonical?.titleSlugline || scene.slugline || scene.location || scene.sceneLabel || '',
+      }
+    }
+    return null
+  },
 
   // Link a shot to a script scene (or unlink with null)
   linkShotToScene: (shotId, sceneId, opts = {}) => {
