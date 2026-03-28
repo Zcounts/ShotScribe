@@ -1,10 +1,20 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
+import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
+
+function parseAspectRatioValue(value) {
+  if (value === '2.39:1') return '239 / 100'
+  const [left, right] = String(value || '16:9').split(':')
+  const leftNum = Number(left)
+  const rightNum = Number(right)
+  if (!leftNum || !rightNum) return '16 / 9'
+  return `${leftNum} / ${rightNum}`
+}
 
 // Small scene link badge + picker for linking a shot to a script scene
 function SceneLinkBadge({ shot }) {
@@ -13,6 +23,8 @@ function SceneLinkBadge({ shot }) {
   const requestScriptFocus = useStore(s => s.requestScriptFocus)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const pickerRef = useRef(null)
 
   const linked = shot.linkedSceneId
     ? scriptScenes.find(s => s.id === shot.linkedSceneId)
@@ -27,6 +39,49 @@ function SceneLinkBadge({ shot }) {
       || `${ss.location || ''}`.toLowerCase().includes(q)
       || (ss.characters || []).join(' ').toLowerCase().includes(q))
   })
+
+  useEffect(() => {
+    if (!pickerOpen) return
+    const handlePointerDown = (event) => {
+      if (!pickerRef.current?.contains(event.target)) {
+        setPickerOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [pickerOpen])
+
+  useEffect(() => {
+    const selectedIndex = filteredScenes.findIndex(ss => ss.id === shot.linkedSceneId)
+    setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0)
+  }, [filteredScenes, shot.linkedSceneId])
+
+  const handlePickerKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setPickerOpen(false)
+      return
+    }
+    if (!filteredScenes.length) return
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setActiveIndex((current) => Math.min(filteredScenes.length - 1, current + 1))
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActiveIndex((current) => Math.max(0, current - 1))
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const activeScene = filteredScenes[activeIndex]
+      if (!activeScene) return
+      linkShotToScene(shot.id, activeScene.id)
+      setPickerOpen(false)
+    }
+  }
 
   if (scriptScenes.length === 0) return null
 
@@ -75,88 +130,119 @@ function SceneLinkBadge({ shot }) {
 
       {pickerOpen && (
         <div
+          ref={pickerRef}
           onPointerDown={e => e.stopPropagation()}
+          onKeyDown={handlePickerKeyDown}
           style={{
-            position: 'absolute', top: 18, right: 0, zIndex: 50,
-            background: '#1e1e2e', border: '1px solid #444', borderRadius: 6,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-            minWidth: 180, maxHeight: 220, overflowY: 'auto',
-            padding: 4,
+            position: 'absolute', top: 22, right: 0, zIndex: 80,
+            background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.3)', borderRadius: 10,
+            boxShadow: '0 18px 38px rgba(0,0,0,0.3)',
+            width: 470,
+            maxWidth: 'min(470px, 70vw)',
+            maxHeight: 460,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
-          <div className="p-2 border-b border-slate/15">
+          <div style={{ padding: 10, borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#F1EDE5' }}>
             <input
               autoFocus
               placeholder="Search by number, location, or cast..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-[#2C2C2E] text-white text-sm px-2 py-1.5 rounded outline-none placeholder-slate/50 focus:ring-1 focus:ring-[#E84040]/50"
+              style={{
+                width: '100%',
+                border: '1px solid rgba(74,85,104,0.35)',
+                background: '#FAF8F4',
+                color: '#1A1A1A',
+                fontSize: 12,
+                padding: '8px 10px',
+                borderRadius: 6,
+                outline: 'none',
+              }}
             />
           </div>
-          {/* Unlink option */}
-          {linked && (
-            <button
-              onClick={() => { linkShotToScene(shot.id, null); setPickerOpen(false) }}
-              style={{
-                width: '100%', textAlign: 'left', padding: '5px 8px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 10, fontFamily: 'monospace', color: '#f87171',
-                borderRadius: 3,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-            >
-              Unlink scene
-            </button>
-          )}
+          <div style={{ padding: 8, borderBottom: linked ? '1px solid rgba(74,85,104,0.18)' : 'none' }}>
+            {linked && (
+              <button
+                onClick={() => { linkShotToScene(shot.id, null); setPickerOpen(false) }}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '8px 10px',
+                  background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.26)', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 600, color: '#b42323', borderRadius: 6,
+                }}
+              >
+                Unlink scene
+              </button>
+            )}
+          </div>
 
-          {/* Scene options */}
-          {filteredScenes.map(ss => (
-            <button
-              key={ss.id}
-              onClick={() => { linkShotToScene(shot.id, ss.id); setPickerOpen(false) }}
-              style={{
-                width: '100%', textAlign: 'left', padding: '5px 8px',
-                background: ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none',
-                border: 'none', cursor: 'pointer',
-                fontSize: 10, fontFamily: 'monospace',
-                color: ss.id === shot.linkedSceneId ? '#93c5fd' : '#ccc',
-                borderRadius: 3,
-                display: 'flex', alignItems: 'center', gap: 5,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.3)' : 'rgba(128,128,128,0.1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(59,130,246,0.2)' : 'none')}
-            >
-              {ss.color && (
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
-              )}
-              <span style={{ fontWeight: 700 }}>SC {ss.sceneNumber}</span>
-              {ss.location && <span style={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>· {ss.location}</span>}
-              {(ss.characters || []).length > 0 && (
-                <span style={{ opacity: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
-                  · {(ss.characters || []).join(', ')}
-                </span>
-              )}
-            </button>
-          ))}
-          {filteredScenes.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#718096', padding: '10px 8px', fontSize: 11 }}>
-              No scenes match
-            </div>
-          )}
+          <div style={{ overflowY: 'auto', padding: 8, minHeight: 220 }}>
+            {filteredScenes.map((ss, idx) => {
+              const isSelected = ss.id === shot.linkedSceneId
+              const isActive = idx === activeIndex
+              return (
+                <button
+                  key={ss.id}
+                  onClick={() => { linkShotToScene(shot.id, ss.id); setPickerOpen(false) }}
+                  onMouseEnter={() => setActiveIndex(idx)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '10px 12px',
+                    marginBottom: 6,
+                    background: isSelected
+                      ? 'rgba(82,101,224,0.16)'
+                      : isActive
+                        ? 'rgba(74,85,104,0.1)'
+                        : '#FAF8F4',
+                    border: `1px solid ${isSelected ? 'rgba(82,101,224,0.48)' : isActive ? 'rgba(74,85,104,0.35)' : 'rgba(74,85,104,0.2)'}`,
+                    cursor: 'pointer',
+                    borderRadius: 8,
+                    display: 'grid',
+                    gap: 4,
+                    color: '#2C2C2E',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {ss.color && (
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
+                    )}
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#4A5568' }}>SC {ss.sceneNumber || '—'}</span>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A' }}>{ss.slugline || ss.location || 'Untitled scene'}</div>
+                  <div style={{ fontSize: 11, color: '#718096', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {[ss.location, (ss.characters || []).length > 0 ? (ss.characters || []).join(', ') : null].filter(Boolean).join(' · ') || 'No additional metadata'}
+                  </div>
+                </button>
+              )
+            })}
+            {filteredScenes.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#718096', padding: '28px 8px', fontSize: 12 }}>
+                No scenes match this search.
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
+export default function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
   const fileInputRef = useRef(null)
+  const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
+  const visibleInfo = displayConfig.visibleInfo
+  const visibleSpecKeys = useMemo(
+    () => ['size', 'type', 'move', 'equip'].filter(key => visibleInfo[key] !== false),
+    [visibleInfo]
+  )
 
   const {
     attributes,
@@ -244,27 +330,31 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
         {/* Shot ID + Camera name */}
         <div className="flex-1 flex items-center gap-1 min-w-0" style={{ alignItems: 'center' }}>
           <span className="font-bold text-xs whitespace-nowrap" style={{ verticalAlign: 'middle', lineHeight: 1 }}>{displayId} -</span>
-          <input
-            type="text"
-            value={shot.cameraName}
-            onChange={handleCameraNameChange}
-            onPointerDown={e => e.stopPropagation()}
-            className="text-xs bg-transparent border-none outline-none p-0 min-w-0 flex-1"
-            style={{ maxWidth: 80 }}
-            placeholder="Camera 1"
-          />
+          {visibleInfo.camera !== false && (
+            <input
+              type="text"
+              value={shot.cameraName}
+              onChange={handleCameraNameChange}
+              onPointerDown={e => e.stopPropagation()}
+              className="text-xs bg-transparent border-none outline-none p-0 min-w-0 flex-1"
+              style={{ maxWidth: 80 }}
+              placeholder="Camera 1"
+            />
+          )}
         </div>
 
         {/* Focal length — right-aligned, never covered */}
-        <input
-          type="text"
-          value={shot.focalLength}
-          onChange={handleFocalLengthChange}
-          onPointerDown={e => e.stopPropagation()}
-          className="text-xs bg-transparent border-none outline-none text-right p-0 flex-shrink-0"
-          style={{ width: 46 }}
-          placeholder="85mm"
-        />
+        {visibleInfo.lens !== false && (
+          <input
+            type="text"
+            value={shot.focalLength}
+            onChange={handleFocalLengthChange}
+            onPointerDown={e => e.stopPropagation()}
+            className="text-xs bg-transparent border-none outline-none text-right p-0 flex-shrink-0"
+            style={{ width: 46 }}
+            placeholder="85mm"
+          />
+        )}
 
         {/* Scene link badge — only when script scenes exist */}
         <SceneLinkBadge shot={shot} />
@@ -274,7 +364,7 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
       <div
         className="image-placeholder"
         onClick={handleImageClick}
-        style={{ border: `2px solid ${shot.color}`, aspectRatio: '16/9' }}
+        style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
       >
         {shot.image ? (
           <img src={shot.image} alt="Shot frame" />
@@ -298,37 +388,48 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
       </div>
 
       {/* Specs Table */}
-      <SpecsTable
-        shotId={shot.id}
-        specs={shot.specs}
-        useDropdowns={useDropdowns}
-      />
+      {visibleSpecKeys.length > 0 && (
+        <SpecsTable
+          shotId={shot.id}
+          specs={shot.specs}
+          useDropdowns={useDropdowns}
+          visibleSpecKeys={visibleSpecKeys}
+        />
+      )}
 
       {/* Notes Area */}
-      <div className="border-t border-gray-200">
-        <NotesArea shotId={shot.id} value={shot.notes} />
-      </div>
+      {visibleInfo.notes !== false && (
+        <div className="border-t border-gray-200">
+          <NotesArea shotId={shot.id} value={shot.notes} />
+        </div>
+      )}
 
-      <div className="shot-time-fields">
-        <label className="shot-time-field">
-          <span>SETUP TIME</span>
-          <input
-            type="text"
-            value={shot.setupTime || ''}
-            onChange={handleSetupTimeChange}
-            placeholder="e.g. 15"
-          />
-        </label>
-        <label className="shot-time-field">
-          <span>SHOT TIME</span>
-          <input
-            type="text"
-            value={shot.shootTime || ''}
-            onChange={handleShotTimeChange}
-            placeholder="e.g. 10"
-          />
-        </label>
-      </div>
+      {(visibleInfo.setupTime !== false || visibleInfo.shotTime !== false) && (
+        <div className="shot-time-fields">
+          {visibleInfo.setupTime !== false && (
+            <label className="shot-time-field">
+              <span>SETUP TIME</span>
+              <input
+                type="text"
+                value={shot.setupTime || ''}
+                onChange={handleSetupTimeChange}
+                placeholder="e.g. 15"
+              />
+            </label>
+          )}
+          {visibleInfo.shotTime !== false && (
+            <label className="shot-time-field">
+              <span>SHOT TIME</span>
+              <input
+                type="text"
+                value={shot.shootTime || ''}
+                onChange={handleShotTimeChange}
+                placeholder="e.g. 10"
+              />
+            </label>
+          )}
+        </div>
+      )}
 
       {/* Delete button — bottom-right corner, avoids focal length field */}
       {hovered && (

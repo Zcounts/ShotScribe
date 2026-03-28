@@ -56,31 +56,32 @@ function SpecCell({ shotId, specKey, value, useDropdowns }) {
   )
 }
 
-export default function SpecsTable({ shotId, specs, useDropdowns }) {
+export default function SpecsTable({ shotId, specs, useDropdowns, visibleSpecKeys = ['size', 'type', 'move', 'equip'] }) {
+  const columns = [
+    { key: 'size', label: 'SIZE' },
+    { key: 'type', label: 'TYPE' },
+    { key: 'move', label: 'MOVE' },
+    { key: 'equip', label: 'EQUIP' },
+  ].filter(column => visibleSpecKeys.includes(column.key))
+
+  if (columns.length === 0) return null
+
   return (
     <table className="specs-table">
       <thead>
         <tr>
-          <th>SIZE</th>
-          <th>TYPE</th>
-          <th>MOVE</th>
-          <th>EQUIP</th>
+          {columns.map(column => (
+            <th key={column.key}>{column.label}</th>
+          ))}
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td>
-            <SpecCell shotId={shotId} specKey="size" value={specs.size} useDropdowns={useDropdowns} />
-          </td>
-          <td>
-            <SpecCell shotId={shotId} specKey="type" value={specs.type} useDropdowns={useDropdowns} />
-          </td>
-          <td>
-            <SpecCell shotId={shotId} specKey="move" value={specs.move} useDropdowns={useDropdowns} />
-          </td>
-          <td>
-            <SpecCell shotId={shotId} specKey="equip" value={specs.equip} useDropdowns={useDropdowns} />
-          </td>
+          {columns.map(column => (
+            <td key={column.key}>
+              <SpecCell shotId={shotId} specKey={column.key} value={specs[column.key]} useDropdowns={useDropdowns} />
+            </td>
+          ))}
         </tr>
       </tbody>
     </table>

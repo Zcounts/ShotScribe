@@ -11,6 +11,10 @@ import {
   normalizeShortcutBinding,
   saveShortcutBindings,
 } from './shortcuts'
+import {
+  DEFAULT_STORYBOARD_DISPLAY_CONFIG,
+  normalizeStoryboardDisplayConfig,
+} from './storyboardDisplayConfig'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -409,6 +413,7 @@ const useStore = create((set, get) => ({
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
+  storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
 
   // Per-column width overrides for the shotlist table (key → px width).
   // Saved with the project so widths are restored on reload.
@@ -1286,6 +1291,36 @@ const useStore = create((set, get) => ({
     return scene.id
   },
 
+  addSceneAtStoryboardPosition: (afterSceneId, overrides = {}) => {
+    const currentScenes = get().scenes
+    const storyboardOrder = get().getStoryboardSceneOrder()
+    const sceneNum = currentScenes.length + 1
+    const scriptScenes = get().scriptScenes
+    const usedScriptSceneIds = new Set(currentScenes.map(s => s.linkedScriptSceneId).filter(Boolean))
+    const nextSuggestedScriptScene = scriptScenes.find(s => !usedScriptSceneIds.has(s.id)) || scriptScenes[0] || null
+    const scene = createScene({
+      sceneLabel: `SCENE ${sceneNum}`,
+      linkedScriptSceneId: nextSuggestedScriptScene?.id || null,
+      location: nextSuggestedScriptScene?.location || undefined,
+      intOrExt: nextSuggestedScriptScene?.intExt || undefined,
+      dayNight: nextSuggestedScriptScene?.dayNight || undefined,
+      ...overrides,
+    })
+
+    const normalizedOrder = normalizeStoryboardSceneOrder(storyboardOrder, currentScenes)
+    const anchorIndex = normalizedOrder.findIndex(id => id === afterSceneId)
+    const insertIndex = anchorIndex >= 0 ? anchorIndex + 1 : normalizedOrder.length
+    const nextOrder = [...normalizedOrder]
+    nextOrder.splice(insertIndex, 0, scene.id)
+
+    set(state => ({
+      scenes: [...state.scenes, scene],
+      storyboardSceneOrder: nextOrder,
+    }))
+    get()._scheduleAutoSave()
+    return scene.id
+  },
+
   deleteScene: (sceneId) => {
     set(state => {
       if (state.scenes.length <= 1) return state
@@ -1555,6 +1590,15 @@ const useStore = create((set, get) => ({
       },
     }))
   },
+  updateStoryboardDisplayConfig: (patch) => {
+    set(state => ({
+      storyboardDisplayConfig: normalizeStoryboardDisplayConfig({
+        ...state.storyboardDisplayConfig,
+        ...(patch || {}),
+      }),
+    }))
+    get()._scheduleAutoSave()
+  },
   resetTabViewState: () => set({
     tabViewState: {
       script: {},
@@ -1763,6 +1807,7 @@ const useStore = create((set, get) => ({
       scriptScenes, importedScripts, scriptSettings,
       shortcutBindings,
       storyboardSceneOrder,
+      storyboardDisplayConfig,
     } = get()
     return {
       version: 2,
@@ -1779,6 +1824,7 @@ const useStore = create((set, get) => ({
       customColumns,
       customDropdownOptions,
       storyboardSceneOrder: normalizeStoryboardSceneOrder(storyboardSceneOrder, scenes),
+      storyboardDisplayConfig: normalizeStoryboardDisplayConfig(storyboardDisplayConfig),
       // Scenes and shots are reconstructed field-by-field so that any
       // non-serializable value that accidentally landed in state (e.g. a DOM
       // event object spread via an overrides parameter) is stripped before
@@ -2209,6 +2255,7 @@ const useStore = create((set, get) => ({
         }
       }),
       storyboardSceneOrder: normalizeStoryboardSceneOrder(data.storyboardSceneOrder, scenes),
+      storyboardDisplayConfig: normalizeStoryboardDisplayConfig(data.storyboardDisplayConfig),
       schedule: loadedSchedule,
       scheduleCollapseState: loadedCollapseState,
       scheduleColumnConfig: (() => {
@@ -2362,6 +2409,7 @@ const useStore = create((set, get) => ({
       projectEmoji: '🎬',
       scenes: [scene],
       storyboardSceneOrder: [],
+      storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
       schedule: [],
       callsheets: {},
       castRoster: [],
