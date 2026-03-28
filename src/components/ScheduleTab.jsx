@@ -108,6 +108,38 @@ function formatDate(isoDate) {
   }
 }
 
+const LIST_GRID_TEMPLATE = '76px minmax(240px,1.8fr) 96px 130px 170px 74px 90px 90px 34px 34px'
+const LIST_HEADER_COLUMNS = [
+  'Scene #',
+  'Set / Title',
+  'I/E & Day',
+  'Cast',
+  'Shoot Location',
+  'Pages',
+  'Est. Time',
+  'Start Time',
+]
+
+function colorWithAlpha(hexColor, alpha = 0.16) {
+  if (!hexColor) return `rgba(148,163,184,${alpha})`
+  const hex = hexColor.replace('#', '')
+  if (hex.length !== 6) return `rgba(148,163,184,${alpha})`
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function getCastPills(cast) {
+  if (!cast) return []
+  return cast
+    .split(',')
+    .map(name => name.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .map(name => name.split(/\s+/).map(part => part[0] || '').join('').toUpperCase())
+}
+
 // ── Small shared UI ───────────────────────────────────────────────────────────
 
 function IconButton({ onClick, title, children, danger, small, onPointerDown }) {
@@ -302,367 +334,115 @@ function ProjectedTimeBadge({ totalMins, isDark }) {
 //   isCollapsed / onToggleCollapse — Feature 2: per-block collapse
 //   shotData.shootTime / shotData.setupTime — Feature 1: synced via shot store
 
-function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, columnConfig, isCollapsed, onToggleCollapse, onCtrlToggleAll }) {
+function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, isCollapsed, onToggleCollapse, onCtrlToggleAll, pageCountByScene }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
-  const updateShotBlock = useStore(s => s.updateShotBlock)
-  const updateShot = useStore(s => s.updateShot)
   const setActiveTab = useStore(s => s.setActiveTab)
 
-  // Feature 4: confirmation before removing from schedule
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
-  const fg = isDark ? '#ddd' : '#111'
-  const mutedFg = isDark ? '#666' : '#555'
-  const labelFg = isDark ? '#555' : '#999'
-  const borderColor = isDark ? '#2a2a2a' : '#ede9df'
-  const bg = isDark ? '#1c1c1c' : '#fff'
-
-  const showImage = isColVisible(columnConfig, 'image')
-  const showNotes = isColVisible(columnConfig, 'notes')
-  const showLocation = isColVisible(columnConfig, 'shootingLocation')
-  const showCast = isColVisible(columnConfig, 'castMembers')
-  const showShootTime = isColVisible(columnConfig, 'estimatedShootTime')
-  const showSetupTime = isColVisible(columnConfig, 'estimatedSetupTime')
-  const showProjectedTime = isColVisible(columnConfig, 'projectedTime')
-
-  const handleLocationChange = useCallback((val) => {
-    if (dayId) updateShotBlock(dayId, block.id, { shootingLocation: val })
-  }, [dayId, block.id, updateShotBlock])
-
-  const handleCastChange = useCallback((val) => {
-    if (block.shotId) updateShot(block.shotId, { cast: val })
-  }, [block.shotId, updateShot])
-
-  // Feature 1: shoot/setup time writes go directly to the shot (single source of truth)
-  const handleShootTimeChange = useCallback((val) => {
-    if (block.shotId) updateShot(block.shotId, { shootTime: val })
-  }, [block.shotId, updateShot])
-
-  const handleSetupTimeChange = useCallback((val) => {
-    if (block.shotId) updateShot(block.shotId, { setupTime: val })
-  }, [block.shotId, updateShot])
+  const borderColor = isDark ? '#2a2a2a' : '#d9d3c7'
+  const sceneTint = colorWithAlpha(shotData?.linkedSceneData?.color || '#94a3b8', isDark ? 0.2 : 0.18)
+  const sceneEdge = shotData?.linkedSceneData?.color || (isDark ? '#64748b' : '#94a3b8')
+  const title = shotData?.sceneLabel || 'Untitled scene'
+  const secondary = shotData?.notes || shotData?.location || '—'
+  const locationLabel = block.shootingLocation || shotData?.location || '—'
+  const castPills = getCastPills(shotData?.cast)
+  const pageVal = (shotData?.linkedSceneId && pageCountByScene?.[shotData.linkedSceneId] !== undefined)
+    ? Number(pageCountByScene[shotData.linkedSceneId]).toFixed(2)
+    : '—'
+  const estMins = parseMinutes(shotData?.shootTime) + parseMinutes(shotData?.setupTime)
 
   const handleConfirmRemove = useCallback(() => {
     removeShotBlock(dayId, block.id)
     setShowRemoveConfirm(false)
   }, [removeShotBlock, dayId, block.id])
 
-  // ── Collapsed (compact) row — Feature 2 ───────────────────────────────────
-  if (isCollapsed && !isOverlay && shotData) {
+  if (!shotData) {
     return (
       <div style={{
-        background: bg,
-        borderBottom: `1px solid ${borderColor}`,
-        padding: '7px 14px',
-        display: 'grid',
-        gridTemplateColumns: 'auto 1fr auto auto',
-        gap: '0 10px',
-        alignItems: 'center',
-        minHeight: 36,
+        display: 'grid', gridTemplateColumns: LIST_GRID_TEMPLATE, alignItems: 'center',
+        gap: 8, minHeight: 34, padding: '4px 10px', borderBottom: `1px solid ${borderColor}`,
+        background: '#fff5f5',
       }}>
-        {/* Drag handle */}
-        <div
-          {...(dragHandleProps || {})}
-          style={{ color: mutedFg, cursor: dragHandleProps ? 'grab' : 'default', userSelect: 'none' }}
-        >
-          <DragHandleIcon color={mutedFg} />
-        </div>
-
-        {/* Compact summary */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
-          {showProjectedTime && projectedTime !== null && projectedTime !== undefined && (
-            <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
-          )}
-          <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 800, color: fg, flexShrink: 0 }}>
-            {shotData.displayId}
-          </span>
-          {shotData.linkedSceneData && (
-            <SceneScheduleBadge
-              linkedSceneData={{ ...shotData.linkedSceneData, sceneNumber: shotData.linkedSceneData.sceneNumber }}
-              onNavigate={() => setActiveTab('scenes')}
-            />
-          )}
-          <span style={{ fontSize: 12, fontWeight: 600, color: fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {shotData.sceneLabel}
-          </span>
-          {(shotData.shootTime || shotData.setupTime) && (
-            <span style={{ fontSize: 11, fontFamily: 'monospace', color: labelFg, flexShrink: 0 }}>
-              {shotData.shootTime ? `${shotData.shootTime}m shoot` : ''}
-              {shotData.shootTime && shotData.setupTime ? ' · ' : ''}
-              {shotData.setupTime ? `${shotData.setupTime}m setup` : ''}
-            </span>
-          )}
-        </div>
-
-        {/* Collapse toggle */}
-        <button
-          onClick={e => { e.stopPropagation(); if (e.ctrlKey && onCtrlToggleAll) { onCtrlToggleAll() } else { onToggleCollapse() } }}
-          onPointerDown={e => e.stopPropagation()}
-          title="Expand (Ctrl+click to expand all in day)"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedFg, padding: '2px 4px', display: 'flex', alignItems: 'center' }}
-        >
-          <ChevronIcon collapsed={true} color={mutedFg} size={10} />
-        </button>
-
-        {/* Remove button */}
-        <IconButton
-          onClick={() => setShowRemoveConfirm(true)}
-          onPointerDown={e => e.stopPropagation()}
-          title="Remove from schedule"
-          danger
-          small
-        >
-          ✕
-        </IconButton>
-
-        {/* Confirmation dialog — Feature 4 */}
-        {showRemoveConfirm && (
-          <RemoveConfirmDialog
-            displayId={shotData?.displayId}
-            isDark={isDark}
-            onConfirm={handleConfirmRemove}
-            onCancel={() => setShowRemoveConfirm(false)}
-          />
-        )}
+        <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#ef4444' }}>Deleted shot</span>
       </div>
     )
   }
 
-  // ── Expanded view ──────────────────────────────────────────────────────────
-
-  // Feature 3: image column only shown when column is enabled and we have room
-  const showImageColumn = showImage && !isOverlay
-
   return (
-    <div style={{
-      background: bg,
-      borderRadius: isOverlay ? 6 : 0,
-      boxShadow: isOverlay ? '0 8px 28px rgba(0,0,0,0.22)' : 'none',
-      borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
-      padding: '10px 14px',
-      display: 'grid',
-      gridTemplateColumns: 'auto 1fr auto',
-      gap: '0 10px',
-      alignItems: 'start',
-      position: 'relative',
-    }}>
-
-      {/* Drag handle */}
-      <div
-        {...(dragHandleProps || {})}
-        style={{
-          paddingTop: 3,
-          color: mutedFg,
-          cursor: dragHandleProps ? 'grab' : 'default',
-          userSelect: 'none',
-          opacity: isOverlay ? 0 : 1,
-        }}
-      >
-        <DragHandleIcon color={mutedFg} />
+    <div
+      onMouseEnter={() => !isOverlay && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: LIST_GRID_TEMPLATE,
+        alignItems: 'center',
+        columnGap: 8,
+        minHeight: isCollapsed ? 34 : 42,
+        padding: isCollapsed ? '4px 10px' : '5px 10px',
+        borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
+        borderLeft: `4px solid ${sceneEdge}`,
+        background: sceneTint,
+        boxShadow: isOverlay ? '0 12px 30px rgba(0,0,0,0.28)' : 'none',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div {...(dragHandleProps || {})} style={{ color: '#6b7280', cursor: dragHandleProps ? 'grab' : 'default', opacity: isOverlay ? 0 : 1 }}>
+          <DragHandleIcon color="#6b7280" />
+        </div>
+        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 800, color: '#111827' }}>{shotData.displayId}</span>
       </div>
 
-      {/* Main content — Feature 3: two-column layout when image is shown */}
       <div style={{ minWidth: 0 }}>
-        {shotData ? (
-          <div style={{
-            display: showImageColumn ? 'grid' : 'block',
-            gridTemplateColumns: showImageColumn ? 'auto 1fr' : undefined,
-            gap: showImageColumn ? '0 14px' : undefined,
-            alignItems: 'start',
-          }}>
-            {/* Left column: storyboard image */}
-            {showImageColumn && (
-              <div style={{ flexShrink: 0 }}>
-                {shotData.image ? (
-                  <img
-                    src={shotData.image}
-                    alt=""
-                    style={{
-                      width: 110,
-                      height: 74,
-                      objectFit: 'cover',
-                      borderRadius: 4,
-                      display: 'block',
-                      border: `1px solid ${borderColor}`,
-                    }}
-                  />
-                ) : (
-                  <div style={{
-                    width: 110,
-                    height: 74,
-                    borderRadius: 4,
-                    background: isDark ? '#252525' : '#f0ece4',
-                    border: `1px solid ${borderColor}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={mutedFg} strokeWidth="1.5" opacity="0.4">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21,15 16,10 5,21" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Right column: all text info */}
-            <div style={{ minWidth: 0 }}>
-              {/* Shot identifier row — bold and prominent (Feature 3 typography) */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: 7,
-                flexWrap: 'wrap',
-                marginBottom: 4,
-              }}>
-                {showProjectedTime && projectedTime !== null && projectedTime !== undefined && !isOverlay && (
-                  <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
-                )}
-                <span style={{
-                  fontFamily: 'monospace',
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color: fg,
-                  flexShrink: 0,
-                  letterSpacing: '-0.01em',
-                }}>
-                  {shotData.displayId}
-                </span>
-                <Badge label={shotData.intOrExt} />
-                <Badge label={shotData.dayNight} />
-                {shotData.linkedSceneData && (
-                  <SceneScheduleBadge
-                    linkedSceneData={shotData.linkedSceneData}
-                    onNavigate={() => setActiveTab('scenes')}
-                  />
-                )}
-              </div>
-
-              {/* Scene label + location — secondary info (Feature 3 typography) */}
-              <div style={{ fontSize: 11, marginBottom: (showNotes && shotData.notes) ? 5 : 0 }}>
-                <span style={{ fontWeight: 600, color: fg, fontFamily: 'monospace', letterSpacing: '0.02em' }}>
-                  {shotData.sceneLabel}
-                </span>
-                {shotData.location && (
-                  <>
-                    <span style={{ color: labelFg, margin: '0 4px' }}>·</span>
-                    <span style={{ color: mutedFg }}>{shotData.location}</span>
-                  </>
-                )}
-              </div>
-
-              {/* Notes — italic and visually differentiated (Feature 3 typography) */}
-              {showNotes && shotData.notes && (
-                <div style={{
-                  fontSize: 11,
-                  color: mutedFg,
-                  fontStyle: 'italic',
-                  overflow: 'hidden',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  marginBottom: 4,
-                  lineHeight: 1.5,
-                  borderLeft: `2px solid ${isDark ? '#333' : '#e5e0d8'}`,
-                  paddingLeft: 6,
-                }}>
-                  {shotData.notes}
-                </div>
-              )}
-
-              {/* Inline-editable schedule fields (not shown in overlay) */}
-              {!isOverlay && (showShootTime || showSetupTime || showLocation || showCast) && (
-                <div style={{ marginTop: 2 }}>
-                  {/* Time fields — Feature 1: reads/writes via shot */}
-                  {(showShootTime || showSetupTime) && (
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      {showShootTime && (
-                        <InlineField
-                          value={shotData.shootTime || ''}
-                          onChange={handleShootTimeChange}
-                          placeholder="—"
-                          isDark={isDark}
-                          label="SHOOT"
-                          inputWidth={40}
-                        />
-                      )}
-                      {showSetupTime && (
-                        <InlineField
-                          value={shotData.setupTime || ''}
-                          onChange={handleSetupTimeChange}
-                          placeholder="—"
-                          isDark={isDark}
-                          label="SETUP"
-                          inputWidth={40}
-                        />
-                      )}
-                    </div>
-                  )}
-                  {showLocation && (
-                    <InlineField
-                      value={block.shootingLocation}
-                      onChange={handleLocationChange}
-                      placeholder="Shooting location…"
-                      isDark={isDark}
-                      label="LOCATION"
-                    />
-                  )}
-                  {showCast && (
-                    <InlineField
-                      value={shotData?.cast || ''}
-                      onChange={handleCastChange}
-                      placeholder="Cast…"
-                      isDark={isDark}
-                      label="CAST"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+          {shotData.linkedSceneData && (
+            <SceneScheduleBadge linkedSceneData={shotData.linkedSceneData} onNavigate={() => setActiveTab('scenes')} />
+          )}
+        </div>
+        {!isCollapsed && (
+          <div style={{ fontSize: 10, color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+            {secondary}
           </div>
-        ) : (
-          <span style={{ fontSize: 12, color: '#f87171', fontFamily: 'monospace' }}>
-            Shot deleted — remove this entry
-          </span>
         )}
       </div>
 
-      {/* Right column: collapse toggle only */}
-      {!isOverlay && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, paddingTop: 1 }}>
-          {onToggleCollapse && shotData && (
-            <button
-              onClick={e => { e.stopPropagation(); if (e.ctrlKey && onCtrlToggleAll) { onCtrlToggleAll() } else { onToggleCollapse() } }}
-              onPointerDown={e => e.stopPropagation()}
-              title="Collapse (Ctrl+click to collapse all in day)"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedFg, padding: '2px 4px', display: 'flex', alignItems: 'center' }}
-            >
-              <ChevronIcon collapsed={false} color={mutedFg} size={10} />
-            </button>
-          )}
-        </div>
-      )}
+      <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#4b5563' }}>{[shotData.intOrExt, shotData.dayNight].filter(Boolean).join(' · ') || '—'}</span>
 
-      {/* Delete X — bottom right corner of the expanded block */}
-      {!isOverlay && (
-        <div
-          style={{ position: 'absolute', bottom: 10, right: 14 }}
-          onPointerDown={e => e.stopPropagation()}
-        >
-          <IconButton
-            onClick={() => setShowRemoveConfirm(true)}
-            title="Remove from schedule"
-            danger
-            small
-          >
-            ✕
-          </IconButton>
-        </div>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
+        {castPills.length ? castPills.map((pill, idx) => (
+          <span key={`${pill}_${idx}`} style={{ fontSize: 9, fontFamily: 'monospace', fontWeight: 700, color: '#334155', border: '1px solid rgba(51,65,85,0.25)', background: 'rgba(255,255,255,0.62)', borderRadius: 999, padding: '1px 6px' }}>{pill}</span>
+        )) : <span style={{ fontSize: 10, color: '#6b7280' }}>—</span>}
+      </div>
 
-      {/* Confirmation dialog — Feature 4 */}
+      <span style={{ fontSize: 10, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationLabel || '—'}</span>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#111827' }}>{pageVal}</span>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#111827' }}>{estMins > 0 ? formatMins(estMins) : '—'}</span>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#111827' }}>{projectedTime !== null && projectedTime !== undefined ? formatTimeOfDay(projectedTime) : '—'}</span>
+
+      <button
+        onClick={e => { e.stopPropagation(); if (e.ctrlKey && onCtrlToggleAll) { onCtrlToggleAll() } else { onToggleCollapse?.() } }}
+        onPointerDown={e => e.stopPropagation()}
+        title={isCollapsed ? 'Expand' : 'Collapse'}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: 2, display: isOverlay ? 'none' : 'inline-flex', opacity: 0.65 }}
+      >
+        <ChevronIcon collapsed={isCollapsed} color="#6b7280" size={10} />
+      </button>
+
+      <button
+        onClick={() => setShowRemoveConfirm(true)}
+        onPointerDown={e => e.stopPropagation()}
+        title="Remove from schedule"
+        style={{
+          border: 'none', background: 'rgba(15,23,42,0.08)', color: '#334155', borderRadius: 4,
+          width: 22, height: 22, cursor: 'pointer', display: isOverlay ? 'none' : 'inline-flex',
+          alignItems: 'center', justifyContent: 'center', opacity: hovered ? 1 : 0.25,
+        }}
+      >
+        ⋯
+      </button>
+
       {showRemoveConfirm && (
         <RemoveConfirmDialog
           displayId={shotData?.displayId}
@@ -741,7 +521,7 @@ function RemoveConfirmDialog({ displayId, isDark, onConfirm, onCancel }) {
 
 // ── SortableShotBlock ─────────────────────────────────────────────────────────
 
-function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, columnConfig, isCollapsed, onToggleCollapse, onCtrlToggleAll }) {
+function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, isCollapsed, onToggleCollapse, onCtrlToggleAll, pageCountByScene }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
     data: { type: 'block', dayId },
@@ -778,10 +558,10 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, colu
           isDark={isDark}
           projectedTime={projectedTime}
           dragHandleProps={{ ...attributes, ...listeners }}
-          columnConfig={columnConfig}
           isCollapsed={isCollapsed}
           onToggleCollapse={onToggleCollapse}
           onCtrlToggleAll={onCtrlToggleAll}
+          pageCountByScene={pageCountByScene}
         />
       )}
     </div>
@@ -1291,11 +1071,6 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
 
-  const fg = isDark ? '#ddd' : '#111'
-  const mutedFg = isDark ? '#666' : '#555'
-  const borderColor = isDark ? '#2a2a2a' : '#ede9df'
-  const bg = isDark ? '#2a2310' : '#fffbef'
-
   const [editingName, setEditingName] = useState(false)
   const [localName, setLocalName] = useState(block.label || 'Break')
 
@@ -1315,39 +1090,25 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
 
   return (
     <div style={{
-      background: bg,
-      borderRadius: isOverlay ? 6 : 0,
-      boxShadow: isOverlay ? '0 8px 28px rgba(0,0,0,0.22)' : 'none',
-      borderBottom: isOverlay ? 'none' : `1px solid ${borderColor}`,
-      borderLeft: isOverlay ? 'none' : `3px solid ${isDark ? '#6b5a00' : '#d4a820'}`,
-      padding: '9px 14px',
       display: 'grid',
-      gridTemplateColumns: 'auto 1fr auto',
-      gap: '0 10px',
+      gridTemplateColumns: LIST_GRID_TEMPLATE,
       alignItems: 'center',
+      columnGap: 8,
+      minHeight: 34,
+      padding: '4px 10px',
+      background: isDark ? '#252525' : '#323740',
+      color: '#e5e7eb',
+      borderBottom: isOverlay ? 'none' : '1px solid rgba(255,255,255,0.09)',
+      boxShadow: isOverlay ? '0 12px 30px rgba(0,0,0,0.28)' : 'none',
     }}>
-      {/* Drag handle */}
-      <div
-        {...(dragHandleProps || {})}
-        style={{
-          color: mutedFg,
-          cursor: dragHandleProps ? 'grab' : 'default',
-          userSelect: 'none',
-          opacity: isOverlay ? 0 : 1,
-        }}
-      >
-        <DragHandleIcon color={mutedFg} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div {...(dragHandleProps || {})} style={{ color: '#cbd5e1', cursor: dragHandleProps ? 'grab' : 'default', opacity: isOverlay ? 0 : 1 }}>
+          <DragHandleIcon color="#cbd5e1" />
+        </div>
+        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>BREAK</span>
       </div>
-
-      {/* Content */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
-        {/* Projected time */}
-        {projectedTime !== null && projectedTime !== undefined && !isOverlay && (
-          <ProjectedTimeBadge totalMins={projectedTime} isDark={isDark} />
-        )}
-
-        {/* Break icon + editable name */}
-        <span style={{ fontSize: 13, flexShrink: 0 }}>⏸</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ fontSize: 12 }}>⏸</span>
         <input
           value={localName}
           onChange={e => setLocalName(e.target.value)}
@@ -1359,46 +1120,41 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
           }}
           onPointerDown={e => e.stopPropagation()}
           style={{
-            fontFamily: 'monospace',
-            fontSize: 13,
-            fontWeight: 700,
-            color: fg,
-            background: editingName ? (isDark ? '#2a2a2a' : '#fff') : 'transparent',
-            border: editingName ? `1px solid ${borderColor}` : '1px solid transparent',
-            borderRadius: 3,
-            padding: editingName ? '2px 6px' : '2px 0',
-            outline: 'none',
-            cursor: 'text',
-            minWidth: 60,
-            maxWidth: 200,
+            fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#f8fafc',
+            background: editingName ? 'rgba(255,255,255,0.08)' : 'transparent',
+            border: editingName ? '1px solid rgba(255,255,255,0.22)' : '1px solid transparent',
+            borderRadius: 3, padding: editingName ? '2px 6px' : '2px 0', outline: 'none', maxWidth: 220,
           }}
         />
-
-        {/* Duration field */}
+      </div>
+      <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#cbd5e1' }}>—</span>
+      <span style={{ fontSize: 10, color: '#cbd5e1' }}>—</span>
+      <span style={{ fontSize: 10, color: '#cbd5e1' }}>—</span>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#f8fafc' }}>—</span>
+      <div>
         {!isOverlay && (
           <InlineField
             value={block.duration !== undefined && block.duration !== 0 ? String(block.duration) : ''}
             onChange={handleDurationChange}
             placeholder="—"
-            isDark={isDark}
-            label="Duration (min)"
-            inputWidth={40}
+            isDark={true}
+            label={null}
+            inputWidth={56}
           />
         )}
       </div>
-
-      {/* Remove button */}
-      {!isOverlay && dayId && (
-        <IconButton
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#f8fafc' }}>{projectedTime !== null && projectedTime !== undefined ? formatTimeOfDay(projectedTime) : '—'}</span>
+      <span />
+      {!isOverlay ? (
+        <button
           onClick={() => removeShotBlock(dayId, block.id)}
           onPointerDown={e => e.stopPropagation()}
           title="Remove break"
-          danger
-          small
+          style={{ border: 'none', background: 'rgba(255,255,255,0.14)', color: '#f8fafc', borderRadius: 4, width: 22, height: 22, cursor: 'pointer' }}
         >
-          ✕
-        </IconButton>
-      )}
+          ⋯
+        </button>
+      ) : <span />}
     </div>
   )
 }
@@ -1666,9 +1422,50 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
   )
 }
 
+function ScheduleListColumnHeader() {
+  return (
+    <div style={{
+      position: 'sticky',
+      top: 104,
+      zIndex: 24,
+      background: '#f4f1ea',
+      border: '1px solid #d5d0c4',
+      borderBottom: '1px solid #bfb8a9',
+      borderRadius: 4,
+      marginBottom: 8,
+    }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: LIST_GRID_TEMPLATE,
+        alignItems: 'center',
+        columnGap: 8,
+        padding: '6px 10px',
+      }}>
+        {LIST_HEADER_COLUMNS.map((label) => (
+          <span
+            key={label}
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.09em',
+              textTransform: 'uppercase',
+              color: '#6b7280',
+              fontFamily: 'monospace',
+            }}
+          >
+            {label}
+          </span>
+        ))}
+        <span />
+        <span />
+      </div>
+    </div>
+  )
+}
+
 // ── SortableShootingDay ───────────────────────────────────────────────────────
 
-function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, columnConfig }) {
+function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, totalDays, pageCountByScene }) {
   const removeShootingDay = useStore(s => s.removeShootingDay)
   const updateShootingDay = useStore(s => s.updateShootingDay)
   const setDayCollapsed = useStore(s => s.setDayCollapsed)
@@ -1693,19 +1490,12 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
     data: { type: 'day' },
   })
 
-  const bg = isDark ? '#1a1a1a' : '#fff'
-  const headerBg = isDark ? '#1e1e1e' : '#f5f3ee'
-  const borderColor = isDark ? '#2a2a2a' : '#d9d4cb'
-  const fg = isDark ? '#ddd' : '#111'
-  const mutedFg = isDark ? '#555' : '#666'
-
   const blockIds = blocks.map(b => b.id)
   const existingShotIds = blocks.filter(b => b.type !== 'break').map(b => b.shotId)
   const formattedDate = formatDate(day.date)
   const shotCount = blocks.filter(b => b.type !== 'break').length
   const breakCount = blocks.filter(b => b.type === 'break').length
 
-  // Calculate cumulative projected times for each block (if start time is set)
   const startMins = parseStartTime(day.startTime)
   let cumulativeMins = 0
   const blockProjections = blocks.map(block => {
@@ -1713,218 +1503,92 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
     if (block.type === 'break') {
       cumulativeMins += parseMinutes(block.duration)
     } else {
-      // Feature 1: use the shot's own shootTime/setupTime (via enrichedBlockMap)
       const sd = enrichedBlockMap[block.id]
       cumulativeMins += parseMinutes(sd?.shootTime) + parseMinutes(sd?.setupTime)
     }
     return { block, projectedTime }
   })
 
+  const totalShootMins = blocks.reduce((sum, b) => b.type === 'break' ? sum : sum + parseMinutes(enrichedBlockMap[b.id]?.shootTime), 0)
+  const totalBreakMins = blocks.reduce((sum, b) => b.type === 'break' ? sum + parseMinutes(b.duration) : sum, 0)
+  const totalPages = blocks.reduce((sum, b) => {
+    const sid = enrichedBlockMap[b.id]?.linkedSceneId
+    return sum + (sid && pageCountByScene[sid] ? Number(pageCountByScene[sid]) : 0)
+  }, 0)
+
   return (
-    <div
+    <section
       ref={setNodeRef}
       id={`sched-day-${day.id}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.4 : 1,
-        border: `1px solid ${borderColor}`,
-        borderRadius: 6,
-        overflow: 'visible',
-        background: bg,
-        boxShadow: 'var(--app-panel-shadow)',
-        marginBottom: 16,
-        position: 'relative',
+        opacity: isDragging ? 0.45 : 1,
+        marginBottom: 10,
+        border: '1px solid #d5cfc2',
+        borderRadius: 4,
+        overflow: 'hidden',
+        background: '#f7f4ed',
       }}
     >
-      {/* Day header — acts as drag handle for day reordering; click toggles collapse */}
       <div
         {...attributes}
         {...listeners}
         onClick={() => setDayCollapsed(day.id, !collapsed)}
         style={{
-          padding: '8px 14px',
-          background: headerBg,
-          borderBottom: collapsed ? 'none' : `1px solid ${borderColor}`,
-          borderRadius: collapsed ? 6 : '6px 6px 0 0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '6px 10px',
+          background: '#ece7db',
+          borderBottom: collapsed ? 'none' : '1px solid #cfc7b8',
           cursor: isDragging ? 'grabbing' : 'grab',
           userSelect: 'none',
         }}
       >
-        {/* Row 1: primary info — day number, date, call time */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Handle icon */}
-          <span style={{ color: mutedFg, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            <DragHandleIcon color={mutedFg} size={12} />
-          </span>
-
-          {/* Day number */}
-          <span style={{
-            fontFamily: 'monospace',
-            fontSize: 13,
-            fontWeight: 800,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: fg,
-            flexShrink: 0,
-          }}>
-            Day {dayIndex + 1}
-          </span>
-
-          {/* Date picker */}
-          <input
-            type="date"
-            value={day.date || ''}
-            onChange={e => updateShootingDay(day.id, { date: e.target.value })}
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => e.stopPropagation()}
-            style={{
-              fontFamily: 'monospace',
-              fontSize: 13,
-              fontWeight: 700,
-              border: 'none',
-              background: 'none',
-              color: fg,
-              cursor: 'pointer',
-              outline: 'none',
-              padding: 0,
-            }}
-          />
-
-          {/* Formatted date label */}
-          {formattedDate && (
-            <span style={{ fontSize: 13, fontWeight: 700, color: fg, fontFamily: 'monospace' }}>
-              {formattedDate}
-            </span>
-          )}
-          {!day.date && (
-            <span style={{ fontSize: 11, color: mutedFg, fontStyle: 'italic', fontFamily: 'monospace' }}>
-              No date set
-            </span>
-          )}
-
-          {/* Call time / start time input */}
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => e.stopPropagation()}
-          >
-            <span style={{
-              fontSize: 9,
-              fontFamily: 'monospace',
-              color: mutedFg,
-              letterSpacing: '0.07em',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              flexShrink: 0,
-            }}>
-              Call:
-            </span>
-            <input
-              type="time"
-              value={day.startTime || ''}
-              onChange={e => updateShootingDay(day.id, { startTime: e.target.value })}
-              onPointerDown={e => e.stopPropagation()}
-              onClick={e => e.stopPropagation()}
-              title="Set call time / start time to generate projected timeline"
-              style={{
-                fontFamily: 'monospace',
-                fontSize: 13,
-                fontWeight: 700,
-                border: `1px solid ${day.startTime ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
-                background: day.startTime ? (isDark ? '#252525' : '#fff') : 'transparent',
-                color: day.startTime ? fg : mutedFg,
-                cursor: 'pointer',
-                outline: 'none',
-                borderRadius: 3,
-                padding: day.startTime ? '1px 5px' : '1px 0',
-                width: 90,
-                transition: 'border-color 0.1s, background 0.1s',
-              }}
-            />
-          </div>
-
-          <div style={{ flex: 1 }} />
-
-          {/* Collapse chevron */}
-          <span style={{
-            display: 'flex',
-            alignItems: 'center',
-            color: mutedFg,
-            flexShrink: 0,
-            marginRight: 2,
-          }}>
-            <ChevronIcon collapsed={collapsed} color={mutedFg} size={11} />
-          </span>
-
-          {/* Remove day */}
-          <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-            <IconButton
-              onClick={() => removeShootingDay(day.id)}
-              title="Remove this shooting day"
-              danger
-              small
-            >
-              Remove Day
-            </IconButton>
-          </div>
-        </div>
-
-        {/* Row 2: secondary info — basecamp and shot count */}
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, paddingLeft: 22, flexWrap: 'wrap' }}
+        <DragHandleIcon color="#6b7280" size={12} />
+        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 800, color: '#111827' }}>Day {dayIndex + 1}</span>
+        <input
+          type="date"
+          value={day.date || ''}
+          onChange={e => updateShootingDay(day.id, { date: e.target.value })}
           onPointerDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
+          style={{ fontFamily: 'monospace', fontSize: 11, border: 'none', background: 'transparent', color: '#111827', outline: 'none' }}
+        />
+        <span style={{ fontSize: 11, color: '#4b5563', fontFamily: 'monospace' }}>{formattedDate || 'No date set'}</span>
+        <span style={{ fontSize: 10, color: '#6b7280', fontFamily: 'monospace' }}>CALL</span>
+        <input
+          type="time"
+          value={day.startTime || ''}
+          onChange={e => updateShootingDay(day.id, { startTime: e.target.value })}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+          style={{ fontFamily: 'monospace', fontSize: 11, border: '1px solid #d2cbbb', borderRadius: 3, background: '#fff', color: '#111827', padding: '1px 4px', width: 86 }}
+        />
+        <span style={{ fontSize: 10, color: '#6b7280', fontFamily: 'monospace' }}>BASE</span>
+        <input
+          type="text"
+          value={day.basecamp || ''}
+          onChange={e => updateShootingDay(day.id, { basecamp: e.target.value })}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+          placeholder="Basecamp"
+          style={{ fontFamily: 'monospace', fontSize: 11, border: '1px solid #d2cbbb', borderRadius: 3, background: '#fff', color: '#111827', padding: '1px 4px', width: 120 }}
+        />
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#6b7280', fontFamily: 'monospace' }}>{shotCount} strips · {breakCount} breaks</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); removeShootingDay(day.id) }}
+          style={{ border: 'none', background: 'rgba(15,23,42,0.08)', color: '#334155', borderRadius: 4, width: 24, height: 24, cursor: 'pointer' }}
+          title="Day actions"
         >
-          {/* Basecamp input */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-            <span style={{
-              fontSize: 9,
-              fontFamily: 'monospace',
-              color: mutedFg,
-              letterSpacing: '0.07em',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              flexShrink: 0,
-            }}>
-              Basecamp:
-            </span>
-            <input
-              type="text"
-              value={day.basecamp || ''}
-              onChange={e => updateShootingDay(day.id, { basecamp: e.target.value })}
-              onPointerDown={e => e.stopPropagation()}
-              onClick={e => e.stopPropagation()}
-              placeholder="Location…"
-              title="Basecamp / unit base location for the whole day"
-              style={{
-                fontFamily: 'monospace',
-                fontSize: 11,
-                border: `1px solid ${day.basecamp ? (isDark ? '#3a3a3a' : '#d4cfc6') : 'transparent'}`,
-                background: day.basecamp ? (isDark ? '#252525' : '#fff') : 'transparent',
-                color: day.basecamp ? fg : mutedFg,
-                cursor: 'text',
-                outline: 'none',
-                borderRadius: 3,
-                padding: day.basecamp ? '1px 5px' : '1px 0',
-                width: 130,
-                transition: 'border-color 0.1s, background 0.1s',
-              }}
-            />
-          </div>
-
-          {/* Shot count */}
-          <span style={{ fontSize: 11, color: mutedFg, fontFamily: 'monospace' }}>
-            {shotCount} shot{shotCount !== 1 ? 's' : ''}
-            {breakCount > 0 ? `, ${breakCount} break${breakCount !== 1 ? 's' : ''}` : ''}
-          </span>
-        </div>
+          ⋯
+        </button>
+        <ChevronIcon collapsed={collapsed} color="#6b7280" size={10} />
       </div>
 
-      {/* Body — hidden when collapsed */}
       {!collapsed && (
         <>
-          {/* Shot block list */}
           <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
             {blocks.length === 0 ? (
               <DayDropZone dayId={day.id} isDark={isDark} />
@@ -1938,10 +1602,10 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
                     dayId={day.id}
                     isDark={isDark}
                     projectedTime={projectedTime}
-                    columnConfig={columnConfig}
                     isCollapsed={collapsedBlocksMap[block.id] ?? true}
                     onToggleCollapse={() => toggleBlockCollapse(block.id)}
                     onCtrlToggleAll={handleCtrlToggleAllBlocks}
+                    pageCountByScene={pageCountByScene}
                   />
                 ))}
                 <DayEndDropZone dayId={day.id} />
@@ -1949,10 +1613,23 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
             )}
           </SortableContext>
 
-          {/* Day totals */}
-          <DayTotals blocks={blocks} enrichedBlockMap={enrichedBlockMap} isDark={isDark} />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto auto auto auto',
+            gap: 10,
+            alignItems: 'center',
+            padding: '6px 10px',
+            background: '#1f2937',
+            color: '#e5e7eb',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>End of Day {dayIndex + 1} of {totalDays}</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace' }}>Shoot {formatMins(totalShootMins)}</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace' }}>Break {formatMins(totalBreakMins)}</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace' }}>Pages {totalPages > 0 ? totalPages.toFixed(2) : '—'}</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace' }}>{shotCount} strips</span>
+          </div>
 
-          {/* Add shot footer */}
           <AddShotFooter
             dayId={day.id}
             existingShotIds={existingShotIds}
@@ -1960,7 +1637,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
           />
         </>
       )}
-    </div>
+    </section>
   )
 }
 
@@ -3208,6 +2885,7 @@ export default function ScheduleTab({
 }) {
   const schedule = useStore(s => s.schedule)
   const scenes = useStore(s => s.scenes)
+  const scriptScenes = useStore(s => s.scriptScenes)
   const theme = useStore(s => s.theme)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const addShootingDay = useStore(s => s.addShootingDay)
@@ -3245,6 +2923,14 @@ export default function ScheduleTab({
     })
     return map
   }, [scenes])
+
+  const pageCountByScene = useMemo(() => {
+    const map = {}
+    scriptScenes.forEach(scene => {
+      map[scene.id] = scene.pageCount ?? null
+    })
+    return map
+  }, [scriptScenes])
 
   const stripHeight = stripDensity === 'compact' ? 24 : 36
 
@@ -3574,6 +3260,7 @@ export default function ScheduleTab({
         />
       ) : scheduleView === 'list' ? (
         <>
+          <ScheduleListColumnHeader />
           <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
             <DayTabBar
               days={dayTabs}
@@ -3603,7 +3290,8 @@ export default function ScheduleTab({
                   blocks={getBlocksForDay(day.id)}
                   enrichedBlockMap={enrichedBlockMap}
                   isDark={isDark}
-                  columnConfig={scheduleColumnConfig}
+                  totalDays={schedule.length}
+                  pageCountByScene={pageCountByScene}
                 />
               ))}
             </SortableContext>
@@ -3630,7 +3318,7 @@ export default function ScheduleTab({
                   dayId={null}
                   isDark={isDark}
                   isOverlay
-                  columnConfig={scheduleColumnConfig}
+                  pageCountByScene={pageCountByScene}
                 />
               )
             ) : null}
