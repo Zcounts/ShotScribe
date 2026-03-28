@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import useStore from '../store'
 
 const INT_EXT_OPTIONS = ['INT', 'EXT', 'INT/EXT']
@@ -57,9 +57,24 @@ export default function ShotPropertiesDialog() {
   const close = useStore(s => s.closeShotDialog)
   const getShotDialogData = useStore(s => s.getShotDialogData)
   const updateShot = useStore(s => s.updateShot)
+  const scriptScenes = useStore(s => s.scriptScenes)
+  const moveShotToScriptScene = useStore(s => s.moveShotToScriptScene)
+  const setActiveTab = useStore(s => s.setActiveTab)
+  const [scenePickerOpen, setScenePickerOpen] = useState(false)
+  const [sceneSearch, setSceneSearch] = useState('')
 
   const shotPayload = dialog ? getShotDialogData(dialog.shotId) : null
   const shot = shotPayload?.shot
+  const filteredScenes = useMemo(() => {
+    const query = sceneSearch.trim().toLowerCase()
+    return scriptScenes.filter((scene) => {
+      if (!query) return true
+      return (`${scene.sceneNumber || ''}`.toLowerCase().includes(query)
+        || `${scene.location || ''}`.toLowerCase().includes(query)
+        || `${scene.slugline || ''}`.toLowerCase().includes(query)
+        || (scene.characters || []).join(' ').toLowerCase().includes(query))
+    })
+  }, [sceneSearch, scriptScenes])
 
   useEffect(() => {
     if (!dialog) return undefined
@@ -135,6 +150,20 @@ export default function ShotPropertiesDialog() {
               </div>
 
               <div className="shot-props-hero-controls">
+                <div className="shot-props-field shot-props-field-wide">
+                  <span className="dialog-label">Organization</span>
+                  <button
+                    className="dialog-button-secondary"
+                    type="button"
+                    onClick={() => {
+                      setSceneSearch('')
+                      setScenePickerOpen(true)
+                    }}
+                    style={{ justifySelf: 'flex-start' }}
+                  >
+                    Move to Scene
+                  </button>
+                </div>
                 <Field label="Camera Name">
                   <input value={shot.cameraName || ''} onChange={(e) => setField('cameraName', e.target.value)} />
                 </Field>
@@ -249,9 +278,83 @@ export default function ShotPropertiesDialog() {
               </pre>
             </details>
           </div>
-        </div>
+      </div>
 
-        <div className="dialog-actions shot-props-footer">
+      {scenePickerOpen && (
+        <div className="modal-overlay" style={{ zIndex: 760 }} onClick={() => setScenePickerOpen(false)}>
+          <div
+            className="modal app-dialog"
+            style={{ width: 'min(560px, 92vw)', maxHeight: 'min(640px, 85vh)', overflow: 'hidden' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="dialog-title" style={{ marginBottom: 6 }}>Move to Scene</p>
+            <p className="dialog-description" style={{ marginBottom: 12 }}>
+              Select a target scene. The shot will move to that scene&apos;s storyboard page.
+            </p>
+            <input
+              autoFocus
+              placeholder="Search by scene number, location, slugline, or cast..."
+              value={sceneSearch}
+              onChange={(event) => setSceneSearch(event.target.value)}
+              style={{
+                width: '100%',
+                border: '1px solid rgba(74,85,104,0.35)',
+                background: '#FAF8F4',
+                color: '#1A1A1A',
+                fontSize: 12,
+                padding: '9px 10px',
+                borderRadius: 6,
+                outline: 'none',
+                marginBottom: 10,
+              }}
+            />
+            <div style={{ overflowY: 'auto', maxHeight: 420, paddingRight: 2 }}>
+              {filteredScenes.map((scene) => (
+                <button
+                  key={scene.id}
+                  type="button"
+                  onClick={() => {
+                    moveShotToScriptScene(shot.id, scene.id)
+                    setScenePickerOpen(false)
+                    setActiveTab('storyboard')
+                  }}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '10px 12px',
+                    marginBottom: 7,
+                    background: '#FAF8F4',
+                    border: '1px solid rgba(74,85,104,0.2)',
+                    cursor: 'pointer',
+                    borderRadius: 8,
+                    display: 'grid',
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {scene.color ? <span style={{ width: 8, height: 8, borderRadius: '50%', background: scene.color }} /> : null}
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#4A5568' }}>SC {scene.sceneNumber || '—'}</span>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A' }}>{scene.slugline || scene.location || 'Untitled scene'}</div>
+                  <div style={{ fontSize: 11, color: '#718096', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {[scene.location, (scene.characters || []).length > 0 ? scene.characters.join(', ') : null].filter(Boolean).join(' · ') || 'No additional metadata'}
+                  </div>
+                </button>
+              ))}
+              {filteredScenes.length === 0 && (
+                <div style={{ textAlign: 'center', color: '#718096', padding: '26px 8px', fontSize: 12 }}>
+                  No scenes match this search.
+                </div>
+              )}
+            </div>
+            <div className="dialog-actions" style={{ marginTop: 12 }}>
+              <button className="dialog-button-secondary" type="button" onClick={() => setScenePickerOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="dialog-actions shot-props-footer">
           <span className="shot-props-autosave-pill">Autosave is on</span>
           <button className="dialog-button-primary" onClick={close}>Close</button>
         </div>
