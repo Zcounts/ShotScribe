@@ -47,7 +47,6 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
-import { SubTabNav } from './SubTabNav'
 import SidebarPane from './SidebarPane'
 
 // ── Time Utilities ────────────────────────────────────────────────────────────
@@ -150,44 +149,36 @@ function hasReadableValue(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
 }
 
-function getCastChipStyle() {
-  return {
-    fontSize: 9,
-    fontFamily: 'monospace',
-    fontWeight: 700,
-    color: '#1e293b',
-    border: '1px solid rgba(30,41,59,0.25)',
-    background: 'rgba(255,255,255,0.75)',
-    borderRadius: 999,
-    padding: '2px 7px',
-    letterSpacing: '0.04em',
-  }
-}
-
-function getTimeTextStyle(hasValue = true) {
-  return {
-    fontSize: 12,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    fontVariantNumeric: 'tabular-nums',
-    color: hasValue ? '#0f172a' : '#94a3b8',
-    fontWeight: hasValue ? 800 : 600,
-    letterSpacing: hasValue ? '0.02em' : '0.05em',
-  }
-}
-
-function summarizeDay(blocks = [], pageCountByScene = {}, enrichedBlockMap = {}) {
-  const shotBlocks = blocks.filter(b => !!b.shotId)
-  const shotCount = shotBlocks.length
-  const breakCount = blocks.filter(b => b.type === 'break').length
-  const totalPages = shotBlocks.reduce((sum, b) => {
-    const sid = enrichedBlockMap[b.id]?.linkedSceneId
-    return sum + (sid && pageCountByScene[sid] ? Number(pageCountByScene[sid]) : 0)
-  }, 0)
-  const totalMins = shotBlocks.reduce(
-    (sum, b) => sum + parseMinutes(enrichedBlockMap[b.id]?.shootTime) + parseMinutes(enrichedBlockMap[b.id]?.setupTime),
-    0
+function AccordionSection({ title, isOpen, onToggle, children, grow = false }) {
+  return (
+    <section style={{ display: 'grid', minHeight: 0, alignContent: 'start', ...(grow ? { flex: 1 } : {}) }}>
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          padding: '9px 10px',
+          border: 'none',
+          borderBottom: '1px solid rgba(74,85,104,0.12)',
+          background: '#f6f3ec',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>
+          {title}
+        </span>
+        <ChevronIcon collapsed={!isOpen} color="#64748b" size={10} />
+      </button>
+      {isOpen && (
+        <div style={{ padding: '10px 10px 12px', borderBottom: '1px solid rgba(74,85,104,0.08)' }}>
+          {children}
+        </div>
+      )}
+    </section>
   )
-  return { shotCount, breakCount, totalPages, totalMins }
 }
 
 // ── Small shared UI ───────────────────────────────────────────────────────────
@@ -414,12 +405,9 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   const shotSpecs = [
     hasReadableValue(shotData?.cameraName) ? { label: 'Camera', value: shotData.cameraName } : null,
     hasReadableValue(shotData?.focalLength) ? { label: 'Lens', value: shotData.focalLength } : null,
-    hasReadableValue(shotData?.specs?.size) ? { label: 'Size', value: shotData.specs.size } : null,
+    hasReadableValue(shotData?.specs?.size) ? { label: 'Shot Size', value: shotData.specs.size } : null,
     hasReadableValue(shotData?.specs?.move) ? { label: 'Move', value: shotData.specs.move } : null,
     hasReadableValue(shotData?.specs?.type) ? { label: 'Type', value: shotData.specs.type } : null,
-    hasReadableValue(shotData?.scriptTime) ? { label: 'Script', value: `${shotData.scriptTime}m` } : null,
-    hasReadableValue(shotData?.predictedTakes) ? { label: 'Takes', value: shotData.predictedTakes } : null,
-    hasReadableValue(shotData?.frameRate) ? { label: 'FPS', value: shotData.frameRate } : null,
   ].filter(Boolean)
   const productionMeta = [
     hasReadableValue(shotData?.sound) ? { label: 'Sound', value: shotData.sound } : null,
@@ -529,91 +517,112 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       {!isCollapsed && (
         <div style={{
           gridColumn: '1 / -1',
-          marginTop: 4,
-          padding: '8px 10px',
+          marginTop: 5,
+          padding: '10px',
           borderRadius: 4,
           border: '1px solid rgba(15,23,42,0.16)',
-          background: 'rgba(255,255,255,0.74)',
+          background: 'rgba(255,255,255,0.84)',
           display: 'grid',
-          gap: 8,
+          gridTemplateColumns: '120px minmax(0, 1fr)',
+          gap: 12,
+          alignItems: 'start',
         }}>
-          {(hasReadableValue(shotData?.sceneSlugline) || hasReadableValue(shotData?.sceneTitle) || hasReadableValue(sceneDescription)) && (
-            <div style={{ display: 'grid', gap: 4 }}>
-              {hasReadableValue(shotData?.sceneSlugline) && (
-                <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#334155' }}>
-                  {shotData.sceneSlugline}
-                </div>
-              )}
-              {hasReadableValue(shotData?.sceneTitle) && (
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
-                  {shotData.sceneTitle}
-                </div>
-              )}
+          <div>
+            {hasReadableValue(shotData?.image) ? (
+              <img
+                src={shotData.image}
+                alt={shotData?.sceneLabel ? `Storyboard for ${shotData.sceneLabel}` : 'Storyboard thumbnail'}
+                style={{
+                  width: 120,
+                  height: 80,
+                  objectFit: 'cover',
+                  borderRadius: 6,
+                  border: '1px solid rgba(15,23,42,0.18)',
+                  display: 'block',
+                }}
+              />
+            ) : (
+              <div style={{
+                width: 120,
+                height: 80,
+                borderRadius: 6,
+                border: '1px solid rgba(15,23,42,0.16)',
+                background: 'rgba(241,245,249,0.85)',
+                color: '#64748b',
+                fontSize: 10,
+                display: 'grid',
+                placeItems: 'center',
+                textAlign: 'center',
+                padding: 8,
+              }}>
+                No storyboard image
+              </div>
+            )}
+          </div>
+
+          <div style={{ minWidth: 0, display: 'grid', gap: 10 }}>
+            <div style={{ display: 'grid', gap: 3 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.25 }}>
+                {hasReadableValue(shotData?.sceneTitle) ? shotData.sceneTitle : title}
+              </div>
               {hasReadableValue(sceneDescription) && (
-                <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.35 }}>
+                <div style={{ fontSize: 11, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {sceneDescription}
                 </div>
               )}
             </div>
-          )}
 
-          {hasSceneMeta && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              <Badge label={`Pages ${pageVal}`} />
-              {hasEstTime ? <Badge label={`Est ${formatMins(estMins)}`} /> : null}
-              {hasReadableValue(shotData?.intOrExt) ? <Badge label={shotData.intOrExt} /> : null}
-              {hasReadableValue(shotData?.dayNight) ? <Badge label={shotData.dayNight} /> : null}
-              {hasReadableValue(locationLabel) && locationLabel !== '—' ? <Badge label={`LOC ${locationLabel}`} /> : null}
-            </div>
-          )}
-
-          {castNames.length > 0 && (
-            <div style={{ display: 'grid', gap: 3 }}>
-              <div style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
-                Cast
+            <div style={{ display: 'grid', gap: 4 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>Metadata</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))', gap: '3px 10px' }}>
+                <span style={{ fontSize: 11, color: '#334155' }}><strong>Pages:</strong> {pageVal}</span>
+                {hasReadableValue(shotData?.intOrExt) && <span style={{ fontSize: 11, color: '#334155' }}><strong>I/E:</strong> {shotData.intOrExt}</span>}
+                {hasReadableValue(shotData?.dayNight) && <span style={{ fontSize: 11, color: '#334155' }}><strong>Day/Night:</strong> {shotData.dayNight}</span>}
+                {locationLabel !== '—' && <span style={{ fontSize: 11, color: '#334155' }}><strong>Location:</strong> {locationLabel}</span>}
               </div>
-              <div style={{ fontSize: 11, color: '#0f172a' }}>{castNames.join(', ')}</div>
             </div>
-          )}
 
-          {(linkedShots.length > 0 || shotSpecs.length > 0 || productionMeta.length > 0) && (
-            <div style={{ display: 'grid', gap: 6 }}>
-              {linkedShots.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>
-                    Linked Shots ({linkedShots.length})
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {linkedShots.slice(0, 8).map(linked => (
-                      <span key={linked.id} style={{ fontSize: 10, fontFamily: 'monospace', color: '#1e293b', border: '1px solid rgba(30,41,59,0.2)', borderRadius: 999, padding: '2px 7px', background: 'rgba(248,250,252,0.9)' }}>
-                        {linked.cameraName || linked.id}
-                      </span>
-                    ))}
-                  </div>
+            {castNames.length > 0 && (
+              <div style={{ display: 'grid', gap: 3 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>People</div>
+                <div style={{ fontSize: 11, color: '#0f172a' }}>
+                  <strong>Cast:</strong> {castNames.join(', ')}
                 </div>
-              )}
+              </div>
+            )}
 
-              {shotSpecs.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {(shotSpecs.length > 0 || productionMeta.length > 0 || linkedShots.length > 0) && (
+              <div style={{ display: 'grid', gap: 4 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>Technical</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 1fr))', gap: '3px 10px' }}>
                   {shotSpecs.map(item => (
-                    <span key={item.label} style={{ fontSize: 10, color: '#334155' }}>
-                      <strong style={{ color: '#0f172a' }}>{item.label}:</strong> {item.value}
+                    <span key={item.label} style={{ fontSize: 11, color: '#334155' }}>
+                      <strong>{item.label}:</strong> {item.value}
                     </span>
                   ))}
-                </div>
-              )}
-
-              {productionMeta.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {productionMeta.map(item => (
-                    <span key={item.label} style={{ fontSize: 10, color: '#334155' }}>
-                      <strong style={{ color: '#0f172a' }}>{item.label}:</strong> {item.value}
+                    <span key={item.label} style={{ fontSize: 11, color: '#334155' }}>
+                      <strong>{item.label}:</strong> {item.value}
                     </span>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
+                {linkedShots.length > 0 && (
+                  <div style={{ fontSize: 10, color: '#475569' }}>
+                    Linked shots: {linkedShots.slice(0, 6).map(linked => linked.cameraName || linked.id).join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hasSceneMeta && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                <Badge label={`Pages ${pageVal}`} />
+                {hasEstTime ? <Badge label={`Est ${formatMins(estMins)}`} /> : null}
+                {hasReadableValue(shotData?.intOrExt) ? <Badge label={shotData.intOrExt} /> : null}
+                {hasReadableValue(shotData?.dayNight) ? <Badge label={shotData.dayNight} /> : null}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -801,105 +810,34 @@ function isColVisible(config, key) {
   return col ? col.visible : true
 }
 
-// ── ScheduleColumnConfigPanel ─────────────────────────────────────────────────
+// ── ScheduleColumnConfigList ──────────────────────────────────────────────────
 
-function ScheduleColumnConfigPanel({ config, onChange, onClose }) {
+function ScheduleColumnConfigList({ config, onChange }) {
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 34,
-        right: 0,
-        zIndex: 200,
-        width: 220,
-        background: '#FAF8F4',
-        border: '1px solid rgba(74,85,104,0.2)',
-        borderRadius: 6,
-        boxShadow: '0 8px 28px rgba(0,0,0,0.12)',
-        padding: '10px 8px 8px',
-      }}
-      onClick={e => e.stopPropagation()}
-    >
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-        paddingBottom: 7,
-        borderBottom: '1px solid rgba(74,85,104,0.12)',
-      }}>
-        <span style={{
-          fontSize: 9,
-          fontWeight: 700,
-          fontFamily: 'Sora, sans-serif',
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          color: '#718096',
-        }}>
-          Configure Columns
-        </span>
-        <button
-          onClick={onClose}
-          style={{
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            color: '#718096',
-            fontSize: 16,
-            lineHeight: 1,
-            padding: '0 2px',
-            display: 'flex',
-            alignItems: 'center',
-          }}
-        >
-          ×
-        </button>
+    <div style={{ display: 'grid', gap: 5 }}>
+      <div style={{ fontSize: 10, color: '#64748b', letterSpacing: '0.04em', fontWeight: 700, textTransform: 'uppercase' }}>
+        List Columns
       </div>
-
-      {/* Toggle list */}
       {config.map(col => (
-        <button
+        <label
           key={col.key}
-          onClick={() => onChange(config.map(c => c.key === col.key ? { ...c, visible: !c.visible } : c))}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            width: '100%',
-            padding: '5px 6px',
-            border: 'none',
-            borderRadius: 3,
-            background: 'none',
-            color: col.visible ? '#2C2C2C' : '#718096',
+            fontSize: 12,
+            color: '#1f2937',
             cursor: 'pointer',
-            textAlign: 'left',
-            fontFamily: 'Sora, sans-serif',
-            fontSize: 11,
+            padding: '3px 0',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#EDE9E1' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
         >
-          {/* Checkbox visual */}
-          <span style={{
-            width: 12,
-            height: 12,
-            border: `1px solid ${col.visible ? '#E84040' : 'rgba(74,85,104,0.3)'}`,
-            borderRadius: 2,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            background: col.visible ? '#E84040' : 'transparent',
-          }}>
-            {col.visible && (
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round">
-                <polyline points="1.5,4 3,5.5 6.5,2" />
-              </svg>
-            )}
-          </span>
-          {col.label}
-        </button>
+          <input
+            type="checkbox"
+            checked={!!col.visible}
+            onChange={() => onChange(config.map(c => c.key === col.key ? { ...c, visible: !c.visible } : c))}
+          />
+          <span>{col.label}</span>
+        </label>
       ))}
     </div>
   )
@@ -3150,13 +3088,19 @@ export default function ScheduleTab({
   const setTabViewState = useStore(s => s.setTabViewState)
 
   const isDark = theme === 'dark'
-  const fg = '#1A1A1A'
-  const mutedFg = '#718096'
 
   // ── Sub-view state ───────────────────────────────────────────────────────────
   const [scheduleView, setScheduleView] = useState(scheduleViewState.scheduleView || 'list') // 'list' | 'stripboard' | 'calendar'
   const [stripDensity, setStripDensity] = useState(scheduleViewState.stripDensity || 'comfortable') // 'compact' | 'comfortable'
   const [stripPopover, setStripPopover] = useState(null) // { block, shotData, dayId, rect }
+  const [sectionOpen, setSectionOpen] = useState(() => ({
+    views: true,
+    actions: true,
+    selectedDay: true,
+    display: true,
+    configure: true,
+    summary: true,
+  }))
 
   // Open a specific day in the List view (used by CalendarView dialog action)
   const handleJumpToDay = useCallback((dayId) => {
@@ -3193,20 +3137,13 @@ export default function ScheduleTab({
     )
   }, [])
 
-  const configPanelRef = useRef(null)
   const [listActiveDayId, setListActiveDayId] = useState(scheduleViewState.listActiveDayId || null)
   const containerRef = useRef(null)
 
-  // Close config panel when clicking outside
   useEffect(() => {
     if (!configureOpen) return
-    const handler = (e) => {
-      if (configPanelRef.current && !configPanelRef.current.contains(e.target)) {
-        onConfigureOpenChange(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    setSectionOpen(prev => ({ ...prev, configure: true }))
+    onConfigureOpenChange(false)
   }, [configureOpen, onConfigureOpenChange])
 
   // ── DnD state ───────────────────────────────────────────────────────────────
@@ -3378,15 +3315,6 @@ export default function ScheduleTab({
       block.type === 'break' ? daySum + parseMinutes(block.duration) : daySum
     ), 0)
   ), 0)
-  const subtitleText = schedule.length > 0
-    ? `${schedule.length} shooting day${schedule.length !== 1 ? 's' : ''} · ${totalStrips} strip${totalStrips !== 1 ? 's' : ''} scheduled`
-    : 'Build your shoot days and drag shots into place.'
-  const activeSubTab = scheduleView === 'list'
-    ? 'List'
-    : scheduleView === 'stripboard'
-      ? 'Stripboard'
-      : 'Calendar'
-
   useEffect(() => {
     if (!schedule.length) {
       setListActiveDayId(null)
@@ -3431,38 +3359,164 @@ export default function ScheduleTab({
       className="flex flex-col h-full overflow-y-auto canvas-texture"
       onScroll={(e) => setTabViewState('schedule', { scrollTop: e.currentTarget.scrollTop })}
     >
-      <div className="sticky top-0 z-40 px-6 py-3 border-b border-slate/10 bg-canvas/95 backdrop-blur-sm">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-slate whitespace-nowrap">{subtitleText}</p>
-        </div>
-      </div>
-
-      <div className="px-6 pb-6 pt-3">
+      <div className="pb-6 pt-0">
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
-      ) : scheduleView === 'calendar' ? (
-        // ── Calendar view ──────────────────────────────────────────────────
-        <CalendarView
-          schedule={schedule}
-          scenes={scenes}
-          isDark={isDark}
-          onOpenDayInList={handleJumpToDay}
-          enrichedBlockMap={enrichedBlockMap}
-          pageCountByScene={pageCountByScene}
-        />
-      ) : scheduleView === 'list' ? (
-        <div style={{ background: '#f5f2ea', border: '1px solid #c8bfaf' }}>
-          <ScheduleListColumnHeader />
-          <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
-            <DayTabBar
-              days={dayTabs}
-              activeDay={listActiveDayId}
-              onSelect={(dayId) => {
-                setListActiveDayId(dayId)
-                const el = document.getElementById(`sched-day-${dayId}`)
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }}
-              onAddDay={() => addShootingDay()}
+      ) : (
+        <div style={{ display: 'flex', minHeight: 'calc(100vh - 96px)', borderTop: '1px solid #c8bfaf', borderBottom: '1px solid #c8bfaf', background: '#f5f2ea' }}>
+          <SidebarPane width={284}>
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+              <AccordionSection title="Schedule Views" isOpen={sectionOpen.views} onToggle={() => setSectionOpen(prev => ({ ...prev, views: !prev.views }))}>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {[
+                    { id: 'list', label: 'List' },
+                    { id: 'stripboard', label: 'Stripboard' },
+                    { id: 'calendar', label: 'Calendar' },
+                  ].map(view => {
+                    const active = scheduleView === view.id
+                    return (
+                      <button
+                        key={view.id}
+                        onClick={() => setScheduleView(view.id)}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '9px 10px',
+                          borderRadius: 5,
+                          border: active ? '1px solid rgba(15,23,42,0.18)' : '1px solid rgba(74,85,104,0.14)',
+                          background: active ? '#e8e2d5' : '#fbfaf7',
+                          color: active ? '#0f172a' : '#475569',
+                          fontSize: 12,
+                          fontWeight: active ? 700 : 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {view.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </AccordionSection>
+
+              <AccordionSection title="Actions" isOpen={sectionOpen.actions} onToggle={() => setSectionOpen(prev => ({ ...prev, actions: !prev.actions }))}>
+                <button
+                  onClick={() => addShootingDay()}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontFamily: 'Sora, sans-serif',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    border: 'none',
+                    borderRadius: 4,
+                    background: '#E84040',
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                  }}
+                >
+                  + Add Day
+                </button>
+              </AccordionSection>
+
+              <AccordionSection title="Selected Day" isOpen={sectionOpen.selectedDay} onToggle={() => setSectionOpen(prev => ({ ...prev, selectedDay: !prev.selectedDay }))}>
+                {selectedDay ? (
+                  <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 10, display: 'grid', rowGap: 6 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>Day {selectedDayIndex + 1}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>{formatDate(selectedDay.date) || 'Date not set'}</div>
+                    <div style={{ borderTop: '1px solid rgba(74,85,104,0.15)', marginTop: 2, paddingTop: 6, display: 'grid', gap: 4 }}>
+                      {[
+                        ['Call Time', selectedDay.startTime || '—'],
+                        ['Basecamp', selectedDay.basecamp || '—'],
+                        ['Strips', selectedDayShotBlocks.length],
+                        ['Breaks', selectedDayBreakBlocks.length],
+                        ['Pages', selectedDayPages.toFixed(2).replace(/\.00$/, '') || '0'],
+                        ['Est. Day', formatMins(selectedDayShootMins + selectedDayBreakMins)],
+                      ].map(([label, value]) => (
+                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11 }}>
+                          <span style={{ color: '#64748b' }}>{label}</span>
+                          <span style={{ color: '#0f172a', fontWeight: 600 }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#718096' }}>No day selected.</div>
+                )}
+              </AccordionSection>
+
+              <AccordionSection title="Display" isOpen={sectionOpen.display} onToggle={() => setSectionOpen(prev => ({ ...prev, display: !prev.display }))}>
+                {scheduleView === 'stripboard' ? (
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {['compact', 'comfortable'].map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => setStripDensity(mode)}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '8px 10px',
+                          borderRadius: 4,
+                          border: '1px solid rgba(74,85,104,0.2)',
+                          background: stripDensity === mode ? '#ede9e1' : '#fff',
+                          color: stripDensity === mode ? '#0f172a' : '#64748b',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {mode === 'compact' ? 'Compact strips (24px)' : 'Comfortable strips (36px)'}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#718096' }}>
+                    {scheduleView === 'list' ? 'Display settings are configured below.' : 'No extra display controls for this view.'}
+                  </div>
+                )}
+              </AccordionSection>
+
+              <AccordionSection title="Configure" isOpen={sectionOpen.configure} onToggle={() => setSectionOpen(prev => ({ ...prev, configure: !prev.configure }))}>
+                {scheduleView === 'list' ? (
+                  <ScheduleColumnConfigList
+                    config={scheduleColumnConfig}
+                    onChange={setScheduleColumnConfig}
+                  />
+                ) : (
+                  <div style={{ fontSize: 11, color: '#718096' }}>
+                    Configure options are available in List view.
+                  </div>
+                )}
+              </AccordionSection>
+
+              <AccordionSection title="Summary" isOpen={sectionOpen.summary} onToggle={() => setSectionOpen(prev => ({ ...prev, summary: !prev.summary }))} grow>
+                <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[
+                    [schedule.length, 'Shoot Days'],
+                    [totalStrips, 'Strips'],
+                    [totalBreaks, 'Break Strips'],
+                    [totalPages.toFixed(2).replace(/\.00$/, '') || '0', 'Pages'],
+                    [formatMins(totalShootMins), 'Est. Shoot'],
+                    [formatMins(totalShootMins + totalBreakMins), 'Shoot + Break'],
+                  ].map(([value, label]) => (
+                    <div key={label} style={{ border: '1px solid rgba(74,85,104,0.1)', borderRadius: 5, padding: '8px 7px', background: '#fcfcfd' }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{value}</div>
+                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </AccordionSection>
+            </div>
+          </SidebarPane>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+          {scheduleView === 'calendar' ? (
+            // ── Calendar view ──────────────────────────────────────────────────
+            <CalendarView
+              schedule={schedule}
+              scenes={scenes}
+              isDark={isDark}
+              onJumpToDay={handleJumpToDay}
             />
           ) : scheduleView === 'list' ? (
             <div>
