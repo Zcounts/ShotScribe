@@ -166,6 +166,31 @@ function normalizeIsoDate(value) {
   return null
 }
 
+function getCastChipStyle() {
+  return {
+    fontSize: 9,
+    fontFamily: 'monospace',
+    fontWeight: 700,
+    color: '#1e293b',
+    border: '1px solid rgba(30,41,59,0.25)',
+    background: 'rgba(255,255,255,0.75)',
+    borderRadius: 999,
+    padding: '2px 7px',
+    letterSpacing: '0.04em',
+  }
+}
+
+function getTimeTextStyle(hasValue = true) {
+  return {
+    fontSize: 12,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+    fontVariantNumeric: 'tabular-nums',
+    color: hasValue ? '#0f172a' : '#94a3b8',
+    fontWeight: hasValue ? 800 : 600,
+    letterSpacing: hasValue ? '0.02em' : '0.05em',
+  }
+}
+
 function summarizeDay(blocks, pageCountByScene, enrichedBlockMap) {
   const safeBlocks = Array.isArray(blocks) ? blocks : []
   const safePages = pageCountByScene || {}
