@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
-import useStore, { getShotLetter } from '../store'
+import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
+import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1332,19 +1333,11 @@ ${pageDivs.join('\n')}
 // schedule; all other fields come from the callsheets store map.
 
 function buildCallsheetPrintHtml(dayIdxFilter = null) {
-  const { schedule, callsheets, projectName, scenes, castRoster, getDayCastRosterEntries } = useStore.getState()
+  const { schedule, callsheets, projectName, castRoster, crewRoster, scriptScenes, getScheduleWithShots, callsheetColumnConfig } = useStore.getState()
 
   if (schedule.length === 0) {
     return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40px"><p>No shooting days scheduled.</p></body></html>`
   }
-
-  // Build shotMap for Advanced Schedule section
-  const shotMap = new Map()
-  scenes.forEach((scene, sceneIdx) => {
-    scene.shots.forEach((shot, shotIdx) => {
-      shotMap.set(shot.id, { shot, scene, displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}` })
-    })
-  })
 
   function fmt12(t) {
     if (!t) return ''
@@ -1358,6 +1351,37 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
     if (!d) return ''
     const [y, mo, da] = d.split('-')
     return `${mo}/${da}/${y}`
+  }
+
+  function formatMinuteOfDay(totalMins) {
+    if (typeof totalMins !== 'number') return '—'
+    const safeTotal = ((Math.round(totalMins) % (24 * 60)) + 24 * 60) % (24 * 60)
+    const h24 = Math.floor(safeTotal / 60)
+    const m = safeTotal % 60
+    const h12 = h24 % 12 || 12
+    const ampm = h24 < 12 ? 'AM' : 'PM'
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
+  }
+
+  function formatDayNightDisplay(value) {
+    const raw = String(value || '').trim()
+    if (!raw) return '—'
+    const upper = raw.toUpperCase()
+    if (upper === 'NIGHT') return 'NITE'
+    return upper.slice(0, 4)
+  }
+
+  const scheduleWithShots = getScheduleWithShots()
+  const primaryBySection = {
+    advancedSchedule: 'sluglineScene',
+    castList: 'actor',
+    crewList: 'name',
+  }
+  const isColumnVisible = (sectionKey, columnKey) => {
+    if (columnKey === primaryBySection[sectionKey]) return true
+    const rows = Array.isArray(callsheetColumnConfig?.[sectionKey]) ? callsheetColumnConfig[sectionKey] : []
+    const match = rows.find(row => row.key === columnKey)
+    return match ? !!match.visible : true
   }
 
   const dayPages = schedule
@@ -1381,111 +1405,73 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
       `<tr><td class="info-label">${label}</td><td class="info-value">${value}</td></tr>`
     ).join('\n')
 
-    // ── Advanced Schedule: group shot blocks by scene + compute break start times
-    const startMins = scheduleParseStartTime(day.startTime)
-    let cumulativeAdvMins = 0
-
-    // First pass: compute projected start time for every block (in order)
-    const blockProjMap = {}
-    const dayBlocksCs = day.blocks || day.shotBlocks || []
-    dayBlocksCs.forEach(block => {
-      const projStart = startMins !== null ? startMins + cumulativeAdvMins : null
-      blockProjMap[block.id] = projStart
-      if (block.type === 'break' || block.type === 'move' || block.type === 'meal' || block.type === 'travel') {
-        cumulativeAdvMins += parseScheduleMinutes(block.duration ?? block.breakDuration ?? block.blockDuration ?? 0)
-      } else {
-        const found = shotMap.get(block.shotId)
-        if (found) {
-          cumulativeAdvMins += parseScheduleMinutes(found.shot.shootTime) + parseScheduleMinutes(found.shot.setupTime)
-        }
-      }
+    const derivedScheduleRows = buildDayScheduleRows(day, scheduleWithShots, scriptScenes)
+    const castListRows = deriveDayCastRows({
+      dayId: day.id,
+      callsheet: cs,
+      castRoster,
+      scriptScenes,
+      scheduledSceneIds: derivedScheduleRows.scheduledSceneIds,
     })
+    const crewListRows = deriveDayCrewRows({ callsheet: cs, crewRoster, day })
 
-    const sceneGroups = []
-    const seenScenes = new Map()
-    const breaks = []
-    dayBlocksCs.forEach(block => {
-      if (block.type === 'break' || block.type === 'move' || block.type === 'meal' || block.type === 'travel') {
-        breaks.push({ ...block, projStart: blockProjMap[block.id] })
-        return
-      }
-      const found = shotMap.get(block.shotId)
-      if (!found) return
-      const { scene } = found
-      const key = `${scene.id}`
-      if (!seenScenes.has(key)) {
-        seenScenes.set(key, sceneGroups.length)
-        sceneGroups.push({ sceneLabel: scene.sceneLabel, location: scene.location, intOrExt: found.shot.intOrExt || scene.intOrExt, dayNight: found.shot.dayNight || scene.dayNight, count: 0 })
-      }
-      sceneGroups[seenScenes.get(key)].count++
-    })
+    const scheduleColumns = CALLSHEET_COLUMN_DEFINITIONS.advancedSchedule.filter(column => isColumnVisible('advancedSchedule', column.key))
+    const castColumns = CALLSHEET_COLUMN_DEFINITIONS.castList.filter(column => isColumnVisible('castList', column.key))
+    const crewColumns = CALLSHEET_COLUMN_DEFINITIONS.crewList.filter(column => isColumnVisible('crewList', column.key))
 
-    const advSceneRows = sceneGroups.map((sg, i) =>
-      `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">
-        <td>${escapeHtml(sg.sceneLabel)}</td>
-        <td>${escapeHtml(sg.location)}</td>
-        <td>${escapeHtml(sg.intOrExt)}</td>
-        <td>${escapeHtml(sg.dayNight)}</td>
-        <td style="text-align:right">${sg.count}</td>
-      </tr>`
-    ).join('\n')
+    const scheduleHeader = scheduleColumns.map(column => `<th>${escapeHtml(column.label.toUpperCase())}</th>`).join('')
+    const castHeader = castColumns.map(column => `<th>${escapeHtml(column.label.toUpperCase())}</th>`).join('')
+    const crewHeader = crewColumns.map(column => `<th>${escapeHtml(column.label.toUpperCase())}</th>`).join('')
 
-    const breakRows = breaks.map(b => {
-      const timeLabel = b.projStart !== null
-        ? `<span style="color:#1d4ed8;font-weight:700;font-style:normal">${escapeHtml(scheduleFormatTimeOfDay(b.projStart))}</span> — `
-        : ''
-      const blockDur = b.duration ?? b.breakDuration ?? b.blockDuration ?? 0
-      const durLabel = blockDur ? `${blockDur} min` : ''
-      const blockIcon = b.type === 'break' ? '☕' : b.type === 'move' ? '↗' : b.type === 'meal' ? '☕' : '●'
-      const blockLbl = b.label || b.breakName || b.blockName || (b.type === 'break' ? 'Break' : b.type)
-      return `<tr class="break-adv-row"><td colspan="4" style="color:#666">${blockIcon} ${timeLabel}${escapeHtml(blockLbl)}</td><td style="text-align:right;color:#999">${durLabel}</td></tr>`
-    }).join('\n')
+    const scheduleBodyRows = derivedScheduleRows.scenes.length === 0
+      ? `<tr><td colspan="${Math.max(scheduleColumns.length, 1)}" style="color:#aaa;font-style:italic;padding:6px 8px">No scenes scheduled for this day.</td></tr>`
+      : derivedScheduleRows.scenes.map((scene, i) => {
+          const cells = scheduleColumns.map(column => {
+            if (column.key === 'sceneNumber') return `<td>${escapeHtml(scene.sceneNumber || '—')}</td>`
+            if (column.key === 'sluglineScene') return `<td>${escapeHtml(scene.slugline || '—')}</td>`
+            if (column.key === 'location') return `<td>${escapeHtml(scene.location || '—')}</td>`
+            if (column.key === 'intExt') return `<td>${escapeHtml(scene.intExt || '—')}</td>`
+            if (column.key === 'dayNight') return `<td>${escapeHtml(formatDayNightDisplay(scene.dayNight))}</td>`
+            if (column.key === 'start') return `<td>${escapeHtml(formatMinuteOfDay(scene.start))}</td>`
+            if (column.key === 'end') return `<td>${escapeHtml(formatMinuteOfDay(scene.end))}</td>`
+            if (column.key === 'pages') return `<td>${escapeHtml(Number(scene.pageCount || 0).toFixed(2))}</td>`
+            if (column.key === 'shots') return `<td>${escapeHtml(String(scene.shotCount ?? '0'))}</td>`
+            if (column.key === 'notes') return `<td>${escapeHtml(scene.notes || '—')}</td>`
+            return '<td>—</td>'
+          }).join('')
+          return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
+        }).join('\n')
 
-    // ── Cast List
-    const cast = cs.cast || []
-    const derivedCast = getDayCastRosterEntries(day.id).map(entry => ({
-      rosterId: entry.id,
-      name: entry.name || '',
-      character: entry.character || entry.characterIds?.[0] || '',
-      pickupTime: '',
-      makeupCall: '',
-      setCall: '',
-    }))
-    const mergedCast = [...cast]
-    const existingRosterIds = new Set(cast.map(row => row.rosterId).filter(Boolean))
-    derivedCast.forEach(row => {
-      if (!existingRosterIds.has(row.rosterId)) mergedCast.push(row)
-    })
-    const castWithRoster = mergedCast.map(row => {
-      if (!row.rosterId) return row
-      const rosterEntry = castRoster.find(entry => entry.id === row.rosterId)
-      return rosterEntry
-        ? { ...row, name: rosterEntry.name || row.name, character: rosterEntry.character || row.character || rosterEntry.characterIds?.[0] || '' }
-        : row
-    })
-    const castRows = castWithRoster.length === 0
-      ? `<tr><td colspan="5" style="color:#aaa;font-style:italic;padding:6px 8px">No cast listed</td></tr>`
-      : castWithRoster.map((r, i) =>
-          `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">
-            <td>${escapeHtml(r.name || '')}</td>
-            <td>${escapeHtml(r.character || '')}</td>
-            <td>${escapeHtml(r.pickupTime || '')}</td>
-            <td>${escapeHtml(r.makeupCall || '')}</td>
-            <td>${escapeHtml(r.setCall || '')}</td>
-          </tr>`
-        ).join('\n')
+    const castRows = castListRows.length === 0
+      ? `<tr><td colspan="${Math.max(castColumns.length, 1)}" style="color:#aaa;font-style:italic;padding:6px 8px">No cast listed</td></tr>`
+      : castListRows.map((row, i) => {
+          const cells = castColumns.map(column => {
+            if (column.key === 'actor') return `<td>${escapeHtml(row.name || '')}</td>`
+            if (column.key === 'character') return `<td>${escapeHtml(row.character || '—')}</td>`
+            if (column.key === 'sceneCount') return `<td>${escapeHtml(String(row.sceneCount ?? 0))}</td>`
+            if (column.key === 'pageCount') return `<td>${escapeHtml(Number(row.pageCount || 0).toFixed(2))}</td>`
+            if (column.key === 'pickupTime') return `<td>${escapeHtml(row.pickupTime || '')}</td>`
+            if (column.key === 'makeupCall') return `<td>${escapeHtml(row.makeupCall || '')}</td>`
+            if (column.key === 'setCall') return `<td>${escapeHtml(row.setCall || '')}</td>`
+            if (column.key === 'contact') return `<td>${escapeHtml(row.contact || '—')}</td>`
+            return '<td>—</td>'
+          }).join('')
+          return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
+        }).join('\n')
 
-    // ── Crew List
-    const crew = cs.crew || []
-    const crewRows = crew.length === 0
-      ? `<tr><td colspan="3" style="color:#aaa;font-style:italic;padding:6px 8px">No crew listed</td></tr>`
-      : crew.map((r, i) =>
-          `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">
-            <td>${escapeHtml(r.name || '')}</td>
-            <td>${escapeHtml(r.role || '')}</td>
-            <td>${escapeHtml(r.callTime || '')}</td>
-          </tr>`
-        ).join('\n')
+    const crewRows = crewListRows.length === 0
+      ? `<tr><td colspan="${Math.max(crewColumns.length, 1)}" style="color:#aaa;font-style:italic;padding:6px 8px">No crew listed</td></tr>`
+      : crewListRows.map((row, i) => {
+          const cells = crewColumns.map(column => {
+            if (column.key === 'name') return `<td>${escapeHtml(row.name || '')}</td>`
+            if (column.key === 'role') return `<td>${escapeHtml(row.role || row.department || '—')}</td>`
+            if (column.key === 'callTime') return `<td>${escapeHtml(row.callTime || '')}</td>`
+            if (column.key === 'notes') return `<td>${escapeHtml(row.notes || '')}</td>`
+            if (column.key === 'contact') return `<td>${escapeHtml(row.contact || '—')}</td>`
+            return '<td>—</td>'
+          }).join('')
+          return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
+        }).join('\n')
 
     // ── Location Details
     const locLines = []
@@ -1523,29 +1509,17 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
   <!-- ADVANCED SCHEDULE -->
   <div class="section">
     <div class="section-title">ADVANCED SCHEDULE</div>
-    ${sceneGroups.length === 0 && breaks.length === 0
-      ? '<p class="empty-msg">No shots scheduled for this day.</p>'
-      : `<table>
-          <colgroup>
-            <col style="width:18%"><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:50px">
-          </colgroup>
-          <thead><tr><th>SCENE</th><th>LOCATION</th><th>INT/EXT</th><th>DAY/NIGHT</th><th style="text-align:right">SHOTS</th></tr></thead>
-          <tbody>
-            ${advSceneRows}
-            ${breakRows}
-          </tbody>
-        </table>`
-    }
+    <table>
+      <thead><tr>${scheduleHeader}</tr></thead>
+      <tbody>${scheduleBodyRows}</tbody>
+    </table>
   </div>
 
   <!-- CAST LIST -->
   <div class="section">
     <div class="section-title">CAST LIST</div>
     <table>
-      <colgroup>
-        <col style="width:22%"><col style="width:18%"><col style="width:16%"><col style="width:16%"><col style="width:16%">
-      </colgroup>
-      <thead><tr><th>NAME</th><th>CHARACTER</th><th>PICKUP</th><th>MAKEUP CALL</th><th>SET CALL</th></tr></thead>
+      <thead><tr>${castHeader}</tr></thead>
       <tbody>${castRows}</tbody>
     </table>
   </div>
@@ -1554,10 +1528,7 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
   <div class="section">
     <div class="section-title">CREW LIST</div>
     <table>
-      <colgroup>
-        <col style="width:30%"><col style="width:auto"><col style="width:100px">
-      </colgroup>
-      <thead><tr><th>NAME</th><th>DEPARTMENT / ROLE</th><th>CALL TIME</th></tr></thead>
+      <thead><tr>${crewHeader}</tr></thead>
       <tbody>${crewRows}</tbody>
     </table>
   </div>
