@@ -386,7 +386,8 @@ const useStore = create((set, get) => ({
 
   // UI state
   settingsOpen: false,
-  contextMenu: null, // { shotId, sceneId, x, y }
+  contextMenu: null, // { type: 'shot', shotId, sceneId, x, y } | { type: 'person', personType, personId, x, y }
+  personDialog: null, // { type: 'cast'|'crew', id: string|null }
   activeTab: 'script', // 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
@@ -1048,12 +1049,36 @@ const useStore = create((set, get) => ({
   },
 
   removeCastRosterEntry: (id) => {
-    set(state => ({ castRoster: state.castRoster.filter(entry => entry.id !== id) }))
+    set(state => ({
+      castRoster: state.castRoster.filter(entry => entry.id !== id),
+      callsheets: Object.fromEntries(
+        Object.entries(state.callsheets || {}).map(([dayId, callsheet]) => ([
+          dayId,
+          {
+            ...(callsheet || {}),
+            cast: (callsheet?.cast || []).filter(row => row?.rosterId !== id),
+          },
+        ]))
+      ),
+      personDialog: state.personDialog?.type === 'cast' && state.personDialog?.id === id ? null : state.personDialog,
+    }))
     get()._scheduleAutoSave()
   },
 
   removeCrewRosterEntry: (id) => {
-    set(state => ({ crewRoster: state.crewRoster.filter(entry => entry.id !== id) }))
+    set(state => ({
+      crewRoster: state.crewRoster.filter(entry => entry.id !== id),
+      callsheets: Object.fromEntries(
+        Object.entries(state.callsheets || {}).map(([dayId, callsheet]) => ([
+          dayId,
+          {
+            ...(callsheet || {}),
+            crew: (callsheet?.crew || []).filter(row => row?.rosterId !== id),
+          },
+        ]))
+      ),
+      personDialog: state.personDialog?.type === 'crew' && state.personDialog?.id === id ? null : state.personDialog,
+    }))
     get()._scheduleAutoSave()
   },
 
@@ -1553,8 +1578,11 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
-  showContextMenu: (shotId, sceneId, x, y) => set({ contextMenu: { shotId, sceneId, x, y } }),
+  showContextMenu: (shotId, sceneId, x, y) => set({ contextMenu: { type: 'shot', shotId, sceneId, x, y } }),
+  showPersonContextMenu: (personType, personId, x, y) => set({ contextMenu: { type: 'person', personType, personId, x, y } }),
   hideContextMenu: () => set({ contextMenu: null }),
+  openPersonDialog: (type, id = null) => set({ personDialog: { type, id } }),
+  closePersonDialog: () => set({ personDialog: null }),
 
   setShortcutBinding: (actionId, binding, opts = {}) => {
     const normalized = normalizeShortcutBinding(binding)
@@ -2193,6 +2221,8 @@ const useStore = create((set, get) => ({
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
       activeTab: 'script',
+      contextMenu: null,
+      personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
         script: {},
@@ -2307,6 +2337,8 @@ const useStore = create((set, get) => ({
       projectPath: null,
       lastSaved: null,
       activeTab: 'script',
+      contextMenu: null,
+      personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
         script: {},

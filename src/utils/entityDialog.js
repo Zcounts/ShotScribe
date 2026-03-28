@@ -35,3 +35,14 @@ export function resolveEntityTarget(target) {
   if (!entityType || !entityId) return null
   return { entityType, entityId }
 }
+
+export function resolvePersonEntityTarget(target) {
+  if (!(target instanceof Element)) return null
+  const node = target.closest('[data-person-type][data-person-id]')
+  if (!node) return null
+  const personType = node.getAttribute('data-person-type')
+  const personId = node.getAttribute('data-person-id')
+  if (!personType || !personId) return null
+  if (personType !== 'cast' && personType !== 'crew') return null
+  return { personType, personId }
+}

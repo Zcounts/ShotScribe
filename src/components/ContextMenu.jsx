@@ -6,6 +6,9 @@ export default function ContextMenu() {
   const hideContextMenu = useStore(s => s.hideContextMenu)
   const deleteShot = useStore(s => s.deleteShot)
   const duplicateShot = useStore(s => s.duplicateShot)
+  const openPersonDialog = useStore(s => s.openPersonDialog)
+  const removeCastRosterEntry = useStore(s => s.removeCastRosterEntry)
+  const removeCrewRosterEntry = useStore(s => s.removeCrewRosterEntry)
   const ref = useRef(null)
 
   useEffect(() => {
@@ -22,13 +25,48 @@ export default function ContextMenu() {
 
   if (!contextMenu) return null
 
-  const { shotId, x, y } = contextMenu
+  const { x, y } = contextMenu
 
   // Adjust position to stay in viewport
   const menuWidth = 180
-  const menuHeight = 100
+  const menuHeight = contextMenu.type === 'person' ? 88 : 100
   const left = Math.min(x, window.innerWidth - menuWidth - 8)
   const top = Math.min(y, window.innerHeight - menuHeight - 8)
+
+  if (contextMenu.type === 'person') {
+    const { personType, personId } = contextMenu
+    const label = personType === 'cast' ? 'cast' : 'crew'
+    return (
+      <div
+        ref={ref}
+        className="context-menu"
+        style={{ left, top }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div
+          className="context-menu-item"
+          onClick={() => { openPersonDialog(personType, personId); hideContextMenu() }}
+        >
+          Edit Cast/Crew Member
+        </div>
+        <div className="border-t border-gray-200 my-1" />
+        <div
+          className="context-menu-item danger"
+          onClick={() => {
+            const ok = window.confirm(`Delete this ${label} member? This will also remove linked callsheet entries.`)
+            if (!ok) return
+            if (personType === 'cast') removeCastRosterEntry(personId)
+            else removeCrewRosterEntry(personId)
+            hideContextMenu()
+          }}
+        >
+          Delete Cast/Crew Member
+        </div>
+      </div>
+    )
+  }
+
+  const { shotId } = contextMenu
 
   return (
     <div

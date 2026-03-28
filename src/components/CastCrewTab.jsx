@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
 import useStore from '../store'
 import { SubTabNav } from './SubTabNav'
-import PersonProfileDialog from './PersonProfileDialog'
 
 function formatDayHeader(day) {
   const location = (day.blocks.find(b => b.shotData?.location)?.shotData?.location || 'SET')
@@ -53,11 +52,11 @@ export default function CastCrewTab() {
   const setCastCrewNotes = useStore(s => s.setCastCrewNotes)
   const castCrewViewState = useStore(s => s.tabViewState?.castcrew || {})
   const setTabViewState = useStore(s => s.setTabViewState)
+  const openPersonDialog = useStore(s => s.openPersonDialog)
   const [activeSubTab, setActiveSubTab] = useState(castCrewViewState.activeSubTab || 'Quick Reference')
-  const [editor, setEditor] = useState(null)
   const scrollRef = useRef(null)
 
-  const openProfile = (type, id) => setEditor({ type, id: id || null })
+  const openProfile = (type, id) => openPersonDialog(type, id || null)
 
   const scheduleDays = getScheduleWithShots()
 
@@ -165,8 +164,8 @@ export default function CastCrewTab() {
                 </thead>
                 <tbody>
                   {castMatrix.map((row, rowIndex) => (
-                    <tr key={row.castId} className={rowIndex % 2 === 0 ? 'bg-canvas' : 'bg-canvas-dark/40'} onDoubleClick={() => openProfile('cast', row.castId)}>
-                      <td className="sticky left-0 z-10 min-w-[160px] px-3 py-2 text-ink font-medium border-b border-r border-slate/10 bg-inherit">{row.actor}</td>
+                    <tr key={row.castId} className={rowIndex % 2 === 0 ? 'bg-canvas' : 'bg-canvas-dark/40'}>
+                      <td className="sticky left-0 z-10 min-w-[160px] px-3 py-2 text-ink font-medium border-b border-r border-slate/10 bg-inherit" data-person-type="cast" data-person-id={row.castId}>{row.actor}</td>
                       {row.perDay.map((status, i) => (
                         <td key={`${row.castId}-${scheduleDays[i]?.id || i}`} className="px-3 py-2 border-b border-r border-slate/10">
                           <Circle status={status} />
@@ -182,8 +181,8 @@ export default function CastCrewTab() {
           <SectionShell title="Crew" subtitle="Assigned crew only.">
             <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {crewRows.map(member => (
-                <div key={member.id} className="border border-slate/15 rounded p-2 bg-canvas/50" onDoubleClick={() => setEditor({ type: 'crew', id: member.id })}>
-                  <div className="text-sm font-semibold text-ink">{member.name}</div>
+                <div key={member.id} className="border border-slate/15 rounded p-2 bg-canvas/50">
+                  <div className="text-sm font-semibold text-ink" data-person-type="crew" data-person-id={member.id}>{member.name}</div>
                   <div className="text-xs text-slate">{member.department} · {member.role || '—'}</div>
                   <div className="text-[11px] text-slate-light mt-1">Callsheet days: {member.daysBooked}</div>
                 </div>
@@ -206,8 +205,8 @@ export default function CastCrewTab() {
               </thead>
               <tbody>
                 {castListRows.map(row => (
-                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => openProfile('cast', row.id)}>
-                    <td className="p-2 font-medium text-ink">{row.name}</td>
+                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer">
+                    <td className="p-2 font-medium text-ink" data-person-type="cast" data-person-id={row.id}>{row.name}</td>
                     <td className="p-2 text-slate">{row.characterDisplay}</td>
                     <td className="p-2 text-right text-slate">{row.scriptSceneCount}</td>
                     <td className="p-2 text-right text-slate">{row.scriptPageCount.toFixed(2)}</td>
@@ -230,8 +229,8 @@ export default function CastCrewTab() {
               </thead>
               <tbody>
                 {crewRows.map(row => (
-                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer" onDoubleClick={() => openProfile('crew', row.id)}>
-                    <td className="p-2 font-medium text-ink">{row.name}</td>
+                  <tr key={row.id} className="border-b border-slate/10 cursor-pointer">
+                    <td className="p-2 font-medium text-ink" data-person-type="crew" data-person-id={row.id}>{row.name}</td>
                     <td className="p-2 text-slate">{row.department || '—'}</td>
                     <td className="p-2 text-slate">{row.role || '—'}</td>
                     <td className="p-2 text-right text-slate">{row.daysBooked}</td>
@@ -257,13 +256,6 @@ export default function CastCrewTab() {
         className="w-full min-h-[110px] bg-paper border border-slate/20 rounded-md p-3 text-sm text-slate outline-none"
       />
 
-      {editor && (
-        <PersonProfileDialog
-          personType={editor.type}
-          person={editor.id ? (editor.type === 'cast' ? castRoster : crewRoster).find(entry => entry.id === editor.id) : null}
-          onClose={() => setEditor(null)}
-        />
-      )}
     </div>
   )
 }

@@ -35,6 +35,14 @@ function formatMinuteOfDay(totalMins) {
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
 }
 
+function formatDayNightDisplay(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return '—'
+  const upper = raw.toUpperCase()
+  if (upper === 'NIGHT') return 'NITE'
+  return upper.slice(0, 4)
+}
+
 function Card({ title, children, tone = 'default' }) {
   const bg = tone === 'alert' ? '#FFF5F5' : '#FAF8F4'
   const border = tone === 'alert' ? '1px solid #FECACA' : '1px solid #E2E8F0'
@@ -274,8 +282,7 @@ export default function CallsheetTab({ configureOpen = true }) {
                     <EditableField label="Directions / access notes" value={callsheet.directions} onChange={(value) => onDayUpdate({ directions: value })} placeholder="Nearest cross street, gate entry, elevator/floor details" multiline rows={1} />
                   </div>
                   <div style={{ display: 'grid', gap: 7, alignContent: 'start' }}>
-                    <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', padding: 8, display: 'grid', gap: 6 }}>
-                      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700 }}>Weather and daylight</div>
+                    <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', padding: 8, display: 'grid', gap: 5 }}>
                       <EditableField label="Weather" value={callsheet.weather} onChange={(value) => onDayUpdate({ weather: value })} placeholder="Cloudy, 62°F" />
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                         <EditableField label="Sunrise" value={callsheet.sunrise} onChange={(value) => onDayUpdate({ sunrise: value })} placeholder="6:42 AM" />
@@ -295,7 +302,23 @@ export default function CallsheetTab({ configureOpen = true }) {
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
                       {['Scene #', 'Slugline / Scene', 'Location', 'I/E', 'D/N', 'Start', 'End', 'Pages', 'Shots', 'Cast Involved', 'Notes'].map(label => (
-                        <th key={label} style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</th>
+                        <th
+                          key={label}
+                          style={{
+                            textAlign: label === 'D/N' ? 'center' : 'left',
+                            padding: '7px 6px',
+                            borderBottom: '1px solid #E2E8F0',
+                            color: '#475569',
+                            fontSize: 10,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.08em',
+                            width: label === 'D/N' ? 60 : undefined,
+                            minWidth: label === 'D/N' ? 60 : undefined,
+                            maxWidth: label === 'D/N' ? 60 : undefined,
+                          }}
+                        >
+                          {label}
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -314,7 +337,7 @@ export default function CallsheetTab({ configureOpen = true }) {
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.slugline || '—'}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.location || '—'}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.intExt || '—'}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.dayNight || '—'}</td>
+                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', textAlign: 'center', width: 60, minWidth: 60, maxWidth: 60, fontWeight: 600 }}>{formatDayNightDisplay(scene.dayNight)}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{formatMinuteOfDay(scene.start)}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{formatMinuteOfDay(scene.end)}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{Number(scene.pageCount || 0).toFixed(2)}</td>
@@ -352,7 +375,13 @@ export default function CallsheetTab({ configureOpen = true }) {
                     {castRows.length === 0 && <tr><td colSpan={8} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No cast mapped to scheduled scenes.</td></tr>}
                     {castRows.map((row, idx) => (
                       <tr key={row.id} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}>{row.name}</td>
+                        <td
+                          style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}
+                          data-person-type={row.rosterId ? 'cast' : undefined}
+                          data-person-id={row.rosterId || undefined}
+                        >
+                          {row.name}
+                        </td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.character || '—'}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.sceneCount}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{Number(row.pageCount || 0).toFixed(2)}</td>
@@ -381,7 +410,13 @@ export default function CallsheetTab({ configureOpen = true }) {
                     {crewRows.length === 0 && <tr><td colSpan={5} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No crew in Cast/Crew roster. Add crew there to populate this list.</td></tr>}
                     {crewRows.map((row, idx) => (
                       <tr key={row.id} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}>{row.name}</td>
+                        <td
+                          style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}
+                          data-person-type={row.rosterId ? 'crew' : undefined}
+                          data-person-id={row.rosterId || undefined}
+                        >
+                          {row.name}
+                        </td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.role || row.department || '—'}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>
                           <input value={row.callTime} onChange={(e) => onDayUpdate({ crew: updateRowValue(callsheet.crew, row.rosterId, row.id, { name: row.name, role: row.role, callTime: e.target.value }) })} placeholder={formatTime12(row.defaultCall)} style={{ width: 100, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} />
