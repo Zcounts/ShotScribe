@@ -113,9 +113,12 @@ export function deriveDayCastRows({
   scheduledSceneIds = new Set(),
 }) {
   const dayCastRows = Array.isArray(callsheet.cast) ? callsheet.cast : []
+  const excludedRosterIds = new Set(Array.isArray(callsheet.castExcludedRosterIds) ? callsheet.castExcludedRosterIds.filter(Boolean) : [])
   const manualByRosterId = new Map(dayCastRows.filter(row => row?.rosterId).map(row => [row.rosterId, row]))
 
   const included = castRoster.filter(entry => {
+    if (excludedRosterIds.has(entry.id)) return false
+    if (manualByRosterId.has(entry.id)) return true
     const keys = [entry.character, ...(entry.characterIds || [])].map(normalizeKey).filter(Boolean)
     if (keys.length === 0) return false
     return scriptScenes
@@ -166,9 +169,10 @@ export function deriveDayCastRows({
 
 export function deriveDayCrewRows({ callsheet = {}, crewRoster = [], day }) {
   const dayCrewRows = Array.isArray(callsheet.crew) ? callsheet.crew : []
+  const excludedRosterIds = new Set(Array.isArray(callsheet.crewExcludedRosterIds) ? callsheet.crewExcludedRosterIds.filter(Boolean) : [])
   const manualByRosterId = new Map(dayCrewRows.filter(row => row?.rosterId).map(row => [row.rosterId, row]))
 
-  const rosterRows = crewRoster.map(entry => {
+  const rosterRows = crewRoster.filter(entry => !excludedRosterIds.has(entry.id)).map(entry => {
     const manual = manualByRosterId.get(entry.id) || {}
     return {
       id: manual.id || `derived_${entry.id}`,
@@ -209,7 +213,8 @@ export function buildCallsheetWarnings({ day, callsheet = {}, scheduleRows, cast
   if (!callsheet.sunrise || !callsheet.sunset) warnings.push('Sunrise and/or sunset time is missing.')
   if (!callsheet.nearestHospital) warnings.push('Nearest hospital details are missing.')
   if (!callsheet.emergencyContacts) warnings.push('Emergency contacts are missing.')
-  if (!callsheet.keyContacts) warnings.push('Key production contacts are missing.')
+  const keyContactCrewIds = Array.isArray(callsheet.keyContactCrewIds) ? callsheet.keyContactCrewIds.filter(Boolean) : []
+  if (keyContactCrewIds.length === 0 && !String(callsheet.keyContacts || '').trim()) warnings.push('Key production contacts are missing.')
   if (!callsheet.parkingNotes) warnings.push('Parking / arrival notes are missing.')
   if (!callsheet.directions && !callsheet.mapsLink) warnings.push('Directions or map link is missing.')
   if (!callsheet.safetyNotes && !callsheet.additionalNotes) warnings.push('Safety / special notes are missing.')
