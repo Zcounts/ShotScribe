@@ -995,6 +995,8 @@ function SortableShotRow({
   return (
     <tr
       ref={setNodeRef}
+      data-entity-type="shot"
+      data-entity-id={shot.id}
       style={{
         height: rowHeight,
         backgroundColor: rowBg,
@@ -1677,6 +1679,8 @@ export default function ShotlistTab({
               <button
                 key={scene.id}
                 onClick={() => jumpToScene(scene.id)}
+                data-entity-type="scene"
+                data-entity-id={scene.id}
                 style={{
                   width: '100%',
                   border: 'none',
@@ -1706,6 +1710,8 @@ export default function ShotlistTab({
               <section
                 key={scene.id}
                 data-scene-id={scene.id}
+                data-entity-type="scene"
+                data-entity-id={scene.id}
                 ref={node => { sceneSectionRefs.current[scene.id] = node }}
                 style={{
                   marginBottom: 8,
@@ -1717,7 +1723,7 @@ export default function ShotlistTab({
                   overflow: 'hidden',
                 }}
               >
-                <div onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)} style={{ padding: '8px 12px 7px', borderLeft: `4px solid ${scene._canonical?.color || scene.color || '#F2C250'}` }}>
+                <div data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)} style={{ padding: '8px 12px 7px', borderLeft: `4px solid ${scene._canonical?.color || scene.color || '#F2C250'}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>

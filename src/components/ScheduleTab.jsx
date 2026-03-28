@@ -6,6 +6,8 @@ function SceneScheduleBadge({ linkedSceneData, onNavigate }) {
   const color = linkedSceneData.color
   return (
     <span
+      data-entity-type={linkedSceneData.id ? 'scene' : undefined}
+      data-entity-id={linkedSceneData.id || undefined}
       title={`Script scene: ${linkedSceneData.intExt || ''} ${linkedSceneData.dayNight || ''} · ${linkedSceneData.location || ''}`}
       onClick={onNavigate}
       style={{
@@ -748,6 +750,8 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, colu
   return (
     <div
       ref={setNodeRef}
+      data-entity-type={block.type === 'shot' && block.shotId ? 'shot' : undefined}
+      data-entity-id={block.type === 'shot' ? block.shotId : undefined}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,

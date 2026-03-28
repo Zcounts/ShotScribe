@@ -29,10 +29,12 @@ import ScenesTab from './components/ScenesTab'
 import ScriptTab from './components/ScriptTab'
 import CastCrewTab from './components/CastCrewTab'
 import ScenePropertiesDialog from './components/ScenePropertiesDialog'
+import ShotPropertiesDialog from './components/ShotPropertiesDialog'
 import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
+import { resolveEntityTarget, shouldSuppressEntityOpen } from './utils/entityDialog'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -104,6 +106,8 @@ function SortableStoryboardSceneNavItem({
       {...listeners}
       onDoubleClick={onDoubleClick}
       onClick={onClick}
+      data-entity-type="scene"
+      data-entity-id={item.id}
       style={{
         ...getOutlineItemStyle(item.color, isActive),
         transform: CSS.Transform.toString(transform),
@@ -329,6 +333,8 @@ export default function App() {
   const documentSession = useStore(s => s.documentSession)
   const scriptScenes = useStore(s => s.scriptScenes)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
+  const openSceneDialog = useStore(s => s.openSceneDialog)
+  const openShotDialog = useStore(s => s.openShotDialog)
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
   const getStoryboardScenes = useStore(s => s.getStoryboardScenes)
   const reorderStoryboardScenes = useStore(s => s.reorderStoryboardScenes)
@@ -608,11 +614,26 @@ export default function App() {
   }
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
 
+  const handleEntityDoubleClickCapture = useCallback((event) => {
+    const target = event.target
+    if (shouldSuppressEntityOpen(target)) return
+    const entity = resolveEntityTarget(target)
+    if (!entity) return
+    if (entity.entityType === 'scene') {
+      openSceneDialog(entity.entityId)
+      return
+    }
+    if (entity.entityType === 'shot') {
+      openShotDialog(entity.entityId)
+    }
+  }, [openSceneDialog, openShotDialog])
+
   return (
     <div
       className="flex flex-col"
       style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#F5F2EC' }}
       onClick={() => hideContextMenu()}
+      onDoubleClickCapture={handleEntityDoubleClickCapture}
     >
       {/* Toolbar */}
       <Toolbar
@@ -764,6 +785,8 @@ export default function App() {
                   }}
                   id={scene.id}
                   data-outline-id={scene.id}
+                  data-entity-type="scene"
+                  data-entity-id={scene.id}
                 >
                   {/* Scene separator (between scenes) */}
                   {sceneIdx > 0 && (
@@ -850,6 +873,7 @@ export default function App() {
       {/* Context Menu */}
       <ContextMenu />
       <ScenePropertiesDialog />
+      <ShotPropertiesDialog />
 
       {/* Export Modal */}
       <ExportModal

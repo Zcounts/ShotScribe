@@ -303,7 +303,12 @@ export default function CallsheetTab({ configureOpen = true }) {
                       <tr><td colSpan={11} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No scenes scheduled for this day.</td></tr>
                     )}
                     {scheduleRows.scenes.map((scene, idx) => (
-                      <tr key={scene.id} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                      <tr
+                        key={scene.id}
+                        data-entity-type={scene.linkedSceneId ? 'scene' : undefined}
+                        data-entity-id={scene.linkedSceneId || undefined}
+                        style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}
+                      >
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}>{scene.sceneNumber || '—'}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.slugline || '—'}</td>
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.location || '—'}</td>
