@@ -48,6 +48,7 @@ import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import { SubTabNav } from './SubTabNav'
+import SidebarPane from './SidebarPane'
 
 // ── Time Utilities ────────────────────────────────────────────────────────────
 
@@ -3260,8 +3261,26 @@ export default function ScheduleTab({
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const totalShots = schedule.reduce((n, d) => n + d.blocks.length, 0)
+  const totalBreaks = schedule.reduce((n, d) => n + d.blocks.filter(b => b.type === 'break').length, 0)
+  const totalStrips = totalShots - totalBreaks
+  const totalPages = schedule.reduce((sum, day) => (
+    sum + day.blocks.reduce((daySum, block) => {
+      if (block.type === 'break') return daySum
+      return daySum + (pageCountByScene[block.sceneId] ?? 0)
+    }, 0)
+  ), 0)
+  const totalShootMins = schedule.reduce((sum, day) => (
+    sum + day.blocks.reduce((daySum, block) => (
+      block.type === 'break' ? daySum : daySum + parseMinutes(enrichedBlockMap[block.id]?.shootTime)
+    ), 0)
+  ), 0)
+  const totalBreakMins = schedule.reduce((sum, day) => (
+    sum + day.blocks.reduce((daySum, block) => (
+      block.type === 'break' ? daySum + parseMinutes(block.duration) : daySum
+    ), 0)
+  ), 0)
   const subtitleText = schedule.length > 0
-    ? `${schedule.length} shooting day${schedule.length !== 1 ? 's' : ''} · ${totalShots} shot${totalShots !== 1 ? 's' : ''} scheduled`
+    ? `${schedule.length} shooting day${schedule.length !== 1 ? 's' : ''} · ${totalStrips} strip${totalStrips !== 1 ? 's' : ''} scheduled`
     : 'Build your shoot days and drag shots into place.'
   const activeSubTab = scheduleView === 'list'
     ? 'List'
@@ -3294,6 +3313,19 @@ export default function ScheduleTab({
     }
   }, [scheduleViewState.scrollTop])
 
+  const selectedDay = useMemo(() => {
+    if (!schedule.length) return null
+    const fallbackDayId = listActiveDayId || schedule[0].id
+    return schedule.find(day => day.id === fallbackDayId) || schedule[0]
+  }, [schedule, listActiveDayId])
+
+  const selectedDayIndex = selectedDay ? schedule.findIndex(day => day.id === selectedDay.id) : -1
+  const selectedDayShotBlocks = selectedDay ? selectedDay.blocks.filter(block => block.type !== 'break') : []
+  const selectedDayBreakBlocks = selectedDay ? selectedDay.blocks.filter(block => block.type === 'break') : []
+  const selectedDayPages = selectedDayShotBlocks.reduce((sum, block) => sum + (pageCountByScene[block.sceneId] ?? 0), 0)
+  const selectedDayShootMins = selectedDayShotBlocks.reduce((sum, block) => sum + parseMinutes(enrichedBlockMap[block.id]?.shootTime), 0)
+  const selectedDayBreakMins = selectedDayBreakBlocks.reduce((sum, block) => sum + parseMinutes(block.duration), 0)
+
   return (
     <div
       ref={containerRef}
@@ -3302,152 +3334,206 @@ export default function ScheduleTab({
     >
       <div className="sticky top-0 z-40 px-6 py-3 border-b border-slate/10 bg-canvas/95 backdrop-blur-sm">
         <div className="flex items-center justify-between gap-4">
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-            <SubTabNav
-              tabs={['List', 'Stripboard', 'Calendar']}
-              active={activeSubTab}
-              onChange={(tab) => {
-                if (tab === 'List') setScheduleView('list')
-                if (tab === 'Stripboard') setScheduleView('stripboard')
-                if (tab === 'Calendar') setScheduleView('calendar')
-              }}
-            />
-            <p className="text-sm text-slate whitespace-nowrap">{subtitleText}</p>
-          </div>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {scheduleView === 'stripboard' && schedule.length > 0 && (
-            <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1' }}>
-              <button
-                onClick={() => setStripDensity('compact')}
-                title="Compact strips (24px)"
-                style={{
-                  textAlign: 'center',
-                  padding: '5px 12px',
-                  fontFamily: 'Sora, sans-serif',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.04em',
-                  border: 'none',
-                  borderRadius: 3,
-                  background: stripDensity === 'compact' ? '#FAF8F4' : 'transparent',
-                  color: stripDensity === 'compact' ? '#E84040' : '#718096',
-                  cursor: 'pointer',
-                }}
-              >
-                Compact
-              </button>
-              <button
-                onClick={() => setStripDensity('comfortable')}
-                title="Comfortable strips (36px)"
-                style={{
-                  textAlign: 'center',
-                  padding: '5px 12px',
-                  fontFamily: 'Sora, sans-serif',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.04em',
-                  border: 'none',
-                  borderRadius: 3,
-                  background: stripDensity === 'comfortable' ? '#FAF8F4' : 'transparent',
-                  color: stripDensity === 'comfortable' ? '#E84040' : '#718096',
-                  cursor: 'pointer',
-                }}
-              >
-                Comfortable
-              </button>
-            </div>
-          )}
-
-          {schedule.length > 0 && scheduleView === 'list' && (
-            <>
-              <div ref={configPanelRef} style={{ position: 'relative' }}>
-                {configureOpen && (
-                  <ScheduleColumnConfigPanel
-                    config={scheduleColumnConfig}
-                    onChange={setScheduleColumnConfig}
-                    onClose={() => onConfigureOpenChange(false)}
-                  />
-                )}
-              </div>
-            </>
-          )}
-
-          <button
-            onClick={() => addShootingDay()}
-            style={{
-              padding: '7px 16px',
-              fontFamily: 'Sora, sans-serif',
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              border: 'none',
-              borderRadius: 4,
-              background: '#E84040',
-              color: '#ffffff',
-              cursor: 'pointer',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#d03838' }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#E84040' }}
-          >
-            + Add Day
-          </button>
+          <p className="text-sm text-slate whitespace-nowrap">{subtitleText}</p>
         </div>
       </div>
 
-      </div>
-
-      <div className="px-6 pb-6">
+      <div className="px-6 pb-6 pt-3">
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
-      ) : scheduleView === 'calendar' ? (
-        // ── Calendar view ──────────────────────────────────────────────────
-        <CalendarView
-          schedule={schedule}
-          scenes={scenes}
-          isDark={isDark}
-          onJumpToDay={handleJumpToDay}
-        />
-      ) : scheduleView === 'list' ? (
-        <div style={{ background: '#f5f2ea', border: '1px solid #c8bfaf' }}>
-          <ScheduleListColumnHeader />
-          <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
-            <DayTabBar
-              days={dayTabs}
-              activeDay={listActiveDayId}
-              onSelect={(dayId) => {
-                setListActiveDayId(dayId)
-                const el = document.getElementById(`sched-day-${dayId}`)
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }}
-              onAddDay={() => addShootingDay()}
-            />
-          </div>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <SortableContext items={dayIds} strategy={verticalListSortingStrategy}>
-              {schedule.map((day, dayIndex) => (
-                <SortableShootingDay
-                  key={day.id}
-                  day={day}
-                  dayIndex={dayIndex}
-                  blocks={getBlocksForDay(day.id)}
-                  enrichedBlockMap={enrichedBlockMap}
-                  isDark={isDark}
-                  totalDays={schedule.length}
-                  pageCountByScene={pageCountByScene}
+      ) : (
+        <div style={{ display: 'flex', border: '1px solid #c8bfaf', background: '#f5f2ea' }}>
+          <SidebarPane width={276} title="Schedule Controls">
+            <div style={{ padding: '10px 12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <section>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
+                  View
+                </div>
+                <SubTabNav
+                  tabs={['List', 'Stripboard', 'Calendar']}
+                  active={activeSubTab}
+                  onChange={(tab) => {
+                    if (tab === 'List') setScheduleView('list')
+                    if (tab === 'Stripboard') setScheduleView('stripboard')
+                    if (tab === 'Calendar') setScheduleView('calendar')
+                  }}
                 />
-              ))}
-            </SortableContext>
+              </section>
+
+              <section>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
+                  Actions
+                </div>
+                <button
+                  onClick={() => addShootingDay()}
+                  style={{
+                    width: '100%',
+                    padding: '8px 14px',
+                    fontFamily: 'Sora, sans-serif',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    border: 'none',
+                    borderRadius: 4,
+                    background: '#E84040',
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#d03838' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#E84040' }}
+                >
+                  + Add Day
+                </button>
+              </section>
+
+              <section>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
+                  Selected Day
+                </div>
+                {selectedDay ? (
+                  <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 9, display: 'grid', rowGap: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937' }}>Day {selectedDayIndex + 1}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>{formatDate(selectedDay.date) || 'Date not set'}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>Call: {selectedDay.startTime || '—'}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>Basecamp: {selectedDay.basecamp || '—'}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>Strips: {selectedDayShotBlocks.length}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>Breaks: {selectedDayBreakBlocks.length}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>Pages: {selectedDayPages.toFixed(2).replace(/\.00$/, '')}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563' }}>Est. day: {formatMins(selectedDayShootMins + selectedDayBreakMins)}</div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#718096' }}>No day selected.</div>
+                )}
+              </section>
+
+              <section>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
+                  Display
+                </div>
+                {scheduleView === 'stripboard' ? (
+                  <div style={{ display: 'flex', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 4, padding: 2, background: '#EDE9E1' }}>
+                    <button
+                      onClick={() => setStripDensity('compact')}
+                      title="Compact strips (24px)"
+                      style={{
+                        textAlign: 'center',
+                        padding: '5px 12px',
+                        fontFamily: 'Sora, sans-serif',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        letterSpacing: '0.04em',
+                        border: 'none',
+                        borderRadius: 3,
+                        background: stripDensity === 'compact' ? '#FAF8F4' : 'transparent',
+                        color: stripDensity === 'compact' ? '#E84040' : '#718096',
+                        cursor: 'pointer',
+                        flex: 1,
+                      }}
+                    >
+                      Compact
+                    </button>
+                    <button
+                      onClick={() => setStripDensity('comfortable')}
+                      title="Comfortable strips (36px)"
+                      style={{
+                        textAlign: 'center',
+                        padding: '5px 12px',
+                        fontFamily: 'Sora, sans-serif',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        letterSpacing: '0.04em',
+                        border: 'none',
+                        borderRadius: 3,
+                        background: stripDensity === 'comfortable' ? '#FAF8F4' : 'transparent',
+                        color: stripDensity === 'comfortable' ? '#E84040' : '#718096',
+                        cursor: 'pointer',
+                        flex: 1,
+                      }}
+                    >
+                      Comfortable
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#718096' }}>
+                    {scheduleView === 'list' ? 'Use Configure to manage List columns.' : 'No extra display controls for this view.'}
+                  </div>
+                )}
+                {schedule.length > 0 && scheduleView === 'list' && (
+                  <div ref={configPanelRef} style={{ position: 'relative', marginTop: 8 }}>
+                    {configureOpen && (
+                      <ScheduleColumnConfigPanel
+                        config={scheduleColumnConfig}
+                        onChange={setScheduleColumnConfig}
+                        onClose={() => onConfigureOpenChange(false)}
+                      />
+                    )}
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#718096', marginBottom: 8 }}>
+                  Schedule Summary
+                </div>
+                <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: '#fff', padding: 9, display: 'grid', rowGap: 6 }}>
+                  <div style={{ fontSize: 11, color: '#4b5563' }}>Shoot days: {schedule.length}</div>
+                  <div style={{ fontSize: 11, color: '#4b5563' }}>Scheduled strips: {totalStrips}</div>
+                  <div style={{ fontSize: 11, color: '#4b5563' }}>Break strips: {totalBreaks}</div>
+                  <div style={{ fontSize: 11, color: '#4b5563' }}>Pages: {totalPages.toFixed(2).replace(/\.00$/, '')}</div>
+                  <div style={{ fontSize: 11, color: '#4b5563' }}>Estimated shoot: {formatMins(totalShootMins)}</div>
+                  <div style={{ fontSize: 11, color: '#4b5563' }}>Estimated day+break: {formatMins(totalShootMins + totalBreakMins)}</div>
+                </div>
+              </section>
+            </div>
+          </SidebarPane>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+          {scheduleView === 'calendar' ? (
+            // ── Calendar view ──────────────────────────────────────────────────
+            <CalendarView
+              schedule={schedule}
+              scenes={scenes}
+              isDark={isDark}
+              onJumpToDay={handleJumpToDay}
+            />
+          ) : scheduleView === 'list' ? (
+            <div>
+              <ScheduleListColumnHeader />
+              <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
+                <DayTabBar
+                  days={dayTabs}
+                  activeDay={listActiveDayId}
+                  onSelect={(dayId) => {
+                    setListActiveDayId(dayId)
+                    const el = document.getElementById(`sched-day-${dayId}`)
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }}
+                />
+              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+              >
+                <SortableContext items={dayIds} strategy={verticalListSortingStrategy}>
+                  {schedule.map((day, dayIndex) => (
+                    <SortableShootingDay
+                      key={day.id}
+                      day={day}
+                      dayIndex={dayIndex}
+                      blocks={getBlocksForDay(day.id)}
+                      enrichedBlockMap={enrichedBlockMap}
+                      isDark={isDark}
+                      totalDays={schedule.length}
+                      pageCountByScene={pageCountByScene}
+                    />
+                  ))}
+                </SortableContext>
 
           {/* DragOverlay only for shot blocks and break blocks.
               dropAnimation={null}: the store is committed synchronously in
@@ -3455,115 +3541,118 @@ export default function ScheduleTab({
               time the pointer is released.  Letting dnd-kit animate the overlay
               back to the item's new DOM position causes a brief double-render
               flash, so we skip the animation entirely. */}
-          <DragOverlay dropAnimation={null}>
-            {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (
-              blockMap[activeDrag.id].type === 'break' ? (
-                <BreakBlockContent
-                  block={blockMap[activeDrag.id]}
-                  dayId={null}
-                  isDark={isDark}
-                  isOverlay
-                />
-              ) : (
-                <ShotBlockContent
-                  block={blockMap[activeDrag.id]}
-                  shotData={enrichedBlockMap[activeDrag.id]}
-                  dayId={null}
-                  isDark={isDark}
-                  isOverlay
-                  pageCountByScene={pageCountByScene}
-                />
-              )
-            ) : null}
-            </DragOverlay>
-          </DndContext>
-        </div>
-      ) : (
-        // ── Stripboard view ────────────────────────────────────────────────────
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          onDragCancel={handleDragCancel}
-        >
-          {/* Strip detail popover */}
-          {stripPopover && (
-            <StripDetailPopover
-              block={stripPopover.block}
-              shotData={stripPopover.shotData}
-              dayId={stripPopover.dayId}
-              isDark={isDark}
-              onClose={() => setStripPopover(null)}
-              anchorRect={stripPopover.rect}
-            />
-          )}
-
-          {/* Horizontally scrolling board */}
-          <SortableContext items={dayIds} strategy={horizontalListSortingStrategy}>
-            <div style={{
-              display: 'flex',
-              gap: 8,
-              overflowX: 'auto',
-              paddingBottom: 16,
-              alignItems: 'flex-start',
-              // Extend past the padded container so columns reach the edge
-              marginLeft: -4,
-              marginRight: -4,
-              paddingLeft: 4,
-              paddingRight: 4,
-            }}>
-              {schedule.map((day, dayIndex) => (
-                <SortableStripboardColumn
-                  key={day.id}
-                  day={day}
-                  dayIndex={dayIndex}
-                  blocks={getBlocksForDay(day.id)}
-                  enrichedBlockMap={enrichedBlockMap}
-                  shotColorMap={shotColorMap}
-                  isDark={isDark}
-                  height={stripHeight}
-                  onStripClick={handleStripClick}
-                />
-              ))}
+                <DragOverlay dropAnimation={null}>
+                  {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (
+                    blockMap[activeDrag.id].type === 'break' ? (
+                      <BreakBlockContent
+                        block={blockMap[activeDrag.id]}
+                        dayId={null}
+                        isDark={isDark}
+                        isOverlay
+                      />
+                    ) : (
+                      <ShotBlockContent
+                        block={blockMap[activeDrag.id]}
+                        shotData={enrichedBlockMap[activeDrag.id]}
+                        dayId={null}
+                        isDark={isDark}
+                        isOverlay
+                        pageCountByScene={pageCountByScene}
+                      />
+                    )
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             </div>
-          </SortableContext>
+          ) : (
+        // ── Stripboard view ────────────────────────────────────────────────────
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
+            >
+              {/* Strip detail popover */}
+              {stripPopover && (
+                <StripDetailPopover
+                  block={stripPopover.block}
+                  shotData={stripPopover.shotData}
+                  dayId={stripPopover.dayId}
+                  isDark={isDark}
+                  onClose={() => setStripPopover(null)}
+                  anchorRect={stripPopover.rect}
+                />
+              )}
 
-          <DragOverlay dropAnimation={null}>
-            {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (() => {
-              const block = blockMap[activeDrag.id]
-              const isShotBlock = !!block.shotId
-              return (
+              {/* Horizontally scrolling board */}
+              <SortableContext items={dayIds} strategy={horizontalListSortingStrategy}>
                 <div style={{
-                  width: STRIP_COLUMN_WIDTH,
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-                  opacity: 0.92,
+                  display: 'flex',
+                  gap: 8,
+                  overflowX: 'auto',
+                  paddingBottom: 16,
+                  alignItems: 'flex-start',
+                  // Extend past the padded container so columns reach the edge
+                  marginLeft: -4,
+                  marginRight: -4,
+                  paddingLeft: 4,
+                  paddingRight: 4,
                 }}>
-                  {isShotBlock ? (
-                    <ShotStripContent
-                      block={block}
-                      shotData={enrichedBlockMap[activeDrag.id]}
-                      color={shotColorMap[block.shotId] || '#9ca3af'}
+                  {schedule.map((day, dayIndex) => (
+                    <SortableStripboardColumn
+                      key={day.id}
+                      day={day}
+                      dayIndex={dayIndex}
+                      blocks={getBlocksForDay(day.id)}
+                      enrichedBlockMap={enrichedBlockMap}
+                      shotColorMap={shotColorMap}
                       isDark={isDark}
                       height={stripHeight}
-                      isOverlay
+                      onStripClick={handleStripClick}
                     />
-                  ) : (
-                    <SpecialStripContent
-                      block={block}
-                      isDark={isDark}
-                      height={stripHeight}
-                      isOverlay
-                    />
-                  )}
+                  ))}
                 </div>
-              )
-            })() : null}
-          </DragOverlay>
-        </DndContext>
+              </SortableContext>
+
+              <DragOverlay dropAnimation={null}>
+                {activeDrag?.type === 'block' && blockMap[activeDrag.id] ? (() => {
+                  const block = blockMap[activeDrag.id]
+                  const isShotBlock = !!block.shotId
+                  return (
+                    <div style={{
+                      width: STRIP_COLUMN_WIDTH,
+                      borderRadius: 3,
+                      overflow: 'hidden',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                      opacity: 0.92,
+                    }}>
+                      {isShotBlock ? (
+                        <ShotStripContent
+                          block={block}
+                          shotData={enrichedBlockMap[activeDrag.id]}
+                          color={shotColorMap[block.shotId] || '#9ca3af'}
+                          isDark={isDark}
+                          height={stripHeight}
+                          isOverlay
+                        />
+                      ) : (
+                        <SpecialStripContent
+                          block={block}
+                          isDark={isDark}
+                          height={stripHeight}
+                          isOverlay
+                        />
+                      )}
+                    </div>
+                  )
+                })() : null}
+              </DragOverlay>
+            </DndContext>
+          )}
+          </div>
+        </div>
       )}
       </div>
     </div>
