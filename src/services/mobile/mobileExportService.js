@@ -168,7 +168,7 @@ function buildCallsheet(day, callsheets, shotLookup) {
     dayId: day.id,
     callTime: isoFromDayTime(day.date, day.startTime),
     nearestHospital: callsheet?.nearestHospital || '',
-    shootLocation: callsheet?.shootLocation || day.basecamp || '',
+    shootLocation: day.primaryLocation || callsheet?.shootLocation || day.basecamp || '',
     locationAddress: callsheet?.locationAddress || '',
     parkingNotes: callsheet?.parkingNotes || '',
     directions: callsheet?.directions || '',

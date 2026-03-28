@@ -58,12 +58,13 @@ export const DEFAULT_SCHEDULE_COLUMN_CONFIG = [
 ]
 
 export const DEFAULT_CALLSHEET_SECTION_CONFIG = [
-  { key: 'generalInfo',       visible: true,  label: 'General Info' },
+  { key: 'generalInfo',       visible: true,  label: 'Day Logistics and Emergency' },
   { key: 'advancedSchedule',  visible: true,  label: "Today's Shooting Schedule" },
   { key: 'castList',          visible: true,  label: 'Cast List' },
   { key: 'crewList',          visible: true,  label: 'Crew List' },
   { key: 'locationDetails',   visible: true,  label: 'Location Details' },
-  { key: 'additionalNotes',   visible: true,  label: 'Additional Notes' },
+  { key: 'additionalNotes',   visible: true,  label: 'Special Instructions' },
+  { key: 'nextDayAdvance',    visible: true,  label: 'Next-Day Advance Notes' },
 ]
 
 const DEFAULT_COLOR = '#4ade80'
@@ -782,6 +783,7 @@ const useStore = create((set, get) => ({
       id: `day_${Date.now()}_${dayIdCounter}`,
       date: '',
       startTime: '',
+      primaryLocation: '',
       basecamp: '',
       blocks: [],
       ...overrides,
@@ -1748,6 +1750,7 @@ const useStore = create((set, get) => ({
         id: day.id,
         date: day.date,
         startTime: day.startTime,
+        primaryLocation: day.primaryLocation || '',
         basecamp: day.basecamp,
         blocks: (day.blocks || day.shotBlocks || []).map(b => {
           if (b.type === 'break') {
@@ -2015,6 +2018,7 @@ const useStore = create((set, get) => ({
           id: day.id || `day_${Date.now()}_${++dayIdCounter}`,
           date: day.date || '',
           startTime: day.startTime || '',
+          primaryLocation: day.primaryLocation || day.shootLocation || '',
           basecamp: day.basecamp || '',
           // Accept both new 'blocks' format and legacy 'shotBlocks' format
           blocks: (day.blocks || day.shotBlocks || []).map(b => {
