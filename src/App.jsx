@@ -324,6 +324,7 @@ export default function App() {
   const activeTab = useStore(s => s.activeTab)
   const setActiveTab = useStore(s => s.setActiveTab)
   const storyboardViewState = useStore(s => s.tabViewState?.storyboard || {})
+  const callsheetViewState = useStore(s => s.tabViewState?.callsheet || {})
   const setTabViewState = useStore(s => s.setTabViewState)
   const documentSession = useStore(s => s.documentSession)
   const scriptScenes = useStore(s => s.scriptScenes)
@@ -348,7 +349,7 @@ export default function App() {
   const [scenesConfigOpen, setScenesConfigOpen] = useState(false)
   const [shotlistConfigOpen, setShotlistConfigOpen] = useState(false)
   const [scheduleConfigOpen, setScheduleConfigOpen] = useState(false)
-  const [callsheetConfigOpen, setCallsheetConfigOpen] = useState(true)
+  const [callsheetConfigOpen, setCallsheetConfigOpen] = useState(callsheetViewState.sidebarExpanded ?? true)
   const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
@@ -835,7 +836,6 @@ export default function App() {
           <CallsheetTab
             key={`callsheet-${documentSession}`}
             configureOpen={callsheetConfigOpen}
-            onConfigureOpenChange={setCallsheetConfigOpen}
           />
         </div>
       ) : activeTab === 'castcrew' ? (

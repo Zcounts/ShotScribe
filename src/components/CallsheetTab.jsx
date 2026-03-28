@@ -156,7 +156,7 @@ function CallsheetSidebar({ warnings, callsheetSectionConfig, setCallsheetSectio
   )
 }
 
-export default function CallsheetTab({ configureOpen = true, onConfigureOpenChange = () => {} }) {
+export default function CallsheetTab({ configureOpen = true }) {
   const schedule = useStore(s => s.schedule)
   const projectName = useStore(s => s.projectName)
   const callsheetSectionConfig = useStore(s => s.callsheetSectionConfig)
@@ -177,10 +177,6 @@ export default function CallsheetTab({ configureOpen = true, onConfigureOpenChan
     if (!schedule.length) return null
     return schedule.find(day => day.id === selectedDayId) || schedule[0]
   }, [schedule, selectedDayId])
-
-  useEffect(() => {
-    onConfigureOpenChange(configureOpen)
-  }, [configureOpen, onConfigureOpenChange])
 
   useEffect(() => {
     setTabViewState('callsheet', {
@@ -241,11 +237,7 @@ export default function CallsheetTab({ configureOpen = true, onConfigureOpenChan
           callsheetSectionConfig={callsheetSectionConfig}
           setCallsheetSectionConfig={setCallsheetSectionConfig}
         />
-      ) : (
-        <aside style={{ width: 44, minWidth: 44, borderRight: '1px solid rgba(74,85,104,0.15)', background: '#FAF8F4', display: 'grid', placeItems: 'start center', paddingTop: 10 }}>
-          <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64748B', fontWeight: 700 }}>Callsheet</div>
-        </aside>
-      )}
+      ) : null}
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <DayTabBar days={dayTabs} activeDay={activeDay.id} onSelect={setSelectedDayId} />
@@ -273,24 +265,24 @@ export default function CallsheetTab({ configureOpen = true, onConfigureOpenChan
 
             {visibleSections.includes('generalInfo') && (
               <Card title="Day logistics and emergency">
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 0.9fr)', gap: 12 }}>
-                  <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
-                    <EditableField label="Key production contacts" value={callsheet.keyContacts} onChange={(value) => onDayUpdate({ keyContacts: value })} placeholder="1st AD — phone, PM — phone, transport captain — phone" multiline rows={2} />
-                    <EditableField label="Emergency contacts" value={callsheet.emergencyContacts} onChange={(value) => onDayUpdate({ emergencyContacts: value })} placeholder="Police, fire, medic, on-site safety" multiline rows={2} />
-                    <EditableField label="Parking / arrival notes" value={callsheet.parkingNotes} onChange={(value) => onDayUpdate({ parkingNotes: value })} placeholder="Gate access, lot notes, load-in route" multiline rows={2} />
-                    <EditableField label="Directions / access notes" value={callsheet.directions} onChange={(value) => onDayUpdate({ directions: value })} placeholder="Nearest cross street, gate entry, elevator/floor details" multiline rows={2} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gap: 7, alignContent: 'start' }}>
+                    <EditableField label="Key production contacts" value={callsheet.keyContacts} onChange={(value) => onDayUpdate({ keyContacts: value })} placeholder="1st AD — phone, PM — phone, transport captain — phone" multiline rows={1} />
+                    <EditableField label="Emergency contacts" value={callsheet.emergencyContacts} onChange={(value) => onDayUpdate({ emergencyContacts: value })} placeholder="Police, fire, medic, on-site safety" multiline rows={1} />
+                    <EditableField label="Parking / arrival notes" value={callsheet.parkingNotes} onChange={(value) => onDayUpdate({ parkingNotes: value })} placeholder="Gate access, lot notes, load-in route" multiline rows={1} />
+                    <EditableField label="Directions / access notes" value={callsheet.directions} onChange={(value) => onDayUpdate({ directions: value })} placeholder="Nearest cross street, gate entry, elevator/floor details" multiline rows={1} />
                   </div>
-                  <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
-                    <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', padding: 9, display: 'grid', gap: 8 }}>
+                  <div style={{ display: 'grid', gap: 7, alignContent: 'start' }}>
+                    <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', padding: 8, display: 'grid', gap: 6 }}>
                       <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700 }}>Weather and daylight</div>
                       <EditableField label="Weather" value={callsheet.weather} onChange={(value) => onDayUpdate({ weather: value })} placeholder="Cloudy, 62°F" />
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                         <EditableField label="Sunrise" value={callsheet.sunrise} onChange={(value) => onDayUpdate({ sunrise: value })} placeholder="6:42 AM" />
                         <EditableField label="Sunset" value={callsheet.sunset} onChange={(value) => onDayUpdate({ sunset: value })} placeholder="7:31 PM" />
                       </div>
                     </div>
-                    <EditableField label="Nearest hospital" value={callsheet.nearestHospital} onChange={(value) => onDayUpdate({ nearestHospital: value })} placeholder="Hospital name, address, phone" multiline rows={2} />
-                    <EditableField label="Safety / hazards" value={callsheet.safetyNotes} onChange={(value) => onDayUpdate({ safetyNotes: value })} placeholder="Stunts, weather hazards, roadway control, PPE reminders" multiline rows={2} />
+                    <EditableField label="Nearest hospital" value={callsheet.nearestHospital} onChange={(value) => onDayUpdate({ nearestHospital: value })} placeholder="Hospital name, address, phone" multiline rows={1} />
+                    <EditableField label="Safety / hazards" value={callsheet.safetyNotes} onChange={(value) => onDayUpdate({ safetyNotes: value })} placeholder="Stunts, weather hazards, roadway control, PPE reminders" multiline rows={1} />
                   </div>
                 </div>
               </Card>
