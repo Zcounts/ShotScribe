@@ -160,15 +160,17 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
     <div className="page-header" onDoubleClick={onDoubleClick}>
       {/* Scene identifier + slugline */}
       <div className="page-header-scene">
-        <div className="page-header-row page-header-scene-top page-header-scene-tag">
-          {`SCENE ${displaySceneNumber || '—'}`}
-        </div>
         <div className="page-header-row page-header-scene-bottom">
+          <span className="page-header-scene-primary">
+            {`SCENE ${displaySceneNumber || '—'}`}
+          </span>
+        </div>
+        <div className="page-header-row page-header-scene-top page-header-scene-tag">
           <input
             type="text"
             value={displaySlugline}
             onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { titleSlugline: e.target.value })}
-            className="text-[17px] font-black tracking-tight bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
+            className="bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
             style={{ minWidth: 50, width: `${Math.min(Math.max((displaySlugline || '').length, 4), 38)}ch` }}
             placeholder="TITLE / SLUGLINE"
           />
