@@ -553,6 +553,47 @@
     background: rgba(232,64,64,0.08);
   }
 
+  .entity-action-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    z-index: 430;
+  }
+
+  .entity-action-menu {
+    position: fixed;
+    min-width: 180px;
+    background: #FAF8F4;
+    border: 1px solid rgba(74,85,104,0.2);
+    border-radius: 6px;
+    overflow: hidden;
+    z-index: 440;
+  }
+
+  .entity-action-item {
+    width: 100%;
+    border: none;
+    background: none;
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: 'Sora', sans-serif;
+    color: #2C2C2C;
+    cursor: pointer;
+  }
+
+  .entity-action-item:hover {
+    background: #EDE9E1;
+  }
+
+  .entity-action-item.danger {
+    color: #E84040;
+  }
+
+  .entity-action-item.danger:hover {
+    background: rgba(232,64,64,0.08);
+  }
+
   /* Scene delete button */
   .scene-delete-btn {
     display: flex;

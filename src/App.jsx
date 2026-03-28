@@ -30,11 +30,12 @@ import ScriptTab from './components/ScriptTab'
 import CastCrewTab from './components/CastCrewTab'
 import ScenePropertiesDialog from './components/ScenePropertiesDialog'
 import ShotPropertiesDialog from './components/ShotPropertiesDialog'
+import EntityActionMenu from './components/EntityActionMenu'
 import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
-import { resolveEntityTarget, shouldSuppressEntityOpen } from './utils/entityDialog'
+import { resolveEntityTarget, shouldSuppressEntityActions, shouldSuppressEntityOpen } from './utils/entityDialog'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -335,6 +336,9 @@ export default function App() {
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
   const openSceneDialog = useStore(s => s.openSceneDialog)
   const openShotDialog = useStore(s => s.openShotDialog)
+  const deleteScene = useStore(s => s.deleteScene)
+  const deleteShot = useStore(s => s.deleteShot)
+  const getShotDialogData = useStore(s => s.getShotDialogData)
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
   const getStoryboardScenes = useStore(s => s.getStoryboardScenes)
   const reorderStoryboardScenes = useStore(s => s.reorderStoryboardScenes)
@@ -359,7 +363,10 @@ export default function App() {
   const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
+  const [entityActionMenu, setEntityActionMenu] = useState(null)
+  const [deleteConfirmEntity, setDeleteConfirmEntity] = useState(null)
   const storyboardScrollRef = useRef(null)
+  const entityClickTimerRef = useRef(null)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
   const storyboardSceneRefs = useRef({})
@@ -615,10 +622,15 @@ export default function App() {
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
+    if (entityClickTimerRef.current) {
+      clearTimeout(entityClickTimerRef.current)
+      entityClickTimerRef.current = null
+    }
+    setEntityActionMenu(null)
     const target = event.target
-    if (shouldSuppressEntityOpen(target)) return
     const entity = resolveEntityTarget(target)
     if (!entity) return
+    if (shouldSuppressEntityOpen(target, entity.node)) return
     if (entity.entityType === 'scene') {
       openSceneDialog(entity.entityId)
       return
@@ -628,11 +640,62 @@ export default function App() {
     }
   }, [openSceneDialog, openShotDialog])
 
+  const handleEntityClickCapture = useCallback((event) => {
+    const target = event.target
+    const entity = resolveEntityTarget(target)
+    if (!entity) return
+    if (shouldSuppressEntityActions(target, entity.node)) return
+    const clickX = event.clientX
+    const clickY = event.clientY
+    if (entityClickTimerRef.current) clearTimeout(entityClickTimerRef.current)
+    entityClickTimerRef.current = setTimeout(() => {
+      setEntityActionMenu({
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        x: clickX + 8,
+        y: clickY + 8,
+      })
+      entityClickTimerRef.current = null
+    }, 210)
+  }, [])
+
+  const handleOpenEntityProperties = useCallback(() => {
+    if (!entityActionMenu) return
+    if (entityActionMenu.entityType === 'scene') openSceneDialog(entityActionMenu.entityId)
+    if (entityActionMenu.entityType === 'shot') openShotDialog(entityActionMenu.entityId)
+    setEntityActionMenu(null)
+  }, [entityActionMenu, openSceneDialog, openShotDialog])
+
+  const handleDeleteEntityRequest = useCallback(() => {
+    if (!entityActionMenu) return
+    setDeleteConfirmEntity({
+      entityType: entityActionMenu.entityType,
+      entityId: entityActionMenu.entityId,
+    })
+    setEntityActionMenu(null)
+  }, [entityActionMenu])
+
+  const handleConfirmDeleteEntity = useCallback(() => {
+    if (!deleteConfirmEntity) return
+    if (deleteConfirmEntity.entityType === 'scene') deleteScene(deleteConfirmEntity.entityId)
+    if (deleteConfirmEntity.entityType === 'shot') deleteShot(deleteConfirmEntity.entityId)
+    setDeleteConfirmEntity(null)
+  }, [deleteConfirmEntity, deleteScene, deleteShot])
+
+  useEffect(() => () => {
+    if (entityClickTimerRef.current) clearTimeout(entityClickTimerRef.current)
+  }, [])
+
+  const deleteConfirmShotData = deleteConfirmEntity?.entityType === 'shot'
+    ? getShotDialogData(deleteConfirmEntity.entityId)
+    : null
+
   return (
     <div
       className="flex flex-col"
       style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#F5F2EC' }}
-      onClick={() => hideContextMenu()}
+      onClick={() => { hideContextMenu(); setEntityActionMenu(null) }}
+      onClickCapture={handleEntityClickCapture}
       onDoubleClickCapture={handleEntityDoubleClickCapture}
     >
       {/* Toolbar */}
@@ -872,6 +935,12 @@ export default function App() {
 
       {/* Context Menu */}
       <ContextMenu />
+      <EntityActionMenu
+        menu={entityActionMenu}
+        onRequestClose={() => setEntityActionMenu(null)}
+        onOpenProperties={handleOpenEntityProperties}
+        onDelete={handleDeleteEntityRequest}
+      />
       <ScenePropertiesDialog />
       <ShotPropertiesDialog />
 
@@ -910,6 +979,34 @@ export default function App() {
                 }}
               >
                 Restore
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmEntity && (
+        <div className="modal-overlay" style={{ zIndex: 520 }} onClick={() => setDeleteConfirmEntity(null)}>
+          <div className="modal app-dialog" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 430 }}>
+            <p className="dialog-title" style={{ marginBottom: 8, fontSize: 20 }}>
+              {deleteConfirmEntity.entityType === 'scene' ? 'Delete scene?' : 'Delete shot?'}
+            </p>
+            {deleteConfirmEntity.entityType === 'shot' && (
+              <p className="dialog-description" style={{ marginBottom: 14 }}>
+                {deleteConfirmShotData?.displayId ? `Shot ${deleteConfirmShotData.displayId}` : 'This shot'} will be permanently removed from all tabs.
+              </p>
+            )}
+            {deleteConfirmEntity.entityType === 'scene' && (
+              <p className="dialog-description" style={{ marginBottom: 14 }}>
+                This will delete the scene and remove every linked shot/schedule reference across the app.
+              </p>
+            )}
+            <div className="dialog-actions">
+              <button className="dialog-button-secondary" onClick={() => setDeleteConfirmEntity(null)}>
+                Cancel
+              </button>
+              <button className="dialog-button-danger" onClick={handleConfirmDeleteEntity}>
+                {deleteConfirmEntity.entityType === 'scene' ? 'Delete Scene' : 'Delete Shot'}
               </button>
             </div>
           </div>
