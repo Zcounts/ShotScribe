@@ -182,9 +182,26 @@ function deriveScriptSceneFromElements(scene, elements) {
 }
 
 function normalizeCastEntry(entry = {}) {
-  const characterIds = Array.isArray(entry.characterIds)
-    ? entry.characterIds.filter(Boolean)
-    : (entry.character ? [String(entry.character).trim()] : [])
+  const dedupedCharacterIds = []
+  const seenCharacterIds = new Set()
+  const pushCharacterId = (value) => {
+    const normalized = String(value || '').trim()
+    const key = normalizePersonKey(normalized)
+    if (!normalized || seenCharacterIds.has(key)) return
+    seenCharacterIds.add(key)
+    dedupedCharacterIds.push(normalized)
+  }
+
+  if (Array.isArray(entry.characterIds)) {
+    entry.characterIds.forEach(pushCharacterId)
+  }
+  pushCharacterId(entry.character)
+
+  const primaryCharacter = String(entry.character || '').trim()
+  const normalizedPrimary = primaryCharacter && seenCharacterIds.has(normalizePersonKey(primaryCharacter))
+    ? dedupedCharacterIds.find(id => normalizePersonKey(id) === normalizePersonKey(primaryCharacter)) || dedupedCharacterIds[0] || ''
+    : dedupedCharacterIds[0] || ''
+
   return {
     id: entry.id || `cast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: entry.name || '',
@@ -192,8 +209,8 @@ function normalizeCastEntry(entry = {}) {
     phone: entry.phone || '',
     role: entry.role || 'Cast',
     department: entry.department || 'Cast',
-    character: entry.character || characterIds[0] || '',
-    characterIds,
+    character: normalizedPrimary,
+    characterIds: dedupedCharacterIds,
     notes: entry.notes || '',
     metadata: entry.metadata || {},
   }
