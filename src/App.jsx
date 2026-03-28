@@ -467,23 +467,38 @@ export default function App() {
     }
   })
 
-  const jumpToStoryboardScene = (sceneId) => {
-    const node = storyboardSceneRefs.current[sceneId]
+  const scrollStoryboardTargetIntoView = useCallback((targetNode) => {
+    const container = storyboardScrollRef.current
+    if (!container || !targetNode) return
+    const containerRect = container.getBoundingClientRect()
+    const targetRect = targetNode.getBoundingClientRect()
+    const stickyOffset = 12
+    const targetTop = targetRect.top - containerRect.top + container.scrollTop - stickyOffset
+    container.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: 'smooth',
+    })
+  }, [])
+
+  const jumpToStoryboardScene = useCallback((sceneId) => {
+    const pageNode = storyboardPageRefs.current[`${sceneId}__page_0`] || document.getElementById(`${sceneId}__page_0`)
+    const fallbackNode = storyboardSceneRefs.current[sceneId]
       || document.getElementById(sceneId)
       || document.querySelector(`[data-outline-id="${sceneId}"]`)
-    if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const targetNode = pageNode || fallbackNode
+    if (targetNode) {
+      scrollStoryboardTargetIntoView(targetNode)
       setActiveOutlineItem(sceneId)
     }
-  }
+  }, [scrollStoryboardTargetIntoView])
 
   const jumpToStoryboardPage = useCallback((pageId) => {
     const node = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
     if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      scrollStoryboardTargetIntoView(node)
       setActiveOutlineItem(pageId)
     }
-  }, [])
+  }, [scrollStoryboardTargetIntoView])
 
   useEffect(() => {
     setTabViewState('storyboard', {
