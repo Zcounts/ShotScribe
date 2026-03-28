@@ -108,7 +108,7 @@ function formatDate(isoDate) {
   }
 }
 
-const LIST_GRID_TEMPLATE = '92px minmax(360px,2.7fr) 104px 140px minmax(180px,1.4fr) 78px 94px 96px 30px 30px'
+const LIST_GRID_TEMPLATE = '92px minmax(320px,2.5fr) 108px 128px minmax(160px,1.2fr) 88px 118px 126px 30px 30px'
 const LIST_HEADER_COLUMNS = [
   'Scene #',
   'Set',
@@ -138,6 +138,15 @@ function getCastPills(cast) {
     .filter(Boolean)
     .slice(0, 4)
     .map(name => name.split(/\s+/).map(part => part[0] || '').join('').toUpperCase())
+}
+
+function splitCastNames(cast) {
+  if (!cast) return []
+  return cast.split(',').map(name => name.trim()).filter(Boolean)
+}
+
+function hasReadableValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== ''
 }
 
 // ── Small shared UI ───────────────────────────────────────────────────────────
@@ -348,10 +357,34 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   const secondary = shotData?.notes || shotData?.location || '—'
   const locationLabel = block.shootingLocation || shotData?.location || '—'
   const castPills = getCastPills(shotData?.cast)
+  const castNames = Array.from(new Set([
+    ...splitCastNames(shotData?.cast),
+    ...(shotData?.castRosterEntries || []).map(person => (person?.name || person?.character || '').trim()).filter(Boolean),
+  ]))
   const pageVal = (shotData?.linkedSceneId && pageCountByScene?.[shotData.linkedSceneId] !== undefined)
     ? Number(pageCountByScene[shotData.linkedSceneId]).toFixed(2)
     : '—'
   const estMins = parseMinutes(shotData?.shootTime) + parseMinutes(shotData?.setupTime)
+  const hasEstTime = estMins > 0
+  const hasStartTime = projectedTime !== null && projectedTime !== undefined
+  const linkedShots = (shotData?.sceneShotSummaries || []).filter(item => item.id !== shotData?.shotId)
+  const hasSceneMeta = hasReadableValue(shotData?.intOrExt) || hasReadableValue(shotData?.dayNight) || hasReadableValue(locationLabel)
+  const sceneDescription = [shotData?.description, shotData?.subject, shotData?.sceneNotes, shotData?.notes].find(hasReadableValue) || ''
+  const shotSpecs = [
+    hasReadableValue(shotData?.cameraName) ? { label: 'Camera', value: shotData.cameraName } : null,
+    hasReadableValue(shotData?.focalLength) ? { label: 'Lens', value: shotData.focalLength } : null,
+    hasReadableValue(shotData?.specs?.size) ? { label: 'Size', value: shotData.specs.size } : null,
+    hasReadableValue(shotData?.specs?.move) ? { label: 'Move', value: shotData.specs.move } : null,
+    hasReadableValue(shotData?.specs?.type) ? { label: 'Type', value: shotData.specs.type } : null,
+    hasReadableValue(shotData?.scriptTime) ? { label: 'Script', value: `${shotData.scriptTime}m` } : null,
+    hasReadableValue(shotData?.predictedTakes) ? { label: 'Takes', value: shotData.predictedTakes } : null,
+    hasReadableValue(shotData?.frameRate) ? { label: 'FPS', value: shotData.frameRate } : null,
+  ].filter(Boolean)
+  const productionMeta = [
+    hasReadableValue(shotData?.sound) ? { label: 'Sound', value: shotData.sound } : null,
+    hasReadableValue(shotData?.props) ? { label: 'Props', value: shotData.props } : null,
+    hasReadableValue(shotData?.takeNumber) ? { label: 'Take', value: shotData.takeNumber } : null,
+  ].filter(Boolean)
 
   const handleConfirmRemove = useCallback(() => {
     removeShotBlock(dayId, block.id)
@@ -379,8 +412,8 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
         gridTemplateColumns: LIST_GRID_TEMPLATE,
         alignItems: 'center',
         columnGap: 10,
-        minHeight: isCollapsed ? 44 : 56,
-        padding: isCollapsed ? '6px 10px' : '8px 10px',
+        minHeight: 44,
+        padding: '6px 10px',
         borderTop: `1px solid ${borderColor}`,
         borderBottom: `1px solid ${borderColor}`,
         borderLeft: `6px solid ${sceneEdge}`,
@@ -422,8 +455,28 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
 
       <span style={{ fontSize: 10, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationLabel || '—'}</span>
       <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#111827' }}>{pageVal}</span>
-      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#111827' }}>{estMins > 0 ? formatMins(estMins) : '—'}</span>
-      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#111827' }}>{projectedTime !== null && projectedTime !== undefined ? formatTimeOfDay(projectedTime) : '—'}</span>
+      <span style={{
+        fontSize: 12,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontVariantNumeric: 'tabular-nums',
+        color: hasEstTime ? '#0f172a' : '#94a3b8',
+        fontWeight: hasEstTime ? 800 : 600,
+        letterSpacing: hasEstTime ? '0.02em' : '0.05em',
+        textAlign: 'left',
+      }}>
+        {hasEstTime ? formatMins(estMins) : '—'}
+      </span>
+      <span style={{
+        fontSize: 12,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontVariantNumeric: 'tabular-nums',
+        color: hasStartTime ? '#0b3a2f' : '#94a3b8',
+        fontWeight: hasStartTime ? 800 : 600,
+        letterSpacing: hasStartTime ? '0.01em' : '0.05em',
+        textAlign: 'left',
+      }}>
+        {hasStartTime ? formatTimeOfDay(projectedTime) : '—'}
+      </span>
 
       <button
         onClick={e => { e.stopPropagation(); if (e.ctrlKey && onCtrlToggleAll) { onCtrlToggleAll() } else { onToggleCollapse?.() } }}
@@ -446,6 +499,92 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       >
         ⋯
       </button>
+
+      {!isCollapsed && (
+        <div style={{
+          gridColumn: '1 / -1',
+          marginTop: 4,
+          padding: '8px 10px',
+          borderRadius: 4,
+          border: '1px solid rgba(15,23,42,0.16)',
+          background: 'rgba(255,255,255,0.74)',
+          display: 'grid',
+          gap: 8,
+        }}>
+          {(hasReadableValue(shotData?.sceneTitle) || hasReadableValue(sceneDescription)) && (
+            <div style={{ display: 'grid', gap: 4 }}>
+              {hasReadableValue(shotData?.sceneTitle) && (
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
+                  {shotData.sceneTitle}
+                </div>
+              )}
+              {hasReadableValue(sceneDescription) && (
+                <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.35 }}>
+                  {sceneDescription}
+                </div>
+              )}
+            </div>
+          )}
+
+          {hasSceneMeta && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <Badge label={`Pages ${pageVal}`} />
+              {hasEstTime ? <Badge label={`Est ${formatMins(estMins)}`} /> : null}
+              {hasReadableValue(shotData?.intOrExt) ? <Badge label={shotData.intOrExt} /> : null}
+              {hasReadableValue(shotData?.dayNight) ? <Badge label={shotData.dayNight} /> : null}
+              {hasReadableValue(locationLabel) && locationLabel !== '—' ? <Badge label={`LOC ${locationLabel}`} /> : null}
+            </div>
+          )}
+
+          {castNames.length > 0 && (
+            <div style={{ display: 'grid', gap: 3 }}>
+              <div style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
+                Cast
+              </div>
+              <div style={{ fontSize: 11, color: '#0f172a' }}>{castNames.join(', ')}</div>
+            </div>
+          )}
+
+          {(linkedShots.length > 0 || shotSpecs.length > 0 || productionMeta.length > 0) && (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {linkedShots.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>
+                    Linked Shots ({linkedShots.length})
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {linkedShots.slice(0, 8).map(linked => (
+                      <span key={linked.id} style={{ fontSize: 10, fontFamily: 'monospace', color: '#1e293b', border: '1px solid rgba(30,41,59,0.2)', borderRadius: 999, padding: '2px 7px', background: 'rgba(248,250,252,0.9)' }}>
+                        {linked.cameraName || linked.id}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {shotSpecs.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {shotSpecs.map(item => (
+                    <span key={item.label} style={{ fontSize: 10, color: '#334155' }}>
+                      <strong style={{ color: '#0f172a' }}>{item.label}:</strong> {item.value}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {productionMeta.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {productionMeta.map(item => (
+                    <span key={item.label} style={{ fontSize: 10, color: '#334155' }}>
+                      <strong style={{ color: '#0f172a' }}>{item.label}:</strong> {item.value}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {showRemoveConfirm && (
         <RemoveConfirmDialog
