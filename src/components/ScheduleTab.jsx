@@ -41,7 +41,7 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  horizontalListSortingStrategy,
+  rectSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -217,6 +217,9 @@ function summarizeDay(blocks, pageCountByScene, enrichedBlockMap) {
 }
 
 const LIST_GRID_TEMPLATE = '92px minmax(320px,2.5fr) 108px 128px minmax(160px,1.2fr) 88px 118px 126px 30px 30px'
+const LIST_DAY_TAB_BAR_HEIGHT = 36
+const LIST_DAY_TAB_BAR_TOP = 0
+const LIST_COLUMN_HEADER_TOP = LIST_DAY_TAB_BAR_TOP + LIST_DAY_TAB_BAR_HEIGHT
 const LIST_HEADER_COLUMNS = [
   'Scene #',
   'Set',
@@ -1662,7 +1665,7 @@ function ScheduleListColumnHeader() {
   return (
     <div style={{
       position: 'sticky',
-      top: 104,
+      top: LIST_COLUMN_HEADER_TOP,
       zIndex: 24,
       background: '#d3c9b8',
       borderTop: '1px solid #b8ae9d',
@@ -1943,7 +1946,7 @@ function getCastInitials(cast) {
     .join(' ')
 }
 
-const STRIP_COLUMN_WIDTH = 210
+const STRIP_COLUMN_MIN_WIDTH = 250
 
 // ── StripDetailPopover ────────────────────────────────────────────────────────
 
@@ -2161,11 +2164,12 @@ function ShotStripContent({ block, shotData, color, isDark, height, dragHandlePr
   const bg = isDark ? '#1c1c1c' : '#fff'
   const hoverBg = isDark ? '#252525' : '#f7f5f0'
   const [hovered, setHovered] = useState(false)
+  const minHeight = Math.max(height || 0, 52)
 
   if (!shotData) {
     return (
       <div style={{
-        height,
+        minHeight,
         display: 'flex',
         alignItems: 'center',
         paddingLeft: 8,
@@ -2178,7 +2182,15 @@ function ShotStripContent({ block, shotData, color, isDark, height, dragHandlePr
   }
 
   const castStr = getCastInitials(shotData.cast)
+  const castNames = splitCastNames(shotData.cast)
+  const castSummary = castNames.length > 0
+    ? `${castNames.slice(0, 2).join(', ')}${castNames.length > 2 ? ` +${castNames.length - 2}` : ''}`
+    : ''
   const locationStr = block.shootingLocation || shotData.location || ''
+  const title = shotData.sceneSlugline || shotData.sceneTitle || shotData.sceneLabel || ''
+  const pageLabel = hasReadableValue(shotData.pageLength) ? `${shotData.pageLength} pgs` : null
+  const estMins = parseMinutes(shotData.shootTime) + parseMinutes(shotData.setupTime)
+  const estLabel = estMins > 0 ? formatMins(estMins) : null
 
   return (
     <div
@@ -2188,75 +2200,82 @@ function ShotStripContent({ block, shotData, color, isDark, height, dragHandlePr
       onMouseLeave={() => setHovered(false)}
       title={`${shotData.displayId} — ${shotData.sceneLabel}${locationStr ? ` · ${locationStr}` : ''}`}
       style={{
-        height,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        paddingLeft: 7,
-        paddingRight: 6,
+        minHeight,
+        display: 'grid',
+        gridTemplateRows: 'auto auto auto',
+        gap: 3,
+        padding: '7px 8px',
         borderBottom: `1px solid ${borderColor}`,
         background: hovered ? hoverBg : bg,
         cursor: isOverlay ? 'grabbing' : dragHandleProps ? 'grab' : 'pointer',
         userSelect: 'none',
-        overflow: 'hidden',
         transition: isOverlay ? undefined : 'background 0.1s',
       }}
     >
-      {/* Color swatch */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <div style={{
+          width: 4,
+          alignSelf: 'stretch',
+          borderRadius: 2,
+          background: color || '#9ca3af',
+          flexShrink: 0,
+        }} />
+        <span style={{
+          fontFamily: 'monospace',
+          fontSize: 10,
+          fontWeight: 800,
+          color: fg,
+          flexShrink: 0,
+          letterSpacing: '-0.01em',
+        }}>
+          {shotData.displayId}
+        </span>
+        {shotData.intOrExt && (
+          <span style={{ fontFamily: 'monospace', fontSize: 8, color: mutedFg, flexShrink: 0 }}>
+            {shotData.intOrExt}
+          </span>
+        )}
+        {shotData.dayNight && (
+          <span style={{ fontFamily: 'monospace', fontSize: 8, color: mutedFg, flexShrink: 0 }}>
+            {shotData.dayNight}
+          </span>
+        )}
+        <span style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: fg,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          minWidth: 0,
+        }}>
+          {title || shotData.sceneLabel}
+        </span>
+      </div>
+
       <div style={{
-        width: 4,
-        height: Math.max(8, height - 10),
-        borderRadius: 2,
-        background: color || '#9ca3af',
-        flexShrink: 0,
-      }} />
-
-      {/* Shot ID */}
-      <span style={{
-        fontFamily: 'monospace',
-        fontSize: 10,
-        fontWeight: 800,
-        color: fg,
-        flexShrink: 0,
-        letterSpacing: '-0.01em',
-        minWidth: 20,
-      }}>
-        {shotData.displayId}
-      </span>
-
-      {/* INT/EXT */}
-      {shotData.intOrExt && (
-        <span style={{ fontFamily: 'monospace', fontSize: 8, color: mutedFg, flexShrink: 0 }}>
-          {shotData.intOrExt}
-        </span>
-      )}
-
-      {/* D/N */}
-      {shotData.dayNight && height >= 28 && (
-        <span style={{ fontFamily: 'monospace', fontSize: 8, color: mutedFg, flexShrink: 0 }}>
-          {shotData.dayNight}
-        </span>
-      )}
-
-      {/* Location / scene */}
-      <span style={{
         fontSize: 10,
         color: mutedFg,
         overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        flex: 1,
-        minWidth: 0,
+        display: '-webkit-box',
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical',
+        minHeight: 26,
+        lineHeight: 1.3,
       }}>
-        {locationStr || shotData.sceneLabel}
-      </span>
+        {locationStr || 'Location not set'}
+      </div>
 
-      {/* Cast initials */}
-      {castStr && height >= 28 && (
-        <span style={{ fontSize: 8, fontFamily: 'monospace', color: mutedFg, flexShrink: 0, opacity: 0.8 }}>
-          {castStr}
-        </span>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', minWidth: 0 }}>
+        {pageLabel && <span style={{ fontSize: 9, fontFamily: 'monospace', color: mutedFg }}>{pageLabel}</span>}
+        {estLabel && <span style={{ fontSize: 9, fontFamily: 'monospace', color: mutedFg }}>{estLabel}</span>}
+        {castStr && <span style={{ fontSize: 9, fontFamily: 'monospace', color: mutedFg }}>{castStr}</span>}
+        {castSummary && (
+          <span style={{ fontSize: 9, color: mutedFg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {castSummary}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -2265,6 +2284,7 @@ function ShotStripContent({ block, shotData, color, isDark, height, dragHandlePr
 
 function SpecialStripContent({ block, isDark, height, dragHandleProps, isOverlay }) {
   const borderColor = isDark ? '#2a2a2a' : '#ede9df'
+  const minHeight = Math.max(height || 0, 38)
 
   let bg, textColor, label, icon
   if (block.type === 'break') {
@@ -2296,7 +2316,7 @@ function SpecialStripContent({ block, isDark, height, dragHandleProps, isOverlay
     <div
       {...(dragHandleProps || {})}
       style={{
-        height,
+        minHeight,
         display: 'flex',
         alignItems: 'center',
         gap: 5,
@@ -2447,8 +2467,8 @@ function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, sho
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.4 : 1,
-        width: Math.max(STRIP_COLUMN_WIDTH, 230),
-        flexShrink: 0,
+        width: '100%',
+        minWidth: STRIP_COLUMN_MIN_WIDTH,
         border: `1px solid ${borderColor}`,
         borderRadius: 5,
         overflow: 'hidden',
@@ -2918,10 +2938,24 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
                 const dayNum_ = getDayNumber(day.id)
                 const dayBlocks = Array.isArray(day?.blocks) ? day.blocks : []
                 const shotCount = dayBlocks.filter(b => !!b.shotId).length
+                const breakCount = dayBlocks.filter(b => b?.type === 'break').length
                 const startMins = parseStartTime(day.startTime)
                 const callStr = startMins !== null ? formatTimeOfDay(startMins) : null
                 const sceneColors = getSceneColors(day)
                 const isDraggingThis = draggingId === day.id
+                const summary = summarizeDay(dayBlocks, pageCountByScene, enrichedBlockMap)
+                const shotBlocks = dayBlocks.filter(b => !!b.shotId)
+                const uniqueLocations = []
+                shotBlocks.forEach(block => {
+                  const shotData = enrichedBlockMap[block.id]
+                  const location = (block.shootingLocation || shotData?.location || '').trim()
+                  if (location && !uniqueLocations.includes(location)) uniqueLocations.push(location)
+                })
+                const locationSummary = uniqueLocations.length === 0
+                  ? null
+                  : uniqueLocations.length === 1
+                  ? uniqueLocations[0]
+                  : `${uniqueLocations[0]} +${uniqueLocations.length - 1}`
 
                 return (
                   <div
@@ -2949,37 +2983,47 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
                     }}
                     onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
                   >
-                    {/* DAY N · X shots · CALL Hpm */}
                     <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 6,
                       fontFamily: 'monospace',
                       fontSize: 9,
                       fontWeight: 700,
                       letterSpacing: '0.04em',
                       color: isDark ? '#bbb' : '#333',
                       lineHeight: 1.3,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
                     }}>
                       <span style={{ color: isDark ? '#ddd' : '#111' }}>DAY {dayNum_}</span>
-                      <span style={{ opacity: 0.5, margin: '0 3px' }}>·</span>
-                      {shotCount} shot{shotCount !== 1 ? 's' : ''}
-                      {callStr && (
+                      <span style={{ color: isDark ? '#999' : '#4b5563' }}>{shotCount} strip{shotCount !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 9, color: isDark ? '#999' : '#525252' }}>
+                      {callStr ? `Call ${callStr}` : 'Call not set'}
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 9, color: isDark ? '#999' : '#525252', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {summary.totalPages > 0 ? `${summary.totalPages.toFixed(2)} pgs` : 'No pages'}
+                      <span style={{ opacity: 0.55, margin: '0 4px' }}>·</span>
+                      {summary.totalMins > 0 ? formatMins(summary.totalMins) : 'No est. time'}
+                      {breakCount > 0 && (
                         <>
-                          <span style={{ opacity: 0.5, margin: '0 3px' }}>·</span>
-                          <span>CALL {callStr}</span>
+                          <span style={{ opacity: 0.55, margin: '0 4px' }}>·</span>
+                          {breakCount} break{breakCount !== 1 ? 's' : ''}
                         </>
                       )}
                     </div>
-                    <div style={{ marginTop: 3, fontSize: 9, color: isDark ? '#999' : '#525252' }}>
-                      {(() => {
-                        const summary = summarizeDay(Array.isArray(day?.blocks) ? day.blocks : [], pageCountByScene, enrichedBlockMap)
-                        const parts = []
-                        if (summary.totalPages > 0) parts.push(`${summary.totalPages.toFixed(2)} pgs`)
-                        if (summary.totalMins > 0) parts.push(formatMins(summary.totalMins))
-                        return parts.join(' · ')
-                      })()}
-                    </div>
+                    {locationSummary && (
+                      <div style={{
+                        marginTop: 2,
+                        fontSize: 9,
+                        color: isDark ? '#aaa' : '#4b5563',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {locationSummary}
+                      </div>
+                    )}
 
                     {/* Scene color dots */}
                     {sceneColors.length > 0 && (
@@ -3157,17 +3201,49 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
           onMouseDown={() => setDetailDayId(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1800, display: 'grid', placeItems: 'center' }}
         >
-          <div onMouseDown={(e) => e.stopPropagation()} style={{ width: 460, maxWidth: '92vw', maxHeight: '82vh', overflow: 'auto', background: isDark ? '#1e1e1e' : '#fff', borderRadius: 8, border: `1px solid ${borderColor}`, padding: 14 }}>
+          <div onMouseDown={(e) => e.stopPropagation()} style={{ width: 500, maxWidth: '94vw', maxHeight: '82vh', overflow: 'auto', background: isDark ? '#1e1e1e' : '#fff', borderRadius: 8, border: `1px solid ${borderColor}`, padding: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div style={{ fontFamily: 'monospace', fontWeight: 800, color: fg }}>Day {getDayNumber(detailDay.id)} · {formatDate(detailDay.date) || 'No date set'}</div>
               <button onClick={() => setDetailDayId(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: mutedFg, fontSize: 18 }}>×</button>
             </div>
-            <div style={{ fontSize: 11, color: mutedFg, marginBottom: 8 }}>
-              {detailDay.startTime ? `Call ${formatTimeOfDay(parseStartTime(detailDay.startTime))}` : 'Call not set'}
-            </div>
             {(() => {
               const summary = summarizeDay(Array.isArray(detailDay?.blocks) ? detailDay.blocks : [], pageCountByScene, enrichedBlockMap)
-              return <div style={{ fontSize: 11, color: fg, marginBottom: 8 }}>{summary.shotCount} strips · {summary.totalPages > 0 ? `${summary.totalPages.toFixed(2)} pgs` : 'No pages'} · {summary.totalMins > 0 ? formatMins(summary.totalMins) : 'No est. time'}</div>
+              const dayBlocks = Array.isArray(detailDay?.blocks) ? detailDay.blocks : []
+              const breakCount = dayBlocks.filter(b => b?.type === 'break').length
+              const shotBlocks = dayBlocks.filter(b => !!b.shotId)
+              const locations = []
+              shotBlocks.forEach((block) => {
+                const shotData = enrichedBlockMap[block.id]
+                const location = (block.shootingLocation || shotData?.location || '').trim()
+                if (location && !locations.includes(location)) locations.push(location)
+              })
+              const castNames = []
+              shotBlocks.forEach((block) => {
+                const shotData = enrichedBlockMap[block.id]
+                splitCastNames(shotData?.cast).forEach(name => {
+                  if (!castNames.includes(name)) castNames.push(name)
+                })
+              })
+              return (
+                <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, color: mutedFg }}>
+                    {detailDay.startTime ? `Call ${formatTimeOfDay(parseStartTime(detailDay.startTime))}` : 'Call not set'}
+                  </div>
+                  <div style={{ fontSize: 11, color: fg }}>
+                    {summary.shotCount} strips · {summary.totalPages > 0 ? `${summary.totalPages.toFixed(2)} pgs` : 'No pages'} · {summary.totalMins > 0 ? formatMins(summary.totalMins) : 'No est. time'}{breakCount > 0 ? ` · ${breakCount} break${breakCount !== 1 ? 's' : ''}` : ''}
+                  </div>
+                  {locations.length > 0 && (
+                    <div style={{ fontSize: 11, color: mutedFg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      Locations: {locations.slice(0, 3).join(' · ')}{locations.length > 3 ? ` +${locations.length - 3}` : ''}
+                    </div>
+                  )}
+                  {castNames.length > 0 && (
+                    <div style={{ fontSize: 11, color: mutedFg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      Cast: {castNames.slice(0, 6).join(', ')}{castNames.length > 6 ? ` +${castNames.length - 6}` : ''}
+                    </div>
+                  )}
+                </div>
+              )
             })()}
             <div style={{ display: 'grid', gap: 6 }}>
               {(Array.isArray(detailDay.blocks) ? detailDay.blocks : []).filter(b => b.shotId).map((block) => {
@@ -3572,7 +3648,7 @@ export default function ScheduleTab({
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>List view failed to render for current data. Try another view.</div>}>
         <div>
               <ScheduleListColumnHeader />
-              <div style={{ position: 'sticky', top: 64, zIndex: 30, marginBottom: 8 }}>
+              <div style={{ position: 'sticky', top: LIST_DAY_TAB_BAR_TOP, zIndex: 30, marginBottom: 4 }}>
                 <DayTabBar
                   days={dayTabs}
                   activeDay={listActiveDayId}
@@ -3660,12 +3736,14 @@ export default function ScheduleTab({
             />
           )}
 
-          {/* Horizontally scrolling board */}
-          <SortableContext items={dayIds} strategy={horizontalListSortingStrategy}>
+          {/* Responsive stripboard grid */}
+          <SortableContext items={dayIds} strategy={rectSortingStrategy}>
             <div style={{
-              display: 'flex',
+              display: 'grid',
+              gridTemplateColumns: `repeat(auto-fit, minmax(${STRIP_COLUMN_MIN_WIDTH}px, 1fr))`,
               gap: 12,
-              overflowX: 'auto',
+              overflowX: 'hidden',
+              overflowY: 'auto',
               paddingBottom: 16,
               alignItems: 'flex-start',
               // Extend past the padded container so columns reach the edge
@@ -3697,7 +3775,7 @@ export default function ScheduleTab({
                   const isShotBlock = !!block.shotId
                   return (
                     <div style={{
-                      width: STRIP_COLUMN_WIDTH,
+                      width: STRIP_COLUMN_MIN_WIDTH,
                       borderRadius: 3,
                       overflow: 'hidden',
                       boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
