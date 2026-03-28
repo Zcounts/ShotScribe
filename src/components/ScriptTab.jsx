@@ -1,6 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
-import useStore from '../store'
-import SidebarPane from './SidebarPane'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 import {
@@ -22,11 +21,25 @@ const VIEW_OPTIONS = [
   { id: 'visualize', label: 'Visualize' },
 ]
 
+const BREAKDOWN_CATEGORIES = [
+  'Cast',
+  'Props',
+  'Costumes/Wardrobe',
+  'Makeup',
+  'Vehicles',
+  'Music',
+  'Locations',
+  'Notes',
+]
+
 const PX_PER_INCH = 96
 const PAGE_GAP_PX = 24
 const SCREENPLAY_CHAR_WIDTH_RATIO = 0.6
 const RULER_HEIGHT_PX = 34
 const BLOCK_VERTICAL_PADDING = 2
+const DEFAULT_SCENE_PANEL_HEIGHT = 320
+const MIN_SCENE_PANEL_HEIGHT = 140
+const MIN_VIEW_PANEL_HEIGHT = 120
 
 function inchesToPx(value) {
   return Math.round((Number(value) || 0) * PX_PER_INCH)
@@ -76,9 +89,14 @@ function normalizeTextForStore(value, type) {
   return next
 }
 
-function renderHighlightedText(text, baseStart, links, onOpenShot) {
-  if (!links.length) return text || ' '
+function classifyLinkType(view, link) {
+  if (view === 'breakdown') return 'breakdown'
+  if (link.type === 'breakdown') return 'breakdown'
+  return 'visualize'
+}
 
+function renderHighlightedText(text, baseStart, links, onOpenShot, view, onDeleteBreakdownTag) {
+  if (!links.length) return text || ' '
   const safeText = String(text || '')
   const segments = []
   let cursor = 0
@@ -98,9 +116,7 @@ function renderHighlightedText(text, baseStart, links, onOpenShot) {
 
     segments.push({
       type: 'link',
-      shotId: link.shotId,
-      color: link.color,
-      label: link.label,
+      link,
       text: safeText.slice(localStart, localEnd),
     })
 
@@ -111,25 +127,118 @@ function renderHighlightedText(text, baseStart, links, onOpenShot) {
     segments.push({ type: 'plain', text: safeText.slice(cursor) })
   }
 
-  if (!segments.length) return safeText || ' '
-
   return segments.map((segment, index) => {
     if (segment.type === 'plain') return <React.Fragment key={index}>{segment.text}</React.Fragment>
+    const link = segment.link
+    const mode = classifyLinkType(view, link)
+    const isBreakdown = mode === 'breakdown'
     return (
       <span
         key={index}
-        title={`Linked shot ${segment.label} • Double-click to inspect`}
-        onDoubleClick={() => onOpenShot(segment.shotId)}
+        title={isBreakdown ? `${link.category || 'Tag'} • ${link.name || 'Tagged element'}` : `Linked shot ${link.label} • Double-click to inspect`}
+        onDoubleClick={() => {
+          if (isBreakdown) return
+          onOpenShot(link.shotId)
+        }}
+        onContextMenu={(event) => {
+          if (!isBreakdown) return
+          event.preventDefault()
+          onDeleteBreakdownTag(link.id)
+        }}
         style={{
-          background: `${segment.color}33`,
-          borderBottom: `1px solid ${segment.color}`,
-          cursor: 'pointer',
+          background: isBreakdown ? 'rgba(245, 158, 11, 0.2)' : `${link.color}33`,
+          borderBottom: isBreakdown ? '1px solid rgba(217, 119, 6, 0.8)' : `1px solid ${link.color}`,
+          borderRadius: 2,
+          cursor: isBreakdown ? 'pointer' : 'pointer',
         }}
       >
         {segment.text}
       </span>
     )
   })
+}
+
+function getSelectionOffsetsFromBlock(blockElement) {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return null
+  const range = selection.getRangeAt(0)
+  if (!blockElement.contains(range.startContainer) || !blockElement.contains(range.endContainer)) return null
+
+  const preStart = range.cloneRange()
+  preStart.selectNodeContents(blockElement)
+  preStart.setEnd(range.startContainer, range.startOffset)
+  const start = preStart.toString().length
+
+  const preEnd = range.cloneRange()
+  preEnd.selectNodeContents(blockElement)
+  preEnd.setEnd(range.endContainer, range.endOffset)
+  const end = preEnd.toString().length
+
+  if (end <= start) return null
+  return { start, end, text: range.toString(), rect: range.getBoundingClientRect() }
+}
+
+function ScriptEditableBlock({ block, blockStyle, isSelected, onFocusBlock, onCommit, onKeyDown }) {
+  const ref = useRef(null)
+  const [draftText, setDraftText] = useState(block.blockText || '')
+  const composingRef = useRef(false)
+
+  useEffect(() => {
+    if (!ref.current) return
+    if (document.activeElement === ref.current || composingRef.current) return
+    const nextText = block.blockText || ''
+    if (ref.current.textContent !== nextText) {
+      ref.current.textContent = nextText
+    }
+    setDraftText(nextText)
+  }, [block.blockText])
+
+  const sharedStyle = {
+    marginLeft: `${blockStyle.marginLeftPx}px`,
+    marginRight: `${blockStyle.marginRightPx}px`,
+    paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
+    paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
+    minHeight: `${blockStyle.lineHeightPx}px`,
+    fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
+    fontSize: `${blockStyle.fontSizePx}px`,
+    lineHeight: `${blockStyle.lineHeightPx}px`,
+    textAlign: blockStyle.align || 'left',
+    letterSpacing: `${blockStyle.letterSpacingPx}px`,
+    whiteSpace: 'pre-wrap',
+    textTransform: ['heading', 'character', 'transition'].includes(block.blockType) ? 'uppercase' : 'none',
+    borderRadius: 4,
+    border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
+    background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
+    outline: 'none',
+  }
+
+  return (
+    <div
+      ref={ref}
+      data-scene-id={block.sceneId}
+      data-block-id={block.blockId}
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck
+      onFocus={onFocusBlock}
+      onCompositionStart={() => {
+        composingRef.current = true
+      }}
+      onCompositionEnd={(event) => {
+        composingRef.current = false
+        const value = event.currentTarget.textContent || ''
+        setDraftText(value)
+      }}
+      onInput={(event) => {
+        setDraftText(event.currentTarget.textContent || '')
+      }}
+      onBlur={() => {
+        onCommit(draftText)
+      }}
+      onKeyDown={onKeyDown}
+      style={sharedStyle}
+    />
+  )
 }
 
 export default function ScriptTab() {
@@ -140,19 +249,30 @@ export default function ScriptTab() {
   const updateScriptSceneScreenplay = useStore(s => s.updateScriptSceneScreenplay)
   const importScriptScenes = useStore(s => s.importScriptScenes)
   const openShotDialog = useStore(s => s.openShotDialog)
+  const linkShotToScene = useStore(s => s.linkShotToScene)
 
   const [view, setView] = useState('write')
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
-  const [activePanel, setActivePanel] = useState(null)
+  const [activePanel, setActivePanel] = useState('page')
   const [showImportModal, setShowImportModal] = useState(false)
-  const blockRefs = useRef({})
+  const [isScenePanelCollapsed, setIsScenePanelCollapsed] = useState(false)
+  const [scenePanelHeight, setScenePanelHeight] = useState(DEFAULT_SCENE_PANEL_HEIGHT)
+  const [selectionDraft, setSelectionDraft] = useState(null)
+  const [breakdownDraft, setBreakdownDraft] = useState({ name: '', quantity: 1, category: BREAKDOWN_CATEGORIES[1], tagAllMentions: false })
+  const sceneListRef = useRef(null)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
   const documentSettings = useMemo(
     () => normalizeDocumentSettings(scriptSettings?.documentSettings || DEFAULT_SCRIPT_DOCUMENT_SETTINGS),
     [scriptSettings?.documentSettings],
   )
+
+  useEffect(() => {
+    if (!activeSceneId && orderedScenes.length) {
+      setActiveSceneId(orderedScenes[0].id)
+    }
+  }, [activeSceneId, orderedScenes])
 
   const pageSettings = documentSettings.page
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
@@ -166,21 +286,25 @@ export default function ScriptTab() {
     return mapped
   }, [orderedScenes])
 
+  const breakdownTags = Array.isArray(scriptSettings?.breakdownTags) ? scriptSettings.breakdownTags : []
+
   const shotLinksByScene = useMemo(() => {
     const result = {}
-    storyboardScenes.forEach(storyScene => {
-      ;(storyScene.shots || []).forEach((shot, idx) => {
+    storyboardScenes.forEach((storyScene, sceneIndex) => {
+      ;(storyScene.shots || []).forEach((shot, shotIndex) => {
         if (!shot.linkedSceneId) return
         const start = Number.isFinite(shot.linkedScriptRangeStart) ? shot.linkedScriptRangeStart : null
         const end = Number.isFinite(shot.linkedScriptRangeEnd) ? shot.linkedScriptRangeEnd : null
         if (start == null || end == null || end <= start) return
         if (!result[shot.linkedSceneId]) result[shot.linkedSceneId] = []
         result[shot.linkedSceneId].push({
+          id: `shot_link_${shot.id}`,
           shotId: shot.id,
           start,
           end,
           color: shot.color || '#E84040',
-          label: shot.displayId || `${storyScene.sceneNumber || storyScene.id}${String.fromCharCode(65 + idx)}`,
+          label: shot.displayId || `${sceneIndex + 1}${getShotLetter(shotIndex)}`,
+          type: 'visualize',
         })
       })
     })
@@ -191,6 +315,19 @@ export default function ScriptTab() {
 
     return result
   }, [storyboardScenes])
+
+  const breakdownByScene = useMemo(() => {
+    const result = {}
+    breakdownTags.forEach(tag => {
+      if (!tag.sceneId || !Number.isFinite(tag.start) || !Number.isFinite(tag.end) || tag.end <= tag.start) return
+      if (!result[tag.sceneId]) result[tag.sceneId] = []
+      result[tag.sceneId].push({ ...tag, type: 'breakdown' })
+    })
+    Object.keys(result).forEach(sceneId => {
+      result[sceneId] = result[sceneId].sort((a, b) => a.start - b.start)
+    })
+    return result
+  }, [breakdownTags])
 
   const documentModel = useMemo(() => {
     const rowsPerPage = Math.max(1, Math.floor(pageContentHeightPx / documentSettings.blockStyles.action.lineHeightPx))
@@ -251,6 +388,39 @@ export default function ScriptTab() {
     }
   }, [documentSettings, orderedScenes, pageContentHeightPx, pageContentWidthPx, screenplayByScene, scriptSettings.scenePaginationMode])
 
+
+  const breakdownCountByCategory = useMemo(() => {
+    const counts = {}
+    BREAKDOWN_CATEGORIES.forEach(category => {
+      counts[category] = 0
+    })
+    breakdownTags.forEach(tag => {
+      const category = tag.category || 'Notes'
+      counts[category] = (counts[category] || 0) + 1
+    })
+    return counts
+  }, [breakdownTags])
+
+  const currentSceneShots = useMemo(() => {
+    if (!activeSceneId) return []
+    const rows = []
+    storyboardScenes.forEach((storyScene, storySceneIndex) => {
+      ;(storyScene.shots || []).forEach((shot, shotIdx) => {
+        if (shot.linkedSceneId !== activeSceneId && storyScene.linkedScriptSceneId !== activeSceneId) return
+        rows.push({
+          id: shot.id,
+          label: shot.displayId || `${storySceneIndex + 1}${getShotLetter(shotIdx)}`,
+          description: shot.description || shot.subject || 'Untitled shot',
+          color: shot.color || '#e11d48',
+          linkedSceneId: shot.linkedSceneId,
+          linkedScriptRangeStart: shot.linkedScriptRangeStart,
+          linkedScriptRangeEnd: shot.linkedScriptRangeEnd,
+        })
+      })
+    })
+    return rows
+  }, [activeSceneId, storyboardScenes])
+
   const selectedScene = orderedScenes.find(scene => scene.id === selectedBlock?.sceneId)
   const selectedBlockData = selectedScene
     ? (screenplayByScene[selectedScene.id] || []).find(block => block.id === selectedBlock?.blockId)
@@ -271,22 +441,6 @@ export default function ScriptTab() {
     const next = typeof updater === 'function' ? updater(current) : updater
     updateScriptSceneScreenplay(sceneId, ensureEditableScreenplayElements(next))
   }, [orderedScenes, updateScriptSceneScreenplay])
-
-  const focusBlock = useCallback((sceneId, blockId, cursor = 'end') => {
-    requestAnimationFrame(() => {
-      const key = `${sceneId}:${blockId}`
-      const el = blockRefs.current[key]
-      if (!el) return
-      el.focus()
-      const selection = window.getSelection()
-      if (!selection) return
-      const range = document.createRange()
-      range.selectNodeContents(el)
-      range.collapse(cursor === 'start')
-      selection.removeAllRanges()
-      selection.addRange(range)
-    })
-  }, [])
 
   const cycleType = useCallback((sceneId, blockId, direction) => {
     const order = EDITABLE_SCREENPLAY_TYPES.map(option => option.value)
@@ -317,8 +471,7 @@ export default function ScriptTab() {
       return updated
     })
     setSelectedBlock({ sceneId, blockId: newBlock.id })
-    focusBlock(sceneId, newBlock.id, 'start')
-  }, [focusBlock, updateSceneBlocks])
+  }, [updateSceneBlocks])
 
   const mergeWithPrevious = useCallback((sceneId, blockId) => {
     updateSceneBlocks(sceneId, blocks => {
@@ -330,15 +483,60 @@ export default function ScriptTab() {
       updated[index - 1] = { ...previous, text: `${previous.text || ''}${current.text || ''}` }
       updated.splice(index, 1)
       setSelectedBlock({ sceneId, blockId: previous.id })
-      focusBlock(sceneId, previous.id, 'end')
       return updated
     })
-  }, [focusBlock, updateSceneBlocks])
+  }, [updateSceneBlocks])
 
   const updateBlockText = useCallback((sceneId, blockId, type, text) => {
     const normalizedText = normalizeTextForStore(text, type)
     updateSceneBlocks(sceneId, blocks => blocks.map(block => (block.id === blockId ? { ...block, text: normalizedText } : block)))
   }, [updateSceneBlocks])
+
+  const saveBreakdownTags = useCallback((next) => {
+    setScriptSettings({ breakdownTags: next })
+  }, [setScriptSettings])
+
+  const handleCreateBreakdownTag = useCallback(() => {
+    if (!selectionDraft) return
+    const cleanedName = String(breakdownDraft.name || '').trim() || selectionDraft.text
+    const quantity = Math.max(1, Number(breakdownDraft.quantity) || 1)
+    const category = breakdownDraft.category || 'Props'
+
+    const nextTag = {
+      id: `bd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      sceneId: selectionDraft.sceneId,
+      start: selectionDraft.start,
+      end: selectionDraft.end,
+      text: selectionDraft.text,
+      name: cleanedName,
+      quantity,
+      category,
+      createdAt: new Date().toISOString(),
+    }
+
+    let next = [...breakdownTags, nextTag]
+    if (breakdownDraft.tagAllMentions && cleanedName) {
+      const needle = cleanedName.toLowerCase()
+      const sceneText = (screenplayByScene[selectionDraft.sceneId] || []).map(block => block.text || '').join('\n').toLowerCase()
+      let idx = sceneText.indexOf(needle)
+      while (idx !== -1) {
+        const matchEnd = idx + cleanedName.length
+        const has = next.some(tag => tag.sceneId === selectionDraft.sceneId && tag.start === idx && tag.end === matchEnd)
+        if (!has) {
+          next.push({ ...nextTag, id: `bd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, start: idx, end: matchEnd, text: cleanedName })
+        }
+        idx = sceneText.indexOf(needle, idx + needle.length)
+      }
+    }
+
+    saveBreakdownTags(next)
+    setSelectionDraft(null)
+  }, [breakdownDraft, breakdownTags, saveBreakdownTags, screenplayByScene, selectionDraft])
+
+  const deleteBreakdownTag = useCallback((tagId) => {
+    if (!tagId) return
+    saveBreakdownTags(breakdownTags.filter(tag => tag.id !== tagId))
+  }, [breakdownTags, saveBreakdownTags])
 
   const createManualScript = useCallback(() => {
     const now = Date.now()
@@ -395,6 +593,71 @@ export default function ScriptTab() {
     }
   }, [cycleType, insertBlockAfter, mergeWithPrevious, nextTypeForEnter, view])
 
+  const startScenePanelResize = useCallback((event) => {
+    event.preventDefault()
+    const startY = event.clientY
+    const startHeight = scenePanelHeight
+    const containerHeight = sceneListRef.current?.parentElement?.clientHeight || 0
+    const maxHeight = Math.max(MIN_SCENE_PANEL_HEIGHT, containerHeight - MIN_VIEW_PANEL_HEIGHT - 40)
+
+    const onMove = (moveEvent) => {
+      const delta = startY - moveEvent.clientY
+      const next = Math.max(MIN_SCENE_PANEL_HEIGHT, Math.min(maxHeight, startHeight + delta))
+      setScenePanelHeight(next)
+      setIsScenePanelCollapsed(false)
+    }
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [scenePanelHeight])
+
+  const handlePageMouseUp = useCallback((event) => {
+    if (view === 'write') return
+    const blockElement = event.target.closest('[data-scene-id][data-block-id]')
+    if (!blockElement) {
+      setSelectionDraft(null)
+      return
+    }
+    const local = getSelectionOffsetsFromBlock(blockElement)
+    if (!local) return
+
+    const sceneId = blockElement.getAttribute('data-scene-id')
+    const blockId = blockElement.getAttribute('data-block-id')
+    const block = documentModel.blocks.find(entry => entry.sceneId === sceneId && entry.blockId === blockId)
+    if (!block) return
+
+    const sceneStart = block.sceneCharStart + local.start
+    const sceneEnd = block.sceneCharStart + local.end
+    if (sceneEnd <= sceneStart) return
+
+    setActiveSceneId(sceneId)
+    setSelectionDraft({
+      sceneId,
+      start: sceneStart,
+      end: sceneEnd,
+      text: local.text,
+      top: local.rect.top + window.scrollY + 8,
+      left: local.rect.left + window.scrollX,
+    })
+    if (view === 'breakdown') {
+      setBreakdownDraft(prev => ({ ...prev, name: local.text }))
+    }
+  }, [documentModel.blocks, view])
+
+  const handleLinkSelectionToShot = useCallback((shotId) => {
+    if (!selectionDraft || !shotId) return
+    linkShotToScene(shotId, selectionDraft.sceneId, {
+      linkedScriptRangeStart: selectionDraft.start,
+      linkedScriptRangeEnd: selectionDraft.end,
+    })
+    setSelectionDraft(null)
+  }, [linkShotToScene, selectionDraft])
+
   if (orderedScenes.length === 0) {
     return (
       <>
@@ -416,10 +679,9 @@ export default function ScriptTab() {
   return (
     <>
       <div style={{ display: 'flex', height: '100%' }}>
-        <SidebarPane
-          width={278}
-          title="Script"
-          controls={(
+        <div style={{ width: 290, borderRight: '1px solid rgba(148,163,184,0.3)', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(148,163,184,0.25)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8 }}>SCRIPT</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {VIEW_OPTIONS.map(option => (
                 <button
@@ -437,39 +699,114 @@ export default function ScriptTab() {
                 </button>
               ))}
             </div>
-          )}
-        >
-          {orderedScenes.map(scene => {
-            const isActive = activeSceneId === scene.id
-            const linkCount = (shotLinksByScene[scene.id] || []).length
-            return (
-              <button
-                key={scene.id}
-                onClick={() => {
-                  setActiveSceneId(scene.id)
-                  const firstBlock = screenplayByScene[scene.id]?.[0]
-                  if (firstBlock) {
-                    setSelectedBlock({ sceneId: scene.id, blockId: firstBlock.id })
-                    focusBlock(scene.id, firstBlock.id, 'start')
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  border: 'none',
-                  borderBottom: '1px solid rgba(148,163,184,0.16)',
-                  padding: '10px 12px',
-                  background: isActive ? 'rgba(37,99,235,0.08)' : 'transparent',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>SC {scene.sceneNumber || '—'}</div>
-                <div style={{ fontSize: 12, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sceneHeader(scene)}</div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{linkCount} linked shot ranges</div>
-              </button>
-            )
-          })}
-        </SidebarPane>
+          </div>
+
+          <div style={{ padding: 12, borderBottom: '1px solid rgba(148,163,184,0.2)', minHeight: MIN_VIEW_PANEL_HEIGHT, overflowY: 'auto' }}>
+            {view === 'write' && (
+              <>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'page' ? null : 'page')}>Page Setup</button>
+                  <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'styles' ? null : 'styles')}>Element Styles</button>
+                </div>
+                <div style={{ fontSize: 12, color: '#475569' }}>
+                  Page {pxToInches(pageSettings.widthPx)}" × {pxToInches(pageSettings.heightPx)}"<br />
+                  Margins {pxToInches(pageSettings.marginTopPx)}" / {pxToInches(pageSettings.marginRightPx)}" / {pxToInches(pageSettings.marginBottomPx)}" / {pxToInches(pageSettings.marginLeftPx)}"
+                </div>
+              </>
+            )}
+
+            {view === 'breakdown' && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Breakdown Categories</div>
+                {BREAKDOWN_CATEGORIES.map(category => (
+                  <div key={category} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0' }}>
+                    <span>{category}</span>
+                    <span style={{ color: '#64748b' }}>{breakdownCountByCategory[category] || 0}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+                  Select script text to create a category tag.
+                </div>
+              </div>
+            )}
+
+            {view === 'visualize' && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Scene-linked shots</div>
+                {currentSceneShots.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>No shots linked to this scene.</div>}
+                {currentSceneShots.map(shot => (
+                  <div key={shot.id} style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 6, padding: 8, marginBottom: 6, background: '#fff' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{shot.label}</div>
+                    <div style={{ fontSize: 11, color: '#475569' }}>{shot.description}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                      {Number.isFinite(shot.linkedScriptRangeStart) && Number.isFinite(shot.linkedScriptRangeEnd)
+                        ? `Linked range: ${shot.linkedScriptRangeStart} → ${shot.linkedScriptRangeEnd}`
+                        : 'No linked range'}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+                  Select script text and choose a shot to link.
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div
+            onMouseDown={startScenePanelResize}
+            title="Drag to resize scenes panel"
+            style={{ height: 10, cursor: 'row-resize', borderBottom: '1px solid rgba(148,163,184,0.2)', background: 'repeating-linear-gradient(90deg, rgba(100,116,139,0.2), rgba(100,116,139,0.2) 8px, transparent 8px, transparent 16px)' }}
+          />
+
+          <div
+            ref={sceneListRef}
+            style={{
+              height: isScenePanelCollapsed ? 40 : scenePanelHeight,
+              minHeight: isScenePanelCollapsed ? 40 : MIN_SCENE_PANEL_HEIGHT,
+              overflowY: 'auto',
+              transition: 'height 120ms ease',
+            }}
+          >
+            <button
+              onClick={() => setIsScenePanelCollapsed(value => !value)}
+              style={{
+                width: '100%',
+                border: 'none',
+                borderBottom: '1px solid rgba(148,163,184,0.2)',
+                padding: '8px 12px',
+                textAlign: 'left',
+                fontSize: 12,
+                fontWeight: 700,
+                background: '#eef2ff',
+              }}
+            >
+              {isScenePanelCollapsed ? '▸ Show Scenes' : '▾ Scenes'}
+            </button>
+            {!isScenePanelCollapsed && orderedScenes.map(scene => {
+              const isActive = activeSceneId === scene.id
+              const linkCount = (shotLinksByScene[scene.id] || []).length
+              return (
+                <button
+                  key={scene.id}
+                  onClick={() => setActiveSceneId(scene.id)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    border: 'none',
+                    borderBottom: '1px solid rgba(148,163,184,0.16)',
+                    padding: '10px 12px',
+                    background: isActive ? 'rgba(37,99,235,0.08)' : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>SC {scene.sceneNumber || '—'}</div>
+                  <div style={{ fontSize: 12, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sceneHeader(scene)}</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{linkCount} linked shot ranges</div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
@@ -482,14 +819,9 @@ export default function ScriptTab() {
               <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
               <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
             </select>
-            <span style={{ fontSize: 12, color: '#475569', marginLeft: 12 }}>
-              Page {pxToInches(pageSettings.widthPx)}" × {pxToInches(pageSettings.heightPx)}" • Margins {pxToInches(pageSettings.marginTopPx)}"/{pxToInches(pageSettings.marginRightPx)}"/{pxToInches(pageSettings.marginBottomPx)}"/{pxToInches(pageSettings.marginLeftPx)}"
-            </span>
-            <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'page' ? null : 'page')} style={{ marginLeft: 'auto' }}>Page Setup</button>
-            <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'styles' ? null : 'styles')}>Element Styles</button>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
               <div>
                 <div
@@ -513,8 +845,6 @@ export default function ScriptTab() {
                       </div>
                     )
                   })}
-                  <div style={{ position: 'absolute', top: 0, bottom: 0, left: pageSettings.marginLeftPx, width: 1, background: 'rgba(14,116,144,0.35)' }} />
-                  <div style={{ position: 'absolute', top: 0, bottom: 0, left: pageSettings.widthPx - pageSettings.marginRightPx, width: 1, background: 'rgba(14,116,144,0.35)' }} />
                 </div>
 
                 <div style={{ height: 10 }} />
@@ -541,60 +871,59 @@ export default function ScriptTab() {
                       <div style={{ display: 'flex', flexDirection: 'column', minHeight: pageContentHeightPx }}>
                         {page.blocks.map((block) => {
                           const blockStyle = getBlockStyleForType(documentSettings, block.blockType)
-                          const sceneLinks = shotLinksByScene[block.sceneId] || []
-                          const blockLinks = sceneLinks.filter(link => link.end > block.sceneCharStart && link.start < block.sceneCharEnd)
+                          const links = [
+                            ...(shotLinksByScene[block.sceneId] || []),
+                            ...(breakdownByScene[block.sceneId] || []),
+                          ].filter(link => link.end > block.sceneCharStart && link.start < block.sceneCharEnd)
                           const isSelected = selectedBlock?.sceneId === block.sceneId && selectedBlock?.blockId === block.blockId
-                          const upper = ['heading', 'character', 'transition'].includes(block.blockType)
-
-                          const sharedStyle = {
-                            marginLeft: `${blockStyle.marginLeftPx}px`,
-                            marginRight: `${blockStyle.marginRightPx}px`,
-                            paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
-                            paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
-                            minHeight: `${blockStyle.lineHeightPx}px`,
-                            fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
-                            fontSize: `${blockStyle.fontSizePx}px`,
-                            lineHeight: `${blockStyle.lineHeightPx}px`,
-                            textAlign: blockStyle.align || 'left',
-                            letterSpacing: `${blockStyle.letterSpacingPx}px`,
-                            whiteSpace: 'pre-wrap',
-                            textTransform: upper ? 'uppercase' : 'none',
-                            borderRadius: 4,
-                            border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
-                            background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
-                          }
 
                           if (view === 'write') {
                             return (
-                              <div
+                              <ScriptEditableBlock
                                 key={`${block.sceneId}:${block.blockId}`}
-                                ref={(el) => { blockRefs.current[`${block.sceneId}:${block.blockId}`] = el }}
-                                contentEditable
-                                suppressContentEditableWarning
-                                spellCheck
-                                onFocus={() => {
+                                block={block}
+                                blockStyle={blockStyle}
+                                isSelected={isSelected}
+                                onFocusBlock={() => {
                                   setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
                                   setActiveSceneId(block.sceneId)
                                 }}
-                                onInput={(event) => updateBlockText(block.sceneId, block.blockId, block.blockType, event.currentTarget.textContent || '')}
+                                onCommit={(text) => updateBlockText(block.sceneId, block.blockId, block.blockType, text)}
                                 onKeyDown={(event) => handleBlockKeyDown(event, block)}
-                                style={{ ...sharedStyle, outline: 'none' }}
-                              >
-                                {block.blockText || ''}
-                              </div>
+                              />
                             )
                           }
 
                           return (
                             <div
                               key={`${block.sceneId}:${block.blockId}`}
-                              style={{ ...sharedStyle, cursor: 'text' }}
+                              data-scene-id={block.sceneId}
+                              data-block-id={block.blockId}
+                              style={{
+                                marginLeft: `${blockStyle.marginLeftPx}px`,
+                                marginRight: `${blockStyle.marginRightPx}px`,
+                                paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
+                                paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
+                                minHeight: `${blockStyle.lineHeightPx}px`,
+                                fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
+                                fontSize: `${blockStyle.fontSizePx}px`,
+                                lineHeight: `${blockStyle.lineHeightPx}px`,
+                                textAlign: blockStyle.align || 'left',
+                                letterSpacing: `${blockStyle.letterSpacingPx}px`,
+                                whiteSpace: 'pre-wrap',
+                                textTransform: ['heading', 'character', 'transition'].includes(block.blockType) ? 'uppercase' : 'none',
+                                borderRadius: 4,
+                                border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
+                                background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
+                                cursor: 'text',
+                                userSelect: 'text',
+                              }}
                               onClick={() => {
                                 setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
                                 setActiveSceneId(block.sceneId)
                               }}
                             >
-                              {renderHighlightedText(block.blockText, block.sceneCharStart, blockLinks, openShotDialog)}
+                              {renderHighlightedText(block.blockText, block.sceneCharStart, links, openShotDialog, view, deleteBreakdownTag)}
                             </div>
                           )
                         })}
@@ -606,7 +935,7 @@ export default function ScriptTab() {
                 </div>
               </div>
 
-              {activePanel === 'page' && (
+              {view === 'write' && activePanel === 'page' && (
                 <div style={{ width: 286, background: '#fff', border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, padding: 12 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Page Setup (inches)</div>
                   <InlineInchField label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
@@ -618,7 +947,7 @@ export default function ScriptTab() {
                 </div>
               )}
 
-              {activePanel === 'styles' && (
+              {view === 'write' && activePanel === 'styles' && (
                 <div style={{ width: 286, background: '#fff', border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, padding: 12 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Element Style ({selectedStyleType})</div>
                   <InlineInchField label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
@@ -648,6 +977,56 @@ export default function ScriptTab() {
           </div>
         </div>
       </div>
+
+      {selectionDraft && view === 'breakdown' && (
+        <div style={{ position: 'fixed', top: selectionDraft.top, left: selectionDraft.left, zIndex: 50, width: 300, background: '#fff', border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, boxShadow: '0 10px 28px rgba(15,23,42,0.16)' }}>
+          <div style={{ padding: 10, borderBottom: '1px solid rgba(148,163,184,0.2)', fontSize: 12, fontWeight: 700 }}>
+            Tag Selection ({selectionDraft.text.slice(0, 32)})
+          </div>
+          <div style={{ padding: 10 }}>
+            <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Element name</label>
+            <input value={breakdownDraft.name} onChange={(event) => setBreakdownDraft(prev => ({ ...prev, name: event.target.value }))} style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '6px 8px', marginBottom: 8, fontSize: 12 }} />
+            <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Quantity</label>
+            <input type="number" min={1} value={breakdownDraft.quantity} onChange={(event) => setBreakdownDraft(prev => ({ ...prev, quantity: event.target.value }))} style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '6px 8px', marginBottom: 8, fontSize: 12 }} />
+            <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Category</label>
+            <select value={breakdownDraft.category} onChange={(event) => setBreakdownDraft(prev => ({ ...prev, category: event.target.value }))} style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '6px 8px', marginBottom: 8, fontSize: 12 }}>
+              {BREAKDOWN_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
+            </select>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 10 }}>
+              <input type="checkbox" checked={breakdownDraft.tagAllMentions} onChange={(event) => setBreakdownDraft(prev => ({ ...prev, tagAllMentions: event.target.checked }))} />
+              Tag all mentions in scene
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="toolbar-btn" onClick={() => setSelectionDraft(null)}>Cancel</button>
+              <button className="toolbar-btn" onClick={handleCreateBreakdownTag}>Add Tag</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectionDraft && view === 'visualize' && (
+        <div style={{ position: 'fixed', top: selectionDraft.top, left: selectionDraft.left, zIndex: 50, width: 280, background: '#fff', border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, boxShadow: '0 10px 28px rgba(15,23,42,0.16)' }}>
+          <div style={{ padding: 10, borderBottom: '1px solid rgba(148,163,184,0.2)', fontSize: 12, fontWeight: 700 }}>
+            Link selection to shot
+          </div>
+          <div style={{ padding: 10, maxHeight: 220, overflowY: 'auto' }}>
+            {currentSceneShots.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>No shots available for this scene.</div>}
+            {currentSceneShots.map(shot => (
+              <button
+                key={shot.id}
+                onClick={() => handleLinkSelectionToShot(shot.id)}
+                style={{ width: '100%', textAlign: 'left', border: '1px solid rgba(148,163,184,0.35)', borderRadius: 6, background: '#fff', marginBottom: 6, padding: '6px 8px' }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{shot.label}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{shot.description}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{ padding: 10, borderTop: '1px solid rgba(148,163,184,0.2)', textAlign: 'right' }}>
+            <button className="toolbar-btn" onClick={() => setSelectionDraft(null)}>Close</button>
+          </div>
+        </div>
+      )}
 
       {showImportModal && <ImportScriptModal onClose={() => setShowImportModal(false)} />}
     </>
