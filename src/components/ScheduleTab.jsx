@@ -1630,8 +1630,8 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
   const setBlockCollapsed = useStore(s => s.setBlockCollapsed)
   const setDayBlocksCollapsed = useStore(s => s.setDayBlocksCollapsed)
   const collapseState = useStore(s => s.scheduleCollapseState)
-  const collapsed = collapseState.days[day.id] ?? false
-  const collapsedBlocksMap = collapseState.blocks
+  const collapsed = collapseState?.days?.[day.id] ?? false
+  const collapsedBlocksMap = collapseState?.blocks || {}
 
   const toggleBlockCollapse = useCallback((blockId) => {
     setBlockCollapsed(blockId, !(collapsedBlocksMap[blockId] ?? true))
@@ -2557,7 +2557,9 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
   // ── Derived data ──────────────────────────────────────────────────────────
   const shotColorMap = useMemo(() => {
     const map = {}
-    scenes.forEach(sc => sc.shots.forEach(sh => { map[sh.id] = sh.color }))
+    ;(Array.isArray(scenes) ? scenes : []).forEach(sc => {
+      ;(Array.isArray(sc?.shots) ? sc.shots : []).forEach(sh => { map[sh.id] = sh.color })
+    })
     return map
   }, [scenes])
 
@@ -2577,7 +2579,7 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
   const getSceneColors = useCallback((day) => {
     const seen = new Set()
     const colors = []
-    day.blocks.forEach(block => {
+    ;(Array.isArray(day?.blocks) ? day.blocks : []).forEach(block => {
       if (block.shotId) {
         const c = shotColorMap[block.shotId]
         if (c && !seen.has(c)) { seen.add(c); colors.push(c) }
@@ -2830,7 +2832,8 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
               {/* Shoot day cards */}
               {daysOnDate.map(day => {
                 const dayNum_ = getDayNumber(day.id)
-                const shotCount = day.blocks.filter(b => !!b.shotId).length
+                const dayBlocks = Array.isArray(day?.blocks) ? day.blocks : []
+                const shotCount = dayBlocks.filter(b => !!b.shotId).length
                 const startMins = parseStartTime(day.startTime)
                 const callStr = startMins !== null ? formatTimeOfDay(startMins) : null
                 const sceneColors = getSceneColors(day)
@@ -2886,7 +2889,7 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
                     </div>
                     <div style={{ marginTop: 3, fontSize: 9, color: isDark ? '#999' : '#525252' }}>
                       {(() => {
-                        const summary = summarizeDay(day.blocks, pageCountByScene, enrichedBlockMap)
+                        const summary = summarizeDay(Array.isArray(day?.blocks) ? day.blocks : [], pageCountByScene, enrichedBlockMap)
                         const parts = []
                         if (summary.totalPages > 0) parts.push(`${summary.totalPages.toFixed(2)} pgs`)
                         if (summary.totalMins > 0) parts.push(formatMins(summary.totalMins))
@@ -3079,11 +3082,11 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
               {detailDay.startTime ? `Call ${formatTimeOfDay(parseStartTime(detailDay.startTime))}` : 'Call not set'}
             </div>
             {(() => {
-              const summary = summarizeDay(detailDay.blocks, pageCountByScene, enrichedBlockMap)
+              const summary = summarizeDay(Array.isArray(detailDay?.blocks) ? detailDay.blocks : [], pageCountByScene, enrichedBlockMap)
               return <div style={{ fontSize: 11, color: fg, marginBottom: 8 }}>{summary.shotCount} strips · {summary.totalPages > 0 ? `${summary.totalPages.toFixed(2)} pgs` : 'No pages'} · {summary.totalMins > 0 ? formatMins(summary.totalMins) : 'No est. time'}</div>
             })()}
             <div style={{ display: 'grid', gap: 6 }}>
-              {detailDay.blocks.filter(b => b.shotId).map((block) => {
+              {(Array.isArray(detailDay.blocks) ? detailDay.blocks : []).filter(b => b.shotId).map((block) => {
                 const shotData = enrichedBlockMap[block.id]
                 if (!shotData) return null
                 return (
@@ -3125,7 +3128,14 @@ export default function ScheduleTab({
   const scheduleViewState = useStore(s => s.tabViewState?.schedule || {})
   const setTabViewState = useStore(s => s.setTabViewState)
 
-  const schedule = Array.isArray(scheduleRaw) ? scheduleRaw : []
+  const schedule = useMemo(() => {
+    const src = Array.isArray(scheduleRaw) ? scheduleRaw : []
+    return src.map((day, idx) => ({
+      ...day,
+      id: day?.id || `day-${idx + 1}`,
+      blocks: Array.isArray(day?.blocks) ? day.blocks : [],
+    }))
+  }, [scheduleRaw])
   const scenes = Array.isArray(scenesRaw) ? scenesRaw : []
   const scriptScenes = Array.isArray(scriptScenesRaw) ? scriptScenesRaw : []
   const safeGetScheduleWithShots = typeof getScheduleWithShots === 'function' ? getScheduleWithShots : () => []
