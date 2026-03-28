@@ -30,6 +30,7 @@ export default function ShotGrid({
   shots,
   columnCount,
   useDropdowns,
+  storyboardDisplayConfig,
   showAddBtn = false,
   onAddShot,
 }) {
@@ -48,6 +49,7 @@ export default function ShotGrid({
           shot={shot}
           displayId={shot.displayId}
           useDropdowns={useDropdowns}
+          storyboardDisplayConfig={storyboardDisplayConfig}
           sceneId={sceneId}
         />
       ))}
