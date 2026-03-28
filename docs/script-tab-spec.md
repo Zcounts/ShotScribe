@@ -18,7 +18,7 @@ The editor must feel calm, minimal, document-first, and reliable.
 ---
 
 ## 2. Non-negotiables
-These are the hard requirements.
+These are hard requirements.
 
 - Real paginated pages at all times
 - No infinite canvas
@@ -26,8 +26,9 @@ These are the hard requirements.
 - User-facing measurements must be in inches
 - Script data must remain connected to all other tabs
 - Scenes parsed from the script must remain stable identifiers
-- Script text ranges linked to shots must persist and remain inspectable
+- Script text ranges linked to shots or breakdown items must persist and remain inspectable
 - PDF/export pagination should match on-screen pagination as closely as possible
+- Breakdown and Visualize must never mutate text layout
 
 ---
 
@@ -150,7 +151,9 @@ This is critical.
 - Script edits must not silently break connections to:
   - scenes
   - shots
-  - cast / crew planning
+  - storyboard
+  - shotlist
+  - cast/crew
   - schedule
   - call sheet
   - breakdown entities
@@ -225,11 +228,119 @@ Avoid:
 
 Do not copy StudioBinder structurally.
 The structural visual target is closer to scriptOdd.
-StudioBinder is more relevant as a reference for production-linking concepts like highlighted linked text.
+StudioBinder is relevant as a reference for production-linking concepts like highlighted linked text and tagging popovers.
 
 ---
 
-## 12. Current phase plan
+## 12. View isolation contract
+Only the active Script view may show its interaction layer.
+
+### Write
+- editable document
+- no breakdown highlights
+- no shot-linked cards
+- no tagging popovers
+
+### Breakdown
+- read-focused document
+- breakdown highlights visible
+- tagging popover enabled
+- no shot-linked cards or shot-link sidebar panel
+
+### Visualize
+- read-focused document
+- shot-linked highlights visible
+- shot cards/sidebar visible
+- no breakdown category panel or tagging UI
+
+No inactive-view UI may remain visible or active.
+
+---
+
+## 13. Annotation / overlay contract
+Breakdown tags and shot links are annotations, not text layout.
+
+Requirements:
+- highlights must not alter text metrics
+- highlights must not change line wrapping
+- highlights must not insert inline controls into text flow
+- popovers must be anchored overlays, not inline content
+- linking text to shots or breakdown items must not move surrounding text
+- annotation rendering must sit on top of the document, not inside the document structure
+
+---
+
+## 14. Sidebar panel contract
+The left sidebar below the view buttons is split into two stacked regions:
+1. view-specific panel
+2. scene panel
+
+Behavior:
+- separated by a draggable horizontal splitter
+- splitter resizes vertically only
+- both regions have minimum heights
+- both regions can collapse to header rows
+- heights and collapsed states persist
+- resizing the sidebar must not affect page text width or page layout
+
+### View-specific panel
+Changes by active view.
+
+#### Write
+- page setup access
+- element styles access
+- writing-related controls only
+
+#### Breakdown
+- breakdown categories with counts
+- controls related to tagging and filtering breakdown entities
+
+#### Visualize
+- scene-linked shots
+- linked shot range counts
+- controls related to shot-link inspection
+
+### Scene panel
+- remains visible below the view-specific panel
+- clicking a scene scrolls to that scene heading
+- active scene is visually selected
+- scene rows can show metadata like linked shot ranges
+- row height can be adjusted by resizing the scene panel, not by reflowing the page
+
+### Splitter behavior
+Use Photoshop-style panel resizing:
+- drag handle sits between the two sidebar regions
+- cursor changes to row-resize
+- dragging resizes only the two neighboring regions
+- live resizing while dragging
+- clamped by minimum heights
+- releasing preserves the new heights
+- collapsing a region reduces it to a header row, not zero height
+
+---
+
+## 15. Selection behavior contract
+Selection behavior changes by view.
+
+### Write
+- normal text selection for editing
+- no tagging or shot-link popovers
+
+### Breakdown
+- selection creates a breakdown tag candidate
+- selection opens a tagging popover anchored to the selected range
+- double-click on a tagged range opens its breakdown details
+
+### Visualize
+- selection creates a shot-link candidate
+- selection opens a shot-link UI anchored to the selected range
+- double-click on a linked range opens the associated shot
+
+Selections in Breakdown and Visualize must not become broken editable text fields.
+
+---
+
+## 16. Current phase plan
 ### Phase 1
 Rebuild the Script tab shell and document surface
 - document-first structure
@@ -279,7 +390,7 @@ Do not mix phases unless needed to fix a blocker.
 
 ---
 
-## 13. Acceptance checklist
+## 17. Acceptance checklist
 A change is not done unless all are true:
 
 - The Script tab still builds successfully
@@ -292,21 +403,27 @@ A change is not done unless all are true:
 - Direct writing feels better, not clunkier
 - Script-linked scenes and ranges remain connected to the rest of the app
 - Shot-linked text highlighting works and remains inspectable
+- Breakdown tags do not appear in Write or Visualize
+- Shot-linked UI does not appear in Write or Breakdown
+- Adding tags or shot links does not move text or rewrap lines
+- Scene panel click-to-jump works
+- Sidebar splitter resize works reliably
 - The result feels closer to scriptOdd in structure and calmer in use
 
 ---
 
-## 14. Immediate direction
+## 18. Immediate direction
 Right now the biggest problems are:
-- margins and pagination are still wrong
-- edit experience feels broken and clunky
-- page and editing models are not unified enough
-- shot-linked highlighting / script range interaction is not restored properly
-- the Script tab still does not feel trustworthy enough to write in from scratch
+- view isolation is broken
+- annotation layers are mutating document layout
+- scene panel behavior is broken
+- resize behavior is broken
+- shot-linking is unstable
+- the Script tab still does not feel trustworthy enough to write in or link from
 
 So the next work should focus on:
-- rebuilding the Script tab around a true document-first page model
-- preserving all screenplay + production data connections
-- restoring direct writing quality
-- restoring linked-range behavior
-- avoiding more inspector-heavy patching
+- strict view isolation
+- non-destructive overlay architecture
+- sidebar splitter and scene jump behavior
+- stabilizing shot-link and breakdown-tag behavior
+- avoiding more document-surface corruption
