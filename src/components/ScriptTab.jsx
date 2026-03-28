@@ -48,7 +48,23 @@ const SIDEBAR_STORAGE_KEYS = {
   sceneHeight: 'shotscribe:scriptTab:scenePanelHeight',
   sceneCollapsed: 'shotscribe:scriptTab:scenePanelCollapsed',
   viewCollapsed: 'shotscribe:scriptTab:viewPanelCollapsed',
+  inspectorSections: 'shotscribe:scriptTab:inspectorSections',
 }
+
+const WRITE_OPTIONS_DEFAULTS = {
+  boldSlugline: false,
+  boldCharacter: false,
+}
+
+const BLOCK_TYPE_OPTIONS = [
+  { value: 'heading', label: 'Scene Heading / Slugline' },
+  { value: 'action', label: 'Action' },
+  { value: 'character', label: 'Character' },
+  { value: 'dialogue', label: 'Dialogue' },
+  { value: 'parenthetical', label: 'Parenthetical' },
+  { value: 'transition', label: 'Transition' },
+  { value: 'centered', label: 'Centered Text' },
+]
 
 function inchesToPx(value) {
   return Math.round((Number(value) || 0) * PX_PER_INCH)
@@ -75,6 +91,17 @@ function readStoredBoolean(key, fallback) {
   const raw = window.localStorage.getItem(key)
   if (raw == null) return fallback
   return raw === 'true'
+}
+
+function readStoredObject(key, fallback) {
+  if (typeof window === 'undefined') return fallback
+  const raw = window.localStorage.getItem(key)
+  if (raw == null) return fallback
+  try {
+    return { ...fallback, ...(JSON.parse(raw) || {}) }
+  } catch {
+    return fallback
+  }
 }
 
 function InlineInchField({ label, valuePx, onChangePx, min = 0, max = null }) {
@@ -194,7 +221,7 @@ function createRangeForOffsets(blockElement, start, end) {
   return range
 }
 
-function ScriptEditableBlock({ block, blockStyle, isSelected, onFocusBlock, onCommit, onKeyDown, onRegisterHeading }) {
+function ScriptEditableBlock({ block, blockStyle, isSelected, fontWeight, onFocusBlock, onCommit, onKeyDown, onRegisterHeading }) {
   const ref = useRef(null)
   const [draftText, setDraftText] = useState(block.blockText || '')
   const composingRef = useRef(false)
@@ -228,6 +255,7 @@ function ScriptEditableBlock({ block, blockStyle, isSelected, onFocusBlock, onCo
     lineHeight: `${blockStyle.lineHeightPx}px`,
     textAlign: blockStyle.align || 'left',
     letterSpacing: `${blockStyle.letterSpacingPx}px`,
+    fontWeight,
     whiteSpace: 'pre-wrap',
     textTransform: ['heading', 'character', 'transition'].includes(block.blockType) ? 'uppercase' : 'none',
     borderRadius: 4,
@@ -241,6 +269,7 @@ function ScriptEditableBlock({ block, blockStyle, isSelected, onFocusBlock, onCo
       ref={ref}
       data-scene-id={block.sceneId}
       data-block-id={block.blockId}
+      data-block-type={block.blockType}
       data-scene-heading={block.isHeading ? 'true' : undefined}
       contentEditable
       suppressContentEditableWarning
@@ -279,7 +308,6 @@ export default function ScriptTab() {
   const [view, setView] = useState('write')
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
-  const [activePanel, setActivePanel] = useState('page')
   const [showImportModal, setShowImportModal] = useState(false)
 
   const [isViewPanelCollapsed, setIsViewPanelCollapsed] = useState(() => readStoredBoolean(SIDEBAR_STORAGE_KEYS.viewCollapsed, false))
@@ -288,12 +316,19 @@ export default function ScriptTab() {
 
   const [selectionDraft, setSelectionDraft] = useState(null)
   const [breakdownDraft, setBreakdownDraft] = useState({ name: '', quantity: 1, category: BREAKDOWN_CATEGORIES[1], tagAllMentions: false })
-  const [overlayRects, setOverlayRects] = useState([])
+  const [overlayFragmentsByBlock, setOverlayFragmentsByBlock] = useState({})
+  const [inspectorSections, setInspectorSections] = useState(() => readStoredObject(SIDEBAR_STORAGE_KEYS.inspectorSections, {
+    currentBlock: true,
+    writeOptions: true,
+    pageSetup: true,
+    elementStyles: true,
+  }))
 
   const documentScrollerRef = useRef(null)
   const pageCanvasRef = useRef(null)
   const sidebarStackRef = useRef(null)
   const sceneHeadingRefs = useRef({})
+  const pendingCaretPlacementRef = useRef(null)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
   const documentSettings = useMemo(
@@ -323,18 +358,20 @@ export default function ScriptTab() {
   }, [isViewPanelCollapsed])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEYS.inspectorSections, JSON.stringify(inspectorSections))
+  }, [inspectorSections])
+
+  useEffect(() => {
     setSelectionDraft(null)
     if (view !== 'write') {
       setSelectedBlock(null)
-      setActivePanel(null)
       return
-    }
-    if (!activePanel) {
-      setActivePanel('page')
     }
   }, [view])
 
   const pageSettings = documentSettings.page
+  const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
   const pageContentHeightPx = Math.max(120, pageSettings.heightPx - pageSettings.marginTopPx - pageSettings.marginBottomPx)
 
@@ -515,6 +552,12 @@ export default function ScriptTab() {
     })
   }, [updateSceneBlocks])
 
+  const setBlockType = useCallback((sceneId, blockId, nextType) => {
+    updateSceneBlocks(sceneId, blocks => blocks.map(block => (
+      block.id === blockId ? { ...block, type: nextType } : block
+    )))
+  }, [updateSceneBlocks])
+
   const nextTypeForEnter = useCallback((type) => {
     if (type === 'character' || type === 'parenthetical') return 'dialogue'
     if (type === 'dialogue') return 'action'
@@ -531,6 +574,7 @@ export default function ScriptTab() {
       return updated
     })
     setSelectedBlock({ sceneId, blockId: newBlock.id })
+    pendingCaretPlacementRef.current = { sceneId, blockId: newBlock.id, offset: 0 }
   }, [updateSceneBlocks])
 
   const mergeWithPrevious = useCallback((sceneId, blockId) => {
@@ -555,6 +599,15 @@ export default function ScriptTab() {
   const saveBreakdownTags = useCallback((next) => {
     setScriptSettings({ breakdownTags: next })
   }, [setScriptSettings])
+
+  const toggleWriteOption = useCallback((key, checked) => {
+    setScriptSettings({
+      writeOptions: {
+        ...writeOptions,
+        [key]: checked,
+      },
+    })
+  }, [setScriptSettings, writeOptions])
 
   const handleCreateBreakdownTag = useCallback(() => {
     if (!selectionDraft || view !== 'breakdown') return
@@ -788,23 +841,41 @@ export default function ScriptTab() {
   }, [linkShotToScene, selectionDraft, view])
 
   useEffect(() => {
+    if (view !== 'write') return
+    const pending = pendingCaretPlacementRef.current
+    if (!pending || !pageCanvasRef.current) return
+    const node = pageCanvasRef.current.querySelector(
+      `[data-scene-id="${pending.sceneId}"][data-block-id="${pending.blockId}"][contenteditable="true"]`,
+    )
+    if (!node) return
+    node.focus()
+    const selection = window.getSelection()
+    if (!selection) return
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    pendingCaretPlacementRef.current = null
+  }, [documentModel.pages, view])
+
+  useEffect(() => {
     if (view === 'write') {
-      setOverlayRects([])
+      setOverlayFragmentsByBlock({})
       return
     }
 
     const container = pageCanvasRef.current
-    const scroller = documentScrollerRef.current
-    if (!container || !scroller) return
+    if (!container) return
 
     const computeOverlays = () => {
-      const containerRect = container.getBoundingClientRect()
       const linksByScene = view === 'breakdown' ? breakdownByScene : shotLinksByScene
-      const nextRects = []
+      const nextFragmentsByBlock = {}
 
       documentModel.blocks.forEach((block) => {
         const blockElement = container.querySelector(`[data-scene-id="${block.sceneId}"][data-block-id="${block.blockId}"]`)
         if (!blockElement) return
+        const blockRect = blockElement.getBoundingClientRect()
         const blockLinks = (linksByScene[block.sceneId] || []).filter(link => link.end > block.sceneCharStart && link.start < block.sceneCharEnd)
         if (!blockLinks.length) return
 
@@ -817,11 +888,13 @@ export default function ScriptTab() {
 
           Array.from(range.getClientRects()).forEach((rect, index) => {
             if (rect.width === 0 || rect.height === 0) return
-            nextRects.push({
+            const blockKey = `${block.sceneId}:${block.blockId}`
+            if (!nextFragmentsByBlock[blockKey]) nextFragmentsByBlock[blockKey] = []
+            nextFragmentsByBlock[blockKey].push({
               id: `${link.id}_${index}_${rect.top}_${rect.left}`,
               type: classifyLinkType(view, link),
-              top: rect.top - containerRect.top + scroller.scrollTop,
-              left: rect.left - containerRect.left + scroller.scrollLeft,
+              top: rect.top - blockRect.top,
+              left: rect.left - blockRect.left,
               width: rect.width,
               height: rect.height,
               color: link.color || '#f59e0b',
@@ -830,14 +903,12 @@ export default function ScriptTab() {
         })
       })
 
-      setOverlayRects(nextRects)
+      setOverlayFragmentsByBlock(nextFragmentsByBlock)
     }
 
     computeOverlays()
-    scroller.addEventListener('scroll', computeOverlays)
     window.addEventListener('resize', computeOverlays)
     return () => {
-      scroller.removeEventListener('scroll', computeOverlays)
       window.removeEventListener('resize', computeOverlays)
     }
   }, [breakdownByScene, documentModel.blocks, shotLinksByScene, view])
@@ -910,19 +981,56 @@ export default function ScriptTab() {
                 <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12 }}>
                   {view === 'write' && (
                     <>
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                        <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'page' ? null : 'page')}>Page Setup</button>
-                        <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'styles' ? null : 'styles')}>Element Styles</button>
-                      </div>
+                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
+                      <select
+                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 8 }}
+                      >
+                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                      </select>
+
+                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Current line / block type</label>
+                      <select
+                        value={selectedStyleType}
+                        onChange={(event) => {
+                          if (!selectedBlock) return
+                          setBlockType(selectedBlock.sceneId, selectedBlock.blockId, event.target.value)
+                        }}
+                        disabled={!selectedBlock}
+                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 8 }}
+                      >
+                        {BLOCK_TYPE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Write options</div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 }}>
+                        <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
+                        Bold Slugline
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8 }}>
+                        <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
+                        Bold Character
+                      </label>
+                      <div style={{ height: 1, background: 'rgba(148,163,184,0.25)', marginBottom: 8 }} />
                       <div style={{ fontSize: 12, color: '#475569' }}>
-                        Page {pxToInches(pageSettings.widthPx)}" × {pxToInches(pageSettings.heightPx)}"<br />
-                        Margins {pxToInches(pageSettings.marginTopPx)}" / {pxToInches(pageSettings.marginRightPx)}" / {pxToInches(pageSettings.marginBottomPx)}" / {pxToInches(pageSettings.marginLeftPx)}"
+                        8.5" × 11", margins 1"/1"/1"/1.5"
                       </div>
                     </>
                   )}
 
                   {view === 'breakdown' && (
                     <div>
+                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
+                      <select
+                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
+                      >
+                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                      </select>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Breakdown Categories</div>
                       {BREAKDOWN_CATEGORIES.map(category => (
                         <div key={category} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0' }}>
@@ -938,6 +1046,15 @@ export default function ScriptTab() {
 
                   {view === 'visualize' && (
                     <div>
+                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
+                      <select
+                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
+                      >
+                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                      </select>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Scene-linked shots</div>
                       {currentSceneShots.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>No shots linked to this scene.</div>}
                       {currentSceneShots.map(shot => (
@@ -1019,212 +1136,252 @@ export default function ScriptTab() {
           </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>{VIEW_OPTIONS.find(item => item.id === view)?.label} View</span>
-            <select
-              value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
-              onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-              style={{ border: '1px solid rgba(100,116,139,0.35)', borderRadius: 5, padding: '4px 6px', fontSize: 12 }}
-            >
-              <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
-              <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
-            </select>
-          </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Script Document</span>
+            </div>
 
-          <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
-            <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
-              <div>
-                <div
-                  style={{
-                    width: pageSettings.widthPx,
-                    height: RULER_HEIGHT_PX,
-                    border: '1px solid rgba(148,163,184,0.45)',
-                    background: '#f8fafc',
-                    borderRadius: 5,
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {Array.from({ length: Math.floor(pageSettings.widthPx / (PX_PER_INCH / 4)) + 1 }).map((_, idx) => {
-                    const x = idx * (PX_PER_INCH / 4)
-                    const isInch = idx % 4 === 0
-                    return (
-                      <div key={idx} style={{ position: 'absolute', left: x, bottom: 0 }}>
-                        <div style={{ width: 1, height: isInch ? 12 : 7, background: 'rgba(51,65,85,0.45)' }} />
-                        {isInch && <div style={{ fontSize: 9, color: '#64748b', marginLeft: 2 }}>{idx / 4}</div>}
-                      </div>
-                    )
-                  })}
-                </div>
+            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
+              <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
+                <div>
+                  <div
+                    style={{
+                      width: pageSettings.widthPx,
+                      height: RULER_HEIGHT_PX,
+                      border: '1px solid rgba(148,163,184,0.45)',
+                      background: '#f8fafc',
+                      borderRadius: 5,
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {Array.from({ length: Math.floor(pageSettings.widthPx / (PX_PER_INCH / 4)) + 1 }).map((_, idx) => {
+                      const x = idx * (PX_PER_INCH / 4)
+                      const isInch = idx % 4 === 0
+                      return (
+                        <div key={idx} style={{ position: 'absolute', left: x, bottom: 0 }}>
+                          <div style={{ width: 1, height: isInch ? 12 : 7, background: 'rgba(51,65,85,0.45)' }} />
+                          {isInch && <div style={{ fontSize: 9, color: '#64748b', marginLeft: 2 }}>{idx / 4}</div>}
+                        </div>
+                      )
+                    })}
+                  </div>
 
-                <div style={{ height: 10 }} />
+                  <div style={{ height: 10 }} />
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: PAGE_GAP_PX }}>
-                  {documentModel.pages.map(page => (
-                    <div
-                      key={page.id}
-                      className="app-panel-shadow"
-                      style={{
-                        width: pageSettings.widthPx,
-                        height: pageSettings.heightPx,
-                        background: '#fff',
-                        border: '1px solid rgba(148,163,184,0.4)',
-                        position: 'relative',
-                        boxSizing: 'border-box',
-                        paddingTop: pageSettings.marginTopPx,
-                        paddingRight: pageSettings.marginRightPx,
-                        paddingBottom: pageSettings.marginBottomPx,
-                        paddingLeft: pageSettings.marginLeftPx,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', minHeight: pageContentHeightPx }}>
-                        {page.blocks.map((block) => {
-                          const blockStyle = getBlockStyleForType(documentSettings, block.blockType)
-                          const isSelected = selectedBlock?.sceneId === block.sceneId && selectedBlock?.blockId === block.blockId
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: PAGE_GAP_PX }}>
+                    {documentModel.pages.map(page => (
+                      <div
+                        key={page.id}
+                        className="app-panel-shadow"
+                        style={{
+                          width: pageSettings.widthPx,
+                          height: pageSettings.heightPx,
+                          background: '#fff',
+                          border: '1px solid rgba(148,163,184,0.4)',
+                          position: 'relative',
+                          boxSizing: 'border-box',
+                          paddingTop: pageSettings.marginTopPx,
+                          paddingRight: pageSettings.marginRightPx,
+                          paddingBottom: pageSettings.marginBottomPx,
+                          paddingLeft: pageSettings.marginLeftPx,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', minHeight: pageContentHeightPx }}>
+                          {page.blocks.map((block) => {
+                            const blockStyle = getBlockStyleForType(documentSettings, block.blockType)
+                            const isSelected = selectedBlock?.sceneId === block.sceneId && selectedBlock?.blockId === block.blockId
+                            const blockFontWeight = (writeOptions.boldSlugline && block.blockType === 'heading')
+                              || (writeOptions.boldCharacter && block.blockType === 'character')
+                              ? 700
+                              : 400
 
-                          if (view === 'write') {
+                            if (view === 'write') {
+                              return (
+                                <ScriptEditableBlock
+                                  key={`${block.sceneId}:${block.blockId}`}
+                                  block={block}
+                                  blockStyle={blockStyle}
+                                  isSelected={isSelected}
+                                  fontWeight={blockFontWeight}
+                                  onFocusBlock={() => {
+                                    setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
+                                    setActiveSceneId(block.sceneId)
+                                  }}
+                                  onCommit={(text) => updateBlockText(block.sceneId, block.blockId, block.blockType, text)}
+                                  onKeyDown={(event) => handleBlockKeyDown(event, block)}
+                                  onRegisterHeading={(node) => {
+                                    if (!block.isHeading) return
+                                    if (!node) {
+                                      if (sceneHeadingRefs.current[block.sceneId]) delete sceneHeadingRefs.current[block.sceneId]
+                                      return
+                                    }
+                                    if (!sceneHeadingRefs.current[block.sceneId]) sceneHeadingRefs.current[block.sceneId] = node
+                                  }}
+                                />
+                              )
+                            }
+
                             return (
-                              <ScriptEditableBlock
+                              <div
                                 key={`${block.sceneId}:${block.blockId}`}
-                                block={block}
-                                blockStyle={blockStyle}
-                                isSelected={isSelected}
-                                onFocusBlock={() => {
+                                data-scene-id={block.sceneId}
+                                data-block-id={block.blockId}
+                                data-block-type={block.blockType}
+                                data-scene-heading={block.isHeading ? 'true' : undefined}
+                                ref={(node) => {
+                                  if (!block.isHeading) return
+                                  if (!node) {
+                                    if (sceneHeadingRefs.current[block.sceneId]) {
+                                      delete sceneHeadingRefs.current[block.sceneId]
+                                    }
+                                    return
+                                  }
+                                  if (!sceneHeadingRefs.current[block.sceneId]) {
+                                    sceneHeadingRefs.current[block.sceneId] = node
+                                  }
+                                }}
+                                style={{
+                                  marginLeft: `${blockStyle.marginLeftPx}px`,
+                                  marginRight: `${blockStyle.marginRightPx}px`,
+                                  paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
+                                  paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
+                                  minHeight: `${blockStyle.lineHeightPx}px`,
+                                  fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
+                                  fontSize: `${blockStyle.fontSizePx}px`,
+                                  lineHeight: `${blockStyle.lineHeightPx}px`,
+                                  textAlign: blockStyle.align || 'left',
+                                  letterSpacing: `${blockStyle.letterSpacingPx}px`,
+                                  fontWeight: blockFontWeight,
+                                  whiteSpace: 'pre-wrap',
+                                  textTransform: ['heading', 'character', 'transition'].includes(block.blockType) ? 'uppercase' : 'none',
+                                  borderRadius: 4,
+                                  border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
+                                  background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
+                                  cursor: 'text',
+                                  userSelect: 'text',
+                                  position: 'relative',
+                                }}
+                                onClick={() => {
                                   setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
                                   setActiveSceneId(block.sceneId)
                                 }}
-                                onCommit={(text) => updateBlockText(block.sceneId, block.blockId, block.blockType, text)}
-                                onKeyDown={(event) => handleBlockKeyDown(event, block)}
-                                onRegisterHeading={(node) => {
-                                  if (!block.isHeading) return
-                                  if (!node) {
-                                    if (sceneHeadingRefs.current[block.sceneId]) delete sceneHeadingRefs.current[block.sceneId]
-                                    return
-                                  }
-                                  if (!sceneHeadingRefs.current[block.sceneId]) sceneHeadingRefs.current[block.sceneId] = node
-                                }}
-                              />
+                                onDoubleClick={(event) => handleReadBlockDoubleClick(event, block)}
+                                onContextMenu={(event) => handleReadBlockContextMenu(event, block)}
+                              >
+                                {block.blockText || ' '}
+                                {view !== 'write' && (overlayFragmentsByBlock[`${block.sceneId}:${block.blockId}`] || []).map(fragment => (
+                                  <div
+                                    key={fragment.id}
+                                    style={{
+                                      position: 'absolute',
+                                      top: fragment.top,
+                                      left: fragment.left,
+                                      width: fragment.width,
+                                      height: fragment.height,
+                                      borderRadius: 2,
+                                      pointerEvents: 'none',
+                                      background: fragment.type === 'breakdown' ? 'rgba(245, 158, 11, 0.2)' : `${fragment.color}2E`,
+                                      boxShadow: fragment.type === 'breakdown' ? 'inset 0 -1px rgba(217, 119, 6, 0.9)' : `inset 0 -1px ${fragment.color}`,
+                                    }}
+                                  />
+                                ))}
+                              </div>
                             )
-                          }
+                          })}
+                        </div>
 
-                          return (
-                            <div
-                              key={`${block.sceneId}:${block.blockId}`}
-                              data-scene-id={block.sceneId}
-                              data-block-id={block.blockId}
-                              data-scene-heading={block.isHeading ? 'true' : undefined}
-                              ref={(node) => {
-                                if (!block.isHeading) return
-                                if (!node) {
-                                  if (sceneHeadingRefs.current[block.sceneId]) {
-                                    delete sceneHeadingRefs.current[block.sceneId]
-                                  }
-                                  return
-                                }
-                                if (!sceneHeadingRefs.current[block.sceneId]) {
-                                  sceneHeadingRefs.current[block.sceneId] = node
-                                }
-                              }}
-                              style={{
-                                marginLeft: `${blockStyle.marginLeftPx}px`,
-                                marginRight: `${blockStyle.marginRightPx}px`,
-                                paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
-                                paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
-                                minHeight: `${blockStyle.lineHeightPx}px`,
-                                fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
-                                fontSize: `${blockStyle.fontSizePx}px`,
-                                lineHeight: `${blockStyle.lineHeightPx}px`,
-                                textAlign: blockStyle.align || 'left',
-                                letterSpacing: `${blockStyle.letterSpacingPx}px`,
-                                whiteSpace: 'pre-wrap',
-                                textTransform: ['heading', 'character', 'transition'].includes(block.blockType) ? 'uppercase' : 'none',
-                                borderRadius: 4,
-                                border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
-                                background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
-                                cursor: 'text',
-                                userSelect: 'text',
-                                position: 'relative',
-                              }}
-                              onClick={() => {
-                                setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
-                                setActiveSceneId(block.sceneId)
-                              }}
-                              onDoubleClick={(event) => handleReadBlockDoubleClick(event, block)}
-                              onContextMenu={(event) => handleReadBlockContextMenu(event, block)}
-                            >
-                              {block.blockText || ' '}
-                            </div>
-                          )
-                        })}
+                        <div style={{ position: 'absolute', right: 12, top: 10, fontSize: 11, color: '#64748b' }}>{page.number}</div>
                       </div>
-
-                      <div style={{ position: 'absolute', right: 12, top: 10, fontSize: 11, color: '#64748b' }}>{page.number}</div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
-
-              {view !== 'write' && (
-                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                  {overlayRects.map(rect => (
-                    <div
-                      key={rect.id}
-                      style={{
-                        position: 'absolute',
-                        top: rect.top,
-                        left: rect.left,
-                        width: rect.width,
-                        height: rect.height,
-                        borderRadius: 2,
-                        background: rect.type === 'breakdown' ? 'rgba(245, 158, 11, 0.2)' : `${rect.color}2E`,
-                        boxShadow: rect.type === 'breakdown' ? 'inset 0 -1px rgba(217, 119, 6, 0.9)' : `inset 0 -1px ${rect.color}`,
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {view === 'write' && activePanel === 'page' && (
-                <div style={{ width: 286, background: '#fff', border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Page Setup (inches)</div>
-                  <InlineInchField label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
-                  <InlineInchField label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
-                  <InlineInchField label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
-                  <InlineInchField label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
-                  <InlineInchField label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
-                  <InlineInchField label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
-                </div>
-              )}
-
-              {view === 'write' && activePanel === 'styles' && (
-                <div style={{ width: 286, background: '#fff', border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Element Style ({selectedStyleType})</div>
-                  <InlineInchField label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                    ...prev,
-                    blockStyles: {
-                      ...prev.blockStyles,
-                      [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
-                    },
-                  }))} />
-                  <InlineInchField label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                    ...prev,
-                    blockStyles: {
-                      ...prev.blockStyles,
-                      [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
-                    },
-                  }))} />
-                  <InlineInchField label="First-line" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                    ...prev,
-                    blockStyles: {
-                      ...prev.blockStyles,
-                      [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
-                    },
-                  }))} />
-                </div>
-              )}
             </div>
+          </div>
+
+          <div style={{ width: 318, borderLeft: '1px solid rgba(148,163,184,0.25)', background: '#f8fafc', padding: 12, overflowY: 'auto' }}>
+            {[
+              { id: 'currentBlock', title: 'Current line / block type' },
+              { id: 'writeOptions', title: 'Write panel options' },
+              { id: 'pageSetup', title: 'Page Setup' },
+              { id: 'elementStyles', title: 'Element Styles' },
+            ].map(section => (
+              <section key={section.id} style={{ border: '1px solid rgba(148,163,184,0.3)', borderRadius: 8, background: '#fff', marginBottom: 10 }}>
+                <button
+                  onClick={() => setInspectorSections(prev => ({ ...prev, [section.id]: !prev[section.id] }))}
+                  style={{ width: '100%', border: 'none', background: '#f8fafc', borderBottom: inspectorSections[section.id] ? '1px solid rgba(148,163,184,0.2)' : 'none', padding: '8px 10px', textAlign: 'left', fontSize: 12, fontWeight: 700 }}
+                >
+                  {inspectorSections[section.id] ? '▾' : '▸'} {section.title}
+                </button>
+                {inspectorSections[section.id] && (
+                  <div style={{ padding: 10 }}>
+                    {section.id === 'currentBlock' && (
+                      <select
+                        value={selectedStyleType}
+                        onChange={(event) => {
+                          if (!selectedBlock) return
+                          setBlockType(selectedBlock.sceneId, selectedBlock.blockId, event.target.value)
+                        }}
+                        disabled={!selectedBlock || view !== 'write'}
+                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12 }}
+                      >
+                        {BLOCK_TYPE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    )}
+                    {section.id === 'writeOptions' && (
+                      <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8 }}>
+                          <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
+                          Bold Slugline
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                          <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
+                          Bold Character
+                        </label>
+                      </>
+                    )}
+                    {section.id === 'pageSetup' && (
+                      <>
+                        <InlineInchField label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
+                        <InlineInchField label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
+                        <InlineInchField label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
+                        <InlineInchField label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
+                        <InlineInchField label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
+                        <InlineInchField label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
+                      </>
+                    )}
+                    {section.id === 'elementStyles' && (
+                      <>
+                        <InlineInchField label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                          ...prev,
+                          blockStyles: {
+                            ...prev.blockStyles,
+                            [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
+                          },
+                        }))} />
+                        <InlineInchField label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                          ...prev,
+                          blockStyles: {
+                            ...prev.blockStyles,
+                            [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
+                          },
+                        }))} />
+                        <InlineInchField label="First-line" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                          ...prev,
+                          blockStyles: {
+                            ...prev.blockStyles,
+                            [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
+                          },
+                        }))} />
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            ))}
           </div>
         </div>
       </div>
