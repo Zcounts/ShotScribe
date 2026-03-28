@@ -49,7 +49,6 @@ export default function ScenesTab({
   const [invalidEdit, setInvalidEdit] = useState(false)
   const [selectedSceneIds, setSelectedSceneIds] = useState([])
   const [combineOpen, setCombineOpen] = useState(false)
-  const [ctxMenu, setCtxMenu] = useState(null)
   const [scriptCtxMenu, setScriptCtxMenu] = useState(null)
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const listRef = useRef(null)
@@ -122,39 +121,6 @@ export default function ScenesTab({
     setEditingSceneNumberId(null)
   }
 
-  const addBlankSceneNear = (targetScene, offset = 1) => {
-    const idx = scriptScenes.findIndex(s => s.id === targetScene.id)
-    const newScene = {
-      id: `sc_${Date.now()}`,
-      sceneNumber: '', slugline: '', intExt: null, dayNight: null, location: '', customHeader: '',
-      characters: [], actionText: '', dialogueCount: 0, pageCount: null, complexityTags: [], estimatedMinutes: null,
-      screenplayText: '', screenplayElements: [],
-      confidence: 'medium', linkedShotIds: [], notes: '', importSource: targetScene.importSource || '', color: null,
-    }
-    const next = [...scriptScenes]
-    next.splice(Math.max(0, idx + offset), 0, newScene)
-    importScriptScenes(next, { id: 'manual', filename: targetScene.importSource || 'manual' }, 'replace')
-    openEditor(newScene)
-  }
-
-  const addSubScene = (targetScene) => {
-    const base = targetScene.sceneNumber || ''
-    let n = 1
-    const existing = new Set(scriptScenes.map(s => s.sceneNumber))
-    while (existing.has(`${base}.${n}`)) n += 1
-    updateScriptScene(targetScene.id, {})
-    importScriptScenes([
-      ...scriptScenes,
-      {
-        id: `sc_${Date.now()}`,
-        sceneNumber: `${base}.${n}`,
-        slugline: '', intExt: null, dayNight: null, location: '', customHeader: '', characters: [], actionText: '', dialogueCount: 0,
-        screenplayText: '', screenplayElements: [],
-        pageCount: null, complexityTags: [], estimatedMinutes: null, confidence: 'medium', linkedShotIds: [], notes: '', importSource: targetScene.importSource || '', color: targetScene.color || null,
-      },
-    ], { id: 'manual', filename: targetScene.importSource || 'manual' }, 'replace')
-  }
-
   const combineInit = useMemo(() => {
     const selected = visibleScenes.filter(s => selectedSceneIds.includes(s.id))
     if (selected.length === 0) return null
@@ -216,7 +182,7 @@ export default function ScenesTab({
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setCtxMenu(null); setScriptCtxMenu(null); onConfigureOpenChange(false) }}>
+    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setScriptCtxMenu(null); onConfigureOpenChange(false) }}>
       <SidebarPane
         width={240}
         title={null}
@@ -295,7 +261,7 @@ export default function ScenesTab({
           const expanded = !!expandedIds[scene.id]
           const selected = selectedSceneIds.includes(scene.id)
           return (
-            <div className="app-surface-card" key={scene.id} data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ borderRadius: 6 }}>
+            <div className="app-surface-card" key={scene.id} data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} style={{ borderRadius: 6 }}>
               <div
                 role="button"
                 tabIndex={0}
@@ -368,14 +334,6 @@ export default function ScenesTab({
           </div>
         )}
       </div>
-
-      {ctxMenu && (
-        <div style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y, zIndex: 90, background: '#1e1e2e', border: '1px solid #444', borderRadius: 6, overflow: 'hidden' }}>
-          <button onClick={() => { addBlankSceneNear(ctxMenu.scene, -1); setCtxMenu(null) }} style={{ display: 'block', width: '100%', border: 'none', background: 'none', color: '#ddd', padding: '7px 10px', textAlign: 'left' }}>Add scene above</button>
-          <button onClick={() => { addBlankSceneNear(ctxMenu.scene, 1); setCtxMenu(null) }} style={{ display: 'block', width: '100%', border: 'none', background: 'none', color: '#ddd', padding: '7px 10px', textAlign: 'left' }}>Add scene below</button>
-          <button onClick={() => { addSubScene(ctxMenu.scene); setCtxMenu(null) }} style={{ display: 'block', width: '100%', border: 'none', background: 'none', color: '#ddd', padding: '7px 10px', textAlign: 'left' }}>Add sub-scene</button>
-        </div>
-      )}
 
       {scriptCtxMenu && (
         <div style={{ position: 'fixed', left: scriptCtxMenu.x, top: scriptCtxMenu.y, zIndex: 95, background: '#1e1e2e', border: '1px solid #444', borderRadius: 6, overflow: 'hidden' }}>
