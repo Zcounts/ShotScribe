@@ -386,7 +386,7 @@ const useStore = create((set, get) => ({
 
   // UI state
   settingsOpen: false,
-  contextMenu: null, // { type: 'shot', shotId, sceneId, x, y } | { type: 'person', personType, personId, x, y }
+  contextMenu: null, // { type: 'shot'|'scene', entityId, x, y } | { type: 'person', personType, personId, x, y }
   personDialog: null, // { type: 'cast'|'crew', id: string|null }
   activeTab: 'script', // 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
@@ -1578,7 +1578,7 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
-  showContextMenu: (shotId, sceneId, x, y) => set({ contextMenu: { type: 'shot', shotId, sceneId, x, y } }),
+  showContextMenu: (entityType, entityId, x, y) => set({ contextMenu: { type: entityType, entityId, x, y } }),
   showPersonContextMenu: (personType, personId, x, y) => set({ contextMenu: { type: 'person', personType, personId, x, y } }),
   hideContextMenu: () => set({ contextMenu: null }),
   openPersonDialog: (type, id = null) => set({ personDialog: { type, id } }),
