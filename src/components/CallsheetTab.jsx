@@ -70,11 +70,41 @@ function EditableField({ label, value, onChange, placeholder, multiline = false 
   )
 }
 
-function InfoPill({ label, value, emphasize = false }) {
+function HeroEditablePill({ label, value, onChange, type = 'text', placeholder, emphasize = false }) {
+  const sharedInputStyle = {
+    width: '100%',
+    border: '1px solid rgba(148, 163, 184, 0.4)',
+    borderRadius: 8,
+    background: 'rgba(15, 23, 42, 0.35)',
+    color: '#F8FAFC',
+    fontWeight: emphasize ? 800 : 600,
+    fontSize: emphasize ? 20 : 14,
+    lineHeight: 1.3,
+    marginTop: emphasize ? 2 : 4,
+    padding: emphasize ? '5px 9px' : '6px 9px',
+    outline: 'none',
+    transition: 'border-color 120ms ease, box-shadow 120ms ease, background 120ms ease',
+  }
+
   return (
-    <div style={{ padding: '10px 12px', border: '1px solid #E2E8F0', borderRadius: 8, background: emphasize ? '#EEF2FF' : '#F8FAFC' }}>
+    <div style={{ padding: '10px 12px', border: '1px solid rgba(148, 163, 184, 0.35)', borderRadius: 8, background: emphasize ? 'rgba(59, 130, 246, 0.20)' : 'rgba(15, 23, 42, 0.18)' }}>
       <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: emphasize ? 20 : 14, color: '#0F172A', fontWeight: emphasize ? 800 : 600, marginTop: emphasize ? 2 : 4 }}>{value || 'TBD'}</div>
+      {type === 'date' ? (
+        <input
+          type="date"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          style={sharedInputStyle}
+        />
+      ) : (
+        <input
+          type={type}
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          style={sharedInputStyle}
+        />
+      )}
     </div>
   )
 }
@@ -95,13 +125,15 @@ export default function CallsheetTab() {
   const callsheetSectionConfig = useStore(s => s.callsheetSectionConfig)
   const getCallsheet = useStore(s => s.getCallsheet)
   const updateCallsheet = useStore(s => s.updateCallsheet)
+  const updateShootingDay = useStore(s => s.updateShootingDay)
+  const setCallsheetSectionConfig = useStore(s => s.setCallsheetSectionConfig)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const scriptScenes = useStore(s => s.scriptScenes)
   const castRoster = useStore(s => s.castRoster)
   const crewRoster = useStore(s => s.crewRoster)
 
   const [selectedDayId, setSelectedDayId] = useState(schedule[0]?.id || null)
-  const [showConfig, setShowConfig] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(false)
 
   const activeDay = useMemo(() => {
     if (!schedule.length) return null
@@ -141,6 +173,11 @@ export default function CallsheetTab() {
     updateCallsheet(activeDay.id, updates)
   }, [activeDay, updateCallsheet])
 
+  const onScheduleDayUpdate = useCallback((updates) => {
+    if (!activeDay) return
+    updateShootingDay(activeDay.id, updates)
+  }, [activeDay, updateShootingDay])
+
   if (!schedule.length) {
     return <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#64748B', fontSize: 13 }}>Add a shoot day in Schedule to generate a callsheet.</div>
   }
@@ -148,32 +185,15 @@ export default function CallsheetTab() {
   const dayTabs = schedule.map((day, idx) => ({ id: day.id, label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}` }))
 
   return (
-    <div className="canvas-texture" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="canvas-texture" style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <DayTabBar days={dayTabs} activeDay={activeDay.id} onSelect={setSelectedDayId} />
       <div style={{ borderBottom: '1px solid #CBD5E1', background: '#0F172A', padding: '6px 14px', display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: '#94A3B8', fontSize: 11 }}>Callsheet syncs from Schedule, Script/Scenes, Shotlist, and Cast/Crew.</span>
-        <button onClick={() => setShowConfig(value => !value)} style={{ border: '1px solid #334155', background: '#1E293B', color: '#E2E8F0', borderRadius: 5, fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}>Sections</button>
+        <span />
+        <button onClick={() => setShowSidebar(value => !value)} style={{ border: '1px solid #334155', background: '#1E293B', color: '#E2E8F0', borderRadius: 5, fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}>{showSidebar ? 'Close Sidebar' : 'Open Sidebar'}</button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto', display: 'grid', gap: 14 }}>
-          {showConfig && (
-            <Card title="Visible Sections">
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {(callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(section => (
-                  <label key={section.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12 }}>
-                    <input
-                      type="checkbox"
-                      checked={section.visible}
-                      onChange={(e) => useStore.getState().setCallsheetSectionConfig((callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(item => item.key === section.key ? { ...item, visible: e.target.checked } : item))}
-                    />
-                    {section.label}
-                  </label>
-                ))}
-              </div>
-            </Card>
-          )}
-
           <header style={{ background: '#0B1220', color: '#F8FAFC', borderRadius: 10, padding: 16, display: 'grid', gap: 14, boxShadow: 'var(--app-panel-shadow)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
               <div>
@@ -186,20 +206,12 @@ export default function CallsheetTab() {
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(180px, 1fr))', gap: 10 }}>
-              <InfoPill label="Date" value={formatDate(activeDay.date)} emphasize />
-              <InfoPill label="General Call" value={formatTime12(activeDay.startTime)} emphasize />
-              <InfoPill label="Primary Location" value={callsheet.shootLocation || activeDay.basecamp || ''} />
-              <InfoPill label="Unit / Basecamp" value={activeDay.basecamp || ''} />
+              <HeroEditablePill label="Date" value={activeDay.date || ''} onChange={(value) => onScheduleDayUpdate({ date: value })} type="date" emphasize />
+              <HeroEditablePill label="General Call" value={activeDay.startTime || ''} onChange={(value) => onScheduleDayUpdate({ startTime: value })} type="time" emphasize />
+              <HeroEditablePill label="Primary Location" value={activeDay.primaryLocation || callsheet.shootLocation || ''} onChange={(value) => onScheduleDayUpdate({ primaryLocation: value })} placeholder="Set location" />
+              <HeroEditablePill label="Unit / Basecamp" value={activeDay.basecamp || ''} onChange={(value) => onScheduleDayUpdate({ basecamp: value })} placeholder="Basecamp" />
             </div>
           </header>
-
-          {warnings.length > 0 && (
-            <Card title="Missing critical info" tone="alert">
-              <ul style={{ margin: 0, paddingLeft: 18, color: '#991B1B', fontSize: 12, lineHeight: 1.5 }}>
-                {warnings.map(item => <li key={item}>{item}</li>)}
-              </ul>
-            </Card>
-          )}
 
           {visibleSections.includes('generalInfo') && (
             <Card title="Day logistics and emergency">
@@ -329,7 +341,6 @@ export default function CallsheetTab() {
             <Card title="Location details">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <EditableField label="Location address" value={callsheet.locationAddress} onChange={(value) => onDayUpdate({ locationAddress: value })} placeholder="Full address for unit parking or set" multiline />
-                <EditableField label="Next-day advance notes" value={callsheet.nextDayNotes} onChange={(value) => onDayUpdate({ nextDayNotes: value })} placeholder="Tomorrow's company move, call, weather watch, parking changes" multiline />
               </div>
             </Card>
           )}
@@ -339,8 +350,67 @@ export default function CallsheetTab() {
               <EditableField label="Additional notes" value={callsheet.additionalNotes} onChange={(value) => onDayUpdate({ additionalNotes: value })} placeholder="Anything the crew must know before call" multiline />
             </Card>
           )}
+
+          {visibleSections.includes('nextDayAdvance') && (
+            <Card title="Next-day advance notes">
+              <EditableField label="Advance notes" value={callsheet.nextDayNotes} onChange={(value) => onDayUpdate({ nextDayNotes: value })} placeholder="Tomorrow's company move, call, weather watch, parking changes" multiline />
+            </Card>
+          )}
         </div>
       </div>
+
+      {showSidebar && (
+        <div
+          onClick={() => setShowSidebar(false)}
+          style={{ position: 'absolute', inset: 0, background: 'rgba(2, 6, 23, 0.35)', zIndex: 20 }}
+        />
+      )}
+      <aside
+        style={{
+          position: 'absolute',
+          top: 39,
+          right: 0,
+          bottom: 0,
+          width: 340,
+          background: '#111827',
+          borderLeft: '1px solid #334155',
+          transform: showSidebar ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 180ms ease',
+          zIndex: 30,
+          padding: 14,
+          overflowY: 'auto',
+          boxShadow: '-6px 0 24px rgba(15, 23, 42, 0.35)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ color: '#E2E8F0', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Callsheet Sidebar</div>
+          <button onClick={() => setShowSidebar(false)} style={{ border: '1px solid #334155', background: '#0F172A', color: '#CBD5E1', borderRadius: 6, fontSize: 11, padding: '4px 7px', cursor: 'pointer' }}>Close</button>
+        </div>
+        <Card title="Missing critical info" tone="alert">
+          {warnings.length > 0 ? (
+            <ul style={{ margin: 0, paddingLeft: 18, color: '#991B1B', fontSize: 12, lineHeight: 1.5 }}>
+              {warnings.map(item => <li key={item}>{item}</li>)}
+            </ul>
+          ) : (
+            <div style={{ color: '#166534', fontSize: 12, fontWeight: 600 }}>No critical omissions detected for this shoot day.</div>
+          )}
+        </Card>
+        <div style={{ height: 10 }} />
+        <Card title="Visible sections">
+          <div style={{ display: 'grid', gap: 8 }}>
+            {(callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(section => (
+              <label key={section.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 9px', border: '1px solid #CBD5E1', borderRadius: 7, fontSize: 12 }}>
+                <span>{section.label}</span>
+                <input
+                  type="checkbox"
+                  checked={section.visible}
+                  onChange={(e) => setCallsheetSectionConfig((callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(item => item.key === section.key ? { ...item, visible: e.target.checked } : item))}
+                />
+              </label>
+            ))}
+          </div>
+        </Card>
+      </aside>
     </div>
   )
 }

@@ -1347,7 +1347,7 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
       ['DATE', day.date ? escapeHtml(fmtDate(day.date)) : '<em>Not set</em>'],
       ['GENERAL CALL', day.startTime ? `<strong>${escapeHtml(fmt12(day.startTime))}</strong>` : '<em>Not set</em>'],
       ['BASECAMP / UNIT BASE', day.basecamp ? escapeHtml(day.basecamp) : '<em>Not set</em>'],
-      ['SHOOT LOCATION', cs.shootLocation ? escapeHtml(cs.shootLocation) : '<em>Not set</em>'],
+      ['SHOOT LOCATION', day.primaryLocation ? escapeHtml(day.primaryLocation) : (cs.shootLocation ? escapeHtml(cs.shootLocation) : '<em>Not set</em>')],
       ['WEATHER', cs.weather ? escapeHtml(cs.weather) : ''],
       ['NEAREST HOSPITAL', cs.nearestHospital ? escapeHtml(cs.nearestHospital) : ''],
       ['EMERGENCY CONTACTS', cs.emergencyContacts ? escapeHtml(cs.emergencyContacts).replace(/\n/g, '<br>') : ''],

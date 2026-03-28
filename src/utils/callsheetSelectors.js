@@ -204,7 +204,7 @@ export function buildCallsheetWarnings({ day, callsheet = {}, scheduleRows, cast
   const warnings = []
   if (!day?.startTime) warnings.push('General call time is missing on Schedule.')
   if (!day?.date) warnings.push('Shoot date is missing on Schedule.')
-  if (!callsheet.shootLocation && !day?.basecamp) warnings.push('Primary shoot location is missing.')
+  if (!day?.primaryLocation) warnings.push('Primary shoot location is missing.')
   if (!callsheet.weather) warnings.push('Weather summary is missing.')
   if (!callsheet.sunrise || !callsheet.sunset) warnings.push('Sunrise and/or sunset time is missing.')
   if (!callsheet.nearestHospital) warnings.push('Nearest hospital details are missing.')
@@ -217,5 +217,6 @@ export function buildCallsheetWarnings({ day, callsheet = {}, scheduleRows, cast
   if ((crewRows || []).length === 0) warnings.push('No crew assigned in Cast/Crew roster yet.')
   if ((castRows || []).length === 0) warnings.push('No cast linked to scheduled scenes yet.')
   if ((castRows || []).some(row => !row.pickupTime && !row.makeupCall && !row.setCall)) warnings.push('Some cast call times are missing.')
+  if ((crewRows || []).length > 0 && (crewRows || []).some(row => !row.callTime && !row.defaultCall)) warnings.push('Some crew call times are missing.')
   return warnings
 }
