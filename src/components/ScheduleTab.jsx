@@ -138,6 +138,59 @@ function formatDate(isoDate) {
   }
 }
 
+function normalizeIsoDate(value) {
+  if (!value) return null
+  if (typeof value === 'string') {
+    const s = value.trim()
+    if (!s) return null
+    const isoLike = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+    if (isoLike) {
+      const y = Number(isoLike[1])
+      const m = Number(isoLike[2])
+      const d = Number(isoLike[3])
+      const dt = new Date(y, m - 1, d)
+      if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      }
+      return null
+    }
+    const parsed = new Date(s)
+    if (!Number.isNaN(parsed.getTime())) {
+      return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`
+    }
+    return null
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+  }
+  return null
+}
+
+function summarizeDay(blocks, pageCountByScene, enrichedBlockMap) {
+  const safeBlocks = Array.isArray(blocks) ? blocks : []
+  const safePages = pageCountByScene || {}
+  const safeEnriched = enrichedBlockMap || {}
+  let shotCount = 0
+  let totalPages = 0
+  let totalMins = 0
+
+  safeBlocks.forEach(block => {
+    if (!block || block.type === 'break') {
+      totalMins += parseMinutes(block?.duration)
+      return
+    }
+    shotCount += 1
+    const enriched = safeEnriched[block.id] || {}
+    const sceneId = enriched.linkedSceneId || block.sceneId
+    if (sceneId && safePages[sceneId] !== undefined && safePages[sceneId] !== null) {
+      totalPages += Number(safePages[sceneId]) || 0
+    }
+    totalMins += parseMinutes(enriched.shootTime) + parseMinutes(enriched.setupTime)
+  })
+
+  return { shotCount, totalPages, totalMins }
+}
+
 const LIST_GRID_TEMPLATE = '92px minmax(320px,2.5fr) 108px 128px minmax(160px,1.2fr) 88px 118px 126px 30px 30px'
 const LIST_HEADER_COLUMNS = [
   'Scene #',
@@ -2507,10 +2560,15 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
 
   // ── Month navigation ───────────────────────────────────────────────────────
   const [currentMonth, setCurrentMonth] = useState(() => {
-    const first = schedule.find(d => d.date)
+    const first = schedule.find(d => normalizeIsoDate(d.calendarDate || d.date))
     if (first) {
-      const d = new Date(first.date + 'T12:00:00')
-      return { year: d.getFullYear(), month: d.getMonth() }
+      const normalized = normalizeIsoDate(first.calendarDate || first.date)
+      if (normalized) {
+        const d = new Date(`${normalized}T12:00:00`)
+        if (!Number.isNaN(d.getTime())) {
+          return { year: d.getFullYear(), month: d.getMonth() }
+        }
+      }
     }
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() }
@@ -2567,9 +2625,10 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
   const daysByDate = useMemo(() => {
     const m = {}
     schedule.forEach(day => {
-      if (day.date) {
-        if (!m[day.date]) m[day.date] = []
-        m[day.date].push(day)
+      const dateKey = normalizeIsoDate(day.calendarDate || day.date)
+      if (dateKey) {
+        if (!m[dateKey]) m[dateKey] = []
+        m[dateKey].push(day)
       }
     })
     return m
@@ -3134,6 +3193,7 @@ export default function ScheduleTab({
       ...day,
       id: day?.id || `day-${idx + 1}`,
       blocks: Array.isArray(day?.blocks) ? day.blocks : [],
+      calendarDate: normalizeIsoDate(day?.date),
     }))
   }, [scheduleRaw])
   const scenes = Array.isArray(scenesRaw) ? scenesRaw : []
