@@ -345,6 +345,9 @@ export default function App() {
   const [forcedExportTab, setForcedExportTab] = useState(null)
   const [showStoryboardOutline, setShowStoryboardOutline] = useState(storyboardViewState.showOutline ?? true)
   const [storyboardConfigOpen, setStoryboardConfigOpen] = useState(false)
+  const [scenesConfigOpen, setScenesConfigOpen] = useState(false)
+  const [shotlistConfigOpen, setShotlistConfigOpen] = useState(false)
+  const [scheduleConfigOpen, setScheduleConfigOpen] = useState(false)
   const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
@@ -577,6 +580,29 @@ export default function App() {
     ? sceneNavItems.find(item => item.id === activeOutlineDragId) || null
     : null
 
+  const configureHandlers = {
+    storyboard: {
+      isActive: storyboardConfigOpen,
+      onToggle: () => setStoryboardConfigOpen(o => !o),
+    },
+    scenes: {
+      isActive: scenesConfigOpen,
+      onToggle: () => setScenesConfigOpen(o => !o),
+    },
+    shotlist: {
+      isActive: shotlistConfigOpen,
+      onToggle: () => setShotlistConfigOpen(o => !o),
+    },
+    schedule: {
+      isActive: scheduleConfigOpen,
+      onToggle: () => setScheduleConfigOpen(o => !o),
+    },
+    script: { isActive: false, onToggle: () => {} },
+    castcrew: { isActive: false, onToggle: () => {} },
+    callsheet: { isActive: false, onToggle: () => {} },
+  }
+  const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
+
   return (
     <div
       className="flex flex-col"
@@ -641,25 +667,18 @@ export default function App() {
           </button>
         ))}
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
-          {activeTab === 'storyboard' && (
-            <>
-              <ConfigureButton
-                onClick={() => setStoryboardConfigOpen(o => !o)}
-                active={storyboardConfigOpen}
-              />
-              {storyboardConfigOpen && (
-                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, padding: 10, minWidth: 220, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', zIndex: 80 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#4A5568' }}>
-                    <input
-                      type="checkbox"
-                      checked={showStoryboardOutline}
-                      onChange={(e) => setShowStoryboardOutline(e.target.checked)}
-                    />
-                    Show Storyboard Outline
-                  </label>
-                </div>
-              )}
-            </>
+          <ConfigureButton onClick={activeConfigure.onToggle} active={activeConfigure.isActive} />
+          {activeTab === 'storyboard' && storyboardConfigOpen && (
+            <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, padding: 10, minWidth: 220, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', zIndex: 80 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#4A5568' }}>
+                <input
+                  type="checkbox"
+                  checked={showStoryboardOutline}
+                  onChange={(e) => setShowStoryboardOutline(e.target.checked)}
+                />
+                Show Storyboard Outline
+              </label>
+            </div>
           )}
         </div>
       </div>
@@ -780,11 +799,20 @@ export default function App() {
         </div>
       ) : activeTab === 'shotlist' ? (
         <div className="flex-1 flex flex-col overflow-auto canvas-texture">
-          <ShotlistTab key={`shotlist-${documentSession}`} containerRef={shotlistRef} />
+          <ShotlistTab
+            key={`shotlist-${documentSession}`}
+            containerRef={shotlistRef}
+            configureOpen={shotlistConfigOpen}
+            onConfigureOpenChange={setShotlistConfigOpen}
+          />
         </div>
       ) : activeTab === 'scenes' ? (
         <div className="flex-1 overflow-hidden canvas-texture">
-          <ScenesTab key={`scenes-${documentSession}`} />
+          <ScenesTab
+            key={`scenes-${documentSession}`}
+            configureOpen={scenesConfigOpen}
+            onConfigureOpenChange={setScenesConfigOpen}
+          />
         </div>
       ) : activeTab === 'script' ? (
         <div className="flex-1 overflow-hidden canvas-texture">
@@ -792,7 +820,11 @@ export default function App() {
         </div>
       ) : activeTab === 'schedule' ? (
         <div className="flex-1 overflow-y-auto canvas-texture">
-          <ScheduleTab key={`schedule-${documentSession}`} />
+          <ScheduleTab
+            key={`schedule-${documentSession}`}
+            configureOpen={scheduleConfigOpen}
+            onConfigureOpenChange={setScheduleConfigOpen}
+          />
         </div>
       ) : activeTab === 'callsheet' ? (
         <div className="flex-1 flex flex-col overflow-hidden canvas-texture">
