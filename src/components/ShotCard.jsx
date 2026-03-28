@@ -153,7 +153,6 @@ function SceneLinkBadge({ shot }) {
 export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
-  const showContextMenu = useStore(s => s.showContextMenu)
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
@@ -190,11 +189,6 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
     e.target.value = ''
   }
 
-  const handleContextMenu = (e) => {
-    e.preventDefault()
-    showContextMenu(shot.id, sceneId, e.clientX, e.clientY)
-  }
-
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
   }, [shot.id, updateShot])
@@ -219,7 +213,6 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId }) {
       data-entity-type="shot"
       data-entity-id={shot.id}
       className={`shot-card ${isDragging ? 'is-dragging' : ''}`}
-      onContextMenu={handleContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >

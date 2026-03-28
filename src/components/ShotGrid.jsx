@@ -3,7 +3,7 @@ import ShotCard from './ShotCard'
 
 function AddShotButton({ onClick }) {
   return (
-    <button className="add-shot-btn" onClick={onClick} title="Add new shot">
+    <button className="add-shot-btn" data-add-shot-control="true" data-suppress-entity-context-menu="true" onClick={onClick} title="Add new shot">
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="10" cy="10" r="8" />
         <line x1="10" y1="6" x2="10" y2="14" />

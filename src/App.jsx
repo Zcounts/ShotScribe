@@ -631,6 +631,10 @@ export default function App() {
     }
     const entity = resolveEntityTarget(target)
     if (!entity) return
+    const entityNode = target instanceof Element ? target.closest('[data-entity-type][data-entity-id]') : null
+    if (shouldSuppressEntityOpen(target, entityNode)) return
+    event.preventDefault()
+    event.stopPropagation()
     if (entity.entityType === 'scene') {
       openSceneDialog(entity.entityId)
       return
@@ -650,11 +654,24 @@ export default function App() {
     showPersonContextMenu(person.personType, person.personId, event.clientX, event.clientY)
   }, [showPersonContextMenu])
 
+  const handleEntityContextMenuCapture = useCallback((event) => {
+    const target = event.target
+    const entity = resolveEntityTarget(target)
+    if (!entity) return
+    const entityNode = target instanceof Element ? target.closest('[data-entity-type][data-entity-id]') : null
+    if (shouldSuppressEntityContextMenu(target, entityNode)) return
+    if (entity.entityType !== 'shot' && entity.entityType !== 'scene') return
+    event.preventDefault()
+    event.stopPropagation()
+    showContextMenu(entity.entityType, entity.entityId, event.clientX, event.clientY)
+  }, [showContextMenu])
+
   return (
     <div
       className="flex flex-col"
       style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#F5F2EC' }}
       onClick={() => hideContextMenu()}
+      onContextMenuCapture={handleEntityContextMenuCapture}
       onDoubleClickCapture={handleEntityDoubleClickCapture}
       onContextMenuCapture={handleEntityContextMenuCapture}
     >
@@ -834,6 +851,8 @@ export default function App() {
             <div className="add-scene-row">
               <button
                 className="add-scene-btn"
+                data-add-scene-control="true"
+                data-suppress-entity-context-menu="true"
                 onClick={() => addScene()}
                 title="Add a new page"
               >
