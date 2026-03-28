@@ -230,19 +230,20 @@ export default function CallsheetTab({ configureOpen = true }) {
   const dayTabs = schedule.map((day, idx) => ({ id: day.id, label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}` }))
 
   return (
-    <div className="canvas-texture" style={{ height: '100%', display: 'flex', minHeight: 0 }}>
-      {configureOpen ? (
-        <CallsheetSidebar
-          warnings={warnings}
-          callsheetSectionConfig={callsheetSectionConfig}
-          setCallsheetSectionConfig={setCallsheetSectionConfig}
-        />
-      ) : null}
+    <div className="canvas-texture" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <DayTabBar days={dayTabs} activeDay={activeDay.id} onSelect={setSelectedDayId} />
 
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <DayTabBar days={dayTabs} activeDay={activeDay.id} onSelect={setSelectedDayId} />
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        {configureOpen ? (
+          <CallsheetSidebar
+            warnings={warnings}
+            callsheetSectionConfig={callsheetSectionConfig}
+            setCallsheetSectionConfig={setCallsheetSectionConfig}
+          />
+        ) : null}
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
           <div style={{ maxWidth: 1280, margin: '0 auto', display: 'grid', gap: 14 }}>
             <header style={{ background: '#0B1220', color: '#F8FAFC', borderRadius: 10, padding: 16, display: 'grid', gap: 14, boxShadow: 'var(--app-panel-shadow)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
@@ -415,6 +416,7 @@ export default function CallsheetTab({ configureOpen = true }) {
                 <EditableField label="Advance notes" value={callsheet.nextDayNotes} onChange={(value) => onDayUpdate({ nextDayNotes: value })} placeholder="Tomorrow's company move, call, weather watch, parking changes" multiline />
               </Card>
             )}
+          </div>
           </div>
         </div>
       </div>
