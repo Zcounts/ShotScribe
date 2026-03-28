@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import useStore, { DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
+import useStore, { CALLSHEET_COLUMN_DEFINITIONS, DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
 import SidebarPane from './SidebarPane'
 import { DayTabBar } from './DayTabBar'
 import {
@@ -72,6 +72,53 @@ function CompactIconButton({ label, onClick, icon = '+', title }) {
     >
       {icon}
     </button>
+  )
+}
+
+const CALLSHEET_PRIMARY_COLUMN_BY_SECTION = {
+  advancedSchedule: 'sluglineScene',
+  castList: 'actor',
+  crewList: 'name',
+}
+
+function ConfigureButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ border: '1px solid #CBD5E1', borderRadius: 6, padding: '3px 8px', background: '#fff', color: '#334155', fontSize: 12, fontWeight: 600, lineHeight: 1.2, cursor: 'pointer' }}
+    >
+      Configure
+    </button>
+  )
+}
+
+function SectionColumnConfigureControl({ sectionKey, sectionLabel, columnConfig, onToggleColumn, isOpen, onToggleOpen }) {
+  const columns = CALLSHEET_COLUMN_DEFINITIONS[sectionKey] || []
+  const visibleMap = new Map((columnConfig || []).map(column => [column.key, !!column.visible]))
+  const primaryKey = CALLSHEET_PRIMARY_COLUMN_BY_SECTION[sectionKey]
+
+  return (
+    <div style={{ position: 'relative' }} data-callsheet-config-popover="true">
+      <ConfigureButton onClick={onToggleOpen} />
+      {isOpen ? (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 250, zIndex: 40, border: '1px solid #CBD5E1', borderRadius: 8, boxShadow: '0 12px 28px rgba(15,23,42,0.18)', background: '#fff', padding: 8 }} data-callsheet-config-popover="true">
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700, marginBottom: 6 }}>{sectionLabel}</div>
+          <div style={{ display: 'grid', gap: 5 }}>
+            {columns.map(column => {
+              const checked = column.key === primaryKey ? true : visibleMap.get(column.key) !== false
+              const locked = column.key === primaryKey
+              return (
+                <label key={column.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12, color: '#334155' }}>
+                  <span>{column.label}{locked ? ' (required)' : ''}</span>
+                  <input type="checkbox" checked={checked} disabled={locked} onChange={(e) => onToggleColumn(sectionKey, column.key, e.target.checked)} />
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -267,10 +314,12 @@ export default function CallsheetTab({ configureOpen = true }) {
   const schedule = useStore(s => s.schedule)
   const projectName = useStore(s => s.projectName)
   const callsheetSectionConfig = useStore(s => s.callsheetSectionConfig)
+  const callsheetColumnConfig = useStore(s => s.callsheetColumnConfig)
   const getCallsheet = useStore(s => s.getCallsheet)
   const updateCallsheet = useStore(s => s.updateCallsheet)
   const updateShootingDay = useStore(s => s.updateShootingDay)
   const setCallsheetSectionConfig = useStore(s => s.setCallsheetSectionConfig)
+  const setCallsheetColumnConfig = useStore(s => s.setCallsheetColumnConfig)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const scriptScenes = useStore(s => s.scriptScenes)
   const castRoster = useStore(s => s.castRoster)
@@ -286,6 +335,7 @@ export default function CallsheetTab({ configureOpen = true }) {
   const [showCastPicker, setShowCastPicker] = useState(false)
   const [showCrewPicker, setShowCrewPicker] = useState(false)
   const [showKeyContactPicker, setShowKeyContactPicker] = useState(false)
+  const [openColumnSectionKey, setOpenColumnSectionKey] = useState(null)
   const collapseState = callsheetViewState.sidebarCollapseState || { actions: false, visibleSections: false, missingInfo: false }
   const setCollapseState = useCallback((nextValue) => {
     const next = typeof nextValue === 'function' ? nextValue(collapseState) : nextValue
@@ -375,6 +425,38 @@ export default function CallsheetTab({ configureOpen = true }) {
   const visibleSections = (callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG)
     .filter(section => section.visible)
     .map(section => section.key)
+
+  const isColumnVisible = useCallback((sectionKey, columnKey) => {
+    const primaryKey = CALLSHEET_PRIMARY_COLUMN_BY_SECTION[sectionKey]
+    if (columnKey === primaryKey) return true
+    const rows = Array.isArray(callsheetColumnConfig?.[sectionKey]) ? callsheetColumnConfig[sectionKey] : []
+    const match = rows.find(row => row.key === columnKey)
+    return match ? !!match.visible : true
+  }, [callsheetColumnConfig])
+
+  const visibleCounts = useMemo(() => ({
+    advancedSchedule: (CALLSHEET_COLUMN_DEFINITIONS.advancedSchedule || []).filter(column => isColumnVisible('advancedSchedule', column.key)).length,
+    castList: (CALLSHEET_COLUMN_DEFINITIONS.castList || []).filter(column => isColumnVisible('castList', column.key)).length + 1,
+    crewList: (CALLSHEET_COLUMN_DEFINITIONS.crewList || []).filter(column => isColumnVisible('crewList', column.key)).length + 1,
+  }), [isColumnVisible])
+
+  const handleToggleColumn = useCallback((sectionKey, columnKey, checked) => {
+    const primaryKey = CALLSHEET_PRIMARY_COLUMN_BY_SECTION[sectionKey]
+    if (columnKey === primaryKey) return
+    const currentRows = Array.isArray(callsheetColumnConfig?.[sectionKey]) ? callsheetColumnConfig[sectionKey] : []
+    const normalizedRows = (CALLSHEET_COLUMN_DEFINITIONS[sectionKey] || []).map(column => {
+      const existing = currentRows.find(row => row.key === column.key)
+      return {
+        key: column.key,
+        visible: column.key === primaryKey ? true : (existing ? !!existing.visible : true),
+      }
+    })
+    const updatedRows = normalizedRows.map(row => row.key === columnKey ? { ...row, visible: checked } : row)
+    setCallsheetColumnConfig({
+      ...(callsheetColumnConfig || {}),
+      [sectionKey]: updatedRows,
+    })
+  }, [callsheetColumnConfig, setCallsheetColumnConfig])
 
   const onDayUpdate = useCallback((updates) => {
     if (!activeDay) return
@@ -523,6 +605,17 @@ export default function CallsheetTab({ configureOpen = true }) {
     setEmailPreflightOpen(false)
   }, [activeDay, activeDay?.date, activeDayIdx, exportCurrentDayPDF, projectName, recipientSummary.ready])
 
+  useEffect(() => {
+    if (!openColumnSectionKey) return undefined
+    const onPointerDown = (event) => {
+      const trigger = event.target.closest?.('[data-callsheet-config-popover]')
+      if (trigger) return
+      setOpenColumnSectionKey(null)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [openColumnSectionKey])
+
   if (!schedule.length) {
     return <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#64748B', fontSize: 13 }}>Add a shoot day in Schedule to generate a callsheet.</div>
   }
@@ -649,34 +742,37 @@ export default function CallsheetTab({ configureOpen = true }) {
 
             {visibleSections.includes('advancedSchedule') && (
               <div data-callsheet-target="advancedSchedule" style={{ borderRadius: 10, outline: highlightTargetKey === 'advancedSchedule' ? '2px solid #2563EB' : 'none', outlineOffset: 2 }}>
-              <Card title="Today’s shooting schedule">
+              <Card
+                title="Today’s shooting schedule"
+                actions={(
+                  <SectionColumnConfigureControl
+                    sectionKey="advancedSchedule"
+                    sectionLabel="Today’s Shooting Schedule"
+                    columnConfig={callsheetColumnConfig?.advancedSchedule}
+                    onToggleColumn={handleToggleColumn}
+                    isOpen={openColumnSectionKey === 'advancedSchedule'}
+                    onToggleOpen={() => setOpenColumnSectionKey(prev => (prev === 'advancedSchedule' ? null : 'advancedSchedule'))}
+                  />
+                )}
+              >
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Scene #', 'Slugline / Scene', 'Location', 'I/E', 'D/N', 'Start', 'End', 'Pages', 'Shots', 'Notes'].map(label => (
-                        <th
-                          key={label}
-                          style={{
-                            textAlign: label === 'D/N' ? 'center' : 'left',
-                            padding: '7px 6px',
-                            borderBottom: '1px solid #E2E8F0',
-                            color: '#475569',
-                            fontSize: 10,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.08em',
-                            width: label === 'D/N' ? 60 : undefined,
-                            minWidth: label === 'D/N' ? 60 : undefined,
-                            maxWidth: label === 'D/N' ? 60 : undefined,
-                          }}
-                        >
-                          {label}
-                        </th>
-                      ))}
+                      {isColumnVisible('advancedSchedule', 'sceneNumber') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scene #</th> : null}
+                      {isColumnVisible('advancedSchedule', 'sluglineScene') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Slugline / Scene</th> : null}
+                      {isColumnVisible('advancedSchedule', 'location') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Location</th> : null}
+                      {isColumnVisible('advancedSchedule', 'intExt') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>I/E</th> : null}
+                      {isColumnVisible('advancedSchedule', 'dayNight') ? <th style={{ textAlign: 'center', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', width: 60, minWidth: 60, maxWidth: 60 }}>D/N</th> : null}
+                      {isColumnVisible('advancedSchedule', 'start') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Start</th> : null}
+                      {isColumnVisible('advancedSchedule', 'end') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>End</th> : null}
+                      {isColumnVisible('advancedSchedule', 'pages') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Pages</th> : null}
+                      {isColumnVisible('advancedSchedule', 'shots') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Shots</th> : null}
+                      {isColumnVisible('advancedSchedule', 'notes') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</th> : null}
                     </tr>
                   </thead>
                   <tbody>
                     {scheduleRows.scenes.length === 0 && (
-                      <tr><td colSpan={10} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No scenes scheduled for this day.</td></tr>
+                      <tr><td colSpan={visibleCounts.advancedSchedule} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No scenes scheduled for this day.</td></tr>
                     )}
                     {scheduleRows.scenes.map((scene, idx) => (
                       <tr
@@ -685,16 +781,16 @@ export default function CallsheetTab({ configureOpen = true }) {
                         data-entity-id={scene.linkedSceneId || undefined}
                         style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}
                       >
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}>{scene.sceneNumber || '—'}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.slugline || '—'}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.location || '—'}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.intExt || '—'}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', textAlign: 'center', width: 60, minWidth: 60, maxWidth: 60, fontWeight: 600 }}>{formatDayNightDisplay(scene.dayNight)}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{formatMinuteOfDay(scene.start)}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{formatMinuteOfDay(scene.end)}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{Number(scene.pageCount || 0).toFixed(2)}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.shotCount}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.notes || '—'}</td>
+                        {isColumnVisible('advancedSchedule', 'sceneNumber') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}>{scene.sceneNumber || '—'}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'sluglineScene') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.slugline || '—'}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'location') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.location || '—'}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'intExt') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.intExt || '—'}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'dayNight') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', textAlign: 'center', width: 60, minWidth: 60, maxWidth: 60, fontWeight: 600 }}>{formatDayNightDisplay(scene.dayNight)}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'start') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{formatMinuteOfDay(scene.start)}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'end') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{formatMinuteOfDay(scene.end)}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'pages') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{Number(scene.pageCount || 0).toFixed(2)}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'shots') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.shotCount}</td> : null}
+                        {isColumnVisible('advancedSchedule', 'notes') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{scene.notes || '—'}</td> : null}
                       </tr>
                     ))}
                   </tbody>
@@ -720,6 +816,14 @@ export default function CallsheetTab({ configureOpen = true }) {
                 subtitle="Profile-linked columns: Actor, Character, Contact. Day-only columns: Pickup, Makeup, Set."
                 actions={
                   <div style={{ display: 'flex', gap: 6 }}>
+                    <SectionColumnConfigureControl
+                      sectionKey="castList"
+                      sectionLabel="Cast List (Day-Derived)"
+                      columnConfig={callsheetColumnConfig?.castList}
+                      onToggleColumn={handleToggleColumn}
+                      isOpen={openColumnSectionKey === 'castList'}
+                      onToggleOpen={() => setOpenColumnSectionKey(prev => (prev === 'castList' ? null : 'castList'))}
+                    />
                     <CompactIconButton label="Add cast from roster" icon="+ Cast" onClick={() => setShowCastPicker(prev => !prev)} />
                     <CompactIconButton label="Create cast profile" icon="＋New" onClick={() => openPersonDialog('cast', null)} />
                   </div>
@@ -739,29 +843,35 @@ export default function CallsheetTab({ configureOpen = true }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Actor ↗', 'Character ↗', 'SC(DAY) scenes', 'PG(DAY) pages', 'Pickup • day', 'Makeup • day', 'Set • day', 'Contact ↗', '⋯'].map(label => (
-                        <th key={label} style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</th>
-                      ))}
+                      {isColumnVisible('castList', 'actor') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Actor ↗</th> : null}
+                      {isColumnVisible('castList', 'character') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Character ↗</th> : null}
+                      {isColumnVisible('castList', 'sceneCount') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>SC(DAY) scenes</th> : null}
+                      {isColumnVisible('castList', 'pageCount') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>PG(DAY) pages</th> : null}
+                      {isColumnVisible('castList', 'pickupTime') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Pickup • day</th> : null}
+                      {isColumnVisible('castList', 'makeupCall') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Makeup • day</th> : null}
+                      {isColumnVisible('castList', 'setCall') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Set • day</th> : null}
+                      {isColumnVisible('castList', 'contact') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Contact ↗</th> : null}
+                      <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>⋯</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {castRows.length === 0 && <tr><td colSpan={9} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No cast mapped to scheduled scenes.</td></tr>}
+                    {castRows.length === 0 && <tr><td colSpan={visibleCounts.castList} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No cast mapped to scheduled scenes.</td></tr>}
                     {castRows.map((row, idx) => (
                       <tr key={row.id} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
-                        <td
+                        {isColumnVisible('castList', 'actor') ? <td
                           style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}
                           data-person-type={row.rosterId ? 'cast' : undefined}
                           data-person-id={row.rosterId || undefined}
                         >
                           {row.name}
-                        </td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.character || '—'}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.sceneCount}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{Number(row.pageCount || 0).toFixed(2)}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.pickupTime} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, pickupTime: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.makeupCall} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, makeupCall: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.setCall} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, setCall: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.contact || '—'}</td>
+                        </td> : null}
+                        {isColumnVisible('castList', 'character') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.character || '—'}</td> : null}
+                        {isColumnVisible('castList', 'sceneCount') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.sceneCount}</td> : null}
+                        {isColumnVisible('castList', 'pageCount') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{Number(row.pageCount || 0).toFixed(2)}</td> : null}
+                        {isColumnVisible('castList', 'pickupTime') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.pickupTime} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, pickupTime: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td> : null}
+                        {isColumnVisible('castList', 'makeupCall') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.makeupCall} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, makeupCall: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td> : null}
+                        {isColumnVisible('castList', 'setCall') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}><input value={row.setCall} onChange={(e) => onDayUpdate({ cast: updateRowValue(callsheet.cast, row.rosterId, row.id, { name: row.name, character: row.character, setCall: e.target.value }) })} style={{ width: 88, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} /></td> : null}
+                        {isColumnVisible('castList', 'contact') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.contact || '—'}</td> : null}
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', width: 74 }}>
                           <div style={{ display: 'flex', gap: 4 }}>
                             {row.rosterId ? <CompactIconButton label={`Edit ${row.name || 'cast'} profile`} icon="✎" onClick={() => openPersonDialog('cast', row.rosterId)} /> : null}
@@ -783,6 +893,14 @@ export default function CallsheetTab({ configureOpen = true }) {
                 subtitle="Profile-linked columns: Name, Department/Role, Contact. Day-only columns: Call time, Notes."
                 actions={
                   <div style={{ display: 'flex', gap: 6 }}>
+                    <SectionColumnConfigureControl
+                      sectionKey="crewList"
+                      sectionLabel="Crew List"
+                      columnConfig={callsheetColumnConfig?.crewList}
+                      onToggleColumn={handleToggleColumn}
+                      isOpen={openColumnSectionKey === 'crewList'}
+                      onToggleOpen={() => setOpenColumnSectionKey(prev => (prev === 'crewList' ? null : 'crewList'))}
+                    />
                     <CompactIconButton label="Add crew from roster" icon="+ Crew" onClick={() => setShowCrewPicker(prev => !prev)} />
                     <CompactIconButton label="Create crew profile" icon="＋New" onClick={() => openPersonDialog('crew', null)} />
                   </div>
@@ -802,30 +920,33 @@ export default function CallsheetTab({ configureOpen = true }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Name ↗', 'Department / Role ↗', 'Call time • day', 'Notes • day', 'Contact ↗', '⋯'].map(label => (
-                        <th key={label} style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</th>
-                      ))}
+                      {isColumnVisible('crewList', 'name') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Name ↗</th> : null}
+                      {isColumnVisible('crewList', 'role') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Department / Role ↗</th> : null}
+                      {isColumnVisible('crewList', 'callTime') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Call time • day</th> : null}
+                      {isColumnVisible('crewList', 'notes') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes • day</th> : null}
+                      {isColumnVisible('crewList', 'contact') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Contact ↗</th> : null}
+                      <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>⋯</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {crewRows.length === 0 && <tr><td colSpan={6} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No crew in Cast/Crew roster. Add crew there to populate this list.</td></tr>}
+                    {crewRows.length === 0 && <tr><td colSpan={visibleCounts.crewList} style={{ padding: 10, color: '#64748B', fontStyle: 'italic' }}>No crew in Cast/Crew roster. Add crew there to populate this list.</td></tr>}
                     {crewRows.map((row, idx) => (
                       <tr key={row.id} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
-                        <td
+                        {isColumnVisible('crewList', 'name') ? <td
                           style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', fontWeight: 700 }}
                           data-person-type={row.rosterId ? 'crew' : undefined}
                           data-person-id={row.rosterId || undefined}
                         >
                           {row.name}
-                        </td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.role || row.department || '—'}</td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>
+                        </td> : null}
+                        {isColumnVisible('crewList', 'role') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.role || row.department || '—'}</td> : null}
+                        {isColumnVisible('crewList', 'callTime') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>
                           <input value={row.callTime} onChange={(e) => onDayUpdate({ crew: updateRowValue(callsheet.crew, row.rosterId, row.id, { name: row.name, role: row.role, callTime: e.target.value }) })} placeholder={formatTime12(row.defaultCall)} style={{ width: 100, border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} />
-                        </td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>
+                        </td> : null}
+                        {isColumnVisible('crewList', 'notes') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>
                           <input value={row.notes} onChange={(e) => onDayUpdate({ crew: updateRowValue(callsheet.crew, row.rosterId, row.id, { name: row.name, role: row.role, notes: e.target.value }) })} style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: 4, padding: '4px 6px' }} />
-                        </td>
-                        <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.contact || '—'}</td>
+                        </td> : null}
+                        {isColumnVisible('crewList', 'contact') ? <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0' }}>{row.contact || '—'}</td> : null}
                         <td style={{ padding: '8px 6px', borderBottom: '1px solid #E2E8F0', width: 74 }}>
                           <div style={{ display: 'flex', gap: 4 }}>
                             {row.rosterId ? <CompactIconButton label={`Edit ${row.name || 'crew'} profile`} icon="✎" onClick={() => openPersonDialog('crew', row.rosterId)} /> : null}

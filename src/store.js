@@ -71,6 +71,69 @@ export const DEFAULT_CALLSHEET_SECTION_CONFIG = [
   { key: 'nextDayAdvance',    visible: true,  label: 'Next-Day Advance Notes' },
 ]
 
+export const CALLSHEET_COLUMN_DEFINITIONS = {
+  advancedSchedule: [
+    { key: 'sceneNumber', label: 'Scene #' },
+    { key: 'sluglineScene', label: 'Slugline / Scene' },
+    { key: 'location', label: 'Location' },
+    { key: 'intExt', label: 'I/E' },
+    { key: 'dayNight', label: 'D/N' },
+    { key: 'start', label: 'Start' },
+    { key: 'end', label: 'End' },
+    { key: 'pages', label: 'Pages' },
+    { key: 'shots', label: 'Shots' },
+    { key: 'notes', label: 'Notes' },
+  ],
+  castList: [
+    { key: 'actor', label: 'Actor' },
+    { key: 'character', label: 'Character' },
+    { key: 'sceneCount', label: 'SC(Day) Scenes' },
+    { key: 'pageCount', label: 'PG(Day) Pages' },
+    { key: 'pickupTime', label: 'Pickup - Day' },
+    { key: 'makeupCall', label: 'Makeup - Day' },
+    { key: 'setCall', label: 'Set - Day' },
+    { key: 'contact', label: 'Contact' },
+  ],
+  crewList: [
+    { key: 'name', label: 'Name' },
+    { key: 'role', label: 'Department / Role' },
+    { key: 'callTime', label: 'Call Time - Day' },
+    { key: 'notes', label: 'Notes - Day' },
+    { key: 'contact', label: 'Contact' },
+  ],
+}
+
+const CALLSHEET_PRIMARY_COLUMN_BY_SECTION = {
+  advancedSchedule: 'sluglineScene',
+  castList: 'actor',
+  crewList: 'name',
+}
+
+export const DEFAULT_CALLSHEET_COLUMN_CONFIG = Object.fromEntries(
+  Object.entries(CALLSHEET_COLUMN_DEFINITIONS).map(([sectionKey, columns]) => ([
+    sectionKey,
+    columns.map(column => ({
+      key: column.key,
+      visible: true,
+    })),
+  ]))
+)
+
+function normalizeCallsheetColumnConfig(config) {
+  const savedConfig = (typeof config === 'object' && config !== null) ? config : {}
+  return Object.fromEntries(
+    Object.entries(CALLSHEET_COLUMN_DEFINITIONS).map(([sectionKey, columns]) => {
+      const savedRows = Array.isArray(savedConfig[sectionKey]) ? savedConfig[sectionKey] : []
+      const visibleByKey = new Map(savedRows.map(row => [row?.key, !!row?.visible]))
+      const primaryKey = CALLSHEET_PRIMARY_COLUMN_BY_SECTION[sectionKey]
+      return [sectionKey, columns.map(column => ({
+        key: column.key,
+        visible: column.key === primaryKey ? true : (visibleByKey.has(column.key) ? visibleByKey.get(column.key) : true),
+      }))]
+    })
+  )
+}
+
 const DEFAULT_COLOR = '#4ade80'
 
 let shotCounter = 0
@@ -107,6 +170,7 @@ function getUndoableSnapshot(state) {
     shotlistColumnConfig: state.shotlistColumnConfig,
     scheduleColumnConfig: state.scheduleColumnConfig,
     callsheetSectionConfig: state.callsheetSectionConfig,
+    callsheetColumnConfig: state.callsheetColumnConfig,
     shotlistColumnWidths: state.shotlistColumnWidths,
     customColumns: state.customColumns,
     customDropdownOptions: state.customDropdownOptions,
@@ -414,6 +478,7 @@ const useStore = create((set, get) => ({
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
+  callsheetColumnConfig: DEFAULT_CALLSHEET_COLUMN_CONFIG,
   storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
 
   // Per-column width overrides for the shotlist table (key → px width).
@@ -1030,6 +1095,10 @@ const useStore = create((set, get) => ({
 
   setCallsheetSectionConfig: (config) => {
     set({ callsheetSectionConfig: config })
+    get()._scheduleAutoSave()
+  },
+  setCallsheetColumnConfig: (config) => {
+    set({ callsheetColumnConfig: normalizeCallsheetColumnConfig(config) })
     get()._scheduleAutoSave()
   },
   setCastCrewNotes: (notes) => {
@@ -1888,7 +1957,7 @@ const useStore = create((set, get) => ({
       projectName, projectEmoji, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
-      shotlistColumnWidths, callsheets, callsheetSectionConfig,
+      shotlistColumnWidths, callsheets, callsheetSectionConfig, callsheetColumnConfig,
       castRoster, crewRoster,
       castCrewNotes,
       scriptScenes, importedScripts, scriptSettings,
@@ -2004,6 +2073,7 @@ const useStore = create((set, get) => ({
       })),
       callsheets: callsheets || {},
       callsheetSectionConfig: callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG,
+      callsheetColumnConfig: normalizeCallsheetColumnConfig(callsheetColumnConfig),
       castRoster: (castRoster || []).map(normalizeCastEntry),
       crewRoster: (crewRoster || []).map(normalizeCrewEntry),
       castCrewNotes: castCrewNotes || '',
@@ -2387,6 +2457,7 @@ const useStore = create((set, get) => ({
         const newSections = DEFAULT_CALLSHEET_SECTION_CONFIG.filter(c => !savedKeys.has(c.key))
         return [...saved, ...newSections]
       })(),
+      callsheetColumnConfig: normalizeCallsheetColumnConfig(data.callsheetColumnConfig),
       // Script import state — default to empty for older project files
       scriptScenes: Array.isArray(data.scriptScenes)
         ? data.scriptScenes.map(s => deriveScriptSceneFromElements(
@@ -2537,6 +2608,8 @@ const useStore = create((set, get) => ({
       storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
       schedule: [],
       callsheets: {},
+      callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
+      callsheetColumnConfig: DEFAULT_CALLSHEET_COLUMN_CONFIG,
       castRoster: [],
       crewRoster: [],
       castCrewNotes: '',
