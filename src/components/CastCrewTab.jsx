@@ -32,7 +32,7 @@ function Circle({ status }) {
 
 function SectionShell({ title, subtitle, children }) {
   return (
-    <section className="border border-slate/15 rounded-md overflow-hidden bg-paper">
+    <section className="app-surface-card rounded-md overflow-hidden">
       <div className="px-4 py-2 border-b border-slate/10 bg-canvas-dark/40">
         <h3 className="text-xs font-semibold tracking-[0.1em] uppercase text-ink">{title}</h3>
         {subtitle ? <p className="text-xs text-slate mt-0.5">{subtitle}</p> : null}
@@ -129,7 +129,7 @@ export default function CastCrewTab() {
   return (
     <div
       ref={scrollRef}
-      className="h-full bg-canvas px-6 py-5 overflow-auto space-y-4"
+      className="h-full canvas-texture px-6 py-5 overflow-auto space-y-4"
       onScroll={(e) => setTabViewState('castcrew', { scrollTop: e.currentTarget.scrollTop })}
     >
       <div className="flex items-center justify-between gap-4 flex-wrap">

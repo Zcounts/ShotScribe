@@ -1488,6 +1488,7 @@ export default function ShotlistTab({ containerRef }) {
 
   return (
     <div
+      className="canvas-texture"
       ref={el => {
         scrollerRef.current = el
         if (containerRef) containerRef.current = el
@@ -1498,7 +1499,6 @@ export default function ShotlistTab({ containerRef }) {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        backgroundColor: c.pageBg,
       }}
     >
 
@@ -1676,7 +1676,9 @@ export default function ShotlistTab({ containerRef }) {
                   marginBottom: 14,
                   borderRadius: 8,
                   border: `1px solid ${highlightedSceneId === scene.id ? 'rgba(232,64,64,0.45)' : c.thickBorder}`,
-                  boxShadow: highlightedSceneId === scene.id ? '0 0 0 3px rgba(232,64,64,0.12)' : 'none',
+                  boxShadow: highlightedSceneId === scene.id
+                    ? 'var(--app-panel-shadow), 0 0 0 3px rgba(232,64,64,0.12)'
+                    : 'var(--app-panel-shadow)',
                   transition: 'box-shadow 0.25s, border-color 0.25s',
                   background: '#fff',
                   overflow: 'hidden',
