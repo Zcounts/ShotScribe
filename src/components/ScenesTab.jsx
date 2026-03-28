@@ -7,7 +7,6 @@ import SceneColorPicker from './SceneColorPicker'
 import ScenePropertiesPanel, { CharacterTagInput } from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 import SidebarPane from './SidebarPane'
-import ConfigureButton from './ConfigureButton'
 
 const COLUMN_OPTIONS = [1, 2, 3, 4]
 
@@ -19,7 +18,10 @@ const SORT_OPTIONS = [
   { value: 'slugline', label: 'Title / Slugline' },
 ]
 
-export default function ScenesTab() {
+export default function ScenesTab({
+  configureOpen = false,
+  onConfigureOpenChange = () => {},
+}) {
   const scriptScenes = useStore(s => s.scriptScenes)
   const importedScripts = useStore(s => s.importedScripts)
   const scenes = useStore(s => s.scenes)
@@ -40,7 +42,6 @@ export default function ScenesTab() {
   })
   const [sortBy, setSortBy] = useState(() => scenesViewState.sortBy || 'sceneNumber')
   const [sortDirection, setSortDirection] = useState(() => scenesViewState.sortDirection || 'asc')
-  const [configureOpen, setConfigureOpen] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [expandedIds, setExpandedIds] = useState({})
   const [editingSceneNumberId, setEditingSceneNumberId] = useState(null)
@@ -215,7 +216,7 @@ export default function ScenesTab() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setCtxMenu(null); setScriptCtxMenu(null); setConfigureOpen(false) }}>
+    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setCtxMenu(null); setScriptCtxMenu(null); onConfigureOpenChange(false) }}>
       <SidebarPane
         width={240}
         title={null}
@@ -262,7 +263,6 @@ export default function ScenesTab() {
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, position: 'sticky', top: 0, zIndex: 5 }}>
           <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            <ConfigureButton label="Configure" active={configureOpen} onClick={() => setConfigureOpen(v => !v)} />
             {configureOpen && (
               <div style={{ position: 'absolute', right: 0, marginTop: 6, width: 190, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, background: '#fff', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', padding: 10 }}>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 7 }}>Scene Layout</div>

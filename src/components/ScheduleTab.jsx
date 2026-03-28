@@ -46,7 +46,6 @@ import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import { SubTabNav } from './SubTabNav'
-import ConfigureButton from './ConfigureButton'
 
 // ── Time Utilities ────────────────────────────────────────────────────────────
 
@@ -3199,7 +3198,10 @@ function CalendarView({ schedule, scenes, isDark, onJumpToDay }) {
 
 // ── ScheduleTab (main) ────────────────────────────────────────────────────────
 
-export default function ScheduleTab() {
+export default function ScheduleTab({
+  configureOpen = false,
+  onConfigureOpenChange = () => {},
+}) {
   const schedule = useStore(s => s.schedule)
   const scenes = useStore(s => s.scenes)
   const theme = useStore(s => s.theme)
@@ -3248,22 +3250,21 @@ export default function ScheduleTab() {
     )
   }, [])
 
-  const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const configPanelRef = useRef(null)
   const [listActiveDayId, setListActiveDayId] = useState(scheduleViewState.listActiveDayId || null)
   const containerRef = useRef(null)
 
   // Close config panel when clicking outside
   useEffect(() => {
-    if (!configPanelOpen) return
+    if (!configureOpen) return
     const handler = (e) => {
       if (configPanelRef.current && !configPanelRef.current.contains(e.target)) {
-        setConfigPanelOpen(false)
+        onConfigureOpenChange(false)
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [configPanelOpen])
+  }, [configureOpen, onConfigureOpenChange])
 
   // ── DnD state ───────────────────────────────────────────────────────────────
 
@@ -3518,19 +3519,12 @@ export default function ScheduleTab() {
 
           {schedule.length > 0 && scheduleView === 'list' && (
             <>
-              {/* Configure Columns button */}
               <div ref={configPanelRef} style={{ position: 'relative' }}>
-                <ConfigureButton
-                  onClick={(e) => { e.stopPropagation(); setConfigPanelOpen(p => !p) }}
-                  active={configPanelOpen}
-                  title="Configure columns"
-                />
-
-                {configPanelOpen && (
+                {configureOpen && (
                   <ScheduleColumnConfigPanel
                     config={scheduleColumnConfig}
                     onChange={setScheduleColumnConfig}
-                    onClose={() => setConfigPanelOpen(false)}
+                    onClose={() => onConfigureOpenChange(false)}
                   />
                 )}
               </div>

@@ -16,7 +16,6 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
-import ConfigureButton from './ConfigureButton'
 import ScenePropertiesPanel from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 
@@ -1218,7 +1217,11 @@ function SortableShotRow({
 }
 
 // ── Main ShotlistTab ──────────────────────────────────────────────────────────
-export default function ShotlistTab({ containerRef }) {
+export default function ShotlistTab({
+  containerRef,
+  configureOpen = false,
+  onConfigureOpenChange = () => {},
+}) {
   const scenes                  = useStore(s => s.scenes)
   const scriptScenes            = useStore(s => s.scriptScenes)
   const schedule                = useStore(s => s.schedule)
@@ -1245,7 +1248,6 @@ export default function ShotlistTab({ containerRef }) {
   const setTabViewState = useStore(s => s.setTabViewState)
   const isDark = theme === 'dark'
 
-  const [configPanelOpen, setConfigPanelOpen] = useState(false)
   const [selectedDayId, setSelectedDayId] = useState(shotlistViewState.selectedDayId || null)
   const [activeNavSceneId, setActiveNavSceneId] = useState(shotlistViewState.activeNavSceneId || null)
   const [expandedSceneDetails, setExpandedSceneDetails] = useState(shotlistViewState.expandedSceneDetails || {})
@@ -1518,11 +1520,11 @@ export default function ShotlistTab({ containerRef }) {
 
   // Close config panel when clicking outside
   useEffect(() => {
-    if (!configPanelOpen) return
-    const handler = () => setConfigPanelOpen(false)
+    if (!configureOpen) return
+    const handler = () => onConfigureOpenChange(false)
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
-  }, [configPanelOpen])
+  }, [configureOpen, onConfigureOpenChange])
 
   return (
     <div
@@ -1560,18 +1562,12 @@ export default function ShotlistTab({ containerRef }) {
         zIndex: 20,
         flexShrink: 0,
       }}>
-        <ConfigureButton
-          onClick={(e) => { e.stopPropagation(); setConfigPanelOpen(p => !p) }}
-          active={configPanelOpen}
-          title="Configure columns"
-        />
-
-        {configPanelOpen && (
+        {configureOpen && (
           <ColumnConfigPanel
             config={shotlistColumnConfig || []}
             isDark={isDark}
             onChange={setShotlistColumnConfig}
-            onClose={() => setConfigPanelOpen(false)}
+            onClose={() => onConfigureOpenChange(false)}
             customColumns={customColumns}
             onAddCustomColumn={addCustomColumn}
             onRemoveCustomColumn={removeCustomColumn}
