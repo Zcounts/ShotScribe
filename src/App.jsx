@@ -36,6 +36,7 @@ import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import StoryboardConfigureSidebar from './components/StoryboardConfigureSidebar'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
+import { getShotLetter } from './store'
 import {
   resolveEntityTarget,
   resolvePersonEntityTarget,
@@ -147,13 +148,10 @@ function SceneSection({
 }) {
   const getShotsForScene = useStore(s => s.getShotsForScene)
   const addShot = useStore(s => s.addShot)
-  const reorderShots = useStore(s => s.reorderShots)
   const deleteScene = useStore(s => s.deleteScene)
   const scenes = useStore(s => s.scenes)
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
   const updateCanonicalStoryboardSceneMetadata = useStore(s => s.updateCanonicalStoryboardSceneMetadata)
-
-  const [activeId, setActiveId] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const canDelete = scenes.length > 1
@@ -172,39 +170,15 @@ function SceneSection({
     deleteScene(scene.id)
   }
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  )
-
   const shotsWithIds = getShotsForScene(scene.id)
   const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
   const canonicalSceneColor = canonical?.color || scene.color || null
   const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
   const pages = chunkArray(shotsWithIds, cardsPerPage)
-  const allShotIds = shotsWithIds.map(s => s.id)
-
-  const activeShot = activeId ? shotsWithIds.find(s => s.id === activeId) : null
-
-  const handleDragStart = useCallback((event) => {
-    setActiveId(event.active.id)
-  }, [])
-
-  const handleDragEnd = useCallback((event) => {
-    const { active, over } = event
-    setActiveId(null)
-    if (!over || active.id === over.id) return
-    reorderShots(scene.id, active.id, over.id)
-  }, [reorderShots, scene.id])
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={allShotIds} strategy={rectSortingStrategy}>
-        {pages.map((pageShots, pageIdx) => {
+    <>
+      {pages.map((pageShots, pageIdx) => {
           const globalPageNum = pageIndexOffset + pageIdx + 1
           const isContinuation = pageIdx > 0
           const isLastPage = pageIdx === pages.length - 1
@@ -268,8 +242,7 @@ function SceneSection({
               </div>
             </div>
           )
-        })}
-      </SortableContext>
+      })}
 
       {/* Confirmation dialog — shown when deleting a scene that has shots */}
       {showDeleteConfirm && (
@@ -309,19 +282,7 @@ function SceneSection({
         </div>
       )}
 
-      <DragOverlay>
-        {activeShot ? (
-          <div className="drag-overlay">
-            <ShotCard
-              shot={activeShot}
-              displayId={activeShot.displayId}
-              useDropdowns={useDropdowns}
-              sceneId={scene.id}
-            />
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+    </>
   )
 }
 
@@ -355,6 +316,7 @@ export default function App() {
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
   const getStoryboardScenes = useStore(s => s.getStoryboardScenes)
   const reorderStoryboardScenes = useStore(s => s.reorderStoryboardScenes)
+  const moveShotToScene = useStore(s => s.moveShotToScene)
   const storyboardDisplayConfig = useStore(s => s.storyboardDisplayConfig)
   const updateStoryboardDisplayConfig = useStore(s => s.updateStoryboardDisplayConfig)
 
@@ -378,6 +340,7 @@ export default function App() {
   const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
+  const [activeStoryboardShotId, setActiveStoryboardShotId] = useState(null)
   const storyboardScrollRef = useRef(null)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
@@ -388,6 +351,9 @@ export default function App() {
 
   // Reset refs array size on render so stale refs don't linger
   const storyboardScenes = getStoryboardScenes()
+  const storyboardSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
   const outlineSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   )
@@ -599,6 +565,33 @@ export default function App() {
       sceneColor: canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
     }))
   })
+
+  const storyboardShotsWithIds = storyboardScenes.flatMap((scene) => {
+    const sceneNumber = scenes.findIndex(candidate => candidate.id === scene.id) + 1
+    return (scene.shots || []).map((shot, shotIndex) => ({
+      ...shot,
+      sceneId: scene.id,
+      displayId: `${sceneNumber}${getShotLetter(shotIndex)}`,
+    }))
+  })
+  const allStoryboardShotIds = storyboardShotsWithIds.map(shot => shot.id)
+  const activeStoryboardShot = activeStoryboardShotId
+    ? storyboardShotsWithIds.find(shot => shot.id === activeStoryboardShotId) || null
+    : null
+
+  const handleStoryboardDragStart = useCallback((event) => {
+    setActiveStoryboardShotId(event.active?.id || null)
+  }, [])
+
+  const handleStoryboardDragEnd = useCallback((event) => {
+    const { active, over } = event
+    setActiveStoryboardShotId(null)
+    if (!over || active?.id === over?.id) return
+    const activeShot = storyboardShotsWithIds.find(shot => shot.id === active.id)
+    const overShot = storyboardShotsWithIds.find(shot => shot.id === over.id)
+    if (!activeShot || !overShot) return
+    moveShotToScene(active.id, overShot.sceneId, { beforeShotId: over.id })
+  }, [moveShotToScene, storyboardShotsWithIds])
 
   const handleOutlineSceneDragStart = useCallback((event) => {
     setActiveOutlineDragId(event.active?.id || null)
@@ -819,6 +812,14 @@ export default function App() {
                 </SidebarPane>
               </div>
             )}
+            <DndContext
+              sensors={storyboardSensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleStoryboardDragStart}
+              onDragEnd={handleStoryboardDragEnd}
+              onDragCancel={() => setActiveStoryboardShotId(null)}
+            >
+            <SortableContext items={allStoryboardShotIds} strategy={rectSortingStrategy}>
             <div className="pages-container" style={{ flex: 1 }}>
               {storyboardScenes.map((scene, sceneIdx) => (
                 <div
@@ -883,6 +884,21 @@ export default function App() {
               </button>
             </div>
             </div>
+            </SortableContext>
+            <DragOverlay>
+              {activeStoryboardShot ? (
+                <div className="drag-overlay">
+                  <ShotCard
+                    shot={activeStoryboardShot}
+                    displayId={activeStoryboardShot.displayId}
+                    useDropdowns={useDropdowns}
+                    sceneId={activeStoryboardShot.sceneId}
+                    storyboardDisplayConfig={storyboardDisplayConfig}
+                  />
+                </div>
+              ) : null}
+            </DragOverlay>
+            </DndContext>
           </div>
         </div>
       ) : activeTab === 'shotlist' ? (

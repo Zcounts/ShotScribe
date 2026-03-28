@@ -1441,6 +1441,7 @@ const useStore = create((set, get) => ({
       color: DEFAULT_COLOR,
       intOrExt: scene.intOrExt || '',
       dayNight: scene.dayNight || '',
+      linkedSceneId: scene.linkedScriptSceneId || null,
     })
     set(state => ({
       scenes: state.scenes.map(s =>
@@ -1511,6 +1512,88 @@ const useStore = create((set, get) => ({
       }),
     }))
     get()._scheduleAutoSave()
+  },
+
+  moveShotToScene: (shotId, targetSceneId, options = {}) => {
+    const { beforeShotId = null } = options || {}
+    set(state => {
+      const sourceSceneIndex = state.scenes.findIndex(scene => scene.shots.some(shot => shot.id === shotId))
+      const targetSceneIndex = state.scenes.findIndex(scene => scene.id === targetSceneId)
+      if (sourceSceneIndex === -1 || targetSceneIndex === -1) return state
+
+      const sourceScene = state.scenes[sourceSceneIndex]
+      const targetScene = state.scenes[targetSceneIndex]
+      const sourceShotIndex = sourceScene.shots.findIndex(shot => shot.id === shotId)
+      if (sourceShotIndex === -1) return state
+
+      const shotToMove = {
+        ...sourceScene.shots[sourceShotIndex],
+        linkedSceneId: targetScene.linkedScriptSceneId || null,
+      }
+
+      const nextScenes = state.scenes.map(scene => ({ ...scene, shots: [...scene.shots] }))
+      nextScenes[sourceSceneIndex].shots.splice(sourceShotIndex, 1)
+
+      const destinationShots = nextScenes[targetSceneIndex].shots
+      const destinationIndex = beforeShotId
+        ? destinationShots.findIndex(shot => shot.id === beforeShotId)
+        : -1
+      if (destinationIndex === -1) {
+        destinationShots.push(shotToMove)
+      } else {
+        destinationShots.splice(destinationIndex, 0, shotToMove)
+      }
+
+      return { scenes: nextScenes }
+    })
+    get()._scheduleAutoSave()
+  },
+
+  moveShotToScriptScene: (shotId, targetScriptSceneId) => {
+    if (!targetScriptSceneId) return null
+    let destinationSceneId = null
+
+    set(state => {
+      const sourceSceneIndex = state.scenes.findIndex(scene => scene.shots.some(shot => shot.id === shotId))
+      if (sourceSceneIndex === -1) return state
+      const sourceScene = state.scenes[sourceSceneIndex]
+      const shotIndex = sourceScene.shots.findIndex(shot => shot.id === shotId)
+      if (shotIndex === -1) return state
+      const shot = sourceScene.shots[shotIndex]
+
+      const scenesWithScriptLink = state.scenes
+        .map((scene, index) => ({ scene, index }))
+        .filter(entry => entry.scene.linkedScriptSceneId === targetScriptSceneId)
+      const targetSceneEntry = scenesWithScriptLink[scenesWithScriptLink.length - 1] || null
+
+      const nextScenes = state.scenes.map(scene => ({ ...scene, shots: [...scene.shots] }))
+      nextScenes[sourceSceneIndex].shots.splice(shotIndex, 1)
+
+      const movedShot = { ...shot, linkedSceneId: targetScriptSceneId }
+      if (targetSceneEntry) {
+        nextScenes[targetSceneEntry.index].shots.push(movedShot)
+        destinationSceneId = targetSceneEntry.scene.id
+        return { scenes: nextScenes }
+      }
+
+      const scriptScene = state.scriptScenes.find(scene => scene.id === targetScriptSceneId) || null
+      const newScene = createScene({
+        sceneLabel: scriptScene?.sceneNumber ? `SCENE ${scriptScene.sceneNumber}` : `SCENE ${nextScenes.length + 1}`,
+        linkedScriptSceneId: targetScriptSceneId,
+        location: scriptScene?.location || 'LOCATION',
+        slugline: scriptScene?.slugline || '',
+        intOrExt: scriptScene?.intExt || 'INT',
+        dayNight: scriptScene?.dayNight || 'DAY',
+        shots: [movedShot],
+      })
+      destinationSceneId = newScene.id
+      return { scenes: [...nextScenes, newScene] }
+    })
+
+    if (destinationSceneId) {
+      get()._scheduleAutoSave()
+    }
+    return destinationSceneId
   },
 
   updateShot: (shotId, updates) => {
@@ -2159,6 +2242,14 @@ const useStore = create((set, get) => ({
         shots: (data.shots || []).map(s => mapShot(s, data.intOrExt, data.dayNight)),
       })]
     }
+
+    scenes = scenes.map(scene => ({
+      ...scene,
+      shots: (scene.shots || []).map(shot => ({
+        ...shot,
+        linkedSceneId: scene.linkedScriptSceneId || shot.linkedSceneId || null,
+      })),
+    }))
 
     const loadedSchedule = Array.isArray(data.schedule)
       ? data.schedule.map(day => ({

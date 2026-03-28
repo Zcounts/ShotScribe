@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useMemo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
@@ -27,220 +27,6 @@ function sanitizeNumericInput(value) {
   const integerPart = cleaned.slice(0, firstDot + 1)
   const decimalPart = cleaned.slice(firstDot + 1).replace(/\./g, '')
   return `${integerPart}${decimalPart}`
-}
-
-// Small scene link badge + picker for linking a shot to a script scene
-function SceneLinkBadge({ shot }) {
-  const scriptScenes = useStore(s => s.scriptScenes)
-  const linkShotToScene = useStore(s => s.linkShotToScene)
-  const requestScriptFocus = useStore(s => s.requestScriptFocus)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const [activeIndex, setActiveIndex] = useState(0)
-  const pickerRef = useRef(null)
-
-  const linked = shot.linkedSceneId
-    ? scriptScenes.find(s => s.id === shot.linkedSceneId)
-    : null
-
-  const isStale = shot.linkedSceneId && !linked
-  const isDialogueLinked = !!(linked && shot.linkedDialogueLine)
-  const filteredScenes = scriptScenes.filter(ss => {
-    const q = search.trim().toLowerCase()
-    if (!q) return true
-    return (`${ss.sceneNumber || ''}`.toLowerCase().includes(q)
-      || `${ss.location || ''}`.toLowerCase().includes(q)
-      || (ss.characters || []).join(' ').toLowerCase().includes(q))
-  })
-
-  useEffect(() => {
-    if (!pickerOpen) return
-    const handlePointerDown = (event) => {
-      if (!pickerRef.current?.contains(event.target)) {
-        setPickerOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
-  }, [pickerOpen])
-
-  useEffect(() => {
-    const selectedIndex = filteredScenes.findIndex(ss => ss.id === shot.linkedSceneId)
-    setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0)
-  }, [filteredScenes, shot.linkedSceneId])
-
-  const handlePickerKeyDown = (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      setPickerOpen(false)
-      return
-    }
-    if (!filteredScenes.length) return
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActiveIndex((current) => Math.min(filteredScenes.length - 1, current + 1))
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex((current) => Math.max(0, current - 1))
-      return
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      const activeScene = filteredScenes[activeIndex]
-      if (!activeScene) return
-      linkShotToScene(shot.id, activeScene.id)
-      setPickerOpen(false)
-    }
-  }
-
-  if (scriptScenes.length === 0) return null
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <button
-        onPointerDown={e => e.stopPropagation()}
-        onClick={e => {
-          e.stopPropagation()
-          if (isDialogueLinked) {
-            requestScriptFocus(linked.id, shot.id)
-            return
-          }
-          setPickerOpen(!pickerOpen)
-        }}
-        title={isDialogueLinked
-          ? (shot.linkedDialogueLine || '').slice(0, 60)
-          : linked ? `Linked to SC ${linked.sceneNumber} — click to change` : 'Link to scene'}
-        style={{
-          background: linked
-            ? (linked.color ? linked.color + '30' : 'rgba(59,130,246,0.15)')
-            : 'transparent',
-          border: linked
-            ? `1px solid ${linked.color || 'rgba(59,130,246,0.4)'}`
-            : isStale
-              ? '1px dashed rgba(248,113,113,0.5)'
-              : '1px dashed rgba(128,128,128,0.3)',
-          borderRadius: 3,
-          padding: '1px 5px',
-          cursor: 'pointer',
-          fontSize: 9,
-          fontFamily: 'monospace',
-          fontWeight: 700,
-          color: linked
-            ? (linked.color || '#93c5fd')
-            : isStale ? '#f87171' : '#666',
-          lineHeight: 1.4,
-          display: 'inline-flex', alignItems: 'center', gap: 2,
-          flexShrink: 0,
-        }}
-      >
-        {linked
-          ? `SC ${linked.sceneNumber}${shot.linkedDialogueLine ? ' 🔖' : ''}`
-          : isStale ? '⚠' : '⛓'}
-      </button>
-
-      {pickerOpen && (
-        <div
-          ref={pickerRef}
-          onPointerDown={e => e.stopPropagation()}
-          onKeyDown={handlePickerKeyDown}
-          style={{
-            position: 'absolute', top: 22, right: 0, zIndex: 80,
-            background: '#FAF8F4', border: '1px solid rgba(74,85,104,0.3)', borderRadius: 10,
-            boxShadow: '0 18px 38px rgba(0,0,0,0.3)',
-            width: 470,
-            maxWidth: 'min(470px, 70vw)',
-            maxHeight: 460,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ padding: 10, borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#F1EDE5' }}>
-            <input
-              autoFocus
-              placeholder="Search by number, location, or cast..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                width: '100%',
-                border: '1px solid rgba(74,85,104,0.35)',
-                background: '#FAF8F4',
-                color: '#1A1A1A',
-                fontSize: 12,
-                padding: '8px 10px',
-                borderRadius: 6,
-                outline: 'none',
-              }}
-            />
-          </div>
-          <div style={{ padding: 8, borderBottom: linked ? '1px solid rgba(74,85,104,0.18)' : 'none' }}>
-            {linked && (
-              <button
-                onClick={() => { linkShotToScene(shot.id, null); setPickerOpen(false) }}
-                style={{
-                  width: '100%', textAlign: 'left', padding: '8px 10px',
-                  background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.26)', cursor: 'pointer',
-                  fontSize: 11, fontWeight: 600, color: '#b42323', borderRadius: 6,
-                }}
-              >
-                Unlink scene
-              </button>
-            )}
-          </div>
-
-          <div style={{ overflowY: 'auto', padding: 8, minHeight: 220 }}>
-            {filteredScenes.map((ss, idx) => {
-              const isSelected = ss.id === shot.linkedSceneId
-              const isActive = idx === activeIndex
-              return (
-                <button
-                  key={ss.id}
-                  onClick={() => { linkShotToScene(shot.id, ss.id); setPickerOpen(false) }}
-                  onMouseEnter={() => setActiveIndex(idx)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '10px 12px',
-                    marginBottom: 6,
-                    background: isSelected
-                      ? 'rgba(82,101,224,0.16)'
-                      : isActive
-                        ? 'rgba(74,85,104,0.1)'
-                        : '#FAF8F4',
-                    border: `1px solid ${isSelected ? 'rgba(82,101,224,0.48)' : isActive ? 'rgba(74,85,104,0.35)' : 'rgba(74,85,104,0.2)'}`,
-                    cursor: 'pointer',
-                    borderRadius: 8,
-                    display: 'grid',
-                    gap: 4,
-                    color: '#2C2C2E',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {ss.color && (
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
-                    )}
-                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#4A5568' }}>SC {ss.sceneNumber || '—'}</span>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A' }}>{ss.slugline || ss.location || 'Untitled scene'}</div>
-                  <div style={{ fontSize: 11, color: '#718096', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {[ss.location, (ss.characters || []).length > 0 ? (ss.characters || []).join(', ') : null].filter(Boolean).join(' · ') || 'No additional metadata'}
-                  </div>
-                </button>
-              )
-            })}
-            {filteredScenes.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#718096', padding: '28px 8px', fontSize: 12 }}>
-                No scenes match this search.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
 }
 
 export default function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
@@ -317,11 +103,11 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
 
   const timeMetadataColumns = useMemo(
     () => [
+      visibleInfo.shotAspectRatio !== false ? { key: 'shotAspectRatio', label: 'ASPECT RATIO' } : null,
       visibleInfo.setupTime !== false ? { key: 'setupTime', label: 'SETUP TIME' } : null,
       visibleInfo.shotTime !== false ? { key: 'shotTime', label: 'SHOT TIME' } : null,
-      visibleInfo.shotAspectRatio !== false ? { key: 'shotAspectRatio', label: 'ASPECT RATIO' } : null,
     ].filter(Boolean),
-    [visibleInfo.setupTime, visibleInfo.shotTime, visibleInfo.shotAspectRatio]
+    [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
   )
 
   return (
@@ -389,8 +175,6 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
           />
         )}
 
-        {/* Scene link badge — only when script scenes exist */}
-        <SceneLinkBadge shot={shot} />
       </div>
 
       {/* Image Area */}
