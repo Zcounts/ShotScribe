@@ -43,4 +43,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   printToPDF: (htmlContent) =>
     ipcRenderer.invoke('dialog:print-to-pdf', { htmlContent }),
+
+  openExternal: (url) =>
+    ipcRenderer.invoke('shell:open-external', { url }),
+
+  revealFile: (filePath) =>
+    ipcRenderer.invoke('shell:reveal-file', { filePath }),
+
+  copyText: (text) =>
+    ipcRenderer.invoke('clipboard:write-text', { text }),
 })

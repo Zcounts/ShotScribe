@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, clipboard } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -266,5 +266,32 @@ ipcMain.handle('dialog:print-to-pdf', async (_event, { htmlContent }) => {
     if (tempFile) {
       try { fs.unlinkSync(tempFile) } catch { /* ignore cleanup errors */ }
     }
+  }
+})
+
+ipcMain.handle('shell:open-external', async (_event, { url }) => {
+  try {
+    await shell.openExternal(url)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('shell:reveal-file', async (_event, { filePath }) => {
+  try {
+    shell.showItemInFolder(filePath)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('clipboard:write-text', async (_event, { text }) => {
+  try {
+    clipboard.writeText(String(text || ''))
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err.message }
   }
 })

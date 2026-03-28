@@ -2051,7 +2051,7 @@ ${bodyHtml}
 
 // ── Electron path: webContents.printToPDF() ───────────────────────────────────
 
-async function exportViaPrint(htmlContent, projectName, suffix = '') {
+async function exportViaPrint(htmlContent, projectName, suffix = '', explicitFileName = '') {
   console.log(`[PDF Export] Starting printToPDF — ${(htmlContent.length / 1024).toFixed(0)}KB`)
 
   let result
@@ -2071,10 +2071,16 @@ async function exportViaPrint(htmlContent, projectName, suffix = '') {
   const base = projectName
     ? projectName.replace(/[^a-z0-9]/gi, '_')
     : 'export'
-  const fileName = suffix ? `${base}_${suffix}.pdf` : `${base}.pdf`
+  const fileName = explicitFileName || (suffix ? `${base}_${suffix}.pdf` : `${base}.pdf`)
 
-  await window.electronAPI.savePDF(fileName, buffer.buffer)
+  const saveResult = await window.electronAPI.savePDF(fileName, buffer.buffer)
+  if (!saveResult?.success) {
+    if (saveResult?.error) throw new Error(saveResult.error)
+    console.log('[PDF Export] Save cancelled.')
+    return saveResult
+  }
   console.log('[PDF Export] Saved successfully.')
+  return saveResult
 }
 
 // ── Browser fallback path: html2canvas ────────────────────────────────────────
@@ -2426,6 +2432,39 @@ export async function exportCallsheetPDF(projectName) {
     console.error('[PDF Export] Callsheet export failed:', err)
     _handleExportError(err)
   }
+}
+
+function sanitizeExportFilename(name) {
+  return String(name || '')
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export async function exportSingleDayCallsheetPDF({
+  dayIdx,
+  projectName,
+  dayNumber,
+  shootDate,
+  explicitFileName,
+}) {
+  const html = buildCallsheetPrintHtml([dayIdx])
+  const fallbackName = `${projectName || 'Untitled Project'} - Callsheet - Day ${dayNumber || (dayIdx + 1)} - ${shootDate || 'TBD'}.pdf`
+  const resolvedFileName = sanitizeExportFilename(explicitFileName || fallbackName) || `Callsheet-Day-${dayIdx + 1}.pdf`
+
+  if (window.electronAPI?.printToPDF) {
+    const saveResult = await exportViaPrint(html, projectName, '', resolvedFileName)
+    return { filePath: saveResult?.filePath || '', fileName: resolvedFileName }
+  }
+
+  const win = window.open('', '_blank', 'width=900,height=700')
+  if (!win) {
+    throw new Error('Unable to open print window. Please allow popups and retry.')
+  }
+  win.document.write(html)
+  win.document.close()
+  setTimeout(() => { win.focus(); win.print() }, 500)
+  return { filePath: '', fileName: resolvedFileName }
 }
 
 /** @deprecated Use exportStoryboardPDF or exportShotlistPDF directly */
