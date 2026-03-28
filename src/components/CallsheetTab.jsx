@@ -35,10 +35,10 @@ function formatMinuteOfDay(totalMins) {
 }
 
 function Card({ title, children, tone = 'default' }) {
-  const bg = tone === 'alert' ? '#FFF5F5' : '#FFFFFF'
+  const bg = tone === 'alert' ? '#FFF5F5' : '#FAF8F4'
   const border = tone === 'alert' ? '1px solid #FECACA' : '1px solid #E2E8F0'
   return (
-    <section style={{ background: bg, border, borderRadius: 10, overflow: 'hidden' }}>
+    <section style={{ background: bg, border, borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--app-panel-shadow)' }}>
       <header style={{ padding: '9px 12px', borderBottom: '1px solid #EEF2F7', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: '#475569' }}>
         {title}
       </header>
@@ -148,7 +148,7 @@ export default function CallsheetTab() {
   const dayTabs = schedule.map((day, idx) => ({ id: day.id, label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}` }))
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#E2E8F0' }}>
+    <div className="canvas-texture" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <DayTabBar days={dayTabs} activeDay={activeDay.id} onSelect={setSelectedDayId} />
       <div style={{ borderBottom: '1px solid #CBD5E1', background: '#0F172A', padding: '6px 14px', display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ color: '#94A3B8', fontSize: 11 }}>Callsheet syncs from Schedule, Script/Scenes, Shotlist, and Cast/Crew.</span>
@@ -174,7 +174,7 @@ export default function CallsheetTab() {
             </Card>
           )}
 
-          <header style={{ background: '#0B1220', color: '#F8FAFC', borderRadius: 10, padding: 16, display: 'grid', gap: 14 }}>
+          <header style={{ background: '#0B1220', color: '#F8FAFC', borderRadius: 10, padding: 16, display: 'grid', gap: 14, boxShadow: 'var(--app-panel-shadow)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
               <div>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8', fontWeight: 700 }}>Production Callsheet</div>

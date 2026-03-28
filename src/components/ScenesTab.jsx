@@ -295,7 +295,7 @@ export default function ScenesTab() {
           const expanded = !!expandedIds[scene.id]
           const selected = selectedSceneIds.includes(scene.id)
           return (
-            <div key={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ border: '1px solid rgba(74,85,104,0.15)', borderRadius: 6, background: '#FAF8F4' }}>
+            <div className="app-surface-card" key={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, scene }) }} style={{ borderRadius: 6 }}>
               <div
                 role="button"
                 tabIndex={0}

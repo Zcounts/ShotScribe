@@ -779,7 +779,7 @@ export default function App() {
           </div>
         </div>
       ) : activeTab === 'shotlist' ? (
-        <div className="flex-1 flex flex-col overflow-auto">
+        <div className="flex-1 flex flex-col overflow-auto canvas-texture">
           <ShotlistTab key={`shotlist-${documentSession}`} containerRef={shotlistRef} />
         </div>
       ) : activeTab === 'scenes' ? (
@@ -795,11 +795,11 @@ export default function App() {
           <ScheduleTab key={`schedule-${documentSession}`} />
         </div>
       ) : activeTab === 'callsheet' ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden canvas-texture">
           <CallsheetTab key={`callsheet-${documentSession}`} />
         </div>
       ) : activeTab === 'castcrew' ? (
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden canvas-texture">
           <CastCrewTab key={`castcrew-${documentSession}`} />
         </div>
       ) : null}

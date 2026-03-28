@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --app-workspace-bg-base: #F5F2EC;
+    --app-workspace-grid-line: rgba(74,85,104,0.06);
+    --app-panel-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08);
+    --app-panel-border: 1px solid rgba(74,85,104,0.12);
+    --app-panel-bg: #FAF8F4;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -21,11 +29,21 @@
 @layer components {
   /* ── Canvas texture — cutting mat / graph paper ─────────────────────────── */
   .canvas-texture {
-    background-color: #F5F2EC;
+    background-color: var(--app-workspace-bg-base);
     background-image:
-      linear-gradient(rgba(74,85,104,0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(74,85,104,0.06) 1px, transparent 1px);
+      linear-gradient(var(--app-workspace-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--app-workspace-grid-line) 1px, transparent 1px);
     background-size: 20px 20px;
+  }
+
+  .app-panel-shadow {
+    box-shadow: var(--app-panel-shadow);
+  }
+
+  .app-surface-card {
+    background: var(--app-panel-bg);
+    border: var(--app-panel-border);
+    box-shadow: var(--app-panel-shadow);
   }
 
   /* Pages container — centres all page-document divs vertically */
@@ -42,10 +60,10 @@
     color: #1A1A1A;
     width: 100%;
     max-width: 1400px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08);
+    box-shadow: var(--app-panel-shadow);
     margin-bottom: 32px;
     position: relative;
-    border: 1px solid rgba(74,85,104,0.12);
+    border: var(--app-panel-border);
     border-radius: 2px;
   }
 

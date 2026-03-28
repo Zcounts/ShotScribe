@@ -941,11 +941,11 @@ export default function ScriptTab() {
         onScroll={(e) => {
           setTabViewState('script', { scrollTop: e.currentTarget.scrollTop })
         }}
-        style={{ flex: 1, overflowY: 'auto', padding: '8px 12px 16px', position: 'relative', background: '#eef2f7' }}
+        style={{ flex: 1, overflowY: 'auto', padding: '8px 12px 16px', position: 'relative' }}
       >
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', position: 'relative' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: `${pageSettings.widthPx}px`, minHeight: EDIT_BAR_HEIGHT_PX, border: '1px solid rgba(148,163,184,0.45)', borderRadius: 6, background: 'rgba(248,250,252,0.95)', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, boxSizing: 'border-box' }}>
+            <div className="app-surface-card" style={{ width: `${pageSettings.widthPx}px`, minHeight: EDIT_BAR_HEIGHT_PX, borderRadius: 6, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, boxSizing: 'border-box' }}>
               <button
                 className={`toolbar-btn script-edit-toggle ${isEditMode ? 'active' : ''}`}
                 onClick={() => setIsEditMode(value => !value)}
@@ -982,13 +982,13 @@ export default function ScriptTab() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {pagedScript.map((page) => (
                 <div
+                  className="app-panel-shadow"
                   key={page.id}
                   style={{
                     width: `${pageSettings.widthPx}px`,
                     height: `${pageSettings.heightPx}px`,
                     background: '#fff',
                     border: '1px solid rgba(148,163,184,0.42)',
-                    boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
                     fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily,
                     fontSize: screenplayFontSizePx,
                     lineHeight: `${screenplayLineHeightPx}px`,

@@ -1729,6 +1729,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
         borderRadius: 6,
         overflow: 'visible',
         background: bg,
+        boxShadow: 'var(--app-panel-shadow)',
         marginBottom: 16,
         position: 'relative',
       }}
@@ -3452,7 +3453,7 @@ export default function ScheduleTab() {
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full overflow-y-auto bg-canvas"
+      className="flex flex-col h-full overflow-y-auto canvas-texture"
       onScroll={(e) => setTabViewState('schedule', { scrollTop: e.currentTarget.scrollTop })}
     >
       <div className="sticky top-0 z-40 px-6 py-3 border-b border-slate/10 bg-canvas/95 backdrop-blur-sm">
