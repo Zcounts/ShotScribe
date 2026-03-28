@@ -2,6 +2,7 @@ export const STORYBOARD_INFO_FIELDS = [
   { key: 'notes', label: 'Notes' },
   { key: 'setupTime', label: 'Setup Time' },
   { key: 'shotTime', label: 'Shot Time' },
+  { key: 'shotAspectRatio', label: 'Aspect Ratio' },
   { key: 'camera', label: 'Camera' },
   { key: 'lens', label: 'Lens' },
   { key: 'size', label: 'Size' },

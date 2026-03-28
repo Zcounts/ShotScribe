@@ -9,6 +9,13 @@ const ASPECT_RATIO_OPTIONS = [
   { value: '2.39:1', label: '2.39:1 (Scope)' },
 ]
 
+const VISIBLE_INFO_GROUPS = [
+  { title: 'Text', keys: ['notes'] },
+  { title: 'Time', keys: ['setupTime', 'shotTime'] },
+  { title: 'Camera', keys: ['camera', 'lens'] },
+  { title: 'Shot Metadata', keys: ['size', 'type', 'move', 'equip', 'shotAspectRatio'] },
+]
+
 function Section({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -56,6 +63,10 @@ export default function StoryboardConfigureSidebar({
     () => STORYBOARD_INFO_FIELDS.filter(field => visibleInfo[field.key] !== false).length,
     [visibleInfo]
   )
+  const visibleLabelByKey = useMemo(
+    () => Object.fromEntries(STORYBOARD_INFO_FIELDS.map(field => [field.key, field.label])),
+    []
+  )
 
   return (
     <aside
@@ -83,6 +94,9 @@ export default function StoryboardConfigureSidebar({
       <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#1C1C1E' }}>
         <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A0AEC0', fontWeight: 700 }}>Storyboard</div>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#FAF8F4', marginTop: 2 }}>Configure</div>
+        <div style={{ marginTop: 6, fontSize: 11, color: '#D6D3CD' }}>
+          {selectedAspect} layout · {visibleCount} fields visible
+        </div>
       </div>
 
       <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gap: 10 }}>
@@ -122,19 +136,25 @@ export default function StoryboardConfigureSidebar({
         </Section>
 
         <Section title="Visible Info">
-          <div style={{ fontSize: 11, color: '#718096', marginBottom: 8 }}>
-            {visibleCount} of {STORYBOARD_INFO_FIELDS.length} fields visible
-          </div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            {STORYBOARD_INFO_FIELDS.map((field) => (
-              <label key={field.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12, color: '#2C2C2E', padding: '4px 0' }}>
-                <span>{field.label}</span>
-                <input
-                  type="checkbox"
-                  checked={visibleInfo[field.key] !== false}
-                  onChange={(event) => onVisibleFieldToggle(field.key, event.target.checked)}
-                />
-              </label>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {VISIBLE_INFO_GROUPS.map(group => (
+              <div key={group.title} style={{ border: '1px solid rgba(74,85,104,0.14)', borderRadius: 6, padding: '8px 10px', background: '#fffdf9' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4A5568', marginBottom: 6 }}>
+                  {group.title}
+                </div>
+                <div style={{ display: 'grid', gap: 5 }}>
+                  {group.keys.map((fieldKey) => (
+                    <label key={fieldKey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12, color: '#2C2C2E', padding: '2px 0' }}>
+                      <span>{visibleLabelByKey[fieldKey] || fieldKey}</span>
+                      <input
+                        type="checkbox"
+                        checked={visibleInfo[fieldKey] !== false}
+                        onChange={(event) => onVisibleFieldToggle(fieldKey, event.target.checked)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </Section>
