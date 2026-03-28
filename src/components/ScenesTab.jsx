@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react'
 import useStore from '../store'
-import { computeConfidence } from '../utils/scriptParser'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 import ImportScriptModal from './ImportScriptModal'
 import SceneColorPicker from './SceneColorPicker'
@@ -8,18 +7,44 @@ import ScenePropertiesPanel, { CharacterTagInput } from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 import SidebarPane from './SidebarPane'
 
-const COLUMN_OPTIONS = [1, 2, 3, 4]
+const VIEW_MODES = [
+  { value: 'compactGrid', label: 'Compact Grid' },
+  { value: 'visualGrid', label: 'Visual Grid' },
+  { value: 'productionList', label: 'Production List' },
+]
+
+const COLUMN_OPTIONS_BY_MODE = {
+  compactGrid: [1, 2, 3, 4],
+  visualGrid: [1, 2, 3],
+}
 
 const SORT_OPTIONS = [
   { value: 'sceneNumber', label: 'Scene Number' },
-  { value: 'pageCount', label: 'Estimated Page Count' },
-  { value: 'shotCount', label: 'Shot Count' },
+  { value: 'scriptOrder', label: 'Script Order' },
+  { value: 'slugline', label: 'Slugline / Title' },
   { value: 'location', label: 'Location' },
-  { value: 'slugline', label: 'Title / Slugline' },
+  { value: 'shotCount', label: 'Shot Count' },
+  { value: 'pageCount', label: 'Page Count' },
+  { value: 'intExt', label: 'INT / EXT' },
+  { value: 'dayNight', label: 'DAY / NIGHT' },
+]
+
+const GROUP_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'location', label: 'Location' },
+  { value: 'time', label: 'INT/EXT + DAY/NIGHT' },
+  { value: 'importSource', label: 'Imported Script' },
+]
+
+const METADATA_TOGGLE_OPTIONS = [
+  { key: 'showLocation', label: 'Show location' },
+  { key: 'showIntExtDayNight', label: 'Show INT/EXT + DAY/NIGHT' },
+  { key: 'showCastCount', label: 'Show cast count' },
+  { key: 'showScheduleBadge', label: 'Show schedule badge' },
+  { key: 'showStoryboardThumb', label: 'Show storyboard thumbnail' },
 ]
 
 export default function ScenesTab({
-  configureOpen = false,
   onConfigureOpenChange = () => {},
 }) {
   const scriptScenes = useStore(s => s.scriptScenes)
@@ -34,14 +59,30 @@ export default function ScenesTab({
   const scenesViewState = useStore(s => s.tabViewState?.scenes || {})
   const setTabViewState = useStore(s => s.setTabViewState)
   const setActiveTab = useStore(s => s.setActiveTab)
+  const schedule = useStore(s => s.schedule)
 
   const [activeScript, setActiveScript] = useState(scenesViewState.activeScript ?? null)
+  const [viewMode, setViewMode] = useState(() => scenesViewState.sceneViewMode || 'compactGrid')
   const [columnCount, setColumnCount] = useState(() => {
-    const value = Number(scenesViewState.columnCount)
-    return COLUMN_OPTIONS.includes(value) ? value : 1
+    const value = Number(scenesViewState.sceneColumnCount ?? scenesViewState.columnCount)
+    const allowed = COLUMN_OPTIONS_BY_MODE[scenesViewState.sceneViewMode || 'compactGrid'] || COLUMN_OPTIONS_BY_MODE.compactGrid
+    return allowed.includes(value) ? value : allowed[allowed.length - 1]
   })
   const [sortBy, setSortBy] = useState(() => scenesViewState.sortBy || 'sceneNumber')
   const [sortDirection, setSortDirection] = useState(() => scenesViewState.sortDirection || 'asc')
+  const [groupBy, setGroupBy] = useState(() => scenesViewState.groupBy || 'none')
+  const [metadataVisibility, setMetadataVisibility] = useState(() => ({
+    showLocation: scenesViewState.metadataVisibility?.showLocation ?? true,
+    showIntExtDayNight: scenesViewState.metadataVisibility?.showIntExtDayNight ?? true,
+    showCastCount: scenesViewState.metadataVisibility?.showCastCount ?? true,
+    showScheduleBadge: scenesViewState.metadataVisibility?.showScheduleBadge ?? true,
+    showStoryboardThumb: scenesViewState.metadataVisibility?.showStoryboardThumb ?? true,
+  }))
+  const [panelCollapsed, setPanelCollapsed] = useState(() => ({
+    viewOptions: scenesViewState.sidebarPanelCollapsed?.viewOptions ?? false,
+    sceneOrganization: scenesViewState.sidebarPanelCollapsed?.sceneOrganization ?? false,
+    importedScripts: scenesViewState.sidebarPanelCollapsed?.importedScripts ?? false,
+  }))
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [expandedIds, setExpandedIds] = useState({})
   const [editingSceneNumberId, setEditingSceneNumberId] = useState(null)
@@ -67,6 +108,31 @@ export default function ScenesTab({
   }, [scenes])
 
   const pagination = useMemo(() => estimateScreenplayPagination(scriptScenes), [scriptScenes])
+  const scriptOrderMap = useMemo(() => {
+    const map = {}
+    scriptScenes.forEach((scene, idx) => { map[scene.id] = idx })
+    return map
+  }, [scriptScenes])
+
+  const scheduledDayCountByScene = useMemo(() => {
+    const shotIdToSceneId = {}
+    scenes.forEach(scene => {
+      scene.shots.forEach(shot => {
+        shotIdToSceneId[shot.id] = shot.linkedSceneId || null
+      })
+    })
+    const perSceneDays = {}
+    ;(schedule || []).forEach(day => {
+      ;(day.blocks || []).forEach(block => {
+        if (block.type !== 'shot' || !block.shotId) return
+        const linkedSceneId = shotIdToSceneId[block.shotId]
+        if (!linkedSceneId) return
+        if (!perSceneDays[linkedSceneId]) perSceneDays[linkedSceneId] = new Set()
+        perSceneDays[linkedSceneId].add(day.id)
+      })
+    })
+    return Object.fromEntries(Object.entries(perSceneDays).map(([k, v]) => [k, v.size]))
+  }, [schedule, scenes])
 
   const visibleScenes = useMemo(() => {
     const subset = !activeScript
@@ -77,6 +143,11 @@ export default function ScenesTab({
     const safeTextCompare = (left, right) => String(left || '').localeCompare(String(right || ''), undefined, { sensitivity: 'base' })
     const ordered = [...baseSorted].sort((left, right) => {
       if (sortBy === 'sceneNumber') return naturalSortSceneNumber(left, right) * directionMultiplier
+      if (sortBy === 'scriptOrder') {
+        const leftOrder = scriptOrderMap[left.id] ?? Number.MAX_SAFE_INTEGER
+        const rightOrder = scriptOrderMap[right.id] ?? Number.MAX_SAFE_INTEGER
+        if (leftOrder !== rightOrder) return (leftOrder - rightOrder) * directionMultiplier
+      }
       if (sortBy === 'pageCount') {
         const leftPages = pagination.byScene[left.id]?.pageCount ?? 0
         const rightPages = pagination.byScene[right.id]?.pageCount ?? 0
@@ -91,11 +162,31 @@ export default function ScenesTab({
       } else if (sortBy === 'slugline') {
         const cmp = safeTextCompare(left.slugline, right.slugline)
         if (cmp !== 0) return cmp * directionMultiplier
+      } else if (sortBy === 'intExt') {
+        const cmp = safeTextCompare(left.intExt, right.intExt)
+        if (cmp !== 0) return cmp * directionMultiplier
+      } else if (sortBy === 'dayNight') {
+        const cmp = safeTextCompare(left.dayNight, right.dayNight)
+        if (cmp !== 0) return cmp * directionMultiplier
       }
       return naturalSortSceneNumber(left, right)
     })
     return ordered
-  }, [scriptScenes, activeScript, importedScripts, sortBy, sortDirection, linkedShotsMap, pagination])
+  }, [scriptScenes, activeScript, importedScripts, sortBy, sortDirection, linkedShotsMap, pagination, scriptOrderMap])
+
+  const groupedVisibleScenes = useMemo(() => {
+    if (groupBy === 'none') return [{ key: 'all', label: null, scenes: visibleScenes }]
+    const groups = new Map()
+    visibleScenes.forEach(scene => {
+      let key = 'Other'
+      if (groupBy === 'location') key = scene.location?.trim() || 'No Location'
+      if (groupBy === 'time') key = `${scene.intExt || '—'} · ${scene.dayNight || '—'}`
+      if (groupBy === 'importSource') key = scene.importSource?.trim() || 'Primary Script'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(scene)
+    })
+    return [...groups.entries()].map(([key, groupedScenes]) => ({ key, label: key, scenes: groupedScenes }))
+  }, [visibleScenes, groupBy])
 
   const allCharacters = useMemo(() => {
     const set = new Set()
@@ -137,8 +228,23 @@ export default function ScenesTab({
   useEffect(() => { if (combineOpen && combineInit) setCombineForm(combineInit) }, [combineOpen, combineInit])
 
   useEffect(() => {
-    setTabViewState('scenes', { activeScript, columnCount, sortBy, sortDirection })
-  }, [activeScript, columnCount, sortBy, sortDirection, setTabViewState])
+    const allowedColumns = COLUMN_OPTIONS_BY_MODE[viewMode] || COLUMN_OPTIONS_BY_MODE.compactGrid
+    if (!allowedColumns.includes(columnCount)) setColumnCount(allowedColumns[allowedColumns.length - 1])
+  }, [viewMode, columnCount])
+
+  useEffect(() => {
+    setTabViewState('scenes', {
+      activeScript,
+      sceneViewMode: viewMode,
+      sceneColumnCount: columnCount,
+      columnCount,
+      sortBy,
+      sortDirection,
+      groupBy,
+      metadataVisibility,
+      sidebarPanelCollapsed: panelCollapsed,
+    })
+  }, [activeScript, viewMode, columnCount, sortBy, sortDirection, groupBy, metadataVisibility, panelCollapsed, setTabViewState])
 
   useEffect(() => {
     const node = listRef.current
@@ -181,6 +287,12 @@ export default function ScenesTab({
     )
   }
 
+  const togglePanel = (panelKey) => setPanelCollapsed(prev => ({ ...prev, [panelKey]: !prev[panelKey] }))
+  const expandAllPanels = () => setPanelCollapsed({ viewOptions: false, sceneOrganization: false, importedScripts: false })
+  const collapseAllPanels = () => setPanelCollapsed({ viewOptions: true, sceneOrganization: true, importedScripts: true })
+  const columnOptions = COLUMN_OPTIONS_BY_MODE[viewMode] || []
+  const showColumnControls = viewMode !== 'productionList'
+
   return (
     <div style={{ display: 'flex', height: '100%' }} onClick={() => { setScriptCtxMenu(null); onConfigureOpenChange(false) }}>
       <SidebarPane
@@ -188,38 +300,67 @@ export default function ScenesTab({
         title={null}
         footer={<button onClick={() => setImportModalOpen(true)} style={{ width: '100%', background: '#E84040', color: '#fff', border: 'none', borderRadius: 5, padding: 7 }}>+ Import Script</button>}
       >
-          <div style={{ padding: 10, borderBottom: '1px solid rgba(74,85,104,0.12)' }}>
-            <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: 'rgba(255,255,255,0.65)', padding: 10 }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>Scene Organization</div>
-              <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>Sort By</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{ width: '100%', border: '1px solid rgba(128,128,128,0.3)', borderRadius: 4, padding: '6px 7px', fontSize: 12, marginBottom: 8 }}
-              >
-                {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-              <button
-                onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                style={{ width: '100%', border: '1px solid rgba(74,85,104,0.2)', background: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 11, color: '#334155' }}
-              >
-                {sortDirection === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
-              </button>
+          <div style={{ padding: '10px 12px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>Panels</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={collapseAllPanels} style={{ border: 'none', background: 'none', color: '#475569', fontSize: 11, cursor: 'pointer', padding: 0 }}>Collapse All</button>
+              <button onClick={expandAllPanels} style={{ border: 'none', background: 'none', color: '#475569', fontSize: 11, cursor: 'pointer', padding: 0 }}>Expand All</button>
             </div>
           </div>
-          <div style={{ padding: '10px 12px 6px', fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>Imported Scripts</div>
-          <button onClick={() => setActiveScript(null)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 12px', borderRadius: 4 }}>All Scenes</button>
-          {importedScripts.map(sc => (
-            <div
-              key={sc.id}
-              onContextMenu={(e) => {
+          <SidebarSection title="View Options" collapsed={panelCollapsed.viewOptions} onToggle={() => togglePanel('viewOptions')}>
+            <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>View Mode</label>
+            <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={selectStyle}>
+              {VIEW_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+            </select>
+            {showColumnControls && (
+              <>
+                <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4, marginTop: 8 }}>Columns</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginBottom: 8 }}>
+                  {columnOptions.map(count => (
+                    <button key={count} onClick={() => setColumnCount(count)} style={{ ...pillStyle, background: columnCount === count ? 'rgba(232,64,64,0.12)' : '#fff' }}>
+                      {count}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <div style={{ display: 'grid', gap: 6 }}>
+              {METADATA_TOGGLE_OPTIONS.map(toggle => (
+                <label key={toggle.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#334155' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!metadataVisibility[toggle.key]}
+                    onChange={(e) => setMetadataVisibility(prev => ({ ...prev, [toggle.key]: e.target.checked }))}
+                  />
+                  {toggle.label}
+                </label>
+              ))}
+            </div>
+          </SidebarSection>
+          <SidebarSection title="Scene Organization" collapsed={panelCollapsed.sceneOrganization} onToggle={() => togglePanel('sceneOrganization')}>
+            <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>Sort By</label>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle}>
+              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <button onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ ...pillStyle, width: '100%', marginTop: 8 }}>
+              {sortDirection === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
+            </button>
+            <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4, marginTop: 8 }}>Group By</label>
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} style={{ ...selectStyle, marginBottom: 0 }}>
+              {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </SidebarSection>
+          <SidebarSection title="Imported Scripts" collapsed={panelCollapsed.importedScripts} onToggle={() => togglePanel('importedScripts')}>
+            <button onClick={() => setActiveScript(null)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 8px', borderRadius: 4 }}>All Scenes</button>
+            {importedScripts.map(sc => (
+              <div key={sc.id} onContextMenu={(e) => {
                 e.preventDefault()
                 setScriptCtxMenu({ x: e.clientX, y: e.clientY, script: sc })
-              }}
-            >
-              <button onClick={() => setActiveScript(sc.id)} style={{ width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeScript === sc.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 12px' }}>{sc.filename}</button>
-            </div>
-          ))}
+              }}>
+                <button onClick={() => setActiveScript(sc.id)} style={{ width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeScript === sc.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 8px' }}>{sc.filename}</button>
+              </div>
+            ))}
+          </SidebarSection>
       </SidebarPane>
 
       <div
@@ -227,41 +368,47 @@ export default function ScenesTab({
         onScroll={(e) => setTabViewState('scenes', { scrollTop: e.currentTarget.scrollTop })}
         style={{ flex: 1, padding: 14, overflowY: 'auto', position: 'relative' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, position: 'sticky', top: 0, zIndex: 5 }}>
-          <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            {configureOpen && (
-              <div style={{ position: 'absolute', right: 0, marginTop: 6, width: 190, border: '1px solid rgba(74,85,104,0.2)', borderRadius: 6, background: '#fff', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', padding: 10 }}>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 7 }}>Scene Layout</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
-                  {COLUMN_OPTIONS.map(count => (
-                    <button
-                      key={count}
-                      onClick={() => setColumnCount(count)}
-                      style={{
-                        border: '1px solid rgba(74,85,104,0.2)',
-                        borderRadius: 4,
-                        padding: '6px 8px',
-                        background: columnCount === count ? 'rgba(232,64,64,0.12)' : '#fff',
-                        color: '#1f2937',
-                        fontSize: 11,
-                      }}
-                    >
-                      {count} Column{count > 1 ? 's' : ''}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
-          {visibleScenes.map(scene => {
+        {viewMode === 'productionList' ? (
+          <ProductionList
+            scenes={visibleScenes}
+            linkedShotsMap={linkedShotsMap}
+            pagination={pagination}
+            metadataVisibility={metadataVisibility}
+            selectedSceneIds={selectedSceneIds}
+            setSelectedSceneIds={setSelectedSceneIds}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            setSortBy={setSortBy}
+            setSortDirection={setSortDirection}
+          />
+        ) : (
+          groupedVisibleScenes.map(group => (
+            <div key={group.key} style={{ marginBottom: 14 }}>
+              {group.label ? <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, marginBottom: 8 }}>{group.label}</div> : null}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
+                {group.scenes.map(scene => {
           const linkedShots = linkedShotsMap[scene.id] || []
-          const confidence = computeConfidence(scene, linkedShots.length)
+          const storyboardImages = linkedShots.filter(shot => !!shot.image)
+          const heroImage = storyboardImages[0]?.image || null
           const expanded = !!expandedIds[scene.id]
           const selected = selectedSceneIds.includes(scene.id)
+          const pageCount = pagination.byScene[scene.id]?.pageCount?.toFixed(2) || '0.00'
+          const castCount = (scene.characters || []).length
+          const scheduledDays = scheduledDayCountByScene[scene.id] || 0
           return (
             <div className="app-surface-card" key={scene.id} data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} style={{ borderRadius: 6 }}>
+              {viewMode === 'visualGrid' && metadataVisibility.showStoryboardThumb && (
+                <div style={{ padding: '8px 12px 0' }}>
+                  <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(74,85,104,0.16)', background: '#f8fafc', aspectRatio: '16 / 9', position: 'relative' }}>
+                    {heroImage
+                      ? <img src={heroImage} alt={`Scene ${scene.sceneNumber || '—'} storyboard`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 11 }}>No storyboard image</div>}
+                    {storyboardImages.length > 1 && (
+                      <div style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 10, background: 'rgba(15,23,42,0.78)', color: '#fff', padding: '2px 6px', borderRadius: 999 }}>+{storyboardImages.length - 1}</div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div
                 role="button"
                 tabIndex={0}
@@ -285,11 +432,18 @@ export default function ScenesTab({
                 ) : (
                   <button onClick={(e) => { e.stopPropagation(); openEditor(scene) }} onPointerDown={(e) => e.stopPropagation()} style={{ border: 'none', background: 'none', fontFamily: 'monospace', fontWeight: 700, cursor: 'text' }}>SC {scene.sceneNumber || '—'}</button>
                 )}
-                <span style={{ color: '#4A5568', flex: 1, fontSize: 11, pointerEvents: 'none' }}>{scene.location || scene.slugline}</span>
+                <span style={{ color: '#4A5568', flex: 1, fontSize: 11, pointerEvents: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={scene.slugline || scene.location || ''}>{scene.slugline || scene.location || 'Untitled Scene'}</span>
                 <span style={{ color: '#718096', fontSize: 10 }}>{linkedShots.length} shots</span>
-                <span style={{ color: '#718096', fontSize: 10 }}>{pagination.byScene[scene.id]?.pageCount?.toFixed(2) || '0.00'} pp</span>
-                <span style={{ fontSize: 10, color: confidence === 'low' ? '#f87171' : confidence === 'medium' ? '#f59e0b' : '#22c55e' }}>● {confidence}</span>
+                <span style={{ color: '#718096', fontSize: 10 }}>{pageCount} pp</span>
                 <button onClick={(e) => { e.stopPropagation(); setExpandedIds(p => ({ ...p, [scene.id]: !p[scene.id] })) }} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>{expanded ? '▴' : '▾'}</button>
+              </div>
+              <div style={{ padding: '0 12px 8px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {metadataVisibility.showIntExtDayNight && (scene.intExt || scene.dayNight)
+                  ? <Badge>{scene.intExt || '—'} · {scene.dayNight || '—'}</Badge>
+                  : null}
+                {metadataVisibility.showLocation && scene.location ? <Badge>{scene.location}</Badge> : null}
+                {metadataVisibility.showCastCount && castCount > 0 ? <Badge>{castCount} cast</Badge> : null}
+                {metadataVisibility.showScheduleBadge && scheduledDays > 0 ? <Badge>{scheduledDays} day{scheduledDays > 1 ? 's' : ''} scheduled</Badge> : null}
               </div>
 
               {expanded && (
@@ -323,7 +477,10 @@ export default function ScenesTab({
             </div>
           )
         })}
-        </div>
+              </div>
+            </div>
+          ))
+        )}
 
         {selectedSceneIds.length >= 2 && (
           <div style={{ position: 'sticky', bottom: 0, background: '#1c1c1e', color: '#fff', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -395,3 +552,97 @@ export default function ScenesTab({
     </div>
   )
 }
+
+function SidebarSection({ title, collapsed, onToggle, children }) {
+  return (
+    <div style={{ padding: 10, paddingTop: 6 }}>
+      <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: 'rgba(255,255,255,0.65)', overflow: 'hidden' }}>
+        <button onClick={onToggle} style={{ width: '100%', border: 'none', background: 'transparent', padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>{title}</span>
+          <span style={{ color: '#64748b', fontSize: 11 }}>{collapsed ? '▸' : '▾'}</span>
+        </button>
+        {!collapsed && <div style={{ padding: 10, borderTop: '1px solid rgba(74,85,104,0.1)' }}>{children}</div>}
+      </div>
+    </div>
+  )
+}
+
+function Badge({ children }) {
+  return <span style={{ fontSize: 10, color: '#475569', border: '1px solid rgba(100,116,139,0.3)', borderRadius: 999, padding: '2px 7px', background: '#fff' }}>{children}</span>
+}
+
+const selectStyle = { width: '100%', border: '1px solid rgba(128,128,128,0.3)', borderRadius: 4, padding: '6px 7px', fontSize: 12, marginBottom: 8, background: '#fff' }
+const pillStyle = { border: '1px solid rgba(74,85,104,0.2)', background: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 11, color: '#334155', cursor: 'pointer' }
+
+function ProductionList({
+  scenes,
+  linkedShotsMap,
+  pagination,
+  metadataVisibility,
+  selectedSceneIds,
+  setSelectedSceneIds,
+  sortBy,
+  sortDirection,
+  setSortBy,
+  setSortDirection,
+}) {
+  const handleSort = (column) => {
+    if (sortBy === column) setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    else { setSortBy(column); setSortDirection('asc') }
+  }
+  const headers = [
+    ...(metadataVisibility.showStoryboardThumb ? [{ key: 'thumb', label: '' }] : []),
+    { key: 'sceneNumber', label: 'Scene #' },
+    { key: 'slugline', label: 'Slugline / Title' },
+    { key: 'location', label: 'Location' },
+    { key: 'intExt', label: 'INT/EXT' },
+    { key: 'dayNight', label: 'DAY/NIGHT' },
+    { key: 'pageCount', label: 'Pages' },
+    { key: 'shotCount', label: 'Shots' },
+    { key: 'castCount', label: 'Cast' },
+  ]
+  return (
+    <div className="app-surface-card" style={{ borderRadius: 8, overflow: 'hidden' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+        <thead>
+          <tr style={{ background: '#f8fafc' }}>
+            <th style={thStyle}>Sel</th>
+            {headers.map(header => (
+              <th key={header.key} style={thStyle}>
+                {header.key === 'thumb' ? header.label : (
+                  <button onClick={() => handleSort(header.key)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 11, color: '#334155' }}>
+                    {header.label}{sortBy === header.key ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+                  </button>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {scenes.map(scene => {
+            const linkedShots = linkedShotsMap[scene.id] || []
+            const hero = linkedShots.find(shot => !!shot.image)?.image || null
+            const selected = selectedSceneIds.includes(scene.id)
+            return (
+              <tr key={scene.id} style={{ borderTop: '1px solid rgba(148,163,184,0.25)' }}>
+                <td style={tdStyle}><input type="checkbox" checked={selected} onChange={(e) => setSelectedSceneIds(prev => e.target.checked ? [...new Set([...prev, scene.id])] : prev.filter(id => id !== scene.id))} /></td>
+                {metadataVisibility.showStoryboardThumb && <td style={tdStyle}>{hero ? <img src={hero} alt="" style={{ width: 28, height: 18, objectFit: 'cover', borderRadius: 3 }} /> : <span style={{ color: '#94a3b8' }}>—</span>}</td>}
+                <td style={tdStyle}>SC {scene.sceneNumber || '—'}</td>
+                <td style={{ ...tdStyle, maxWidth: 280, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={scene.slugline || ''}>{scene.slugline || 'Untitled Scene'}</td>
+                <td style={tdStyle}>{scene.location || '—'}</td>
+                <td style={tdStyle}>{scene.intExt || '—'}</td>
+                <td style={tdStyle}>{scene.dayNight || '—'}</td>
+                <td style={tdStyle}>{pagination.byScene[scene.id]?.pageCount?.toFixed(2) || '0.00'}</td>
+                <td style={tdStyle}>{linkedShots.length}</td>
+                <td style={tdStyle}>{(scene.characters || []).length || '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const thStyle = { textAlign: 'left', fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '8px 10px' }
+const tdStyle = { padding: '8px 10px', color: '#334155' }
