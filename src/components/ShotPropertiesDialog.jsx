@@ -80,15 +80,20 @@ export default function ShotPropertiesDialog() {
     <div className="modal-overlay" style={{ zIndex: 720 }} onClick={close}>
       <div
         className="modal app-dialog shot-properties-dialog"
-        style={{ width: 'min(1240px, 96vw)', maxHeight: '90vh', overflow: 'hidden' }}
+        style={{ width: 'min(1720px, 90vw)', height: 'min(1120px, 88vh)', overflow: 'hidden' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="shot-props-scroll">
-          <h3 className="dialog-title">Shot Properties</h3>
-          <p className="dialog-description shot-props-dialog-description">
-            Edit canonical shot details. Changes are saved automatically.
-          </p>
+        <header className="shot-props-header">
+          <div>
+            <h3 className="dialog-title">Shot Properties</h3>
+            <p className="dialog-description shot-props-dialog-description">
+              Edit canonical shot details. Changes are saved automatically.
+            </p>
+          </div>
+          <button className="dialog-button-secondary shot-props-close" onClick={close}>Close</button>
+        </header>
 
+        <div className="shot-props-content">
           <section className="shot-props-identity">
             <div
               className="shot-props-image"
@@ -140,7 +145,7 @@ export default function ShotPropertiesDialog() {
             </div>
           </section>
 
-          <div className="shot-props-layout">
+          <div className="shot-props-layout shot-props-layout-main">
             <Section title="General" className="shot-props-section-primary">
               <Field label="Description" wide>
                 <input value={shot.description || ''} onChange={(e) => setField('description', e.target.value)} />
@@ -149,7 +154,7 @@ export default function ShotPropertiesDialog() {
                 <input value={shot.subject || ''} onChange={(e) => setField('subject', e.target.value)} />
               </Field>
               <Field label="Cast" wide>
-                <textarea value={shot.cast || ''} onChange={(e) => setField('cast', e.target.value)} style={{ minHeight: 100 }} />
+                <textarea value={shot.cast || ''} onChange={(e) => setField('cast', e.target.value)} style={{ minHeight: 82 }} />
               </Field>
             </Section>
 
@@ -233,17 +238,17 @@ export default function ShotPropertiesDialog() {
 
             <Section title="Notes" className="shot-props-section-primary shot-props-section-notes">
               <Field label="Notes" wide>
-                <textarea value={shot.notes || ''} onChange={(e) => setField('notes', e.target.value)} style={{ minHeight: 180 }} />
+                <textarea value={shot.notes || ''} onChange={(e) => setField('notes', e.target.value)} style={{ minHeight: 120 }} />
               </Field>
             </Section>
-          </div>
 
-          <details className="shot-props-debug">
-            <summary>Advanced debug data</summary>
-            <pre>
-              {JSON.stringify(shot, null, 2)}
-            </pre>
-          </details>
+            <details className="shot-props-debug">
+              <summary>Advanced debug data</summary>
+              <pre>
+                {JSON.stringify(shot, null, 2)}
+              </pre>
+            </details>
+          </div>
         </div>
 
         <div className="dialog-actions shot-props-footer">
