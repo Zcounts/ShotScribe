@@ -23,9 +23,10 @@ const VIEW_OPTIONS = [
 ]
 
 const PX_PER_INCH = 96
-const RULER_HEIGHT_PX = 34
-const PAGE_GAP_PX = 16
+const PAGE_GAP_PX = 24
 const SCREENPLAY_CHAR_WIDTH_RATIO = 0.6
+const RULER_HEIGHT_PX = 34
+const BLOCK_VERTICAL_PADDING = 2
 
 function inchesToPx(value) {
   return Math.round((Number(value) || 0) * PX_PER_INCH)
@@ -33,27 +34,6 @@ function inchesToPx(value) {
 
 function pxToInches(value) {
   return Number((Number(value || 0) / PX_PER_INCH).toFixed(2))
-}
-
-function splitWrappedChunks(text, maxChars) {
-  const raw = String(text || '')
-  if (!raw) return [{ text: '', start: 0, end: 0 }]
-  const chunks = []
-  let index = 0
-  while (index < raw.length) {
-    if (raw.length - index <= maxChars) {
-      chunks.push({ text: raw.slice(index), start: index, end: raw.length })
-      break
-    }
-    const lookahead = raw.slice(index, index + maxChars + 1)
-    let split = lookahead.lastIndexOf(' ')
-    if (split <= 0) split = maxChars
-    const end = index + split
-    chunks.push({ text: raw.slice(index, end), start: index, end })
-    index = end
-    while (raw[index] === ' ') index += 1
-  }
-  return chunks.length ? chunks : [{ text: '', start: 0, end: 0 }]
 }
 
 function sceneHeader(scene) {
@@ -77,6 +57,81 @@ function InlineInchField({ label, valuePx, onChangePx, min = 0, max = null }) {
   )
 }
 
+function computeCharsPerLine(blockStyle, pageContentWidthPx) {
+  const availableWidth = Math.max(1, pageContentWidthPx - blockStyle.marginLeftPx - blockStyle.marginRightPx - blockStyle.paddingLeftPx - blockStyle.paddingRightPx)
+  const charWidth = Math.max(1, blockStyle.fontSizePx * SCREENPLAY_CHAR_WIDTH_RATIO)
+  return Math.max(1, Math.floor(availableWidth / charWidth))
+}
+
+function wrapLineCount(text, charsPerLine) {
+  const lines = String(text || '').split(/\r?\n/)
+  return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(Math.max(1, line.length) / charsPerLine)), 0)
+}
+
+function normalizeTextForStore(value, type) {
+  const next = String(value || '').replace(/\r/g, '')
+  if (type === 'heading' || type === 'character' || type === 'transition') {
+    return next.toUpperCase()
+  }
+  return next
+}
+
+function renderHighlightedText(text, baseStart, links, onOpenShot) {
+  if (!links.length) return text || ' '
+
+  const safeText = String(text || '')
+  const segments = []
+  let cursor = 0
+  const endOffset = baseStart + safeText.length
+
+  links.forEach(link => {
+    const overlapStart = Math.max(baseStart, link.start)
+    const overlapEnd = Math.min(endOffset, link.end)
+    if (overlapEnd <= overlapStart) return
+
+    const localStart = overlapStart - baseStart
+    const localEnd = overlapEnd - baseStart
+
+    if (localStart > cursor) {
+      segments.push({ type: 'plain', text: safeText.slice(cursor, localStart) })
+    }
+
+    segments.push({
+      type: 'link',
+      shotId: link.shotId,
+      color: link.color,
+      label: link.label,
+      text: safeText.slice(localStart, localEnd),
+    })
+
+    cursor = localEnd
+  })
+
+  if (cursor < safeText.length) {
+    segments.push({ type: 'plain', text: safeText.slice(cursor) })
+  }
+
+  if (!segments.length) return safeText || ' '
+
+  return segments.map((segment, index) => {
+    if (segment.type === 'plain') return <React.Fragment key={index}>{segment.text}</React.Fragment>
+    return (
+      <span
+        key={index}
+        title={`Linked shot ${segment.label} • Double-click to inspect`}
+        onDoubleClick={() => onOpenShot(segment.shotId)}
+        style={{
+          background: `${segment.color}33`,
+          borderBottom: `1px solid ${segment.color}`,
+          cursor: 'pointer',
+        }}
+      >
+        {segment.text}
+      </span>
+    )
+  })
+}
+
 export default function ScriptTab() {
   const scriptScenes = useStore(s => s.scriptScenes)
   const storyboardScenes = useStore(s => s.scenes)
@@ -98,8 +153,10 @@ export default function ScriptTab() {
     () => normalizeDocumentSettings(scriptSettings?.documentSettings || DEFAULT_SCRIPT_DOCUMENT_SETTINGS),
     [scriptSettings?.documentSettings],
   )
+
   const pageSettings = documentSettings.page
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
+  const pageContentHeightPx = Math.max(120, pageSettings.heightPx - pageSettings.marginTopPx - pageSettings.marginBottomPx)
 
   const screenplayByScene = useMemo(() => {
     const mapped = {}
@@ -127,71 +184,76 @@ export default function ScriptTab() {
         })
       })
     })
+
+    Object.keys(result).forEach(sceneId => {
+      result[sceneId] = result[sceneId].sort((a, b) => a.start - b.start)
+    })
+
     return result
   }, [storyboardScenes])
 
-  const charsPerLineByType = useMemo(() => {
-    const styles = documentSettings.blockStyles
-    return Object.entries(styles).reduce((acc, [type, style]) => {
-      const availableWidth = Math.max(1, pageContentWidthPx - style.marginLeftPx - style.marginRightPx - style.paddingLeftPx - style.paddingRightPx)
-      const charWidth = Math.max(1, style.fontSizePx * SCREENPLAY_CHAR_WIDTH_RATIO)
-      acc[type] = Math.max(1, Math.floor(availableWidth / charWidth))
-      return acc
-    }, {})
-  }, [documentSettings.blockStyles, pageContentWidthPx])
-
-  const pageModel = useMemo(() => {
-    const rowsPerPage = Math.max(1, Math.floor((pageSettings.heightPx - pageSettings.marginTopPx - pageSettings.marginBottomPx) / documentSettings.blockStyles.action.lineHeightPx))
-    const allRows = []
+  const documentModel = useMemo(() => {
+    const rowsPerPage = Math.max(1, Math.floor(pageContentHeightPx / documentSettings.blockStyles.action.lineHeightPx))
+    const blocks = []
 
     orderedScenes.forEach(scene => {
-      const blocks = screenplayByScene[scene.id] || []
-      let sceneCharOffset = 0
-      blocks.forEach((block, blockIndex) => {
-        const width = charsPerLineByType[block.type] || charsPerLineByType.action || 1
-        const chunks = splitWrappedChunks(block.text, width)
-        chunks.forEach((chunk, chunkIndex) => {
-          allRows.push({
-            sceneId: scene.id,
-            blockId: block.id,
-            blockType: block.type,
-            blockIndex,
-            chunkIndex,
-            text: chunk.text,
-            sceneCharStart: sceneCharOffset + chunk.start,
-            sceneCharEnd: sceneCharOffset + chunk.end,
-            isFirstChunk: chunkIndex === 0,
-            isSceneStart: blockIndex === 0 && chunkIndex === 0,
-          })
+      let sceneOffset = 0
+      const sceneBlocks = screenplayByScene[scene.id] || []
+
+      sceneBlocks.forEach((block, blockIndex) => {
+        const blockStyle = getBlockStyleForType(documentSettings, block.type)
+        const charsPerLine = computeCharsPerLine(blockStyle, pageContentWidthPx)
+        const lineUnits = wrapLineCount(block.text, charsPerLine)
+        blocks.push({
+          sceneId: scene.id,
+          blockId: block.id,
+          blockType: block.type,
+          blockText: block.text,
+          blockIndex,
+          sceneCharStart: sceneOffset,
+          sceneCharEnd: sceneOffset + String(block.text || '').length,
+          lineUnits,
+          lineHeightPx: blockStyle.lineHeightPx,
+          isSceneStart: blockIndex === 0,
         })
-        sceneCharOffset += String(block.text || '').length + 1
+        sceneOffset += String(block.text || '').length + 1
       })
     })
 
     const pages = []
-    let page = { id: 'p_1', number: 1, rows: [] }
-    allRows.forEach(row => {
+    let currentPage = { id: 'p_1', number: 1, blocks: [], usedLineUnits: 0 }
+
+    blocks.forEach(block => {
       if (
         scriptSettings.scenePaginationMode === SCENE_PAGINATION_MODES.NEW_PAGE
-        && row.isSceneStart
-        && page.rows.length
+        && block.isSceneStart
+        && currentPage.blocks.length
       ) {
-        pages.push(page)
-        page = { id: `p_${pages.length + 1}`, number: pages.length + 1, rows: [] }
+        pages.push(currentPage)
+        currentPage = { id: `p_${pages.length + 1}`, number: pages.length + 1, blocks: [], usedLineUnits: 0 }
       }
-      if (page.rows.length >= rowsPerPage) {
-        pages.push(page)
-        page = { id: `p_${pages.length + 1}`, number: pages.length + 1, rows: [] }
+
+      if (currentPage.usedLineUnits + block.lineUnits > rowsPerPage && currentPage.blocks.length) {
+        pages.push(currentPage)
+        currentPage = { id: `p_${pages.length + 1}`, number: pages.length + 1, blocks: [], usedLineUnits: 0 }
       }
-      page.rows.push(row)
+
+      currentPage.blocks.push(block)
+      currentPage.usedLineUnits += block.lineUnits
     })
-    if (page.rows.length || pages.length === 0) pages.push(page)
-    return { pages, rowsPerPage }
-  }, [charsPerLineByType, documentSettings.blockStyles.action.lineHeightPx, orderedScenes, pageSettings.heightPx, pageSettings.marginBottomPx, pageSettings.marginTopPx, screenplayByScene, scriptSettings.scenePaginationMode])
+
+    if (currentPage.blocks.length || pages.length === 0) pages.push(currentPage)
+
+    return {
+      rowsPerPage,
+      pages,
+      blocks,
+    }
+  }, [documentSettings, orderedScenes, pageContentHeightPx, pageContentWidthPx, screenplayByScene, scriptSettings.scenePaginationMode])
 
   const selectedScene = orderedScenes.find(scene => scene.id === selectedBlock?.sceneId)
   const selectedBlockData = selectedScene
-    ? ensureEditableScreenplayElements(getSceneScreenplayElements(selectedScene)).find(block => block.id === selectedBlock?.blockId)
+    ? (screenplayByScene[selectedScene.id] || []).find(block => block.id === selectedBlock?.blockId)
     : null
   const selectedStyleType = selectedBlockData?.type || 'action'
   const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
@@ -209,6 +271,22 @@ export default function ScriptTab() {
     const next = typeof updater === 'function' ? updater(current) : updater
     updateScriptSceneScreenplay(sceneId, ensureEditableScreenplayElements(next))
   }, [orderedScenes, updateScriptSceneScreenplay])
+
+  const focusBlock = useCallback((sceneId, blockId, cursor = 'end') => {
+    requestAnimationFrame(() => {
+      const key = `${sceneId}:${blockId}`
+      const el = blockRefs.current[key]
+      if (!el) return
+      el.focus()
+      const selection = window.getSelection()
+      if (!selection) return
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      range.collapse(cursor === 'start')
+      selection.removeAllRanges()
+      selection.addRange(range)
+    })
+  }, [])
 
   const cycleType = useCallback((sceneId, blockId, direction) => {
     const order = EDITABLE_SCREENPLAY_TYPES.map(option => option.value)
@@ -239,8 +317,8 @@ export default function ScriptTab() {
       return updated
     })
     setSelectedBlock({ sceneId, blockId: newBlock.id })
-    requestAnimationFrame(() => blockRefs.current[`${sceneId}:${newBlock.id}`]?.focus())
-  }, [updateSceneBlocks])
+    focusBlock(sceneId, newBlock.id, 'start')
+  }, [focusBlock, updateSceneBlocks])
 
   const mergeWithPrevious = useCallback((sceneId, blockId) => {
     updateSceneBlocks(sceneId, blocks => {
@@ -252,13 +330,14 @@ export default function ScriptTab() {
       updated[index - 1] = { ...previous, text: `${previous.text || ''}${current.text || ''}` }
       updated.splice(index, 1)
       setSelectedBlock({ sceneId, blockId: previous.id })
-      requestAnimationFrame(() => blockRefs.current[`${sceneId}:${previous.id}`]?.focus())
+      focusBlock(sceneId, previous.id, 'end')
       return updated
     })
-  }, [updateSceneBlocks])
+  }, [focusBlock, updateSceneBlocks])
 
-  const updateBlockText = useCallback((sceneId, blockId, text) => {
-    updateSceneBlocks(sceneId, blocks => blocks.map(block => (block.id === blockId ? { ...block, text } : block)))
+  const updateBlockText = useCallback((sceneId, blockId, type, text) => {
+    const normalizedText = normalizeTextForStore(text, type)
+    updateSceneBlocks(sceneId, blocks => blocks.map(block => (block.id === blockId ? { ...block, text: normalizedText } : block)))
   }, [updateSceneBlocks])
 
   const createManualScript = useCallback(() => {
@@ -289,66 +368,32 @@ export default function ScriptTab() {
     }, 'merge')
   }, [importScriptScenes])
 
-  const handleBlockKeyDown = useCallback((event, row) => {
-    if (!row?.blockId || view !== 'write') return
+  const handleBlockKeyDown = useCallback((event, block) => {
+    if (view !== 'write') return
+    const element = event.currentTarget
+
     if (event.key === 'Tab') {
       event.preventDefault()
-      cycleType(row.sceneId, row.blockId, event.shiftKey ? -1 : 1)
+      cycleType(block.sceneId, block.blockId, event.shiftKey ? -1 : 1)
       return
     }
+
     if (event.key === 'Enter') {
       event.preventDefault()
-      insertBlockAfter(row.sceneId, row.blockId, nextTypeForEnter(row.blockType))
+      insertBlockAfter(block.sceneId, block.blockId, nextTypeForEnter(block.blockType))
       return
     }
-    const input = event.currentTarget
-    const atStart = input.selectionStart === 0 && input.selectionEnd === 0
-    if (event.key === 'Backspace' && atStart && !String(input.value || '').length) {
-      event.preventDefault()
-      mergeWithPrevious(row.sceneId, row.blockId)
+
+    if (event.key === 'Backspace') {
+      const selection = window.getSelection()
+      const atStart = selection && selection.rangeCount > 0 && selection.anchorOffset === 0 && selection.focusOffset === 0
+      const empty = String(element.textContent || '').length === 0
+      if (atStart && empty) {
+        event.preventDefault()
+        mergeWithPrevious(block.sceneId, block.blockId)
+      }
     }
   }, [cycleType, insertBlockAfter, mergeWithPrevious, nextTypeForEnter, view])
-
-  const renderRowText = useCallback((row, sourceText) => {
-    const links = shotLinksByScene[row.sceneId] || []
-    const inChunkLinks = links.filter(link => link.end > row.sceneCharStart && link.start < row.sceneCharEnd)
-    if (!inChunkLinks.length || view === 'write') return String(sourceText || '')
-
-    const segments = []
-    let cursor = row.sceneCharStart
-    const sorted = [...inChunkLinks].sort((a, b) => a.start - b.start)
-    sorted.forEach(link => {
-      const start = Math.max(row.sceneCharStart, link.start)
-      const end = Math.min(row.sceneCharEnd, link.end)
-      if (start > cursor) {
-        segments.push({ type: 'plain', text: sourceText.slice(cursor - row.sceneCharStart, start - row.sceneCharStart) })
-      }
-      segments.push({
-        type: 'link',
-        shotId: link.shotId,
-        text: sourceText.slice(start - row.sceneCharStart, end - row.sceneCharStart),
-        color: link.color,
-      })
-      cursor = end
-    })
-    if (cursor < row.sceneCharEnd) {
-      segments.push({ type: 'plain', text: sourceText.slice(cursor - row.sceneCharStart) })
-    }
-
-    return segments.map((segment, index) => {
-      if (segment.type === 'plain') return <React.Fragment key={index}>{segment.text}</React.Fragment>
-      return (
-        <span
-          key={index}
-          onDoubleClick={() => openShotDialog(segment.shotId)}
-          style={{ background: `${segment.color}38`, borderBottom: `1px solid ${segment.color}`, cursor: 'pointer' }}
-          title="Double-click to inspect linked shot"
-        >
-          {segment.text}
-        </span>
-      )
-    })
-  }, [openShotDialog, shotLinksByScene, view])
 
   if (orderedScenes.length === 0) {
     return (
@@ -405,7 +450,7 @@ export default function ScriptTab() {
                   const firstBlock = screenplayByScene[scene.id]?.[0]
                   if (firstBlock) {
                     setSelectedBlock({ sceneId: scene.id, blockId: firstBlock.id })
-                    requestAnimationFrame(() => blockRefs.current[`${scene.id}:${firstBlock.id}`]?.focus())
+                    focusBlock(scene.id, firstBlock.id, 'start')
                   }
                 }}
                 style={{
@@ -437,14 +482,27 @@ export default function ScriptTab() {
               <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
               <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
             </select>
+            <span style={{ fontSize: 12, color: '#475569', marginLeft: 12 }}>
+              Page {pxToInches(pageSettings.widthPx)}" × {pxToInches(pageSettings.heightPx)}" • Margins {pxToInches(pageSettings.marginTopPx)}"/{pxToInches(pageSettings.marginRightPx)}"/{pxToInches(pageSettings.marginBottomPx)}"/{pxToInches(pageSettings.marginLeftPx)}"
+            </span>
             <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'page' ? null : 'page')} style={{ marginLeft: 'auto' }}>Page Setup</button>
             <button className="toolbar-btn" onClick={() => setActivePanel(activePanel === 'styles' ? null : 'styles')}>Element Styles</button>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0 22px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
               <div>
-                <div style={{ width: pageSettings.widthPx, height: RULER_HEIGHT_PX, border: '1px solid rgba(148,163,184,0.45)', background: '#f8fafc', borderRadius: 5, position: 'relative' }}>
+                <div
+                  style={{
+                    width: pageSettings.widthPx,
+                    height: RULER_HEIGHT_PX,
+                    border: '1px solid rgba(148,163,184,0.45)',
+                    background: '#f8fafc',
+                    borderRadius: 5,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                >
                   {Array.from({ length: Math.floor(pageSettings.widthPx / (PX_PER_INCH / 4)) + 1 }).map((_, idx) => {
                     const x = idx * (PX_PER_INCH / 4)
                     const isInch = idx % 4 === 0
@@ -455,11 +513,14 @@ export default function ScriptTab() {
                       </div>
                     )
                   })}
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, left: pageSettings.marginLeftPx, width: 1, background: 'rgba(14,116,144,0.35)' }} />
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, left: pageSettings.widthPx - pageSettings.marginRightPx, width: 1, background: 'rgba(14,116,144,0.35)' }} />
                 </div>
 
-                <div style={{ height: 8 }} />
+                <div style={{ height: 10 }} />
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: PAGE_GAP_PX }}>
-                  {pageModel.pages.map(page => (
+                  {documentModel.pages.map(page => (
                     <div
                       key={page.id}
                       className="app-panel-shadow"
@@ -477,71 +538,67 @@ export default function ScriptTab() {
                         overflow: 'hidden',
                       }}
                     >
-                      {page.rows.map((row) => {
-                        const blockStyle = getBlockStyleForType(documentSettings, row.blockType)
-                        const isSelected = selectedBlock?.sceneId === row.sceneId && selectedBlock?.blockId === row.blockId
-                        const scene = orderedScenes.find(entry => entry.id === row.sceneId)
-                        const block = ensureEditableScreenplayElements(getSceneScreenplayElements(scene)).find(entry => entry.id === row.blockId)
-                        const upper = ['heading', 'character', 'transition'].includes(row.blockType)
+                      <div style={{ display: 'flex', flexDirection: 'column', minHeight: pageContentHeightPx }}>
+                        {page.blocks.map((block) => {
+                          const blockStyle = getBlockStyleForType(documentSettings, block.blockType)
+                          const sceneLinks = shotLinksByScene[block.sceneId] || []
+                          const blockLinks = sceneLinks.filter(link => link.end > block.sceneCharStart && link.start < block.sceneCharEnd)
+                          const isSelected = selectedBlock?.sceneId === block.sceneId && selectedBlock?.blockId === block.blockId
+                          const upper = ['heading', 'character', 'transition'].includes(block.blockType)
 
-                        const baseStyle = {
-                          marginLeft: `${blockStyle.marginLeftPx}px`,
-                          marginRight: `${blockStyle.marginRightPx}px`,
-                          minHeight: `${blockStyle.lineHeightPx}px`,
-                          fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
-                          fontSize: `${blockStyle.fontSizePx}px`,
-                          lineHeight: `${blockStyle.lineHeightPx}px`,
-                          textIndent: row.isFirstChunk ? `${blockStyle.firstLineIndentPx}px` : '0px',
-                          textAlign: blockStyle.align || 'left',
-                          letterSpacing: `${blockStyle.letterSpacingPx}px`,
-                          whiteSpace: 'pre-wrap',
-                          textTransform: upper ? 'uppercase' : 'none',
-                          borderRadius: 4,
-                        }
+                          const sharedStyle = {
+                            marginLeft: `${blockStyle.marginLeftPx}px`,
+                            marginRight: `${blockStyle.marginRightPx}px`,
+                            paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
+                            paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
+                            minHeight: `${blockStyle.lineHeightPx}px`,
+                            fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
+                            fontSize: `${blockStyle.fontSizePx}px`,
+                            lineHeight: `${blockStyle.lineHeightPx}px`,
+                            textAlign: blockStyle.align || 'left',
+                            letterSpacing: `${blockStyle.letterSpacingPx}px`,
+                            whiteSpace: 'pre-wrap',
+                            textTransform: upper ? 'uppercase' : 'none',
+                            borderRadius: 4,
+                            border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
+                            background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
+                          }
 
-                        if (row.isFirstChunk && view === 'write') {
+                          if (view === 'write') {
+                            return (
+                              <div
+                                key={`${block.sceneId}:${block.blockId}`}
+                                ref={(el) => { blockRefs.current[`${block.sceneId}:${block.blockId}`] = el }}
+                                contentEditable
+                                suppressContentEditableWarning
+                                spellCheck
+                                onFocus={() => {
+                                  setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
+                                  setActiveSceneId(block.sceneId)
+                                }}
+                                onInput={(event) => updateBlockText(block.sceneId, block.blockId, block.blockType, event.currentTarget.textContent || '')}
+                                onKeyDown={(event) => handleBlockKeyDown(event, block)}
+                                style={{ ...sharedStyle, outline: 'none' }}
+                              >
+                                {block.blockText || ''}
+                              </div>
+                            )
+                          }
+
                           return (
-                            <textarea
-                              key={`${row.sceneId}:${row.blockId}`}
-                              ref={(el) => { blockRefs.current[`${row.sceneId}:${row.blockId}`] = el }}
-                              value={String(block?.text || '')}
-                              onFocus={() => {
-                                setSelectedBlock({ sceneId: row.sceneId, blockId: row.blockId })
-                                setActiveSceneId(row.sceneId)
+                            <div
+                              key={`${block.sceneId}:${block.blockId}`}
+                              style={{ ...sharedStyle, cursor: 'text' }}
+                              onClick={() => {
+                                setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
+                                setActiveSceneId(block.sceneId)
                               }}
-                              onChange={(event) => updateBlockText(row.sceneId, row.blockId, event.target.value)}
-                              onKeyDown={(event) => handleBlockKeyDown(event, row)}
-                              style={{
-                                ...baseStyle,
-                                width: '100%',
-                                border: isSelected ? '1px solid rgba(37,99,235,0.55)' : '1px solid transparent',
-                                background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
-                                resize: 'none',
-                                outline: 'none',
-                                overflow: 'hidden',
-                              }}
-                              rows={1}
-                            />
+                            >
+                              {renderHighlightedText(block.blockText, block.sceneCharStart, blockLinks, openShotDialog)}
+                            </div>
                           )
-                        }
-
-                        return (
-                          <div
-                            key={`${row.sceneId}:${row.blockId}:${row.chunkIndex}`}
-                            style={{
-                              ...baseStyle,
-                              border: isSelected && row.isFirstChunk ? '1px solid rgba(37,99,235,0.4)' : '1px solid transparent',
-                              background: isSelected && row.isFirstChunk ? 'rgba(37,99,235,0.04)' : 'transparent',
-                            }}
-                            onClick={() => {
-                              setSelectedBlock({ sceneId: row.sceneId, blockId: row.blockId })
-                              setActiveSceneId(row.sceneId)
-                            }}
-                          >
-                            {renderRowText(row, row.text) || ' '}
-                          </div>
-                        )
-                      })}
+                        })}
+                      </div>
 
                       <div style={{ position: 'absolute', right: 12, top: 10, fontSize: 11, color: '#64748b' }}>{page.number}</div>
                     </div>
