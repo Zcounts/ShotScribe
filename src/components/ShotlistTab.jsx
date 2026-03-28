@@ -221,6 +221,22 @@ function fmtDate(iso) {
   return `${m}/${d}/${y}`
 }
 
+function formatSceneNumber(sceneNumber) {
+  const value = String(sceneNumber ?? '').trim()
+  return value ? `SC ${value}` : 'SC —'
+}
+
+function formatShotCountLabel(count) {
+  return `${count} shot${count === 1 ? '' : 's'}`
+}
+
+function formatCharacterSummary(characters = [], maxVisible = 2) {
+  if (!Array.isArray(characters) || characters.length === 0) return 'No cast'
+  const visible = characters.slice(0, maxVisible)
+  const overflow = characters.length - visible.length
+  return overflow > 0 ? `${visible.join(', ')} +${overflow}` : visible.join(', ')
+}
+
 // ── EditableCell ──────────────────────────────────────────────────────────────
 // Always renders an <input> or <textarea> — never toggles between a display div
 // and an edit input.  The input is styled to look like plain table text when
@@ -911,7 +927,7 @@ function ShotlistAddShotModal({ scene, candidates, onClose, onCreateNew, onAttac
   return (
     <div className="modal-overlay" style={{ zIndex: 760 }} onClick={onClose}>
       <div className="modal app-dialog" style={{ maxWidth: 680, width: '92vw' }} onClick={e => e.stopPropagation()}>
-        <h3 className="dialog-title" style={{ marginBottom: 4 }}>Add Shot to SC {scene._canonical?.sceneNumber || scene.sceneLabel}</h3>
+        <h3 className="dialog-title" style={{ marginBottom: 4 }}>Add Shot to {formatSceneNumber(scene._canonical?.sceneNumber || scene.sceneLabel)}</h3>
         <p className="dialog-description" style={{ marginBottom: 12 }}>{scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Scene'}</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setMode('new')} style={{ border: mode === 'new' ? '1px solid rgba(232,64,64,0.5)' : '1px solid rgba(74,85,104,0.2)', background: mode === 'new' ? 'rgba(232,64,64,0.08)' : '#fff', borderRadius: 8, padding: 10, textAlign: 'left', cursor: 'pointer' }}>
@@ -961,7 +977,7 @@ function ShotlistAddShotModal({ scene, candidates, onClose, onCreateNew, onAttac
 // ── SortableShotRow ───────────────────────────────────────────────────────────
 function SortableShotRow({
   shot, shotIndex, scene, visibleColumns,
-  c, isDark, handleShotChange, onDelete, rowHeight, sceneIntOrExt, sceneDayNight,
+  c, isDark, handleShotChange, onDelete, rowHeight, sceneIntOrExt, sceneDayNight, stickyOffsets,
 }) {
   const [hovered, setHovered] = useState(false)
   const {
@@ -1000,6 +1016,10 @@ function SortableShotRow({
         verticalAlign: 'middle',
         overflow: 'hidden',
         userSelect: 'none',
+        position: 'sticky',
+        left: 0,
+        zIndex: 4,
+        backgroundColor: rowBg,
       }}>
         <div style={{
           display: 'flex',
@@ -1059,6 +1079,7 @@ function SortableShotRow({
       {visibleColumns.map((col, colIdx) => {
         const isLastCol = colIdx === visibleColumns.length - 1
         const isNotes = col.type === 'textarea'
+        const stickyLeft = stickyOffsets[col.key]
         const cellStyle = {
           borderBottom: `1px solid ${c.border}`,
           borderRight: !isLastCol ? `1px solid ${c.border}` : 'none',
@@ -1067,6 +1088,13 @@ function SortableShotRow({
           textOverflow: 'ellipsis',
           whiteSpace: isNotes ? 'normal' : 'nowrap',
           userSelect: 'none',
+          ...(stickyLeft != null ? {
+            position: 'sticky',
+            left: stickyLeft,
+            zIndex: 3,
+            backgroundColor: rowBg,
+            boxShadow: `1px 0 0 ${c.border}`,
+          } : {}),
         }
 
         if (col.type === 'status') {
@@ -1373,6 +1401,16 @@ export default function ShotlistTab({ containerRef }) {
   }, [shotlistColumnConfig, allColumnsMap, shotlistColumnWidths, viewSettings.showThumbnails])
 
   const totalTableWidth = DRAG_COL_WIDTH + visibleColumns.reduce((sum, col) => sum + col.width, 0)
+  const stickyOffsets = useMemo(() => {
+    const stickyKeys = new Set(['displayId', 'description'])
+    const offsets = {}
+    let running = DRAG_COL_WIDTH
+    visibleColumns.forEach(col => {
+      if (stickyKeys.has(col.key)) offsets[col.key] = running
+      running += col.width
+    })
+    return offsets
+  }, [visibleColumns])
 
   const c = {
     pageBg:      '#F5F2EC',
@@ -1488,7 +1526,6 @@ export default function ShotlistTab({ containerRef }) {
 
   return (
     <div
-      className="canvas-texture"
       ref={el => {
         scrollerRef.current = el
         if (containerRef) containerRef.current = el
@@ -1499,6 +1536,7 @@ export default function ShotlistTab({ containerRef }) {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        background: c.pageBg,
       }}
     >
 
@@ -1633,9 +1671,9 @@ export default function ShotlistTab({ containerRef }) {
 
       {/* ── Table ── */}
       {schedule.length > 0 && activeDay && filteredScenes.length > 0 && (
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', borderTop: `1px solid ${c.border}` }}>
         {viewSettings.showSidebar && (
-          <aside style={{ width: 280, borderRight: `1px solid ${c.thickBorder}`, background: '#F8F5EF', overflow: 'auto' }}>
+          <aside style={{ width: 318, borderRight: `1px solid ${c.thickBorder}`, background: '#F8F5EF', overflow: 'auto' }}>
             <div style={{ padding: '10px 12px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, opacity: 0.6 }}>
               Day scenes
             </div>
@@ -1646,68 +1684,66 @@ export default function ShotlistTab({ containerRef }) {
                 style={{
                   width: '100%',
                   border: 'none',
-                  background: activeNavSceneId === scene.id ? 'rgba(0,0,0,0.07)' : 'transparent',
+                  background: activeNavSceneId === scene.id ? 'rgba(0,0,0,0.08)' : 'transparent',
                   textAlign: 'left',
-                  padding: '10px 12px',
+                  padding: '8px 12px',
                   borderLeft: `3px solid ${scene._canonical?.color || scene.color || '#94a3b8'}`,
                   cursor: 'pointer',
                 }}
               >
-                <div style={{ fontSize: 11, fontWeight: 800, fontFamily: 'monospace' }}>SC {scene._canonical?.sceneNumber || scene.sceneLabel}</div>
-                <div style={{ fontSize: 11, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, fontFamily: 'monospace', opacity: 0.75 }}>{formatSceneNumber(scene._canonical?.sceneNumber || scene.sceneLabel)}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Untitled scene'}
                 </div>
-                <div style={{ marginTop: 3, fontSize: 10, opacity: 0.6 }}>{scene._filteredShots.length} shots</div>
+                <div style={{ marginTop: 2, fontSize: 10, opacity: 0.62 }}>{formatShotCountLabel(scene._filteredShots.length)}</div>
               </button>
             ))}
           </aside>
         )}
 
-        <div ref={mainPanelRef} style={{ flex: 1, overflow: 'auto', padding: '12px 16px 22px' }}>
+        <div ref={mainPanelRef} style={{ flex: 1, overflow: 'auto', padding: '8px 14px 18px' }}>
           {filteredScenes.map((scene) => {
             const shots = sortShots(scene._filteredShots)
-            const showDetails = !!expandedSceneDetails[scene.id]
+            const showDetails = viewSettings.showSceneDetails || !!expandedSceneDetails[scene.id]
+            const sceneCharacters = scene._canonical?.characters || []
             return (
               <section
                 key={scene.id}
                 data-scene-id={scene.id}
                 ref={node => { sceneSectionRefs.current[scene.id] = node }}
                 style={{
-                  marginBottom: 14,
-                  borderRadius: 8,
+                  marginBottom: 8,
+                  borderRadius: 6,
                   border: `1px solid ${highlightedSceneId === scene.id ? 'rgba(232,64,64,0.45)' : c.thickBorder}`,
-                  boxShadow: highlightedSceneId === scene.id
-                    ? 'var(--app-panel-shadow), 0 0 0 3px rgba(232,64,64,0.12)'
-                    : 'var(--app-panel-shadow)',
+                  boxShadow: highlightedSceneId === scene.id ? '0 0 0 3px rgba(232,64,64,0.08)' : 'none',
                   transition: 'box-shadow 0.25s, border-color 0.25s',
-                  background: '#fff',
+                  background: c.tableBg,
                   overflow: 'hidden',
                 }}
               >
-                <div onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)} style={{ padding: '10px 12px 8px', borderLeft: `4px solid ${scene._canonical?.color || scene.color || '#F2C250'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                <div onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)} style={{ padding: '8px 12px 7px', borderLeft: `4px solid ${scene._canonical?.color || scene.color || '#F2C250'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontWeight: 800, fontFamily: 'monospace' }}>SC {scene._canonical?.sceneNumber || scene.sceneLabel}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: 11 }}>{formatSceneNumber(scene._canonical?.sceneNumber || scene.sceneLabel)}</span>
                         <span style={{ fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Untitled Scene'}
                         </span>
                       </div>
-                      <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', lineHeight: 1.25 }}>
                         <span>{scene._canonical?.location || scene.location || 'Location'}</span>
                         <span>•</span>
                         <span>{scene._canonical?.intOrExt || scene.intOrExt || 'INT'}</span>
                         <span>{scene._canonical?.dayNight || scene.dayNight || 'DAY'}</span>
                         <span>•</span>
-                        <span>{scene.linkedScriptSceneId && scriptPaginationByScene[scene.linkedScriptSceneId] ? `${scriptPaginationByScene[scene.linkedScriptSceneId].pageCount.toFixed(2)} pages` : '—'}</span>
+                        <span>{scene.linkedScriptSceneId && scriptPaginationByScene[scene.linkedScriptSceneId] ? `${scriptPaginationByScene[scene.linkedScriptSceneId].pageCount.toFixed(2)} pages` : '— pages'}</span>
                         <span>•</span>
-                        <span>{shots.length} shot{shots.length === 1 ? '' : 's'}</span>
+                        <span>{formatShotCountLabel(shots.length)}</span>
+                        <span>•</span>
+                        <span title={sceneCharacters.join(', ')}>Cast: {formatCharacterSummary(sceneCharacters, 2)}</span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                      {(scene._canonical?.characters || []).slice(0, 4).map(character => (
-                        <span key={character} style={{ fontSize: 10, border: `1px solid ${c.border}`, borderRadius: 999, padding: '1px 6px' }}>{character}</span>
-                      ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                       <button
                         onClick={() => setExpandedSceneDetails(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
                         style={{ border: `1px solid ${c.border}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 10, padding: '3px 7px' }}
@@ -1737,7 +1773,21 @@ export default function ShotlistTab({ containerRef }) {
                   </div>
                 )}
 
-                <div style={{ overflowX: 'auto', borderTop: `1px solid ${c.border}` }}>
+                <div style={{ position: 'relative', overflowX: 'auto', borderTop: `1px solid ${c.border}` }}>
+                  <div style={{
+                    position: 'sticky',
+                    top: 0,
+                    right: 0,
+                    zIndex: 14,
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    pointerEvents: 'none',
+                    height: 0,
+                  }}>
+                    <div style={{ margin: '6px 8px 0 0', fontSize: 10, padding: '2px 8px', borderRadius: 999, background: 'rgba(17,24,39,0.86)', color: '#fff', letterSpacing: '0.02em' }}>
+                      Scroll horizontally for more columns →
+                    </div>
+                  </div>
                   <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: Math.max(totalTableWidth, 980), minWidth: '100%', backgroundColor: c.tableBg, fontSize: 11, fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif' }}>
                     <colgroup>
                       <col style={{ width: DRAG_COL_WIDTH }} />
@@ -1745,9 +1795,9 @@ export default function ShotlistTab({ containerRef }) {
                     </colgroup>
                     <thead>
                       <tr style={{ height: rowHeight + 2 }}>
-                        <th className="shotlist-ui-col" style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: c.headerBg, borderBottom: `2px solid ${c.thickBorder}`, borderRight: `1px solid ${c.thickBorder}`, width: DRAG_COL_WIDTH }} />
+                        <th className="shotlist-ui-col" style={{ position: 'sticky', top: 0, left: 0, zIndex: 16, backgroundColor: c.headerBg, borderBottom: `2px solid ${c.thickBorder}`, borderRight: `1px solid ${c.thickBorder}`, width: DRAG_COL_WIDTH }} />
                         {visibleColumns.map((col, i) => (
-                          <th key={col.key} style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: c.headerBg, color: '#FFFFFF', fontSize: 9, fontWeight: 700, fontFamily: 'Sora, sans-serif', letterSpacing: '0.07em', textTransform: 'uppercase', textAlign: 'left', padding: '0 8px', borderBottom: `2px solid ${c.thickBorder}`, borderRight: i < visibleColumns.length - 1 ? `1px solid ${c.thickBorder}` : 'none', whiteSpace: 'nowrap', userSelect: 'none', overflow: 'hidden', boxSizing: 'border-box', paddingRight: 16 }}>
+                          <th key={col.key} style={{ position: 'sticky', top: 0, left: stickyOffsets[col.key], zIndex: stickyOffsets[col.key] != null ? 15 : 10, backgroundColor: c.headerBg, color: '#FFFFFF', fontSize: 9, fontWeight: 700, fontFamily: 'Sora, sans-serif', letterSpacing: '0.07em', textTransform: 'uppercase', textAlign: 'left', padding: '0 8px', borderBottom: `2px solid ${c.thickBorder}`, borderRight: i < visibleColumns.length - 1 ? `1px solid ${c.thickBorder}` : 'none', whiteSpace: 'nowrap', userSelect: 'none', overflow: 'hidden', boxSizing: 'border-box', paddingRight: 16, boxShadow: stickyOffsets[col.key] != null ? `1px 0 0 ${c.thickBorder}` : 'none' }}>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{col.label}</span>
                               <ColResizeHandle colKey={col.key} width={col.width} isDark={isDark} onResizeStart={handleResizeStart} />
@@ -1773,6 +1823,7 @@ export default function ShotlistTab({ containerRef }) {
                               rowHeight={rowHeight}
                               sceneIntOrExt={scene._canonical?.intOrExt || scene.intOrExt}
                               sceneDayNight={scene._canonical?.dayNight || scene.dayNight}
+                              stickyOffsets={stickyOffsets}
                             />
                           ))}
                         </SortableContext>
