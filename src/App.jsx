@@ -30,15 +30,12 @@ import ScriptTab from './components/ScriptTab'
 import CastCrewTab from './components/CastCrewTab'
 import ScenePropertiesDialog from './components/ScenePropertiesDialog'
 import ShotPropertiesDialog from './components/ShotPropertiesDialog'
+import PersonProfileDialog from './components/PersonProfileDialog'
 import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
-import {
-  resolveEntityTarget,
-  shouldSuppressEntityContextMenu,
-  shouldSuppressEntityOpen,
-} from './utils/entityDialog'
+import { resolveEntityTarget, resolvePersonEntityTarget, shouldSuppressEntityOpen } from './utils/entityDialog'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -328,7 +325,12 @@ export default function App() {
   const autoSave = useStore(s => s.autoSave)
   const getProjectData = useStore(s => s.getProjectData)
   const hideContextMenu = useStore(s => s.hideContextMenu)
-  const showContextMenu = useStore(s => s.showContextMenu)
+  const showPersonContextMenu = useStore(s => s.showPersonContextMenu)
+  const openPersonDialog = useStore(s => s.openPersonDialog)
+  const closePersonDialog = useStore(s => s.closePersonDialog)
+  const personDialog = useStore(s => s.personDialog)
+  const castRoster = useStore(s => s.castRoster)
+  const crewRoster = useStore(s => s.crewRoster)
   const addScene = useStore(s => s.addScene)
   const activeTab = useStore(s => s.activeTab)
   const setActiveTab = useStore(s => s.setActiveTab)
@@ -621,6 +623,12 @@ export default function App() {
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
     const target = event.target
+    if (shouldSuppressEntityOpen(target)) return
+    const person = resolvePersonEntityTarget(target)
+    if (person) {
+      openPersonDialog(person.personType, person.personId)
+      return
+    }
     const entity = resolveEntityTarget(target)
     if (!entity) return
     const entityNode = target instanceof Element ? target.closest('[data-entity-type][data-entity-id]') : null
@@ -634,7 +642,17 @@ export default function App() {
     if (entity.entityType === 'shot') {
       openShotDialog(entity.entityId)
     }
-  }, [openSceneDialog, openShotDialog])
+  }, [openPersonDialog, openSceneDialog, openShotDialog])
+
+  const handleEntityContextMenuCapture = useCallback((event) => {
+    const target = event.target
+    if (shouldSuppressEntityOpen(target)) return
+    const person = resolvePersonEntityTarget(target)
+    if (!person) return
+    event.preventDefault()
+    event.stopPropagation()
+    showPersonContextMenu(person.personType, person.personId, event.clientX, event.clientY)
+  }, [showPersonContextMenu])
 
   const handleEntityContextMenuCapture = useCallback((event) => {
     const target = event.target
@@ -655,6 +673,7 @@ export default function App() {
       onClick={() => hideContextMenu()}
       onContextMenuCapture={handleEntityContextMenuCapture}
       onDoubleClickCapture={handleEntityDoubleClickCapture}
+      onContextMenuCapture={handleEntityContextMenuCapture}
     >
       {/* Toolbar */}
       <Toolbar
@@ -897,6 +916,13 @@ export default function App() {
       <ContextMenu />
       <ScenePropertiesDialog />
       <ShotPropertiesDialog />
+      {personDialog && (
+        <PersonProfileDialog
+          personType={personDialog.type}
+          person={personDialog.id ? (personDialog.type === 'cast' ? castRoster : crewRoster).find(entry => entry.id === personDialog.id) : null}
+          onClose={closePersonDialog}
+        />
+      )}
 
       {/* Export Modal */}
       <ExportModal

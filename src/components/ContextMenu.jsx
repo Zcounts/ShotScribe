@@ -7,9 +7,9 @@ export default function ContextMenu() {
   const deleteShot = useStore(s => s.deleteShot)
   const deleteScene = useStore(s => s.deleteScene)
   const duplicateShot = useStore(s => s.duplicateShot)
-  const openSceneDialog = useStore(s => s.openSceneDialog)
-  const openShotDialog = useStore(s => s.openShotDialog)
-  const scenes = useStore(s => s.scenes)
+  const openPersonDialog = useStore(s => s.openPersonDialog)
+  const removeCastRosterEntry = useStore(s => s.removeCastRosterEntry)
+  const removeCrewRosterEntry = useStore(s => s.removeCrewRosterEntry)
   const ref = useRef(null)
 
   useEffect(() => {
@@ -26,11 +26,11 @@ export default function ContextMenu() {
 
   if (!contextMenu) return null
 
-  const { entityType, entityId, x, y } = contextMenu
+  const { x, y } = contextMenu
 
   // Adjust position to stay in viewport
-  const menuWidth = 200
-  const menuHeight = entityType === 'shot' ? 144 : 112
+  const menuWidth = 180
+  const menuHeight = contextMenu.type === 'person' ? 88 : 100
   const left = Math.min(x, window.innerWidth - menuWidth - 8)
   const top = Math.min(y, window.innerHeight - menuHeight - 8)
   const sceneForDelete = entityType === 'scene' ? scenes.find(scene => scene.id === entityId) : null
@@ -57,6 +57,41 @@ export default function ContextMenu() {
     deleteShot(entityId)
     hideContextMenu()
   }
+
+  if (contextMenu.type === 'person') {
+    const { personType, personId } = contextMenu
+    const label = personType === 'cast' ? 'cast' : 'crew'
+    return (
+      <div
+        ref={ref}
+        className="context-menu"
+        style={{ left, top }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div
+          className="context-menu-item"
+          onClick={() => { openPersonDialog(personType, personId); hideContextMenu() }}
+        >
+          Edit Cast/Crew Member
+        </div>
+        <div className="border-t border-gray-200 my-1" />
+        <div
+          className="context-menu-item danger"
+          onClick={() => {
+            const ok = window.confirm(`Delete this ${label} member? This will also remove linked callsheet entries.`)
+            if (!ok) return
+            if (personType === 'cast') removeCastRosterEntry(personId)
+            else removeCrewRosterEntry(personId)
+            hideContextMenu()
+          }}
+        >
+          Delete Cast/Crew Member
+        </div>
+      </div>
+    )
+  }
+
+  const { shotId } = contextMenu
 
   return (
     <div
