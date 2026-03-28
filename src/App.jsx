@@ -35,7 +35,12 @@ import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
-import { resolveEntityTarget, resolvePersonEntityTarget, shouldSuppressEntityOpen } from './utils/entityDialog'
+import {
+  resolveEntityTarget,
+  resolvePersonEntityTarget,
+  shouldSuppressEntityOpen,
+  shouldSuppressEntityContextMenu,
+} from './utils/entityDialog'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -325,6 +330,7 @@ export default function App() {
   const autoSave = useStore(s => s.autoSave)
   const getProjectData = useStore(s => s.getProjectData)
   const hideContextMenu = useStore(s => s.hideContextMenu)
+  const showContextMenu = useStore(s => s.showContextMenu)
   const showPersonContextMenu = useStore(s => s.showPersonContextMenu)
   const openPersonDialog = useStore(s => s.openPersonDialog)
   const closePersonDialog = useStore(s => s.closePersonDialog)
@@ -646,16 +652,16 @@ export default function App() {
 
   const handleEntityContextMenuCapture = useCallback((event) => {
     const target = event.target
-    if (shouldSuppressEntityOpen(target)) return
     const person = resolvePersonEntityTarget(target)
-    if (!person) return
-    event.preventDefault()
-    event.stopPropagation()
-    showPersonContextMenu(person.personType, person.personId, event.clientX, event.clientY)
-  }, [showPersonContextMenu])
+    if (person) {
+      const personNode = target instanceof Element ? target.closest('[data-person-type][data-person-id]') : null
+      if (shouldSuppressEntityContextMenu(target, personNode)) return
+      event.preventDefault()
+      event.stopPropagation()
+      showPersonContextMenu(person.personType, person.personId, event.clientX, event.clientY)
+      return
+    }
 
-  const handleEntityContextMenuCapture = useCallback((event) => {
-    const target = event.target
     const entity = resolveEntityTarget(target)
     if (!entity) return
     const entityNode = target instanceof Element ? target.closest('[data-entity-type][data-entity-id]') : null
@@ -664,7 +670,7 @@ export default function App() {
     event.preventDefault()
     event.stopPropagation()
     showContextMenu(entity.entityType, entity.entityId, event.clientX, event.clientY)
-  }, [showContextMenu])
+  }, [showContextMenu, showPersonContextMenu])
 
   return (
     <div
@@ -673,7 +679,6 @@ export default function App() {
       onClick={() => hideContextMenu()}
       onContextMenuCapture={handleEntityContextMenuCapture}
       onDoubleClickCapture={handleEntityDoubleClickCapture}
-      onContextMenuCapture={handleEntityContextMenuCapture}
     >
       {/* Toolbar */}
       <Toolbar

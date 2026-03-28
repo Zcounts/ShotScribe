@@ -7,6 +7,9 @@ export default function ContextMenu() {
   const deleteShot = useStore(s => s.deleteShot)
   const deleteScene = useStore(s => s.deleteScene)
   const duplicateShot = useStore(s => s.duplicateShot)
+  const scenes = useStore(s => s.scenes)
+  const openSceneDialog = useStore(s => s.openSceneDialog)
+  const openShotDialog = useStore(s => s.openShotDialog)
   const openPersonDialog = useStore(s => s.openPersonDialog)
   const removeCastRosterEntry = useStore(s => s.removeCastRosterEntry)
   const removeCrewRosterEntry = useStore(s => s.removeCrewRosterEntry)
@@ -30,9 +33,16 @@ export default function ContextMenu() {
 
   // Adjust position to stay in viewport
   const menuWidth = 180
-  const menuHeight = contextMenu.type === 'person' ? 88 : 100
+  const menuHeight = contextMenu.type === 'person'
+    ? 88
+    : contextMenu.type === 'shot'
+      ? 130
+      : 100
   const left = Math.min(x, window.innerWidth - menuWidth - 8)
   const top = Math.min(y, window.innerHeight - menuHeight - 8)
+
+  const entityType = contextMenu.type
+  const entityId = entityType === 'person' ? null : contextMenu.entityId
   const sceneForDelete = entityType === 'scene' ? scenes.find(scene => scene.id === entityId) : null
   const sceneShotCount = sceneForDelete?.shots?.length || 0
 
@@ -90,8 +100,6 @@ export default function ContextMenu() {
       </div>
     )
   }
-
-  const { shotId } = contextMenu
 
   return (
     <div
