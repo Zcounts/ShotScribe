@@ -59,7 +59,7 @@ export const DEFAULT_SCHEDULE_COLUMN_CONFIG = [
 
 export const DEFAULT_CALLSHEET_SECTION_CONFIG = [
   { key: 'generalInfo',       visible: true,  label: 'General Info' },
-  { key: 'advancedSchedule',  visible: true,  label: 'Advanced Schedule' },
+  { key: 'advancedSchedule',  visible: true,  label: "Today's Shooting Schedule" },
   { key: 'castList',          visible: true,  label: 'Cast List' },
   { key: 'crewList',          visible: true,  label: 'Crew List' },
   { key: 'locationDetails',   visible: true,  label: 'Location Details' },
