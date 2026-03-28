@@ -451,52 +451,61 @@ function paginateRows(rows, options = {}) {
 
 export default function ScriptTab() {
   const scriptScenes = useStore(s => s.scriptScenes)
-  const scenes = useStore(s => s.scenes)
-  const addShotWithOverrides = useStore(s => s.addShotWithOverrides)
-  const linkShotToScene = useStore(s => s.linkShotToScene)
-  const updateShot = useStore(s => s.updateShot)
-  const updateShotImage = useStore(s => s.updateShotImage)
-  const setActiveTab = useStore(s => s.setActiveTab)
-  const updateScriptScene = useStore(s => s.updateScriptScene)
   const updateScriptSceneScreenplay = useStore(s => s.updateScriptSceneScreenplay)
-  const useDropdowns = useStore(s => s.useDropdowns)
   const scriptSettings = useStore(s => s.scriptSettings)
   const setScriptSettings = useStore(s => s.setScriptSettings)
-  const scriptFocusRequest = useStore(s => s.scriptFocusRequest)
-  const clearScriptFocusRequest = useStore(s => s.clearScriptFocusRequest)
-  const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
-  const scriptViewState = useStore(s => s.tabViewState?.script || {})
-  const setTabViewState = useStore(s => s.setTabViewState)
 
   const rightRef = useRef(null)
   const headingRefs = useRef({})
-  const [activeSceneId, setActiveSceneId] = useState(scriptViewState.activeSceneId || null)
-  const [addShotDialog, setAddShotDialog] = useState(null)
-  const [shotLinkDialog, setShotLinkDialog] = useState(null)
-  const [pendingOpenShotDialog, setPendingOpenShotDialog] = useState(null)
-  const [importModalOpen, setImportModalOpen] = useState(false)
-  const [isEditMode, setIsEditMode] = useState(Boolean(scriptViewState.isEditMode))
-  const [isInspectorOpen, setIsInspectorOpen] = useState(Boolean(scriptViewState.isInspectorOpen))
+  const blockInputRefs = useRef({})
+  const rulerTrackRef = useRef(null)
+
+  const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
   const [draggingMarker, setDraggingMarker] = useState(null)
-  const rulerTrackRef = useRef(null)
+  const [activeDialog, setActiveDialog] = useState(null)
 
   const orderedScenes = useMemo(() => [...scriptScenes].sort(naturalSortSceneNumber), [scriptScenes])
   const scenePaginationMode = scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
-  const pagination = useMemo(
-    () => estimateScreenplayPagination(orderedScenes, { scenePaginationMode }),
-    [orderedScenes, scenePaginationMode],
-  )
   const documentSettings = useMemo(
     () => normalizeDocumentSettings(scriptSettings?.documentSettings || DEFAULT_SCRIPT_DOCUMENT_SETTINGS),
     [scriptSettings?.documentSettings],
   )
+
   const pageSettings = documentSettings.page
   const charsPerLineByType = useMemo(() => getCharsPerLineByType(documentSettings), [documentSettings])
   const baseBlockStyle = documentSettings.blockStyles.action || DEFAULT_SCRIPT_DOCUMENT_SETTINGS.blockStyles.action
   const screenplayLineHeightPx = baseBlockStyle.lineHeightPx
   const screenplayFontSizePx = baseBlockStyle.fontSizePx
   const rowsPerPage = useMemo(() => getRowsPerPage(pageSettings, screenplayLineHeightPx), [pageSettings, screenplayLineHeightPx])
+
+  const screenplayBySceneId = useMemo(() => {
+    const result = {}
+    orderedScenes.forEach(sc => { result[sc.id] = ensureEditableScreenplayElements(getSceneScreenplayElements(sc)) })
+    return result
+  }, [orderedScenes])
+
+  const screenplayRows = useMemo(
+    () => buildScreenplayRows(orderedScenes, screenplayBySceneId, charsPerLineByType),
+    [charsPerLineByType, orderedScenes, screenplayBySceneId],
+  )
+
+  const pagedScript = useMemo(
+    () => paginateRows(screenplayRows, { scenePaginationMode, rowsPerPage }),
+    [screenplayRows, scenePaginationMode, rowsPerPage],
+  )
+
+  const selectedScene = selectedBlock?.sceneId ? orderedScenes.find(scene => scene.id === selectedBlock.sceneId) : null
+  const selectedBlockData = selectedScene
+    ? ensureEditableScreenplayElements(getSceneScreenplayElements(selectedScene)).find((block) => block.id === selectedBlock?.blockId)
+    : null
+  const selectedStyleType = selectedBlockData?.type || 'action'
+  const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
+  const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
+
+  const blockLeftPx = pageSettings.marginLeftPx + selectedStyle.marginLeftPx
+  const blockRightPx = pageSettings.widthPx - pageSettings.marginRightPx - selectedStyle.marginRightPx
+  const firstLineIndentPx = blockLeftPx + selectedStyle.firstLineIndentPx
 
   const updateDocumentSettings = useCallback((updater) => {
     const current = normalizeDocumentSettings(scriptSettings?.documentSettings || DEFAULT_SCRIPT_DOCUMENT_SETTINGS)
@@ -518,247 +527,75 @@ export default function ScriptTab() {
     }))
   }, [updateDocumentSettings])
 
-  const shotCounts = useMemo(() => {
-    const map = {}
-    scenes.forEach((sc) => sc.shots.forEach((sh) => { if (sh.linkedSceneId) map[sh.linkedSceneId] = (map[sh.linkedSceneId] || 0) + 1 }))
-    return map
-  }, [scenes])
+  const updateSceneBlocks = useCallback((sceneId, updater) => {
+    const scene = orderedScenes.find(entry => entry.id === sceneId)
+    if (!scene) return
+    const current = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
+    const next = ensureEditableScreenplayElements(typeof updater === 'function' ? updater(current) : updater)
+    updateScriptSceneScreenplay(sceneId, next)
+  }, [orderedScenes, updateScriptSceneScreenplay])
 
-  const linkedShotsByScene = useMemo(() => {
-    const map = {}
-    scenes.forEach((storyScene, sceneIdx) => {
-      storyScene.shots.forEach((shot, shotIdx) => {
-        if (!shot.linkedSceneId) return
-        if (!map[shot.linkedSceneId]) map[shot.linkedSceneId] = []
-        map[shot.linkedSceneId].push({
-          ...shot,
-          parentSceneId: storyScene.id,
-          displayId: `${sceneIdx + 1}${String.fromCharCode(65 + shotIdx)}`,
-        })
-      })
+  const updateBlockText = useCallback((sceneId, blockId, text) => {
+    updateSceneBlocks(sceneId, (blocks) => blocks.map(block => (block.id === blockId ? { ...block, text } : block)))
+  }, [updateSceneBlocks])
+
+  const updateBlockType = useCallback((sceneId, blockId, type) => {
+    updateSceneBlocks(sceneId, (blocks) => blocks.map(block => (block.id === blockId ? { ...block, type } : block)))
+  }, [updateSceneBlocks])
+
+  const screenplayTypeOrder = useMemo(() => EDITABLE_SCREENPLAY_TYPES.map(option => option.value), [])
+  const nextTypeForEnter = useCallback((type) => {
+    if (type === 'character') return 'dialogue'
+    if (type === 'parenthetical') return 'dialogue'
+    if (type === 'dialogue') return 'action'
+    return type
+  }, [])
+
+  const cycleType = useCallback((sceneId, blockId, direction = 1) => {
+    updateSceneBlocks(sceneId, (blocks) => {
+      const index = blocks.findIndex(block => block.id === blockId)
+      if (index === -1) return blocks
+      const currentIndex = screenplayTypeOrder.indexOf(blocks[index].type)
+      const nextIndex = (currentIndex + direction + screenplayTypeOrder.length) % screenplayTypeOrder.length
+      const next = [...blocks]
+      next[index] = { ...next[index], type: screenplayTypeOrder[nextIndex] }
+      return next
     })
-    return map
-  }, [scenes])
+  }, [screenplayTypeOrder, updateSceneBlocks])
 
-  const getSceneById = useCallback((sceneId) => orderedScenes.find(scene => scene.id === sceneId), [orderedScenes])
-
-  const commitSceneBlocks = useCallback((sceneId, nextElements, focusBlockId = null) => {
-    const normalized = ensureEditableScreenplayElements(nextElements)
-    updateScriptSceneScreenplay(sceneId, normalized)
-  }, [updateScriptSceneScreenplay])
-
-  const updateBlock = useCallback((sceneId, blockId, updates) => {
-    const scene = getSceneById(sceneId)
-    if (!scene) return
-    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
-    const next = elements.map(element => element.id === blockId ? { ...element, ...updates } : element)
-    commitSceneBlocks(sceneId, next, blockId)
-  }, [commitSceneBlocks, getSceneById])
-
-  const splitBlock = useCallback((sceneId, blockId) => {
-    const scene = getSceneById(sceneId)
-    if (!scene) return
-    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
-    const index = elements.findIndex(element => element.id === blockId)
-    if (index === -1) return
-    const rawText = String(elements[index].text || '')
-    const cursor = rawText.length
-    const left = rawText.slice(0, cursor)
-    const right = rawText.slice(cursor)
-    const current = elements[index]
-    const newBlock = createScreenplayElement(current.type, right)
-    const next = [...elements]
-    next.splice(index, 1, { ...current, text: left }, newBlock)
-    commitSceneBlocks(sceneId, next, newBlock.id)
+  const insertBlockAfter = useCallback((sceneId, blockId, type) => {
+    const newBlock = createScreenplayElement(type, '')
+    updateSceneBlocks(sceneId, (blocks) => {
+      const index = blocks.findIndex(block => block.id === blockId)
+      if (index === -1) return blocks
+      const next = [...blocks]
+      next.splice(index + 1, 0, newBlock)
+      return next
+    })
     setSelectedBlock({ sceneId, blockId: newBlock.id })
-  }, [commitSceneBlocks, getSceneById])
+    requestAnimationFrame(() => blockInputRefs.current[`${sceneId}:${newBlock.id}`]?.focus())
+  }, [updateSceneBlocks])
 
-  const mergeBlock = useCallback((sceneId, blockId, direction = 'up') => {
-    const scene = getSceneById(sceneId)
-    if (!scene) return
-    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
-    const index = elements.findIndex(element => element.id === blockId)
-    if (index === -1) return
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    if (targetIndex < 0 || targetIndex >= elements.length) return
-    const current = elements[index]
-    const target = elements[targetIndex]
-    const mergedText = direction === 'up'
-      ? `${String(target.text || '')}${target.text ? '\n' : ''}${String(current.text || '')}`
-      : `${String(current.text || '')}${current.text ? '\n' : ''}${String(target.text || '')}`
-    const next = [...elements]
-    if (direction === 'up') {
-      next[targetIndex] = { ...target, text: mergedText }
+  const mergeWithPrevious = useCallback((sceneId, blockId) => {
+    updateSceneBlocks(sceneId, (blocks) => {
+      const index = blocks.findIndex(block => block.id === blockId)
+      if (index <= 0) return blocks
+      const prev = blocks[index - 1]
+      const curr = blocks[index]
+      const next = [...blocks]
+      next[index - 1] = { ...prev, text: `${prev.text || ''}${curr.text || ''}` }
       next.splice(index, 1)
-      commitSceneBlocks(sceneId, next, target.id)
-      setSelectedBlock({ sceneId, blockId: target.id })
-    } else {
-      next[index] = { ...current, text: mergedText }
-      next.splice(targetIndex, 1)
-      commitSceneBlocks(sceneId, next, current.id)
-      setSelectedBlock({ sceneId, blockId: current.id })
-    }
-  }, [commitSceneBlocks, getSceneById])
-
-  const insertBlockAfter = useCallback((sceneId, blockId) => {
-    const scene = getSceneById(sceneId)
-    if (!scene) return
-    const elements = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
-    const index = elements.findIndex(element => element.id === blockId)
-    if (index === -1) return
-    const newBlock = createScreenplayElement('action', '')
-    const next = [...elements]
-    next.splice(index + 1, 0, newBlock)
-    commitSceneBlocks(sceneId, next, newBlock.id)
-    setSelectedBlock({ sceneId, blockId: newBlock.id })
-  }, [commitSceneBlocks, getSceneById])
-
-  const screenplayBySceneId = useMemo(() => {
-    const result = {}
-    orderedScenes.forEach(sc => { result[sc.id] = getSceneScreenplayElements(sc) })
-    return result
-  }, [orderedScenes])
-
-  const screenplayRows = useMemo(
-    () => buildScreenplayRows(orderedScenes, screenplayBySceneId, charsPerLineByType),
-    [charsPerLineByType, orderedScenes, screenplayBySceneId],
-  )
-  const pagedScript = useMemo(
-    () => paginateRows(screenplayRows, { scenePaginationMode, rowsPerPage }),
-    [screenplayRows, scenePaginationMode, rowsPerPage],
-  )
-  const scenePageStats = useMemo(() => {
-    const stats = {}
-    pagedScript.forEach(page => {
-      const sceneIds = [...new Set(page.lines.map(l => l.sceneId).filter(Boolean))]
-      sceneIds.forEach(sceneId => {
-        if (!stats[sceneId]) stats[sceneId] = { startPage: page.number, endPage: page.number, pages: new Set() }
-        stats[sceneId].startPage = Math.min(stats[sceneId].startPage, page.number)
-        stats[sceneId].endPage = Math.max(stats[sceneId].endPage, page.number)
-        stats[sceneId].pages.add(page.number)
-      })
+      setSelectedBlock({ sceneId, blockId: prev.id })
+      requestAnimationFrame(() => blockInputRefs.current[`${sceneId}:${prev.id}`]?.focus())
+      return next
     })
-    Object.keys(stats).forEach(sceneId => {
-      stats[sceneId].pageCount = Number((stats[sceneId].pages.size).toFixed(2))
-    })
-    return stats
-  }, [pagedScript])
+  }, [updateSceneBlocks])
+
+  const pxToInches = useCallback((px) => Number((px / 96).toFixed(2)), [])
+  const inchesToPx = useCallback((inches) => Math.round((Number(inches) || 0) * 96), [])
 
   useEffect(() => {
-    const io = new IntersectionObserver((entries) => {
-      const visible = entries.filter(e => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
-      if (visible?.target?.dataset?.sceneid) setActiveSceneId(visible.target.dataset.sceneid)
-    }, { root: rightRef.current, threshold: [0.25, 0.5, 0.75] })
-    Object.values(headingRefs.current).forEach(el => el && io.observe(el))
-    return () => io.disconnect()
-  }, [orderedScenes])
-
-  useEffect(() => {
-    setTabViewState('script', { activeSceneId, isEditMode, isInspectorOpen })
-  }, [activeSceneId, isEditMode, isInspectorOpen, setTabViewState])
-
-  useEffect(() => {
-    const node = rightRef.current
-    if (!node) return
-    const savedTop = scriptViewState.scrollTop
-    if (typeof savedTop === 'number') {
-      requestAnimationFrame(() => {
-        node.scrollTop = savedTop
-      })
-    }
-  }, [scriptViewState.scrollTop])
-
-  useEffect(() => {
-    if (!scriptFocusRequest) return
-    const node = headingRefs.current[scriptFocusRequest.sceneId]
-    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    clearScriptFocusRequest()
-  }, [scriptFocusRequest, clearScriptFocusRequest])
-
-  const allLinkedShotsForScriptScene = useCallback((scriptSceneId) => linkedShotsByScene[scriptSceneId] || [], [linkedShotsByScene])
-
-  const findStoryboardSceneForScriptScene = (scriptScene) => {
-    if (!scriptScene) return null
-    for (const storyboardScene of scenes) {
-      if (storyboardScene.shots.some(shot => shot.linkedSceneId === scriptScene.id)) return storyboardScene
-    }
-    return scenes[0] || null
-  }
-
-  const confirmAddShotDialog = ({ mode, selectedShotId }) => {
-    if (!addShotDialog) return
-    const { scene: scriptScene, selectedText, rangeStart, rangeEnd } = addShotDialog
-    if (mode === 'existing' && selectedShotId) {
-      linkShotToScene(selectedShotId, scriptScene.id, {
-        linkedDialogueLine: selectedText || null,
-        linkedDialogueOffset: Number.isFinite(rangeStart) ? rangeStart : null,
-        linkedScriptRangeStart: rangeStart,
-        linkedScriptRangeEnd: rangeEnd,
-      })
-      if (selectedText) updateShot(selectedShotId, { notes: selectedText })
-      setAddShotDialog(null)
-      return
-    }
-    const targetStoryboardScene = findStoryboardSceneForScriptScene(scriptScene)
-    if (!targetStoryboardScene) return
-    const createdShotId = addShotWithOverrides(targetStoryboardScene.id, {
-      linkedSceneId: scriptScene.id,
-      linkedDialogueLine: selectedText || null,
-      linkedDialogueOffset: Number.isFinite(rangeStart) ? rangeStart : null,
-      linkedScriptRangeStart: rangeStart,
-      linkedScriptRangeEnd: rangeEnd,
-      notes: selectedText || '',
-    })
-    if (createdShotId) {
-      setPendingOpenShotDialog({ sceneId: scriptScene.id, shotId: createdShotId })
-    }
-    setAddShotDialog(null)
-  }
-
-  const openShotLinkDialog = (sceneId, shotIds) => {
-    if (!shotIds?.length) return
-    const shots = allLinkedShotsForScriptScene(sceneId)
-    const shotMap = Object.fromEntries(shots.map(sh => [sh.id, sh]))
-    setShotLinkDialog({ sceneId, shotIds, shotMap })
-  }
-
-  useEffect(() => {
-    if (!pendingOpenShotDialog) return
-    const shots = allLinkedShotsForScriptScene(pendingOpenShotDialog.sceneId)
-    const foundShot = shots.find(sh => sh.id === pendingOpenShotDialog.shotId)
-    if (!foundShot) return
-    setShotLinkDialog({
-      sceneId: pendingOpenShotDialog.sceneId,
-      shotIds: [foundShot.id],
-      shotMap: { [foundShot.id]: foundShot },
-    })
-    setPendingOpenShotDialog(null)
-  }, [pendingOpenShotDialog, allLinkedShotsForScriptScene])
-
-  const jumpToStoryboardShot = (shot) => {
-    if (!shot?.id) return
-    setActiveTab('storyboard')
-    requestAnimationFrame(() => {
-      const node = document.getElementById(`storyboard-shot-${shot.id}`)
-      if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-    })
-  }
-
-  const selectedScene = selectedBlock?.sceneId ? getSceneById(selectedBlock.sceneId) : null
-  const selectedBlockData = selectedScene
-    ? ensureEditableScreenplayElements(getSceneScreenplayElements(selectedScene)).find((block) => block.id === selectedBlock?.blockId)
-    : null
-  const selectedStyleType = selectedBlockData?.type || 'action'
-  const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
-  const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
-
-  const isBlockSelectedForEdit = Boolean(isEditMode && selectedBlockData)
-  const blockLeftPx = pageSettings.marginLeftPx + selectedStyle.marginLeftPx
-  const blockRightPx = pageSettings.widthPx - pageSettings.marginRightPx - selectedStyle.marginRightPx
-  const firstLineIndentPx = blockLeftPx + selectedStyle.firstLineIndentPx
-
-  useEffect(() => {
-    if (!draggingMarker || !isBlockSelectedForEdit) return
+    if (!draggingMarker || !selectedBlockData) return
     const onPointerMove = (event) => {
       const trackRect = rulerTrackRef.current?.getBoundingClientRect()
       if (!trackRect) return
@@ -782,7 +619,7 @@ export default function ScriptTab() {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
     }
-  }, [blockLeftPx, draggingMarker, isBlockSelectedForEdit, pageContentWidthPx, pageSettings.marginLeftPx, pageSettings.marginRightPx, pageSettings.widthPx, selectedStyle.firstLineIndentPx, selectedStyle.marginLeftPx, selectedStyle.marginRightPx, selectedStyleType, updateBlockStyle])
+  }, [blockLeftPx, draggingMarker, pageContentWidthPx, pageSettings.marginLeftPx, pageSettings.marginRightPx, pageSettings.widthPx, selectedBlockData, selectedStyle.marginLeftPx, selectedStyle.marginRightPx, selectedStyleType, updateBlockStyle])
 
   const DocumentRuler = () => {
     const contentWidthPx = Math.max(1, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
@@ -799,25 +636,10 @@ export default function ScriptTab() {
     })
 
     return (
-      <div
-        style={{
-          width: `${pageSettings.widthPx}px`,
-          height: RULER_HEIGHT_PX,
-          border: '1px solid rgba(148,163,184,0.55)',
-          borderRadius: 4,
-          background: '#f8fafc',
-          position: 'relative',
-          overflow: 'hidden',
-          boxSizing: 'border-box',
-        }}
-      >
+      <div style={{ width: `${pageSettings.widthPx}px`, height: RULER_HEIGHT_PX, border: '1px solid rgba(148,163,184,0.55)', borderRadius: 4, background: '#f8fafc', position: 'relative', overflow: 'hidden', boxSizing: 'border-box' }}>
         <div
           ref={rulerTrackRef}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: `linear-gradient(to right, rgba(226,232,240,0.6) ${pageSettings.marginLeftPx}px, transparent ${pageSettings.marginLeftPx}px, transparent ${pageSettings.widthPx - pageSettings.marginRightPx}px, rgba(226,232,240,0.6) ${pageSettings.widthPx - pageSettings.marginRightPx}px)`,
-          }}
+          style={{ position: 'absolute', inset: 0, background: `linear-gradient(to right, rgba(226,232,240,0.6) ${pageSettings.marginLeftPx}px, transparent ${pageSettings.marginLeftPx}px, transparent ${pageSettings.widthPx - pageSettings.marginRightPx}px, rgba(226,232,240,0.6) ${pageSettings.widthPx - pageSettings.marginRightPx}px)` }}
         >
           {ticks.map((tick) => (
             <div key={tick.x} style={{ position: 'absolute', left: tick.x, bottom: 0, transform: 'translateX(-0.5px)' }}>
@@ -828,7 +650,7 @@ export default function ScriptTab() {
           <div style={{ position: 'absolute', left: pageSettings.marginLeftPx, top: 0, bottom: 0, width: 1, background: 'rgba(30,41,59,0.35)' }} />
           <div style={{ position: 'absolute', left: pageSettings.widthPx - pageSettings.marginRightPx, top: 0, bottom: 0, width: 1, background: 'rgba(30,41,59,0.35)' }} />
 
-          {isBlockSelectedForEdit && (
+          {selectedBlockData && (
             <>
               <button type="button" onPointerDown={() => setDraggingMarker('marginLeftPx')} style={{ position: 'absolute', left: blockLeftPx - 6, top: -1, width: 12, height: 12, borderRadius: 2, border: '1px solid #2563eb', background: '#3b82f6', cursor: 'ew-resize' }} aria-label="Adjust block left margin" />
               <button type="button" onPointerDown={() => setDraggingMarker('marginRightPx')} style={{ position: 'absolute', left: blockRightPx - 6, top: -1, width: 12, height: 12, borderRadius: 2, border: '1px solid #2563eb', background: '#3b82f6', cursor: 'ew-resize' }} aria-label="Adjust block right margin" />
@@ -840,145 +662,80 @@ export default function ScriptTab() {
     )
   }
 
-  const BlockStyleInspector = ({ type, style }) => (
-    <div style={{ width: 260, border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, background: 'rgba(255,255,255,0.96)', padding: 12, alignSelf: 'flex-start', boxShadow: '0 4px 14px rgba(15,23,42,0.08)' }}>
-      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Page Layout</div>
-      {[
-        ['widthPx', 'Page width'],
-        ['marginTopPx', 'Top margin'],
-        ['marginRightPx', 'Right margin'],
-        ['marginBottomPx', 'Bottom margin'],
-        ['marginLeftPx', 'Left margin'],
-      ].map(([key, label]) => (
-        <label key={key} style={{ display: 'grid', gridTemplateColumns: '1fr 78px', gap: 8, alignItems: 'center', fontSize: 11, marginBottom: 6 }}>
-          <span>{label}</span>
-          <input
-            type="number"
-            value={Number(pageSettings[key] ?? 0)}
-            onChange={(e) => updateDocumentSettings((current) => ({ ...current, page: { ...current.page, [key]: Number(e.target.value) || 0 } }))}
-            style={{ width: '100%', border: '1px solid rgba(74,85,104,0.25)', borderRadius: 4, padding: '3px 4px', fontSize: 11 }}
-          />
-        </label>
-      ))}
-      <div style={{ borderTop: '1px solid rgba(74,85,104,0.16)', margin: '8px 0' }} />
-      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Block Layout · {type}</div>
-      {[
-        ['marginLeftPx', 'Left margin'],
-        ['marginRightPx', 'Right margin'],
-        ['firstLineIndentPx', 'First-line indent'],
-        ['spacingBeforePx', 'Spacing before'],
-        ['spacingAfterPx', 'Spacing after'],
-        ['lineHeightPx', 'Line height'],
-        ['fontSizePx', 'Font size'],
-        ['letterSpacingPx', 'Letter spacing'],
-      ].map(([key, label]) => (
-        <label key={key} style={{ display: 'grid', gridTemplateColumns: '1fr 78px', gap: 8, alignItems: 'center', fontSize: 11, marginBottom: 6 }}>
-          <span>{label}</span>
-          <input type="number" value={Number(style[key] ?? 0)} onChange={(e) => updateBlockStyle(type, key, Number(e.target.value) || 0)} style={{ width: '100%', border: '1px solid rgba(74,85,104,0.25)', borderRadius: 4, padding: '3px 4px', fontSize: 11 }} />
-        </label>
-      ))}
-      <label style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 8, alignItems: 'center', fontSize: 11, marginBottom: 10 }}>
-        <span>Alignment</span>
-        <select value={style.align || 'left'} onChange={(e) => updateBlockStyle(type, 'align', e.target.value)} style={{ border: '1px solid rgba(74,85,104,0.25)', borderRadius: 4, padding: '3px 4px', fontSize: 11 }}>
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-          <option value="justify">Justify</option>
-        </select>
-      </label>
-      {selectedBlockData && (
-        <label style={{ display: 'block', fontSize: 11, marginBottom: 10 }}>
-          <span style={{ display: 'block', marginBottom: 4 }}>Block text</span>
-          <textarea
-            value={String(selectedBlockData.text || '')}
-            onChange={(event) => selectedBlock && updateBlock(selectedBlock.sceneId, selectedBlock.blockId, { text: event.target.value })}
-            style={{ width: '100%', minHeight: 72, border: '1px solid rgba(74,85,104,0.25)', borderRadius: 4, padding: 6, fontSize: 12, fontFamily: SCREENPLAY_LAYOUT.typography.fontFamily, lineHeight: 1.4, boxSizing: 'border-box' }}
-          />
-        </label>
-      )}
-      <button className="toolbar-btn" style={{ width: '100%', marginBottom: 6 }} onClick={() => updateDocumentSettings((current) => resetBlockStyle(current, type))}>Reset {type} Default</button>
-      <button className="toolbar-btn danger" style={{ width: '100%' }} onClick={() => updateDocumentSettings(() => DEFAULT_SCRIPT_DOCUMENT_SETTINGS)}>Reset Entire Document Formatting</button>
-    </div>
+  const InlineNumericField = ({ label, pxValue, onChange }) => (
+    <label style={{ display: 'grid', gridTemplateColumns: '1fr 82px', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+      <span>{label}</span>
+      <input
+        type="number"
+        step="0.05"
+        value={pxToInches(pxValue)}
+        onChange={(event) => onChange(inchesToPx(event.target.value))}
+        style={{ width: '100%', border: '1px solid rgba(74,85,104,0.25)', borderRadius: 4, padding: '4px 6px', fontSize: 12 }}
+      />
+    </label>
   )
+
+  const handleBlockKeyDown = useCallback((event, row) => {
+    if (!row?.blockId) return
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      cycleType(row.sceneId, row.blockId, event.shiftKey ? -1 : 1)
+      return
+    }
+
+    const input = event.currentTarget
+    const atStart = input.selectionStart === 0 && input.selectionEnd === 0
+
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      insertBlockAfter(row.sceneId, row.blockId, nextTypeForEnter(row.type))
+      return
+    }
+
+    if (event.key === 'Backspace' && atStart && !String(input.value || '').length) {
+      event.preventDefault()
+      mergeWithPrevious(row.sceneId, row.blockId)
+    }
+  }, [cycleType, insertBlockAfter, mergeWithPrevious, nextTypeForEnter])
 
   if (orderedScenes.length === 0) {
     return (
       <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <p style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>No script imported yet</p>
-          <p style={{ margin: 0, color: '#4A5568' }}>Import a screenplay to generate scenes and start linking shots.</p>
-          <button className="dialog-button-primary" onClick={() => setImportModalOpen(true)}>Import Script</button>
-        </div>
-        <ImportScriptModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
+        <p style={{ margin: 0, fontSize: 18, color: '#475569' }}>Import a screenplay to start writing in the Script tab.</p>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
-      <SidebarPane
-        title={`Scenes · ${pagedScript.length} pp`}
-        width={260}
-        controls={null}
-      >
-          {orderedScenes.map(sc => (
-            <button key={sc.id} data-entity-type="scene" data-entity-id={sc.id} onDoubleClick={() => openScenePropertiesDialog('script', sc.id)} onClick={() => headingRefs.current[sc.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', borderLeft: activeSceneId === sc.id ? '3px solid #E84040' : '3px solid transparent', background: activeSceneId === sc.id ? 'rgba(232,64,64,0.08)' : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <SceneColorPicker value={sc.color || null} onChange={(color) => updateScriptScene(sc.id, { color })} title="Scene color" />
-                <span style={{ fontWeight: 700, fontSize: 11 }}>SC {sc.sceneNumber}</span>
-                <span style={{ fontSize: 10, color: '#718096', marginLeft: 'auto' }}>{shotCounts[sc.id] || 0} shots</span>
-              </div>
-              <div style={{ fontSize: 10, color: '#4b5563', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.location || sc.slugline}</div>
-              <div style={{ fontSize: 10, color: '#718096' }}>
-                {scenePageStats[sc.id]?.pageCount?.toFixed(2) || pagination.byScene[sc.id]?.pageCount?.toFixed(2) || '0.00'} pp
-              </div>
-            </button>
-          ))}
-      </SidebarPane>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="app-surface-card" style={{ minHeight: EDIT_BAR_HEIGHT_PX, borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
+        <span style={{ fontSize: 12, color: '#475569', fontWeight: 700 }}>Script Editor</span>
+        <select
+          value={scenePaginationMode}
+          onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+          style={{ border: '1px solid rgba(74,85,104,0.28)', borderRadius: 4, background: '#fff', padding: '4px 6px', fontSize: 12 }}
+        >
+          <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+          <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+        </select>
+        {selectedBlockData && (
+          <select
+            value={selectedStyleType}
+            onChange={(event) => updateBlockType(selectedBlock.sceneId, selectedBlock.blockId, event.target.value)}
+            style={{ border: '1px solid rgba(74,85,104,0.28)', borderRadius: 4, background: '#fff', padding: '4px 6px', fontSize: 12 }}
+          >
+            {EDITABLE_SCREENPLAY_TYPES.map(type => (<option key={type.value} value={type.value}>{type.label}</option>))}
+          </select>
+        )}
+        <button className="toolbar-btn" onClick={() => setActiveDialog(activeDialog === 'page' ? null : 'page')} style={{ marginLeft: 'auto' }}>Page Setup</button>
+        <button className="toolbar-btn" onClick={() => setActiveDialog(activeDialog === 'styles' ? null : 'styles')}>Element Styles</button>
+      </div>
 
-      <div
-        ref={rightRef}
-        onScroll={(e) => {
-          setTabViewState('script', { scrollTop: e.currentTarget.scrollTop })
-        }}
-        style={{ flex: 1, overflowY: 'auto', padding: '8px 12px 16px', position: 'relative' }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', position: 'relative' }}>
+      <div ref={rightRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 18, position: 'relative' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div className="app-surface-card" style={{ width: `${pageSettings.widthPx}px`, minHeight: EDIT_BAR_HEIGHT_PX, borderRadius: 6, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, boxSizing: 'border-box' }}>
-              <button
-                className={`toolbar-btn script-edit-toggle ${isEditMode ? 'active' : ''}`}
-                onClick={() => setIsEditMode(value => !value)}
-              >
-                {isEditMode ? 'Done Editing' : 'Edit Script'}
-              </button>
-              {isEditMode && (
-                <>
-                  {isBlockSelectedForEdit && (
-                    <>
-                      <select
-                        value={selectedStyleType}
-                        onChange={(event) => selectedBlock && updateBlock(selectedBlock.sceneId, selectedBlock.blockId, { type: event.target.value })}
-                        style={{ border: '1px solid rgba(74,85,104,0.28)', borderRadius: 4, background: '#fff', padding: '2px 6px', fontSize: 11 }}
-                      >
-                        {EDITABLE_SCREENPLAY_TYPES.map(type => (
-                          <option key={type.value} value={type.value}>{type.label}</option>
-                        ))}
-                      </select>
-                      <button className="toolbar-btn" onClick={() => selectedBlock && splitBlock(selectedBlock.sceneId, selectedBlock.blockId)} style={{ fontSize: 11, padding: '2px 6px' }}>Split</button>
-                      <button className="toolbar-btn" onClick={() => selectedBlock && mergeBlock(selectedBlock.sceneId, selectedBlock.blockId, 'up')} style={{ fontSize: 11, padding: '2px 6px' }}>Merge ↑</button>
-                      <button className="toolbar-btn" onClick={() => selectedBlock && mergeBlock(selectedBlock.sceneId, selectedBlock.blockId, 'down')} style={{ fontSize: 11, padding: '2px 6px' }}>Merge ↓</button>
-                      <button className="toolbar-btn" onClick={() => selectedBlock && insertBlockAfter(selectedBlock.sceneId, selectedBlock.blockId)} style={{ fontSize: 11, padding: '2px 6px' }}>+ Block</button>
-                    </>
-                  )}
-                  <button className="toolbar-btn" onClick={() => setIsInspectorOpen(value => !value)} style={{ marginLeft: 'auto', fontSize: 11 }}>
-                    {isInspectorOpen ? 'Hide Formatting' : 'Show Formatting'}
-                  </button>
-                </>
-              )}
-            </div>
-            {isEditMode && <div style={{ marginTop: 4 }}><DocumentRuler /></div>}
-            <div style={{ height: isEditMode ? RULER_PAGE_GAP_PX : 6 }} />
+            <DocumentRuler />
+            <div style={{ height: RULER_PAGE_GAP_PX }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {pagedScript.map((page) => (
                 <div
@@ -1001,7 +758,7 @@ export default function ScriptTab() {
                     position: 'relative',
                   }}
                 >
-                  {page.lines.map((row, rowIndex) => {
+                  {page.lines.map((row) => {
                     const styleCfg = getBlockStyleForType(documentSettings, row.type)
                     const selected = selectedBlock?.sceneId === row.sceneId && selectedBlock?.blockId === row.blockId
                     const isUppercaseType = ['heading', 'character', 'transition'].includes(row.type)
@@ -1020,8 +777,8 @@ export default function ScriptTab() {
                       letterSpacing: `${styleCfg.letterSpacingPx}px`,
                       textIndent: row.isFirstChunk ? `${styleCfg.firstLineIndentPx}px` : '0px',
                       textTransform: isUppercaseType ? 'uppercase' : 'none',
-                      border: selected && isEditMode && !isSpacer ? '1px solid rgba(37,99,235,0.55)' : '1px solid transparent',
-                      background: selected && isEditMode && !isSpacer ? 'rgba(37,99,235,0.06)' : 'transparent',
+                      border: selected && !isSpacer ? '1px solid rgba(37,99,235,0.55)' : '1px solid transparent',
+                      background: selected && !isSpacer ? 'rgba(37,99,235,0.06)' : 'transparent',
                       borderRadius: 4,
                       paddingTop: 0,
                       paddingBottom: 0,
@@ -1029,22 +786,49 @@ export default function ScriptTab() {
                       whiteSpace: 'pre-wrap',
                       overflowWrap: 'break-word',
                     }
+
                     return (
                       <div
                         key={row.rowKey}
                         ref={(el) => {
                           if (row.isSceneStart) headingRefs.current[row.sceneId] = el
                         }}
-                        data-sceneid={row.sceneId}
-                        data-entity-type="scene"
-                        data-entity-id={row.sceneId}
                         onClick={() => {
-                          if (row.blockId) setSelectedBlock({ sceneId: row.sceneId, blockId: row.blockId })
+                          if (row.blockId) {
+                            setSelectedBlock({ sceneId: row.sceneId, blockId: row.blockId })
+                            requestAnimationFrame(() => blockInputRefs.current[`${row.sceneId}:${row.blockId}`]?.focus())
+                          }
                           setActiveSceneId(row.sceneId)
                         }}
                         style={{ minHeight: `${screenplayLineHeightPx}px` }}
                       >
-                        <div style={textStyle}>{isSpacer ? '\u00a0' : String(row.text || '')}</div>
+                        {row.blockId && row.isFirstChunk ? (
+                          <textarea
+                            ref={(el) => {
+                              blockInputRefs.current[`${row.sceneId}:${row.blockId}`] = el
+                            }}
+                            value={String(selectedBlock?.sceneId === row.sceneId && selectedBlock?.blockId === row.blockId ? selectedBlockData?.text || '' : (() => {
+                              const scene = orderedScenes.find(entry => entry.id === row.sceneId)
+                              const blocks = ensureEditableScreenplayElements(getSceneScreenplayElements(scene))
+                              return blocks.find(block => block.id === row.blockId)?.text || ''
+                            })())}
+                            onFocus={() => setSelectedBlock({ sceneId: row.sceneId, blockId: row.blockId })}
+                            onChange={(event) => updateBlockText(row.sceneId, row.blockId, event.target.value)}
+                            onKeyDown={(event) => handleBlockKeyDown(event, row)}
+                            style={{
+                              ...textStyle,
+                              width: '100%',
+                              resize: 'none',
+                              border: selected ? '1px solid rgba(37,99,235,0.75)' : '1px solid transparent',
+                              outline: 'none',
+                              background: selected ? 'rgba(37,99,235,0.06)' : 'transparent',
+                              overflow: 'hidden',
+                            }}
+                            rows={1}
+                          />
+                        ) : (
+                          <div style={textStyle}>{isSpacer ? ' ' : String(row.text || '')}</div>
+                        )}
                       </div>
                     )
                   })}
@@ -1053,25 +837,42 @@ export default function ScriptTab() {
               ))}
             </div>
           </div>
-          {isInspectorOpen && isEditMode && (
-            <div style={{ position: 'absolute', top: EDIT_BAR_HEIGHT_PX + RULER_HEIGHT_PX + 24, right: 12 }}>
-              <BlockStyleInspector type={selectedStyleType} style={selectedStyle} />
+
+          {activeDialog === 'page' && (
+            <div style={{ width: 290, border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, background: 'rgba(255,255,255,0.98)', padding: 12, alignSelf: 'flex-start', boxShadow: '0 4px 14px rgba(15,23,42,0.08)' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Page Setup (inches)</div>
+              <InlineNumericField label="Page width" pxValue={pageSettings.widthPx} onChange={(value) => updateDocumentSettings((current) => ({ ...current, page: { ...current.page, widthPx: value } }))} />
+              <InlineNumericField label="Page height" pxValue={pageSettings.heightPx} onChange={(value) => updateDocumentSettings((current) => ({ ...current, page: { ...current.page, heightPx: value } }))} />
+              <InlineNumericField label="Top margin" pxValue={pageSettings.marginTopPx} onChange={(value) => updateDocumentSettings((current) => ({ ...current, page: { ...current.page, marginTopPx: value } }))} />
+              <InlineNumericField label="Right margin" pxValue={pageSettings.marginRightPx} onChange={(value) => updateDocumentSettings((current) => ({ ...current, page: { ...current.page, marginRightPx: value } }))} />
+              <InlineNumericField label="Bottom margin" pxValue={pageSettings.marginBottomPx} onChange={(value) => updateDocumentSettings((current) => ({ ...current, page: { ...current.page, marginBottomPx: value } }))} />
+              <InlineNumericField label="Left margin" pxValue={pageSettings.marginLeftPx} onChange={(value) => updateDocumentSettings((current) => ({ ...current, page: { ...current.page, marginLeftPx: value } }))} />
+            </div>
+          )}
+
+          {activeDialog === 'styles' && (
+            <div style={{ width: 290, border: '1px solid rgba(148,163,184,0.45)', borderRadius: 10, background: 'rgba(255,255,255,0.98)', padding: 12, alignSelf: 'flex-start', boxShadow: '0 4px 14px rgba(15,23,42,0.08)' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Element Styles · {selectedStyleType}</div>
+              <InlineNumericField label="Left indent" pxValue={selectedStyle.marginLeftPx} onChange={(value) => updateBlockStyle(selectedStyleType, 'marginLeftPx', value)} />
+              <InlineNumericField label="Right indent" pxValue={selectedStyle.marginRightPx} onChange={(value) => updateBlockStyle(selectedStyleType, 'marginRightPx', value)} />
+              <InlineNumericField label="First-line indent" pxValue={selectedStyle.firstLineIndentPx} onChange={(value) => updateBlockStyle(selectedStyleType, 'firstLineIndentPx', value)} />
+              <InlineNumericField label="Spacing before" pxValue={selectedStyle.spacingBeforePx} onChange={(value) => updateBlockStyle(selectedStyleType, 'spacingBeforePx', value)} />
+              <InlineNumericField label="Spacing after" pxValue={selectedStyle.spacingAfterPx} onChange={(value) => updateBlockStyle(selectedStyleType, 'spacingAfterPx', value)} />
+              <InlineNumericField label="Line height" pxValue={selectedStyle.lineHeightPx} onChange={(value) => updateBlockStyle(selectedStyleType, 'lineHeightPx', value)} />
+              <label style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 10 }}>
+                <span>Alignment</span>
+                <select value={selectedStyle.align || 'left'} onChange={(event) => updateBlockStyle(selectedStyleType, 'align', event.target.value)} style={{ border: '1px solid rgba(74,85,104,0.25)', borderRadius: 4, padding: '4px 6px', fontSize: 12 }}>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                  <option value="justify">Justify</option>
+                </select>
+              </label>
+              <button className="toolbar-btn" style={{ width: '100%' }} onClick={() => updateDocumentSettings((current) => resetBlockStyle(current, selectedStyleType))}>Reset {selectedStyleType}</button>
             </div>
           )}
         </div>
       </div>
-
-      {addShotDialog && <AddShotModal scene={addShotDialog.scene} shots={addShotDialog.existingShots} onClose={() => setAddShotDialog(null)} onConfirm={confirmAddShotDialog} />}
-      {shotLinkDialog && (
-        <ShotLinkDialog
-          data={shotLinkDialog}
-          onClose={() => setShotLinkDialog(null)}
-          onUpdateShot={(shotId, updates) => updateShot(shotId, updates)}
-          onUpdateShotImage={updateShotImage}
-          useDropdowns={useDropdowns}
-          onJumpToStoryboard={jumpToStoryboardShot}
-        />
-      )}
     </div>
   )
 }
