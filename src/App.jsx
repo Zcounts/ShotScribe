@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react'
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -43,6 +43,7 @@ import {
   shouldSuppressEntityOpen,
   shouldSuppressEntityContextMenu,
 } from './utils/entityDialog'
+import { devPerfLog, useDevRenderCounter } from './utils/devPerf'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -144,6 +145,9 @@ function SceneSection({
   pageIndexOffset,
   pageRefs,
   pageNavRefs,
+  visiblePageRange,
+  pageHeights,
+  onPageMeasured,
   onOpenSceneProperties,
 }) {
   const getShotsForScene = useStore(s => s.getShotsForScene)
@@ -175,23 +179,31 @@ function SceneSection({
   const canonicalSceneColor = canonical?.color || scene.color || null
   const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
   const pages = chunkArray(shotsWithIds, cardsPerPage)
+  useDevRenderCounter('SceneSection', scene.id)
 
   return (
     <>
       {pages.map((pageShots, pageIdx) => {
           const globalPageNum = pageIndexOffset + pageIdx + 1
+          const globalPageIndex = globalPageNum - 1
           const isContinuation = pageIdx > 0
           const isLastPage = pageIdx === pages.length - 1
+          const shouldRenderPageGrid = !visiblePageRange || (
+            globalPageIndex >= visiblePageRange.start && globalPageIndex <= visiblePageRange.end
+          )
+          const pageId = `${scene.id}__page_${pageIdx}`
+          const cachedPageHeight = pageHeights?.[pageId] || 860
           return (
             <div
-              key={`${scene.id}_page_${pageIdx}`}
-              id={`${scene.id}__page_${pageIdx}`}
+              key={pageId}
+              id={pageId}
               ref={el => {
                 if (!el) return
                 pageRefs.current[globalPageNum - 1] = el
-                pageNavRefs.current[`${scene.id}__page_${pageIdx}`] = el
+                pageNavRefs.current[pageId] = el
+                onPageMeasured?.(pageId, el.offsetHeight)
               }}
-              data-outline-id={`${scene.id}__page_${pageIdx}`}
+              data-outline-id={pageId}
               className="page-document"
               style={{ borderLeft: `5px solid ${canonicalSceneColor || 'rgba(74,85,104,0.18)'}` }}
             >
@@ -203,15 +215,19 @@ function SceneSection({
                 onDoubleClick={() => onOpenSceneProperties(scene.id)}
               />
 
-              <ShotGrid
-                sceneId={scene.id}
-                shots={pageShots}
-                columnCount={columnCount}
-                useDropdowns={useDropdowns}
-                storyboardDisplayConfig={storyboardDisplayConfig}
-                showAddBtn={isLastPage}
-                onAddShot={() => addShot(scene.id)}
-              />
+              {shouldRenderPageGrid ? (
+                <ShotGrid
+                  sceneId={scene.id}
+                  shots={pageShots}
+                  columnCount={columnCount}
+                  useDropdowns={useDropdowns}
+                  storyboardDisplayConfig={storyboardDisplayConfig}
+                  showAddBtn={isLastPage}
+                  onAddShot={() => addShot(scene.id)}
+                />
+              ) : (
+                <div style={{ minHeight: Math.max(360, cachedPageHeight - 130), background: '#FAF8F4' }} />
+              )}
 
               <div className="page-footer">
                 <div style={{ position: 'absolute', right: 12, top: 8 }}>
@@ -286,6 +302,8 @@ function SceneSection({
   )
 }
 
+const MemoSceneSection = React.memo(SceneSection)
+
 export default function App() {
   const theme = useStore(s => s.theme)
   const scenes = useStore(s => s.scenes)
@@ -347,6 +365,8 @@ export default function App() {
   const pageRefs = useRef([])
   const storyboardSceneRefs = useRef({})
   const storyboardPageRefs = useRef({})
+  const [storyboardVisibleRange, setStoryboardVisibleRange] = useState({ start: 0, end: 10 })
+  const [storyboardPageHeights, setStoryboardPageHeights] = useState({})
   // shotlistRef points to the ShotlistTab root container for PDF export
   const shotlistRef = useRef(null)
 
@@ -364,6 +384,38 @@ export default function App() {
     return acc + Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }, 0)
   pageRefs.current = pageRefs.current.slice(0, totalPages)
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      devPerfLog('storyboard:mounted-pages', { totalPages, mountedRefs: Object.keys(storyboardPageRefs.current).length })
+    }
+  }, [totalPages, storyboardVisibleRange.start, storyboardVisibleRange.end])
+
+  const updateStoryboardVisibleRange = useCallback(() => {
+    const container = storyboardScrollRef.current
+    if (!container || !totalPages) return
+    const containerRect = container.getBoundingClientRect()
+    let firstVisible = null
+    let lastVisible = null
+    pageRefs.current.forEach((node, index) => {
+      if (!node) return
+      const rect = node.getBoundingClientRect()
+      const intersects = rect.bottom >= containerRect.top && rect.top <= containerRect.bottom
+      if (!intersects) return
+      if (firstVisible == null) firstVisible = index
+      lastVisible = index
+    })
+    if (firstVisible == null || lastVisible == null) return
+    const overscan = 2
+    setStoryboardVisibleRange({
+      start: Math.max(0, firstVisible - overscan),
+      end: Math.min(totalPages - 1, lastVisible + overscan),
+    })
+  }, [totalPages])
+
+  const handlePageMeasured = useCallback((pageId, height) => {
+    if (!height) return
+    setStoryboardPageHeights((prev) => (prev[pageId] === height ? prev : { ...prev, [pageId]: height }))
+  }, [])
 
   useEffect(() => {
     const validSceneIds = new Set(scenes.map(scene => scene.id))
@@ -402,9 +454,13 @@ export default function App() {
     if (!autoSave) return
     const interval = setInterval(() => {
       try {
+        const startedAt = performance.now()
         const data = getProjectData()
         localStorage.setItem('autosave', JSON.stringify(data))
         localStorage.setItem('autosave_time', new Date().toISOString())
+        devPerfLog('app:autosave-interval', {
+          ms: Math.round((performance.now() - startedAt) * 100) / 100,
+        })
       } catch {
         // Silently skip — the user will see an error on the next manual save.
       }
@@ -484,7 +540,16 @@ export default function App() {
   }, [])
 
   const jumpToStoryboardScene = useCallback((sceneId) => {
-    const pageNode = storyboardPageRefs.current[`${sceneId}__page_0`] || document.getElementById(`${sceneId}__page_0`)
+    const pageId = `${sceneId}__page_0`
+    const sceneIndex = storyboardScenes.findIndex(scene => scene.id === sceneId)
+    const pageIndex = sceneIndex >= 0 ? scenePageOffsets[sceneIndex] : -1
+    if (pageIndex >= 0) {
+      setStoryboardVisibleRange({
+        start: Math.max(0, pageIndex - 2),
+        end: Math.min(totalPages - 1, pageIndex + 3),
+      })
+    }
+    const pageNode = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
     const fallbackNode = storyboardSceneRefs.current[sceneId]
       || document.getElementById(sceneId)
       || document.querySelector(`[data-outline-id="${sceneId}"]`)
@@ -493,15 +558,25 @@ export default function App() {
       scrollStoryboardTargetIntoView(targetNode)
       setActiveOutlineItem(sceneId)
     }
-  }, [scrollStoryboardTargetIntoView])
+  }, [scrollStoryboardTargetIntoView, storyboardScenes, scenePageOffsets, totalPages])
 
   const jumpToStoryboardPage = useCallback((pageId) => {
+    const [sceneId, pagePart] = String(pageId).split('__page_')
+    const sceneIndex = storyboardScenes.findIndex(scene => scene.id === sceneId)
+    const pageWithinScene = Number(pagePart || 0)
+    const pageIndex = sceneIndex >= 0 ? (scenePageOffsets[sceneIndex] + (Number.isFinite(pageWithinScene) ? pageWithinScene : 0)) : -1
+    if (pageIndex >= 0) {
+      setStoryboardVisibleRange({
+        start: Math.max(0, pageIndex - 2),
+        end: Math.min(totalPages - 1, pageIndex + 3),
+      })
+    }
     const node = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
     if (node) {
       scrollStoryboardTargetIntoView(node)
       setActiveOutlineItem(pageId)
     }
-  }, [scrollStoryboardTargetIntoView])
+  }, [scrollStoryboardTargetIntoView, storyboardScenes, scenePageOffsets, totalPages])
 
   useEffect(() => {
     setTabViewState('storyboard', {
@@ -540,6 +615,17 @@ export default function App() {
 
   useEffect(() => {
     if (activeTab !== 'storyboard') return
+    const raf = requestAnimationFrame(() => updateStoryboardVisibleRange())
+    return () => cancelAnimationFrame(raf)
+  }, [activeTab, totalPages, columnCount, updateStoryboardVisibleRange])
+
+  const handleStoryboardScroll = useCallback((e) => {
+    setTabViewState('storyboard', { scrollTop: e.currentTarget.scrollTop })
+    updateStoryboardVisibleRange()
+  }, [setTabViewState, updateStoryboardVisibleRange])
+
+  useEffect(() => {
+    if (activeTab !== 'storyboard') return
     const root = storyboardScrollRef.current
     if (!root) return
 
@@ -569,7 +655,7 @@ export default function App() {
     return () => observer.disconnect()
   }, [activeTab, storyboardOutlineTab, storyboardScenes, columnCount])
 
-  const storyboardPageItems = storyboardScenes.flatMap((scene, sceneIdx) => {
+  const storyboardPageItems = useMemo(() => storyboardScenes.flatMap((scene, sceneIdx) => {
     const linkedScene = scene.linkedScriptSceneId
       ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
       : null
@@ -582,16 +668,16 @@ export default function App() {
       subtitle: `SC ${canonical?.sceneNumber || scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${canonical?.titleSlugline || canonical?.location || scene.slugline || scene.location || ''}`,
       sceneColor: canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
     }))
-  })
+  }), [storyboardScenes, scenePageOffsets, columnCount, scriptScenes, getCanonicalStoryboardSceneMetadata])
 
-  const storyboardShotsWithIds = storyboardScenes.flatMap((scene) => {
+  const storyboardShotsWithIds = useMemo(() => storyboardScenes.flatMap((scene) => {
     const sceneNumber = scenes.findIndex(candidate => candidate.id === scene.id) + 1
     return (scene.shots || []).map((shot, shotIndex) => ({
       ...shot,
       sceneId: scene.id,
       displayId: `${sceneNumber}${getShotLetter(shotIndex)}`,
     }))
-  })
+  }), [storyboardScenes, scenes])
   const allStoryboardShotIds = storyboardShotsWithIds.map(shot => shot.id)
   const activeStoryboardShot = activeStoryboardShotId
     ? storyboardShotsWithIds.find(shot => shot.id === activeStoryboardShotId) || null
@@ -777,7 +863,7 @@ export default function App() {
         <div
           ref={storyboardScrollRef}
           className="flex-1 py-4 px-4 overflow-auto canvas-texture"
-          onScroll={(e) => setTabViewState('storyboard', { scrollTop: e.currentTarget.scrollTop })}
+          onScroll={handleStoryboardScroll}
         >
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {showStoryboardOutline && (
@@ -875,7 +961,7 @@ export default function App() {
                     </div>
                   )}
 
-                  <SceneSection
+                  <MemoSceneSection
                     scene={scene}
                     columnCount={columnCount}
                     useDropdowns={useDropdowns}
@@ -883,6 +969,9 @@ export default function App() {
                     pageIndexOffset={scenePageOffsets[sceneIdx]}
                     pageRefs={pageRefs}
                     pageNavRefs={storyboardPageRefs}
+                    visiblePageRange={storyboardVisibleRange}
+                    pageHeights={storyboardPageHeights}
+                    onPageMeasured={handlePageMeasured}
                     onOpenSceneProperties={(sceneId) => openScenePropertiesDialog('storyboard', sceneId)}
                   />
                 </div>
