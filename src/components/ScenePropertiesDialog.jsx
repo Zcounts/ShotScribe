@@ -24,6 +24,12 @@ export default function ScenePropertiesDialog() {
   const canonicalStoryboardScene = !isScript
     ? getCanonicalStoryboardSceneMetadata(dialog.sceneId)
     : null
+  const linkedScriptSceneIds = new Set(
+    scenes
+      .filter(storyScene => storyScene.id !== dialog.sceneId)
+      .map(storyScene => storyScene.linkedScriptSceneId)
+      .filter(Boolean)
+  )
 
   if (!scene) return null
 
@@ -100,11 +106,13 @@ export default function ScenePropertiesDialog() {
                 disabled={scriptScenes.length === 0}
               >
                 <option value="">No linked script scene</option>
-                {scriptScenes.map(scriptScene => (
+                {scriptScenes
+                  .filter(scriptScene => !linkedScriptSceneIds.has(scriptScene.id) || scriptScene.id === scene.linkedScriptSceneId)
+                  .map(scriptScene => (
                   <option key={scriptScene.id} value={scriptScene.id}>
                     SC {scriptScene.sceneNumber || '—'} · {scriptScene.location || scriptScene.slugline || 'Untitled'}
                   </option>
-                ))}
+                  ))}
               </select>
             </>
           )}
