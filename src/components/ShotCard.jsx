@@ -7,6 +7,8 @@ import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
 import CustomDropdown from './CustomDropdown'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
+import { processStoryboardUpload } from '../utils/storyboardImagePipeline'
+import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
@@ -29,7 +31,7 @@ function sanitizeNumericInput(value) {
   return `${integerPart}${decimalPart}`
 }
 
-export default function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
+function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
@@ -40,6 +42,7 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
+  useDevRenderCounter('ShotCard', shot.id)
   const visibleSpecKeys = useMemo(
     () => ['size', 'type', 'move', 'equip'].filter(key => visibleInfo[key] !== false),
     [visibleInfo]
@@ -63,18 +66,34 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
 
   const handleImageClick = () => fileInputRef.current?.click()
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0]
+  const handleImageChange = useCallback(async (e) => {
+    const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.match(/^image\//)) {
       alert('Please select an image file (JPG, PNG, WEBP)')
+      e.target.value = ''
       return
     }
-    const reader = new FileReader()
-    reader.onload = (ev) => updateShotImage(shot.id, ev.target.result)
-    reader.readAsDataURL(file)
-    e.target.value = ''
-  }
+    try {
+      const processed = await processStoryboardUpload(file, {
+        thumbnailWidth: 480,
+        fullLongEdge: 1600,
+        quality: 0.84,
+      })
+      updateShotImage(shot.id, processed)
+      devPerfLog('storyboard:image-upload', {
+        shotId: shot.id,
+        sourceBytes: file.size,
+        thumbBytes: processed?.meta?.thumbBytes,
+        fullBytes: processed?.meta?.fullBytes,
+      })
+    } catch (err) {
+      console.error('Image processing failed', err)
+      alert('Could not process this image. Please try a different file.')
+    } finally {
+      e.target.value = ''
+    }
+  }, [shot.id, updateShotImage])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
@@ -109,6 +128,8 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
     ].filter(Boolean),
     [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
   )
+
+  const storyboardImageSrc = shot.imageAsset?.thumb || shot.image || null
 
   return (
     <div
@@ -183,8 +204,8 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
         onClick={handleImageClick}
         style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
       >
-        {shot.image ? (
-          <img src={shot.image} alt="Shot frame" />
+        {storyboardImageSrc ? (
+          <img src={storyboardImageSrc} alt="Shot frame" loading="lazy" decoding="async" />
         ) : (
           <div className="flex flex-col items-center gap-1 text-gray-500">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -301,3 +322,5 @@ export default function ShotCard({ shot, displayId, useDropdowns, sceneId, story
     </div>
   )
 }
+
+export default React.memo(ShotCard)

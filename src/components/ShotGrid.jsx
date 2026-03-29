@@ -25,7 +25,7 @@ function AddShotButton({ onClick }) {
  *  showAddBtn    – show the "Add Shot" button (only on last page)
  *  onAddShot     – callback when Add Shot is clicked
  */
-export default function ShotGrid({
+function ShotGrid({
   sceneId,
   shots,
   columnCount,
@@ -57,3 +57,5 @@ export default function ShotGrid({
     </div>
   )
 }
+
+export default React.memo(ShotGrid)
