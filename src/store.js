@@ -15,6 +15,7 @@ import {
   DEFAULT_STORYBOARD_DISPLAY_CONFIG,
   normalizeStoryboardDisplayConfig,
 } from './storyboardDisplayConfig'
+import { devPerfLog } from './utils/devPerf'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -152,8 +153,49 @@ function cloneUndoSnapshot(snapshot) {
   return JSON.parse(JSON.stringify(snapshot))
 }
 
-function getUndoableSnapshot(state) {
+function stripHeavyImageData(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.scenes)) return snapshot
   return {
+    ...snapshot,
+    scenes: snapshot.scenes.map(scene => ({
+      ...scene,
+      shots: (scene.shots || []).map((shot) => {
+        if (!shot?.imageAsset) return shot
+        return {
+          ...shot,
+          imageAsset: {
+            ...shot.imageAsset,
+            full: null,
+          },
+        }
+      }),
+    })),
+  }
+}
+
+function buildUndoComparisonToken(snapshot) {
+  const light = {
+    ...snapshot,
+    scenes: (snapshot?.scenes || []).map(scene => ({
+      ...scene,
+      shots: (scene.shots || []).map((shot) => ({
+        ...shot,
+        image: typeof shot.image === 'string' ? `img:${shot.image.length}` : shot.image,
+        imageAsset: shot.imageAsset
+          ? {
+              ...shot.imageAsset,
+              thumb: typeof shot.imageAsset.thumb === 'string' ? `thumb:${shot.imageAsset.thumb.length}` : null,
+              full: null,
+            }
+          : null,
+      })),
+    })),
+  }
+  return JSON.stringify(light)
+}
+
+function getUndoableSnapshot(state) {
+  return stripHeavyImageData({
     scenes: state.scenes,
     storyboardSceneOrder: state.storyboardSceneOrder,
     scriptScenes: state.scriptScenes,
@@ -175,7 +217,7 @@ function getUndoableSnapshot(state) {
     customColumns: state.customColumns,
     customDropdownOptions: state.customDropdownOptions,
     scriptSettings: state.scriptSettings,
-  }
+  })
 }
 
 function applyUndoSnapshot(snapshot, state) {
@@ -316,6 +358,7 @@ function createShot(overrides = {}) {
     focalLength: '85mm',
     color: DEFAULT_COLOR,
     image: null,
+    imageAsset: null,
     specs: {
       size: 'WIDE SHOT',
       type: 'EYE LVL',
@@ -506,6 +549,7 @@ const useStore = create((set, get) => ({
   // Custom columns and dropdown options
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
   customDropdownOptions: {}, // { fieldKey: ['option1', 'option2', ...] }
+  storyboardImageCache: {}, // { [shotId]: { full, updatedAt } } (runtime-only; excluded from project payload)
   shortcutBindings: loadShortcutBindings(),
   undoPast: [],
   undoFuture: [],
@@ -1707,11 +1751,34 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
-  updateShotImage: (shotId, imageBase64) => {
+  updateShotImage: (shotId, imagePayload) => {
+    const isLegacyPayload = typeof imagePayload === 'string' || imagePayload == null
+    const thumb = isLegacyPayload ? (imagePayload || null) : (imagePayload.thumb || null)
+    const full = isLegacyPayload ? null : (imagePayload.full || null)
+    const meta = isLegacyPayload ? null : (imagePayload.meta || null)
     set(state => ({
+      storyboardImageCache: {
+        ...state.storyboardImageCache,
+        ...(full ? { [shotId]: { full, updatedAt: Date.now() } } : {}),
+      },
       scenes: state.scenes.map(s => ({
         ...s,
-        shots: s.shots.map(sh => sh.id === shotId ? { ...sh, image: imageBase64 } : sh),
+        shots: s.shots.map((sh) => {
+          if (sh.id !== shotId) return sh
+          return {
+            ...sh,
+            image: thumb,
+            imageAsset: isLegacyPayload
+              ? (sh.imageAsset || null)
+              : {
+                  version: 1,
+                  mime: imagePayload.mime || 'image/webp',
+                  thumb,
+                  full: null,
+                  meta,
+                },
+          }
+        }),
       })),
     }))
     get()._scheduleAutoSave()
@@ -1953,6 +2020,7 @@ const useStore = create((set, get) => ({
   // ── Save / Load ──────────────────────────────────────────────────────
 
   getProjectData: () => {
+    const startedAt = performance.now()
     const {
       projectName, projectEmoji, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
@@ -1966,7 +2034,7 @@ const useStore = create((set, get) => ({
       storyboardDisplayConfig,
       tabViewState,
     } = get()
-    return {
+    const payload = {
       version: 2,
       projectName,
       projectEmoji: projectEmoji || '🎬',
@@ -1994,7 +2062,14 @@ const useStore = create((set, get) => ({
             cameraName: s.cameraName,
             focalLength: s.focalLength,
             color: s.color,
-            image: s.image,
+            image: s.imageAsset?.thumb || s.image,
+            imageAsset: s.imageAsset ? {
+              version: s.imageAsset.version || 1,
+              mime: s.imageAsset.mime || 'image/webp',
+              thumb: s.imageAsset.thumb || s.image || null,
+              full: null,
+              meta: s.imageAsset.meta || null,
+            } : null,
             specs: s.specs
               ? { size: s.specs.size, type: s.specs.type, move: s.specs.move, equip: s.specs.equip }
               : { size: '', type: '', move: '', equip: '' },
@@ -2117,6 +2192,11 @@ const useStore = create((set, get) => ({
       },
       exportedAt: new Date().toISOString(),
     }
+    devPerfLog('store:getProjectData', {
+      scenes: scenes.length,
+      ms: Math.round((performance.now() - startedAt) * 100) / 100,
+    })
+    return payload
   },
 
   // "Save" — overwrites the current file silently if a path is known;
@@ -2249,7 +2329,24 @@ const useStore = create((set, get) => ({
       cameraName: s.cameraName || 'Camera 1',
       focalLength: s.focalLength || '85mm',
       color: s.color || DEFAULT_COLOR,
-      image: s.image || null,
+      image: s.imageAsset?.thumb || s.image || null,
+      imageAsset: s.imageAsset
+        ? {
+            version: s.imageAsset.version || 1,
+            mime: s.imageAsset.mime || 'image/webp',
+            thumb: s.imageAsset.thumb || s.image || null,
+            full: null,
+            meta: s.imageAsset.meta || null,
+          }
+        : (s.image
+            ? {
+                version: 1,
+                mime: 'image/*',
+                thumb: s.image,
+                full: null,
+                meta: null,
+              }
+            : null),
       specs: s.specs || { size: '', type: '', move: '', equip: '' },
       notes: s.notes || '',
       subject: s.subject || '',
@@ -2516,6 +2613,7 @@ const useStore = create((set, get) => ({
       undoPast: [],
       undoFuture: [],
       undoLastRecordedAt: 0,
+      storyboardImageCache: {},
     })
     saveShortcutBindings(get().shortcutBindings)
   },
@@ -2635,6 +2733,7 @@ const useStore = create((set, get) => ({
       undoPast: [],
       undoFuture: [],
       undoLastRecordedAt: 0,
+      storyboardImageCache: {},
     })
   },
 
@@ -2648,9 +2747,13 @@ const useStore = create((set, get) => ({
     if (state._autoSaveTimeout) clearTimeout(state._autoSaveTimeout)
     const timeout = setTimeout(() => {
       try {
+        const startedAt = performance.now()
         const data = get().getProjectData()
         localStorage.setItem('autosave', JSON.stringify(data))
         localStorage.setItem('autosave_time', new Date().toISOString())
+        devPerfLog('store:autosave-timeout', {
+          ms: Math.round((performance.now() - startedAt) * 100) / 100,
+        })
       } catch {
         // Silently skip — the user will see an error on the next manual save.
       }
@@ -2675,8 +2778,12 @@ useStore.subscribe((state, previousState) => {
 
   const previousSnapshot = getUndoableSnapshot(previousState)
   const nextSnapshot = getUndoableSnapshot(state)
-  const previousSerialized = JSON.stringify(previousSnapshot)
-  const nextSerialized = JSON.stringify(nextSnapshot)
+  const startedAt = performance.now()
+  const previousSerialized = buildUndoComparisonToken(previousSnapshot)
+  const nextSerialized = buildUndoComparisonToken(nextSnapshot)
+  devPerfLog('store:undo-compare', {
+    ms: Math.round((performance.now() - startedAt) * 100) / 100,
+  })
   if (previousSerialized === nextSerialized) return
 
   const now = Date.now()

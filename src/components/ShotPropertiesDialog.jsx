@@ -91,6 +91,18 @@ export default function ShotPropertiesDialog() {
     updateShot(shot.id, { [key]: value })
   }
 
+  const customFields = Object.entries(shot)
+    .filter(([key]) => key.startsWith('custom_'))
+    .sort(([a], [b]) => a.localeCompare(b))
+
+  const linkRows = [
+    ['Linked Script Scene', shot.linkedSceneId || '—'],
+    ['Dialogue Line', shot.linkedDialogueLine || '—'],
+    ['Dialogue Offset', shot.linkedDialogueOffset ?? '—'],
+    ['Script Range Start', shot.linkedScriptRangeStart ?? '—'],
+    ['Script Range End', shot.linkedScriptRangeEnd ?? '—'],
+  ]
+
   return (
     <div className="modal-overlay" style={{ zIndex: 720 }} onClick={close}>
       <div
@@ -108,7 +120,7 @@ export default function ShotPropertiesDialog() {
           <button className="dialog-button-secondary shot-props-close" onClick={close}>Close</button>
         </header>
 
-        <div className="shot-props-content">
+        <div className="shot-props-content shot-props-content-full">
           <section className="shot-props-identity">
             <div
               className="shot-props-image"
@@ -147,6 +159,14 @@ export default function ShotPropertiesDialog() {
                   <span className="shot-props-meta-label">Movement</span>
                   <p className="shot-props-meta-value">{shot.specs?.move || '—'}</p>
                 </div>
+                <div>
+                  <span className="shot-props-meta-label">Status</span>
+                  <p className="shot-props-meta-value">{shot.checked ? 'Checked' : 'Untracked'}</p>
+                </div>
+                <div>
+                  <span className="shot-props-meta-label">Aspect Ratio</span>
+                  <p className="shot-props-meta-value">{shot.shotAspectRatio || '—'}</p>
+                </div>
               </div>
 
               <div className="shot-props-hero-controls">
@@ -169,6 +189,15 @@ export default function ShotPropertiesDialog() {
                 </Field>
                 <Field label="Focal Length">
                   <input value={shot.focalLength || ''} onChange={(e) => setField('focalLength', e.target.value)} />
+                </Field>
+                <Field label="Marked Complete">
+                  <select value={shot.checked ? 'yes' : 'no'} onChange={(e) => setField('checked', e.target.value === 'yes')}>
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </Field>
+                <Field label="Shot Aspect Ratio">
+                  <input value={shot.shotAspectRatio || ''} onChange={(e) => setField('shotAspectRatio', e.target.value)} />
                 </Field>
               </div>
             </div>
@@ -236,6 +265,9 @@ export default function ShotPropertiesDialog() {
               <Field label="Frame Rate">
                 <input value={shot.frameRate || ''} onChange={(e) => setField('frameRate', e.target.value)} />
               </Field>
+              <Field label="Shot ID">
+                <input value={shot.id || ''} readOnly />
+              </Field>
             </Section>
 
             <Section title="Timing" className="shot-props-section-compact">
@@ -271,12 +303,39 @@ export default function ShotPropertiesDialog() {
               </Field>
             </Section>
 
-            <details className="shot-props-debug">
-              <summary>Advanced debug data</summary>
-              <pre>
-                {JSON.stringify(shot, null, 2)}
-              </pre>
-            </details>
+            <Section title="Links / Script Binding" className="shot-props-section-compact">
+              {linkRows.map(([label, value]) => (
+                <div key={label} className="shot-props-data-row">
+                  <span>{label}</span>
+                  <code>{String(value)}</code>
+                </div>
+              ))}
+            </Section>
+
+            <Section title="Custom Columns" className="shot-props-section-compact">
+              {customFields.length === 0 ? (
+                <div className="shot-props-empty">No custom fields on this shot.</div>
+                ) : customFields.map(([key, value]) => (
+                <Field key={key} label={key.replace(/^custom_/, '').replace(/_/g, ' ').toUpperCase()}>
+                  <input
+                    value={value == null ? '' : String(value)}
+                    onChange={(e) => setField(key, e.target.value)}
+                  />
+                </Field>
+              ))}
+            </Section>
+
+            <Section title="Image Asset Data" className="shot-props-section-compact">
+              <div className="shot-props-data-row"><span>Thumb</span><code>{shot.imageAsset?.thumb ? 'available' : 'none'}</code></div>
+              <div className="shot-props-data-row"><span>Mime</span><code>{shot.imageAsset?.mime || '—'}</code></div>
+              <div className="shot-props-data-row"><span>Source</span><code>{shot.imageAsset?.meta?.sourceName || '—'}</code></div>
+              <div className="shot-props-data-row"><span>Dimensions</span><code>{shot.imageAsset?.meta ? `${shot.imageAsset.meta.sourceWidth}×${shot.imageAsset.meta.sourceHeight}` : '—'}</code></div>
+            </Section>
+
+            <section className="shot-props-debug">
+              <h4 className="shot-props-section-title">Full Shot Record (Read-only)</h4>
+              <pre>{JSON.stringify(shot, null, 2)}</pre>
+            </section>
           </div>
       </div>
 
