@@ -170,7 +170,7 @@ export default function ShotPropertiesDialog() {
               </div>
 
               <div className="shot-props-hero-controls">
-                <div className="shot-props-field shot-props-field-wide">
+                <div className="shot-props-field">
                   <span className="dialog-label">Organization</span>
                   <button
                     className="dialog-button-secondary"
@@ -204,7 +204,7 @@ export default function ShotPropertiesDialog() {
           </section>
 
           <div className="shot-props-layout shot-props-layout-main">
-            <Section title="General" className="shot-props-section-primary">
+            <Section title="General" className="shot-props-section-primary shot-props-section-general">
               <Field label="Description" wide>
                 <input value={shot.description || ''} onChange={(e) => setField('description', e.target.value)} />
               </Field>
@@ -212,7 +212,7 @@ export default function ShotPropertiesDialog() {
                 <input value={shot.subject || ''} onChange={(e) => setField('subject', e.target.value)} />
               </Field>
               <Field label="Cast" wide>
-                <textarea value={shot.cast || ''} onChange={(e) => setField('cast', e.target.value)} style={{ minHeight: 82 }} />
+                <textarea value={shot.cast || ''} onChange={(e) => setField('cast', e.target.value)} style={{ minHeight: 70 }} />
               </Field>
             </Section>
 
@@ -233,7 +233,7 @@ export default function ShotPropertiesDialog() {
               </Field>
             </Section>
 
-            <Section title="Camera / Specs" className="shot-props-section-primary">
+            <Section title="Camera / Specs" className="shot-props-section-primary shot-props-section-camera">
               <Field label="Shot Size">
                 <SelectWithValue
                   value={shot.specs?.size || ''}
@@ -270,7 +270,7 @@ export default function ShotPropertiesDialog() {
               </Field>
             </Section>
 
-            <Section title="Timing" className="shot-props-section-compact">
+            <Section title="Timing" className="shot-props-section-compact shot-props-section-timing">
               <Field label="Shoot Time">
                 <input value={shot.shootTime || ''} onChange={(e) => setField('shootTime', e.target.value)} />
               </Field>
@@ -288,7 +288,7 @@ export default function ShotPropertiesDialog() {
               </Field>
             </Section>
 
-            <Section title="Production" className="shot-props-section-compact">
+            <Section title="Production" className="shot-props-section-compact shot-props-section-production">
               <Field label="Sound">
                 <input value={shot.sound || ''} onChange={(e) => setField('sound', e.target.value)} />
               </Field>
@@ -299,7 +299,7 @@ export default function ShotPropertiesDialog() {
 
             <Section title="Notes" className="shot-props-section-primary shot-props-section-notes">
               <Field label="Notes" wide>
-                <textarea value={shot.notes || ''} onChange={(e) => setField('notes', e.target.value)} style={{ minHeight: 120 }} />
+                <textarea value={shot.notes || ''} onChange={(e) => setField('notes', e.target.value)} style={{ minHeight: 96 }} />
               </Field>
             </Section>
 

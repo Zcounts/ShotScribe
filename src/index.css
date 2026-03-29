@@ -858,7 +858,7 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 16px;
-    padding: 22px 26px 14px;
+    padding: 18px 22px 12px;
     border-bottom: 1px solid rgba(148,163,184,0.2);
     background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.92));
   }
@@ -875,10 +875,10 @@
   .shot-props-content {
     flex: 1;
     min-height: 0;
-    padding: 14px 22px 10px;
+    padding: 12px 18px 8px;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 12px;
+    gap: 10px;
     overflow: hidden;
   }
 
@@ -892,8 +892,8 @@
 
   .shot-props-identity {
     display: grid;
-    grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.15fr);
-    gap: 14px;
+    grid-template-columns: minmax(240px, 0.78fr) minmax(420px, 1.22fr);
+    gap: 10px;
     align-items: stretch;
     min-height: 0;
   }
@@ -907,8 +907,8 @@
     align-items: center;
     justify-content: center;
     aspect-ratio: 16 / 9;
-    min-height: 200px;
-    max-height: 340px;
+    min-height: 150px;
+    max-height: 200px;
   }
 
   .shot-props-image img {
@@ -942,16 +942,16 @@
     border: 1px solid rgba(148,163,184,0.28);
     border-radius: 14px;
     background: linear-gradient(170deg, rgba(255,255,255,0.95), rgba(248,250,252,0.88));
-    padding: 14px;
+    padding: 10px 12px;
     display: grid;
-    gap: 12px;
+    gap: 8px;
     align-content: start;
   }
 
   .shot-props-hero-heading {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    gap: 10px 16px;
   }
 
   .shot-props-hero-summary {
@@ -966,8 +966,8 @@
 
   .shot-props-hero-controls {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 10px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px 8px;
   }
 
   .shot-props-meta-label {
@@ -983,7 +983,7 @@
   .shot-props-meta-value {
     margin: 0;
     color: #0f172a;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
   }
 
@@ -1006,7 +1006,7 @@
     border: 1px solid rgba(203,213,225,0.85);
     border-radius: 12px;
     background: rgba(255,255,255,0.92);
-    padding: 10px;
+    padding: 9px 10px;
   }
 
   .shot-props-section-primary {
@@ -1029,7 +1029,21 @@
   .shot-props-fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 10px;
+    gap: 7px 8px;
+  }
+
+  .shot-props-section-camera .shot-props-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .shot-props-section-general .shot-props-fields,
+  .shot-props-section-timing .shot-props-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shot-props-section-notes .shot-props-fields,
+  .shot-props-section-production .shot-props-fields {
+    grid-template-columns: 1fr;
   }
 
   .shot-props-field {
@@ -1101,7 +1115,7 @@
 
   .shot-props-footer {
     margin-top: 0;
-    padding: 12px 26px;
+    padding: 10px 22px;
     border-top: 1px solid rgba(148,163,184,0.26);
     background: rgba(255,255,255,0.92);
     justify-content: space-between;
@@ -1142,6 +1156,11 @@
       grid-template-columns: 1fr;
     }
 
+    .shot-props-hero-heading {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
     .shot-props-layout-main {
       grid-template-columns: 1fr;
     }
@@ -1151,7 +1170,8 @@
       grid-column: auto;
     }
 
-    .shot-props-fields {
+    .shot-props-fields,
+    .shot-props-section-camera .shot-props-fields {
       grid-template-columns: 1fr;
     }
 
