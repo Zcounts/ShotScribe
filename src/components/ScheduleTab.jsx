@@ -2601,6 +2601,7 @@ const CAL_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlockMap, pageCountByScene }) {
   const addShootingDay = useStore(s => s.addShootingDay)
+  const removeShootingDay = useStore(s => s.removeShootingDay)
   const updateShootingDay = useStore(s => s.updateShootingDay)
 
   // ── Month navigation ───────────────────────────────────────────────────────
@@ -3281,6 +3282,7 @@ export default function ScheduleTab({
   const theme = useStore(s => s.theme)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const addShootingDay = useStore(s => s.addShootingDay)
+  const removeShootingDay = useStore(s => s.removeShootingDay)
   const reorderDays = useStore(s => s.reorderDays)
   const applyScheduleDrag = useStore(s => s.applyScheduleDrag)
   const scheduleColumnConfig = useStore(s => s.scheduleColumnConfig)
@@ -3544,6 +3546,13 @@ export default function ScheduleTab({
     setTabViewState('schedule', { scheduleView, stripDensity, listActiveDayId })
   }, [scheduleView, stripDensity, listActiveDayId, setTabViewState])
 
+  const handleDeleteDay = useCallback((dayId, fallbackDayId) => {
+    removeShootingDay(dayId)
+    if (listActiveDayId === dayId) {
+      setListActiveDayId(fallbackDayId || null)
+    }
+  }, [listActiveDayId, removeShootingDay])
+
   useEffect(() => {
     const node = containerRef.current
     if (!node) return
@@ -3657,6 +3666,8 @@ export default function ScheduleTab({
                     const el = document.getElementById(`sched-day-${dayId}`)
                     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                   }}
+                  onDeleteDay={handleDeleteDay}
+                  enableDayContextMenu
                 />
               </div>
               <DndContext

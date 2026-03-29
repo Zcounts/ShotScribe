@@ -1024,7 +1024,61 @@ const useStore = create((set, get) => ({
   },
 
   removeShootingDay: (dayId) => {
-    set(state => ({ schedule: state.schedule.filter(d => d.id !== dayId) }))
+    set(state => {
+      const dayIndex = state.schedule.findIndex(d => d.id === dayId)
+      if (dayIndex === -1) return state
+
+      const removedDay = state.schedule[dayIndex]
+      const nextSchedule = state.schedule.filter(d => d.id !== dayId)
+      const fallbackDay = nextSchedule[Math.max(0, dayIndex - 1)] || nextSchedule[dayIndex] || null
+      const fallbackDayId = fallbackDay?.id || null
+
+      const nextCallsheets = { ...(state.callsheets || {}) }
+      delete nextCallsheets[dayId]
+
+      const nextDayCollapse = { ...(state.scheduleCollapseState?.days || {}) }
+      delete nextDayCollapse[dayId]
+
+      const nextBlockCollapse = { ...(state.scheduleCollapseState?.blocks || {}) }
+      ;(removedDay?.blocks || []).forEach((block) => {
+        if (!block?.id) return
+        delete nextBlockCollapse[block.id]
+      })
+
+      const prevTabViewState = state.tabViewState || {}
+      const nextTabViewState = {
+        ...prevTabViewState,
+        schedule: {
+          ...(prevTabViewState.schedule || {}),
+          listActiveDayId: (prevTabViewState.schedule?.listActiveDayId === dayId)
+            ? fallbackDayId
+            : (prevTabViewState.schedule?.listActiveDayId || null),
+        },
+        shotlist: {
+          ...(prevTabViewState.shotlist || {}),
+          selectedDayId: (prevTabViewState.shotlist?.selectedDayId === dayId)
+            ? fallbackDayId
+            : (prevTabViewState.shotlist?.selectedDayId || null),
+        },
+        callsheet: {
+          ...(prevTabViewState.callsheet || {}),
+          selectedDayId: (prevTabViewState.callsheet?.selectedDayId === dayId)
+            ? fallbackDayId
+            : (prevTabViewState.callsheet?.selectedDayId || null),
+        },
+      }
+
+      return {
+        schedule: nextSchedule,
+        callsheets: nextCallsheets,
+        scheduleCollapseState: {
+          ...state.scheduleCollapseState,
+          days: nextDayCollapse,
+          blocks: nextBlockCollapse,
+        },
+        tabViewState: nextTabViewState,
+      }
+    })
     get()._scheduleAutoSave()
   },
 
