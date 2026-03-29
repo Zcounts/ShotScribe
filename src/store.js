@@ -2032,6 +2032,7 @@ const useStore = create((set, get) => ({
           location: scene.location,
           intOrExt: scene.intOrExt,
           dayNight: scene.dayNight,
+          color: scene.color || null,
           cameras: scene.cameras,
           linkedScriptSceneId: scene.linkedScriptSceneId || null,
           // pageNotes is stored as an array (one entry per storyboard page)
@@ -2288,6 +2289,7 @@ const useStore = create((set, get) => ({
         location: scene.location || 'LOCATION',
         intOrExt: scene.intOrExt || 'INT',
         dayNight: scene.dayNight || 'DAY',
+        color: scene.color || null,
         cameras: scene.cameras || [{ name: scene.cameraName || 'Camera 1', body: scene.cameraBody || 'fx30' }],
         linkedScriptSceneId: scene.linkedScriptSceneId || null,
         // Migrate string pageNotes (legacy) to array format

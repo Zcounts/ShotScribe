@@ -317,6 +317,7 @@ export default function App() {
   const getStoryboardScenes = useStore(s => s.getStoryboardScenes)
   const reorderStoryboardScenes = useStore(s => s.reorderStoryboardScenes)
   const moveShotToScene = useStore(s => s.moveShotToScene)
+  const reorderShots = useStore(s => s.reorderShots)
   const storyboardDisplayConfig = useStore(s => s.storyboardDisplayConfig)
   const updateStoryboardDisplayConfig = useStore(s => s.updateStoryboardDisplayConfig)
 
@@ -447,7 +448,9 @@ export default function App() {
     runningOffset += Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }
 
-  const sceneNavItems = storyboardScenes.map(scene => {
+  const sceneNavItems = storyboardScenes
+    .filter(scene => Boolean(scene.linkedScriptSceneId))
+    .map(scene => {
     const linkedScene = scene.linkedScriptSceneId
       ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
       : null
@@ -470,14 +473,14 @@ export default function App() {
   const scrollStoryboardTargetIntoView = useCallback((targetNode) => {
     const container = storyboardScrollRef.current
     if (!container || !targetNode) return
+    if (typeof targetNode.scrollIntoView === 'function') {
+      targetNode.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+      return
+    }
     const containerRect = container.getBoundingClientRect()
     const targetRect = targetNode.getBoundingClientRect()
-    const stickyOffset = 12
-    const targetTop = targetRect.top - containerRect.top + container.scrollTop - stickyOffset
-    container.scrollTo({
-      top: Math.max(0, targetTop),
-      behavior: 'smooth',
-    })
+    const targetTop = targetRect.top - containerRect.top + container.scrollTop
+    container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
   }, [])
 
   const jumpToStoryboardScene = useCallback((sceneId) => {
@@ -605,8 +608,12 @@ export default function App() {
     const activeShot = storyboardShotsWithIds.find(shot => shot.id === active.id)
     const overShot = storyboardShotsWithIds.find(shot => shot.id === over.id)
     if (!activeShot || !overShot) return
+    if (activeShot.sceneId === overShot.sceneId) {
+      reorderShots(activeShot.sceneId, active.id, over.id)
+      return
+    }
     moveShotToScene(active.id, overShot.sceneId, { beforeShotId: over.id })
-  }, [moveShotToScene, storyboardShotsWithIds])
+  }, [moveShotToScene, reorderShots, storyboardShotsWithIds])
 
   const handleOutlineSceneDragStart = useCallback((event) => {
     setActiveOutlineDragId(event.active?.id || null)
