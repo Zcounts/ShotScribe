@@ -1100,6 +1100,7 @@ export default function ShotlistTab({
   const scriptScenes            = useStore(s => s.scriptScenes)
   const schedule                = useStore(s => s.schedule)
   const addShootingDay          = useStore(s => s.addShootingDay)
+  const removeShootingDay       = useStore(s => s.removeShootingDay)
   const getShotsForScene        = useStore(s => s.getShotsForScene)
   const updateShot              = useStore(s => s.updateShot)
   const updateShotSpec          = useStore(s => s.updateShotSpec)
@@ -1356,6 +1357,13 @@ export default function ShotlistTab({
     if (newDayId) setSelectedDayId(newDayId)
   }, [addShootingDay])
 
+  const handleDeleteDay = useCallback((dayId, fallbackDayId) => {
+    removeShootingDay(dayId)
+    if (selectedDayId === dayId) {
+      setSelectedDayId(fallbackDayId || null)
+    }
+  }, [removeShootingDay, selectedDayId])
+
   const handleRowDragEnd = useCallback((event, sceneId) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -1433,6 +1441,8 @@ export default function ShotlistTab({
         activeDay={schedule[activeDayIdx]?.id}
         onSelect={(dayId) => setSelectedDayId(dayId)}
         onAddDay={handleAddDay}
+        onDeleteDay={handleDeleteDay}
+        enableDayContextMenu
       />
 
       {/* ── Toolbar ── */}
