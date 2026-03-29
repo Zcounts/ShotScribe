@@ -19,132 +19,6 @@ import { DayTabBar } from './DayTabBar'
 import ScenePropertiesPanel from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 
-// ── Scene link badge (chain icon + SC badge) for the SHOT# column ────────────
-function ShotlistSceneBadge({ shot }) {
-  const scriptScenes = useStore(s => s.scriptScenes)
-  const linkShotToScene = useStore(s => s.linkShotToScene)
-  const requestScriptFocus = useStore(s => s.requestScriptFocus)
-  const theme = useStore(s => s.theme)
-  const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState('')
-  const rootRef = React.useRef(null)
-  const isDark = theme === 'dark'
-
-  React.useEffect(() => {
-    if (!open) return
-    const handleOutside = (e) => {
-      if (rootRef.current && !rootRef.current.contains(e.target)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleOutside)
-    return () => document.removeEventListener('mousedown', handleOutside)
-  }, [open])
-
-  if (scriptScenes.length === 0) return null
-
-  const linked = shot.linkedSceneId ? scriptScenes.find(s => s.id === shot.linkedSceneId) : null
-  const isStale = shot.linkedSceneId && !linked
-  const isDialogueLinked = !!(linked && shot.linkedDialogueLine)
-  const filteredScenes = scriptScenes.filter(ss => {
-    const q = search.trim().toLowerCase()
-    if (!q) return true
-    return (`${ss.sceneNumber || ''}`.toLowerCase().includes(q)
-      || `${ss.location || ''}`.toLowerCase().includes(q)
-      || (ss.characters || []).join(' ').toLowerCase().includes(q))
-  })
-
-  return (
-    <div ref={rootRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <button
-        onClick={e => {
-          e.stopPropagation()
-          if (isDialogueLinked) {
-            requestScriptFocus(linked.id, shot.id)
-            return
-          }
-          setOpen(o => !o)
-        }}
-        title={isDialogueLinked ? (shot.linkedDialogueLine || '').slice(0, 60) : linked ? `SC ${linked.sceneNumber} — click to change` : 'Link to scene'}
-        style={{
-          background: linked ? (linked.color ? linked.color + '25' : 'rgba(59,130,246,0.12)') : 'transparent',
-          border: linked ? `1px solid ${linked.color || 'rgba(59,130,246,0.4)'}` : isStale ? '1px dashed rgba(248,113,113,0.5)' : '1px dashed rgba(128,128,128,0.25)',
-          borderRadius: 3, padding: '1px 4px',
-          cursor: 'pointer', fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
-          color: linked ? (linked.color || '#93c5fd') : isStale ? '#f87171' : '#555',
-          lineHeight: 1.3, display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
-        }}
-      >
-        {linked ? `SC ${linked.sceneNumber}${shot.linkedDialogueLine ? ' 🔖' : ''}` : isStale ? '⚠' : '⛓'}
-      </button>
-      {open && (
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            position: 'absolute', top: 18, left: 0, zIndex: 100,
-            background: isDark ? '#1f1f20' : '#FAF8F4',
-            border: isDark ? '1px solid #3A3A3C' : '1px solid rgba(74,85,104,0.2)',
-            borderRadius: 6,
-            boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.55)' : '0 8px 24px rgba(0,0,0,0.15)',
-            minWidth: 170, maxHeight: 220, overflowY: 'auto', padding: 4,
-          }}
-        >
-          <div style={{ padding: 8, borderBottom: isDark ? '1px solid #2d2d2f' : '1px solid rgba(74,85,104,0.12)' }}>
-            <input
-              autoFocus
-              placeholder="Search by number, location, or cast..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                width: '100%',
-                background: isDark ? '#2C2C2E' : '#F1EEE6',
-                color: isDark ? '#EDE9E1' : '#2C2C2C',
-                fontSize: 11,
-                padding: '6px 8px',
-                borderRadius: 4,
-                border: isDark ? '1px solid #3A3A3C' : '1px solid rgba(74,85,104,0.2)',
-                outline: 'none',
-              }}
-            />
-          </div>
-          {linked && (
-            <button onClick={() => { linkShotToScene(shot.id, null); setOpen(false) }}
-              style={{ width: '100%', textAlign: 'left', padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace', color: '#E84040', borderRadius: 3 }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-            >
-              Unlink scene
-            </button>
-          )}
-          {filteredScenes.map(ss => (
-            <button key={ss.id} onClick={() => { linkShotToScene(shot.id, ss.id); setOpen(false) }}
-              style={{
-                width: '100%', textAlign: 'left', padding: '4px 8px',
-                background: ss.id === shot.linkedSceneId ? 'rgba(82,101,224,0.18)' : 'none',
-                border: 'none', cursor: 'pointer', fontSize: 10, fontFamily: 'monospace',
-                color: ss.id === shot.linkedSceneId ? (isDark ? '#b8c4ff' : '#3245A8') : (isDark ? '#D4D4D8' : '#4A5568'),
-                borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(74,85,104,0.08)')}
-              onMouseLeave={e => (e.currentTarget.style.background = ss.id === shot.linkedSceneId ? 'rgba(82,101,224,0.18)' : 'none')}
-            >
-              {ss.color && <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />}
-              <span style={{ fontWeight: 700 }}>SC {ss.sceneNumber}</span>
-              {ss.location && <span style={{ opacity: 0.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>· {ss.location}</span>}
-              {(ss.characters || []).length > 0 && <span style={{ opacity: 0.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>· {(ss.characters || []).join(', ')}</span>}
-            </button>
-          ))}
-          {filteredScenes.length === 0 && (
-            <div style={{ textAlign: 'center', color: isDark ? '#777' : '#718096', padding: '10px 8px', fontSize: 11 }}>
-              No scenes match
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Dropdown options (matching SpecsTable.jsx) ───────────────────────────────
 const SIZE_OPTIONS  = ['WIDE SHOT', 'MEDIUM', 'CLOSE UP', 'OTS', 'ECU', 'INSERT', 'ESTABLISHING']
 const TYPE_OPTIONS  = ['EYE LVL', 'SHOULDER LVL', 'CROWD LVL', 'HIGH ANGLE', 'LOW ANGLE', 'DUTCH']
@@ -1138,15 +1012,13 @@ function SortableShotRow({
         if (col.type === 'readonly') {
           return (
             <td key={col.key} style={cellStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', height: rowHeight, gap: 3, paddingRight: 2, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', height: rowHeight, paddingRight: 2, overflow: 'hidden' }}>
                 <EditableCell
                   type="readonly"
                   value={shot.displayId}
                   isDark={isDark}
                   onChange={() => {}}
                 />
-                <span style={{ fontSize: 10, opacity: 0.45, fontFamily: 'monospace' }}>{shot.cameraName || ''}</span>
-                <ShotlistSceneBadge shot={shot} />
               </div>
             </td>
           )
@@ -1465,6 +1337,25 @@ export default function ShotlistTab({
     }
   }, [addShot, addShotBlock, activeDay])
 
+  const handleAddAllShotsForDay = useCallback((sceneId) => {
+    if (!activeDay) return
+    const existingShotIds = new Set(
+      activeDay.blocks
+        .filter(block => block.type !== 'break' && block.shotId)
+        .map(block => block.shotId)
+    )
+    getShotsForScene(sceneId).forEach((shot) => {
+      if (existingShotIds.has(shot.id)) return
+      addShotBlock(activeDay.id, shot.id)
+      existingShotIds.add(shot.id)
+    })
+  }, [activeDay, addShotBlock, getShotsForScene])
+
+  const handleAddDay = useCallback(() => {
+    const newDayId = addShootingDay()
+    if (newDayId) setSelectedDayId(newDayId)
+  }, [addShootingDay])
+
   const handleRowDragEnd = useCallback((event, sceneId) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -1520,14 +1411,6 @@ export default function ShotlistTab({
     setTimeout(() => setHighlightedSceneId(prev => (prev === sceneId ? null : prev)), 900)
   }, [])
 
-  // Close config panel when clicking outside
-  useEffect(() => {
-    if (!configureOpen) return
-    const handler = () => onConfigureOpenChange(false)
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [configureOpen, onConfigureOpenChange])
-
   return (
     <div
       ref={el => {
@@ -1549,7 +1432,7 @@ export default function ShotlistTab({
         days={dayTabs}
         activeDay={schedule[activeDayIdx]?.id}
         onSelect={(dayId) => setSelectedDayId(dayId)}
-        onAddDay={addShootingDay}
+        onAddDay={handleAddDay}
       />
 
       {/* ── Toolbar ── */}
@@ -1776,20 +1659,6 @@ export default function ShotlistTab({
                 )}
 
                 <div style={{ position: 'relative', overflowX: 'auto', borderTop: `1px solid ${c.border}` }}>
-                  <div style={{
-                    position: 'sticky',
-                    top: 0,
-                    right: 0,
-                    zIndex: 14,
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    pointerEvents: 'none',
-                    height: 0,
-                  }}>
-                    <div style={{ margin: '6px 8px 0 0', fontSize: 10, padding: '2px 8px', borderRadius: 999, background: 'rgba(17,24,39,0.86)', color: '#fff', letterSpacing: '0.02em' }}>
-                      Scroll horizontally for more columns →
-                    </div>
-                  </div>
                   <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: Math.max(totalTableWidth, 980), minWidth: '100%', backgroundColor: c.tableBg, fontSize: 11, fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif' }}>
                     <colgroup>
                       <col style={{ width: DRAG_COL_WIDTH }} />
@@ -1832,9 +1701,14 @@ export default function ShotlistTab({
                       </DndContext>
                       <tr className="shotlist-add-row">
                         <td colSpan={visibleColumns.length + 1} style={{ height: 32, padding: 0, borderBottom: `2px solid ${c.thickBorder}` }}>
-                          <button onClick={() => setAddShotModalSceneId(scene.id)} style={{ width: '100%', height: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.04em', color: '#7c7468' }}>
-                            + Add Shot
-                          </button>
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                            <button onClick={() => setAddShotModalSceneId(scene.id)} style={{ height: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.04em', color: '#7c7468', padding: '0 8px' }}>
+                              + Add Shot
+                            </button>
+                            <button onClick={() => handleAddAllShotsForDay(scene.id)} style={{ height: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.04em', color: '#7c7468', padding: '0 8px' }}>
+                              + Add all shots in scene
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     </tbody>
