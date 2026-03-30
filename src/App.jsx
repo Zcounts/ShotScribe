@@ -35,6 +35,7 @@ import SceneColorPicker from './components/SceneColorPicker'
 import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import StoryboardConfigureSidebar from './components/StoryboardConfigureSidebar'
+import CastCrewConfigureSidebar from './components/CastCrewConfigureSidebar'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
 import { getShotLetter } from './store'
 import {
@@ -337,7 +338,9 @@ export default function App() {
   const moveShotToScene = useStore(s => s.moveShotToScene)
   const reorderShots = useStore(s => s.reorderShots)
   const storyboardDisplayConfig = useStore(s => s.storyboardDisplayConfig)
+  const castCrewDisplayConfig = useStore(s => s.castCrewDisplayConfig)
   const updateStoryboardDisplayConfig = useStore(s => s.updateStoryboardDisplayConfig)
+  const updateCastCrewDisplayConfig = useStore(s => s.updateCastCrewDisplayConfig)
 
   const projectName = useStore(s => s.projectName)
   const shortcutBindings = useStore(s => s.shortcutBindings)
@@ -352,6 +355,7 @@ export default function App() {
   const [forcedExportTab, setForcedExportTab] = useState(null)
   const [showStoryboardOutline, setShowStoryboardOutline] = useState(storyboardViewState.showOutline ?? true)
   const [storyboardConfigOpen, setStoryboardConfigOpen] = useState(false)
+  const [castCrewConfigOpen, setCastCrewConfigOpen] = useState(false)
   const [scenesConfigOpen, setScenesConfigOpen] = useState(false)
   const [shotlistConfigOpen, setShotlistConfigOpen] = useState(false)
   const [scheduleConfigOpen, setScheduleConfigOpen] = useState(false)
@@ -738,7 +742,10 @@ export default function App() {
       isActive: false,
       onToggle: () => setStoryboardConfigOpen(false),
     },
-    castcrew: { isActive: false, onToggle: () => {} },
+    castcrew: {
+      isActive: castCrewConfigOpen,
+      onToggle: () => setCastCrewConfigOpen(o => !o),
+    },
     callsheet: {
       isActive: callsheetConfigOpen,
       onToggle: () => setCallsheetConfigOpen(o => !o),
@@ -1087,6 +1094,27 @@ export default function App() {
               },
             })}
             onUseVisibilityInPdfChange={(useVisibilitySettingsInPdf) => updateStoryboardDisplayConfig({ useVisibilitySettingsInPdf })}
+          />
+        </>
+      )}
+      {activeTab === 'castcrew' && (
+        <>
+          <div
+            onClick={() => setCastCrewConfigOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.3)',
+              zIndex: 150,
+              opacity: castCrewConfigOpen ? 1 : 0,
+              pointerEvents: castCrewConfigOpen ? 'auto' : 'none',
+              transition: 'opacity 200ms ease',
+            }}
+          />
+          <CastCrewConfigureSidebar
+            open={castCrewConfigOpen}
+            config={castCrewDisplayConfig}
+            onChange={updateCastCrewDisplayConfig}
           />
         </>
       )}
