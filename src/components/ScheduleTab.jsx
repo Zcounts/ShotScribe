@@ -3656,7 +3656,6 @@ export default function ScheduleTab({
       ) : scheduleView === 'list' ? (
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>List view failed to render for current data. Try another view.</div>}>
         <div>
-              <ScheduleListColumnHeader />
               <div style={{ position: 'sticky', top: LIST_DAY_TAB_BAR_TOP, zIndex: 30, marginBottom: 4 }}>
                 <DayTabBar
                   days={dayTabs}
@@ -3670,6 +3669,7 @@ export default function ScheduleTab({
                   enableDayContextMenu
                 />
               </div>
+              <ScheduleListColumnHeader />
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
