@@ -15,6 +15,10 @@ import {
   DEFAULT_STORYBOARD_DISPLAY_CONFIG,
   normalizeStoryboardDisplayConfig,
 } from './storyboardDisplayConfig'
+import {
+  DEFAULT_CASTCREW_DISPLAY_CONFIG,
+  normalizeCastCrewDisplayConfig,
+} from './castCrewDisplayConfig'
 import { devPerfLog } from './utils/devPerf'
 
 export const CARD_COLORS = [
@@ -523,6 +527,7 @@ const useStore = create((set, get) => ({
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,
   callsheetColumnConfig: DEFAULT_CALLSHEET_COLUMN_CONFIG,
   storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
+  castCrewDisplayConfig: DEFAULT_CASTCREW_DISPLAY_CONFIG,
 
   // Per-column width overrides for the shotlist table (key → px width).
   // Saved with the project so widths are restored on reload.
@@ -1876,6 +1881,15 @@ const useStore = create((set, get) => ({
     }))
     get()._scheduleAutoSave()
   },
+  updateCastCrewDisplayConfig: (patch) => {
+    set(state => ({
+      castCrewDisplayConfig: normalizeCastCrewDisplayConfig({
+        ...state.castCrewDisplayConfig,
+        ...(patch || {}),
+      }),
+    }))
+    get()._scheduleAutoSave()
+  },
   resetTabViewState: () => set({
     tabViewState: {
       script: {},
@@ -2086,6 +2100,7 @@ const useStore = create((set, get) => ({
       shortcutBindings,
       storyboardSceneOrder,
       storyboardDisplayConfig,
+      castCrewDisplayConfig,
       tabViewState,
     } = get()
     const payload = {
@@ -2104,6 +2119,7 @@ const useStore = create((set, get) => ({
       customDropdownOptions,
       storyboardSceneOrder: normalizeStoryboardSceneOrder(storyboardSceneOrder, scenes),
       storyboardDisplayConfig: normalizeStoryboardDisplayConfig(storyboardDisplayConfig),
+      castCrewDisplayConfig: normalizeCastCrewDisplayConfig(castCrewDisplayConfig),
       // Scenes and shots are reconstructed field-by-field so that any
       // non-serializable value that accidentally landed in state (e.g. a DOM
       // event object spread via an overrides parameter) is stripped before
@@ -2584,6 +2600,7 @@ const useStore = create((set, get) => ({
       }),
       storyboardSceneOrder: normalizeStoryboardSceneOrder(data.storyboardSceneOrder, scenes),
       storyboardDisplayConfig: normalizeStoryboardDisplayConfig(data.storyboardDisplayConfig),
+      castCrewDisplayConfig: normalizeCastCrewDisplayConfig(data.castCrewDisplayConfig),
       schedule: loadedSchedule,
       scheduleCollapseState: loadedCollapseState,
       scheduleColumnConfig: (() => {
@@ -2760,6 +2777,7 @@ const useStore = create((set, get) => ({
       scenes: [scene],
       storyboardSceneOrder: [],
       storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
+      castCrewDisplayConfig: DEFAULT_CASTCREW_DISPLAY_CONFIG,
       schedule: [],
       callsheets: {},
       callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,

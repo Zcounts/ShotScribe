@@ -8,14 +8,14 @@ function isNightShot(shotData) {
   return dayNight.includes('NIGHT')
 }
 
-function Circle({ status }) {
+function Circle({ status, colors }) {
   const styles = {
-    full: 'bg-[#5265E0] border-[#5265E0]',
-    brief: 'bg-[#C7D0FF] border-[#5265E0]',
-    night: 'bg-[#6E4450] border-[#6E4450]',
-    none: 'bg-transparent border-slate/25',
+    full: { background: colors.fullDayColor, borderColor: colors.fullDayColor },
+    brief: { background: colors.briefColor, borderColor: colors.fullDayColor },
+    night: { background: colors.nightOnlyColor, borderColor: colors.nightOnlyColor },
+    none: { background: 'transparent', borderColor: colors.notNeededColor },
   }
-  return <div className={`w-5 h-5 rounded-full border-2 mx-auto ${styles[status]}`} />
+  return <div className="w-5 h-5 rounded-full border-2 mx-auto" style={styles[status]} />
 }
 
 function SectionShell({ title, subtitle, children }) {
@@ -39,6 +39,7 @@ export default function CastCrewTab() {
   const callsheets = useStore(s => s.callsheets)
   const castCrewNotes = useStore(s => s.castCrewNotes)
   const setCastCrewNotes = useStore(s => s.setCastCrewNotes)
+  const castCrewDisplayConfig = useStore(s => s.castCrewDisplayConfig)
   const castCrewViewState = useStore(s => s.tabViewState?.castcrew || {})
   const setTabViewState = useStore(s => s.setTabViewState)
   const openPersonDialog = useStore(s => s.openPersonDialog)
@@ -120,7 +121,7 @@ export default function CastCrewTab() {
       className="h-full canvas-texture px-6 py-5 overflow-auto space-y-4"
       onScroll={(e) => setTabViewState('castcrew', { scrollTop: e.currentTarget.scrollTop })}
     >
-      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, minWidth: 0 }}>
         <SidebarPane
           width={258}
           title="Cast/Crew"
@@ -130,6 +131,8 @@ export default function CastCrewTab() {
                 tabs={['Quick Reference', 'List']}
                 active={activeSubTab}
                 onChange={setActiveSubTab}
+                fullWidth
+                minButtonWidth={0}
               />
               <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#5265E0]/45 text-[#2E3E9A] bg-[#5265E0]/15 hover:bg-[#5265E0]/22" onClick={() => openProfile('cast', null)}>
                 + Add Cast
@@ -150,7 +153,7 @@ export default function CastCrewTab() {
                       <tr>
                         <th className="sticky left-0 z-30 min-w-[160px] bg-canvas-dark text-left text-xs text-ink font-semibold px-3 py-2 border-r border-slate/10">Actor</th>
                         {scheduleDays.map((day, dayIndex) => (
-                          <th key={day.id} className="bg-[#5265E0] text-white font-semibold text-xs text-center px-3 py-2 border-r border-slate/10 whitespace-nowrap">
+                          <th key={day.id} className="text-white font-semibold text-xs text-center px-3 py-2 border-r border-slate/10 whitespace-nowrap" style={{ background: castCrewDisplayConfig.dayHeaderBgColor }}>
                             DAY {dayIndex + 1}
                           </th>
                         ))}
@@ -162,7 +165,7 @@ export default function CastCrewTab() {
                           <td className="sticky left-0 z-10 min-w-[160px] px-3 py-2 text-ink font-medium border-b border-r border-slate/10 bg-inherit" data-person-type="cast" data-person-id={row.castId}>{row.actor}</td>
                           {row.perDay.map((status, i) => (
                             <td key={`${row.castId}-${scheduleDays[i]?.id || i}`} className="px-3 py-2 border-b border-r border-slate/10">
-                              <Circle status={status} />
+                              <Circle status={status} colors={castCrewDisplayConfig} />
                             </td>
                           ))}
                         </tr>
@@ -237,10 +240,10 @@ export default function CastCrewTab() {
           )}
 
           <div className="flex items-center gap-6 text-xs text-slate mt-1">
-            <span className="inline-flex items-center gap-1"><span className="text-[#5265E0]">●</span> Full day</span>
-            <span className="inline-flex items-center gap-1"><span className="text-[#5265E0]">◎</span> Brief (≤2 hrs)</span>
-            <span className="inline-flex items-center gap-1"><span className="text-[#6E4450]">⬤</span> Night block only</span>
-            <span>○ Not needed</span>
+            <span className="inline-flex items-center gap-1"><span style={{ color: castCrewDisplayConfig.fullDayColor }}>●</span> Full day</span>
+            <span className="inline-flex items-center gap-1"><span style={{ color: castCrewDisplayConfig.briefColor }}>◎</span> Brief (≤2 hrs)</span>
+            <span className="inline-flex items-center gap-1"><span style={{ color: castCrewDisplayConfig.nightOnlyColor }}>⬤</span> Night block only</span>
+            <span><span style={{ color: castCrewDisplayConfig.notNeededColor }}>○</span> Not needed</span>
           </div>
 
           <textarea
