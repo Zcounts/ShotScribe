@@ -734,7 +734,10 @@ export default function App() {
       isActive: scheduleConfigOpen,
       onToggle: () => setScheduleConfigOpen(o => !o),
     },
-    script: { isActive: false, onToggle: () => {} },
+    script: {
+      isActive: false,
+      onToggle: () => setStoryboardConfigOpen(false),
+    },
     castcrew: { isActive: false, onToggle: () => {} },
     callsheet: {
       isActive: callsheetConfigOpen,

@@ -926,7 +926,7 @@ export default function ScriptTab() {
             </div>
           </div>
         </div>
-        {showImportModal && <ImportScriptModal onClose={() => setShowImportModal(false)} />}
+        {showImportModal && <ImportScriptModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} />}
       </>
     )
   }
@@ -1436,7 +1436,7 @@ export default function ScriptTab() {
         </div>
       )}
 
-      {showImportModal && <ImportScriptModal onClose={() => setShowImportModal(false)} />}
+      {showImportModal && <ImportScriptModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} />}
     </>
   )
 }
