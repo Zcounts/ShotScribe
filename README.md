@@ -190,6 +190,3 @@ ShotScribe is actively evolving as a web-first production planning platform for 
 
 The current focus is keeping the app **web-safe, portable, and practical**, while preserving a connected workflow from script through production.
 
-## License
-
-Add your preferred license here.
