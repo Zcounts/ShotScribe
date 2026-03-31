@@ -46,6 +46,7 @@ import {
   shouldSuppressEntityContextMenu,
 } from './utils/entityDialog'
 import { devPerfLog, useDevRenderCounter } from './utils/devPerf'
+import { platformService } from './services/platformService'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -466,8 +467,7 @@ export default function App() {
       try {
         const startedAt = performance.now()
         const data = getProjectData()
-        localStorage.setItem('autosave', JSON.stringify(data))
-        localStorage.setItem('autosave_time', new Date().toISOString())
+        platformService.saveAutosave(data)
         devPerfLog('app:autosave-interval', {
           ms: Math.round((performance.now() - startedAt) * 100) / 100,
         })
@@ -486,14 +486,13 @@ export default function App() {
     const hasShots = useStore.getState().scenes.some(s => s.shots.length > 0)
     if (!hasShots) {
       try {
-        const saved = localStorage.getItem('autosave')
-        if (saved) {
-          const data = JSON.parse(saved)
+        const autosave = platformService.loadAutosave()
+        if (autosave?.data) {
+          const data = autosave.data
           const totalShots = (data.scenes || [{ shots: data.shots || [] }])
             .reduce((a, s) => a + (s.shots || []).length, 0)
           if (totalShots > 0) {
-            const savedTime = localStorage.getItem('autosave_time')
-            const timeStr = savedTime ? new Date(savedTime).toLocaleString() : 'recently'
+            const timeStr = autosave.savedAt ? new Date(autosave.savedAt).toLocaleString() : 'recently'
             setRestorePrompt({ data, timeStr, totalShots })
           }
         }

@@ -478,15 +478,12 @@ sceneIdCounter = 0
 
 function loadRecentProjects() {
   try {
-    const raw = localStorage.getItem('recentProjects')
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    return platformService.loadRecentProjects()
   } catch {
     // Guard against malformed/unavailable persisted storage causing renderer
     // startup crashes (e.g. SecurityError in some file:// environments).
     try {
-      localStorage.removeItem('recentProjects')
+      platformService.saveRecentProjects([])
     } catch {
       // Ignore storage cleanup failures; renderer should still boot.
     }
@@ -494,9 +491,35 @@ function loadRecentProjects() {
   }
 }
 
+function getTotalShotsFromProjectData(data) {
+  return (data.scenes || [{ shots: data.shots || [] }])
+    .reduce((a, s) => a + (s.shots || []).length, 0)
+}
+
+function buildRecentProjectEntry({ name, path, shots, browserProjectId = null }) {
+  return {
+    name,
+    path,
+    date: new Date().toISOString(),
+    shots,
+    ...(browserProjectId ? { browserProjectId } : {}),
+  }
+}
+
+function updateRecentProjects(get, set, entry) {
+  const matcher = entry.browserProjectId
+    ? (r) => r.browserProjectId === entry.browserProjectId
+    : (r) => r.path === entry.path
+  const recent = get().recentProjects.filter(r => !matcher(r))
+  const newRecent = [entry, ...recent].slice(0, 10)
+  set({ recentProjects: newRecent })
+  platformService.saveRecentProjects(newRecent)
+}
+
 const useStore = create((set, get) => ({
   // Project metadata
   projectPath: null,
+  browserProjectId: null,
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
   lastSaved: null,
@@ -2337,16 +2360,15 @@ const useStore = create((set, get) => ({
       }
     } else {
       try {
-        const blob = new Blob([json], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = defaultName
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false })
+        const browserProjectId = platformService.saveBrowserProjectSnapshot(get().browserProjectId, data)
+        await platformService.saveProject(defaultName, json)
+        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false, browserProjectId })
+        updateRecentProjects(get, set, buildRecentProjectEntry({
+          name: defaultName,
+          path: `browser:${browserProjectId}`,
+          shots: getTotalShotsFromProjectData(data),
+          browserProjectId,
+        }))
       } catch (err) {
         alert(`Save failed: ${err.message}`)
       }
@@ -2390,16 +2412,15 @@ const useStore = create((set, get) => ({
       }
     } else {
       try {
-        const blob = new Blob([json], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = defaultName
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false })
+        const browserProjectId = platformService.saveBrowserProjectSnapshot(get().browserProjectId, data)
+        await platformService.saveProject(defaultName, json)
+        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false, browserProjectId })
+        updateRecentProjects(get, set, buildRecentProjectEntry({
+          name: defaultName,
+          path: `browser:${browserProjectId}`,
+          shots: getTotalShotsFromProjectData(data),
+          browserProjectId,
+        }))
       } catch (err) {
         alert(`Save failed: ${err.message}`)
       }
@@ -2681,6 +2702,7 @@ const useStore = create((set, get) => ({
       shortcutBindings: getActiveBindings(data.shortcutBindings || loadShortcutBindings() || SHORTCUT_DEFAULTS),
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
+      browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
       activeTab: 'script',
       contextMenu: null,
       personDialog: null,
@@ -2730,15 +2752,12 @@ const useStore = create((set, get) => ({
         const data = JSON.parse(result.data)
         get().loadProject(data)
         const fileName = result.filePath.split(/[\\/]/).pop()
-        const recent = get().recentProjects.filter(r => r.path !== result.filePath)
-        const totalShots = (data.scenes || [{ shots: data.shots || [] }])
-          .reduce((a, s) => a + (s.shots || []).length, 0)
-        const newRecent = [
-          { name: fileName, path: result.filePath, date: new Date().toISOString(), shots: totalShots },
-          ...recent,
-        ].slice(0, 10)
-        set({ recentProjects: newRecent, projectPath: result.filePath })
-        localStorage.setItem('recentProjects', JSON.stringify(newRecent))
+        set({ projectPath: result.filePath, browserProjectId: null })
+        updateRecentProjects(get, set, buildRecentProjectEntry({
+          name: fileName,
+          path: result.filePath,
+          shots: getTotalShotsFromProjectData(data),
+        }))
       } catch {
         alert('Failed to load project: Invalid file format')
       }
@@ -2754,15 +2773,14 @@ const useStore = create((set, get) => ({
           try {
             const data = JSON.parse(ev.target.result)
             get().loadProject(data)
-            const recent = get().recentProjects.filter(r => r.name !== file.name)
-            const totalShots = (data.scenes || [{ shots: data.shots || [] }])
-              .reduce((a, s) => a + (s.shots || []).length, 0)
-            const newRecent = [
-              { name: file.name, path: file.name, date: new Date().toISOString(), shots: totalShots },
-              ...recent,
-            ].slice(0, 10)
-            set({ recentProjects: newRecent })
-            localStorage.setItem('recentProjects', JSON.stringify(newRecent))
+            const browserProjectId = platformService.saveBrowserProjectSnapshot(null, data)
+            set({ browserProjectId, projectPath: null })
+            updateRecentProjects(get, set, buildRecentProjectEntry({
+              name: file.name,
+              path: `browser:${browserProjectId}`,
+              shots: getTotalShotsFromProjectData(data),
+              browserProjectId,
+            }))
           } catch {
             alert('Failed to load project: Invalid file format')
           }
@@ -2786,15 +2804,45 @@ const useStore = create((set, get) => ({
       const data = JSON.parse(result.data)
       get().loadProject(data)
       const fileName = filePath.split(/[\\/]/).pop()
-      const recent = get().recentProjects.filter(r => r.path !== filePath)
-      const totalShots = (data.scenes || [{ shots: data.shots || [] }])
-        .reduce((a, s) => a + (s.shots || []).length, 0)
-      const newRecent = [
-        { name: fileName, path: filePath, date: new Date().toISOString(), shots: totalShots },
-        ...recent,
-      ].slice(0, 10)
-      set({ recentProjects: newRecent, projectPath: filePath })
-      localStorage.setItem('recentProjects', JSON.stringify(newRecent))
+      set({ projectPath: filePath, browserProjectId: null })
+      updateRecentProjects(get, set, buildRecentProjectEntry({
+        name: fileName,
+        path: filePath,
+        shots: getTotalShotsFromProjectData(data),
+      }))
+    } catch {
+      alert('Failed to load project: Invalid file format')
+    }
+  },
+
+  openRecentProject: async (recentProject) => {
+    if (!recentProject) return
+    if (platformService.isDesktop()) {
+      if (recentProject.path) {
+        await get().openProjectFromPath(recentProject.path)
+      } else {
+        await get().openProject()
+      }
+      return
+    }
+    const browserProjectId = recentProject.browserProjectId
+      || (typeof recentProject.path === 'string' && recentProject.path.startsWith('browser:')
+        ? recentProject.path.slice('browser:'.length)
+        : null)
+    const data = platformService.loadBrowserProjectSnapshot(browserProjectId)
+    if (!data) {
+      alert('Could not reopen this browser project. Please import a .shotlist file instead.')
+      return
+    }
+    try {
+      get().loadProject(data)
+      set({ browserProjectId, projectPath: null })
+      updateRecentProjects(get, set, buildRecentProjectEntry({
+        name: recentProject.name || `${data.projectName || 'Untitled Shotlist'}.shotlist`,
+        path: `browser:${browserProjectId}`,
+        shots: getTotalShotsFromProjectData(data),
+        browserProjectId,
+      }))
     } catch {
       alert('Failed to load project: Invalid file format')
     }
@@ -2821,6 +2869,7 @@ const useStore = create((set, get) => ({
       scriptScenes: [],
       importedScripts: [],
       projectPath: null,
+      browserProjectId: platformService.isDesktop() ? null : platformService.ensureBrowserProjectId(),
       lastSaved: null,
       activeTab: 'script',
       contextMenu: null,
@@ -2854,8 +2903,20 @@ const useStore = create((set, get) => ({
       try {
         const startedAt = performance.now()
         const data = get().getProjectData()
-        localStorage.setItem('autosave', JSON.stringify(data))
-        localStorage.setItem('autosave_time', new Date().toISOString())
+        platformService.saveAutosave(data)
+        if (!platformService.isDesktop()) {
+          const activeState = get()
+          const browserProjectId = platformService.saveBrowserProjectSnapshot(activeState.browserProjectId, data)
+          updateRecentProjects(get, set, buildRecentProjectEntry({
+            name: activeState.projectName || 'Untitled Shotlist',
+            path: `browser:${browserProjectId}`,
+            shots: getTotalShotsFromProjectData(data),
+            browserProjectId,
+          }))
+          if (browserProjectId !== activeState.browserProjectId) {
+            set({ browserProjectId })
+          }
+        }
         devPerfLog('store:autosave-timeout', {
           ms: Math.round((performance.now() - startedAt) * 100) / 100,
         })

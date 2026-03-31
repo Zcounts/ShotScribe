@@ -1,4 +1,9 @@
 const DESKTOP_ONLY_ERROR = 'Desktop-only capability is unavailable in this environment.'
+const AUTOSAVE_KEY = 'autosave'
+const AUTOSAVE_TIME_KEY = 'autosave_time'
+const RECENT_PROJECTS_KEY = 'recentProjects'
+const BROWSER_PROJECT_INDEX_KEY = 'browserProjectIndex'
+const BROWSER_PROJECT_KEY_PREFIX = 'browserProject:'
 
 function getElectronApi() {
   if (typeof window === 'undefined') return null
@@ -7,6 +12,23 @@ function getElectronApi() {
 
 function unsupportedResult(action) {
   return { success: false, error: `${action}: ${DESKTOP_ONLY_ERROR}` }
+}
+
+function readLocalStorageJson(key, fallback = null) {
+  try {
+    if (typeof localStorage === 'undefined') return fallback
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw)
+  } catch {
+    return fallback
+  }
+}
+
+function writeLocalStorageJson(key, value) {
+  if (typeof localStorage === 'undefined') return false
+  localStorage.setItem(key, JSON.stringify(value))
+  return true
 }
 
 function downloadTextFile(defaultName, data, mimeType = 'application/json') {
@@ -133,6 +155,61 @@ export const platformService = {
         .catch((error) => ({ success: false, error: error?.message || 'clipboard write failed' }))
     }
     return Promise.resolve(unsupportedResult('copyText'))
+  },
+
+  loadRecentProjects() {
+    const parsed = readLocalStorageJson(RECENT_PROJECTS_KEY, [])
+    return Array.isArray(parsed) ? parsed : []
+  },
+
+  saveRecentProjects(projects) {
+    try {
+      writeLocalStorageJson(RECENT_PROJECTS_KEY, Array.isArray(projects) ? projects : [])
+    } catch {
+      // Ignore unavailable storage in constrained browser contexts.
+    }
+  },
+
+  saveAutosave(data) {
+    try {
+      writeLocalStorageJson(AUTOSAVE_KEY, data)
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AUTOSAVE_TIME_KEY, new Date().toISOString())
+      }
+    } catch {
+      // Ignore unavailable storage in constrained browser contexts.
+    }
+  },
+
+  loadAutosave() {
+    return {
+      data: readLocalStorageJson(AUTOSAVE_KEY, null),
+      savedAt: (typeof localStorage !== 'undefined') ? localStorage.getItem(AUTOSAVE_TIME_KEY) : null,
+    }
+  },
+
+  ensureBrowserProjectId(existingId = null) {
+    if (existingId) return existingId
+    return `browser_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  },
+
+  saveBrowserProjectSnapshot(projectId, payload) {
+    const id = this.ensureBrowserProjectId(projectId)
+    try {
+      writeLocalStorageJson(`${BROWSER_PROJECT_KEY_PREFIX}${id}`, payload)
+      const index = readLocalStorageJson(BROWSER_PROJECT_INDEX_KEY, [])
+      const nextIndex = Array.isArray(index) ? index.filter(entry => entry !== id) : []
+      nextIndex.unshift(id)
+      writeLocalStorageJson(BROWSER_PROJECT_INDEX_KEY, nextIndex.slice(0, 30))
+    } catch {
+      // Ignore unavailable storage in constrained browser contexts.
+    }
+    return id
+  },
+
+  loadBrowserProjectSnapshot(projectId) {
+    if (!projectId) return null
+    return readLocalStorageJson(`${BROWSER_PROJECT_KEY_PREFIX}${projectId}`, null)
   },
 }
 

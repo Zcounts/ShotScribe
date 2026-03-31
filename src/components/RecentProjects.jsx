@@ -1,21 +1,14 @@
 import React from 'react'
 import useStore from '../store'
-import { platformService } from '../services/platformService'
 
 export default function RecentProjects() {
   const recentProjects = useStore(s => s.recentProjects)
-  const openProject = useStore(s => s.openProject)
-  const openProjectFromPath = useStore(s => s.openProjectFromPath)
+  const openRecentProject = useStore(s => s.openRecentProject)
 
   if (recentProjects.length === 0) return null
 
   const handleClick = (project) => {
-    // In Electron with a real file path, open directly; otherwise open file picker
-    if (platformService.isDesktop() && project.path && project.path !== project.name) {
-      openProjectFromPath(project.path)
-    } else {
-      openProject()
-    }
+    openRecentProject(project)
   }
 
   return (

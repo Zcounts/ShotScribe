@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
-import { platformService } from '../services/platformService'
 
 let mobileExportServicePromise = null
 
@@ -26,7 +25,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const saveProject = useStore(s => s.saveProject)
   const saveProjectAs = useStore(s => s.saveProjectAs)
   const openProject = useStore(s => s.openProject)
-  const openProjectFromPath = useStore(s => s.openProjectFromPath)
+  const openRecentProject = useStore(s => s.openRecentProject)
   const recentProjects = useStore(s => s.recentProjects)
   const newProject = useStore(s => s.newProject)
   const setProjectName = useStore(s => s.setProjectName)
@@ -377,11 +376,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                   key={i}
                   onClick={() => {
                     setOpenMenuOpen(false)
-                    if (platformService.isDesktop() && project.path && project.path !== project.name) {
-                      guardUnsaved(() => openProjectFromPath(project.path))
-                    } else {
-                      guardUnsaved(openProject)
-                    }
+                    guardUnsaved(() => openRecentProject(project))
                   }}
                   title={`${project.shots} shots — ${new Date(project.date).toLocaleDateString()}`}
                   style={{
