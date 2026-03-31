@@ -342,12 +342,32 @@ function splitPeople(value) {
 }
 
 function normalizeCrewEntry(entry = {}) {
+  const dedupedRoles = []
+  const seenRoles = new Set()
+  const pushRole = (value) => {
+    const normalized = String(value || '').trim()
+    const key = normalizePersonKey(normalized)
+    if (!normalized || seenRoles.has(key)) return
+    seenRoles.add(key)
+    dedupedRoles.push(normalized)
+  }
+
+  if (Array.isArray(entry.roles)) {
+    entry.roles.forEach(pushRole)
+  }
+  if (!Array.isArray(entry.roles) && String(entry.role || '').includes(',')) {
+    String(entry.role || '').split(',').forEach(pushRole)
+  } else {
+    pushRole(entry.role)
+  }
+
   return {
     id: entry.id || `crew_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: entry.name || '',
     email: entry.email || '',
     phone: entry.phone || '',
-    role: entry.role || '',
+    role: dedupedRoles.join(', '),
+    roles: dedupedRoles,
     department: entry.department || 'Production',
     notes: entry.notes || '',
     metadata: entry.metadata || {},

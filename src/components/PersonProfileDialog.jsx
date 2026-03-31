@@ -1,16 +1,44 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
 import useStore from '../store'
 
+const DEFAULT_CREW_ROLES = [
+  'Director',
+  '1st Assistant Director',
+  '2nd Assistant Director',
+  'Director of Photography',
+  'Producer',
+  'Production Designer',
+  'Camera Operator',
+  'Gaffer',
+  'Key Grip',
+  'Sound Mixer',
+  'Boom Operator',
+  'Editor',
+  'VFX Supervisor',
+  'Script Supervisor',
+  'Hair / Makeup',
+  'Wardrobe',
+  'PA',
+]
+
 function createEmptyPerson(type) {
   return type === 'cast'
     ? { name: '', email: '', phone: '', role: 'Cast', department: 'Cast', character: '', characterIds: [], notes: '' }
-    : { name: '', email: '', phone: '', role: '', department: 'Production', notes: '' }
+    : { name: '', email: '', phone: '', role: '', roles: [], department: 'Production', notes: '' }
+}
+
+function getCrewRolesFromPerson(person = {}) {
+  const roleValues = Array.isArray(person.roles) && person.roles.length > 0
+    ? person.roles
+    : String(person.role || '').split(',').map(value => value.trim()).filter(Boolean)
+  return Array.from(new Set(roleValues.map(value => String(value || '').trim()).filter(Boolean)))
 }
 
 export default function PersonProfileDialog({ personType, person, onClose }) {
   const upsertCast = useStore(s => s.upsertCastRosterEntry)
   const upsertCrew = useStore(s => s.upsertCrewRosterEntry)
   const castRoster = useStore(s => s.castRoster)
+  const crewRoster = useStore(s => s.crewRoster)
   const characterCatalog = useStore(s => s.getScriptCharacterCatalog)
   const scriptCharacters = useMemo(() => characterCatalog(), [characterCatalog])
   const isCreateMode = !person?.id
@@ -18,6 +46,7 @@ export default function PersonProfileDialog({ personType, person, onClose }) {
   const [characterQuery, setCharacterQuery] = useState('')
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [highlightedOption, setHighlightedOption] = useState(0)
+  const [customRoleInput, setCustomRoleInput] = useState('')
   const pickerRef = useRef(null)
 
   useEffect(() => {
@@ -149,8 +178,55 @@ export default function PersonProfileDialog({ personType, person, onClose }) {
 
   const save = () => {
     if (personType === 'cast') upsertCast(draft)
-    else upsertCrew(draft)
+    else {
+      const selectedRoles = Array.from(new Set((draft.roles || []).map(value => String(value || '').trim()).filter(Boolean)))
+      upsertCrew({ ...draft, roles: selectedRoles, role: selectedRoles.join(', ') })
+    }
     onClose()
+  }
+
+  const selectedCrewRoles = useMemo(() => {
+    if (personType !== 'crew') return []
+    return getCrewRolesFromPerson(draft)
+  }, [draft.role, draft.roles, personType])
+
+  const crewRoleOptions = useMemo(() => {
+    if (personType !== 'crew') return []
+    const options = new Map()
+    DEFAULT_CREW_ROLES.forEach(role => options.set(role.toLowerCase(), role))
+    crewRoster.forEach(member => {
+      const values = Array.isArray(member.roles) && member.roles.length > 0
+        ? member.roles
+        : String(member.role || '').split(',').map(value => value.trim()).filter(Boolean)
+      values.forEach(role => {
+        const normalized = String(role || '').trim()
+        if (!normalized) return
+        options.set(normalized.toLowerCase(), normalized)
+      })
+    })
+    selectedCrewRoles.forEach(role => options.set(role.toLowerCase(), role))
+    return Array.from(options.values()).sort((a, b) => a.localeCompare(b))
+  }, [crewRoster, personType, selectedCrewRoles])
+
+  const addCrewRole = (value) => {
+    const nextRole = String(value || '').trim()
+    if (!nextRole) return
+    setDraft(prev => {
+      const existing = getCrewRolesFromPerson(prev)
+      if (existing.some(role => role.toLowerCase() === nextRole.toLowerCase())) return prev
+      const roles = [...existing, nextRole]
+      return { ...prev, roles, role: roles.join(', ') }
+    })
+    setCustomRoleInput('')
+  }
+
+  const removeCrewRole = (value) => {
+    const roleToRemove = String(value || '').trim().toLowerCase()
+    if (!roleToRemove) return
+    setDraft(prev => {
+      const roles = getCrewRolesFromPerson(prev).filter(role => role.toLowerCase() !== roleToRemove)
+      return { ...prev, roles, role: roles.join(', ') }
+    })
   }
 
   return (
@@ -168,7 +244,36 @@ export default function PersonProfileDialog({ personType, person, onClose }) {
           <input value={draft.phone || ''} onChange={e => setDraft(prev => ({ ...prev, phone: e.target.value }))} />
 
           <label className="dialog-label">Role</label>
-          <input value={draft.role || ''} onChange={e => setDraft(prev => ({ ...prev, role: e.target.value }))} />
+          {personType === 'crew' ? (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {selectedCrewRoles.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {selectedCrewRoles.map(role => (
+                    <span key={role} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #BFDBFE', background: '#EFF6FF', color: '#1E3A8A', borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+                      {role}
+                      <button type="button" onClick={() => removeCrewRole(role)} style={{ border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0, lineHeight: 1 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <select value="" onChange={e => addCrewRole(e.target.value)}>
+                <option value="">Select assigned role…</option>
+                {crewRoleOptions.filter(role => !selectedCrewRoles.some(selected => selected.toLowerCase() === role.toLowerCase())).map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={customRoleInput}
+                  onChange={e => setCustomRoleInput(e.target.value)}
+                  placeholder="Add custom role"
+                />
+                <button type="button" className="dialog-button-secondary" onClick={() => addCrewRole(customRoleInput)}>Add Role</button>
+              </div>
+            </div>
+          ) : (
+            <input value={draft.role || ''} onChange={e => setDraft(prev => ({ ...prev, role: e.target.value }))} />
+          )}
 
           <label className="dialog-label">Department</label>
           <input value={draft.department || ''} onChange={e => setDraft(prev => ({ ...prev, department: e.target.value }))} />
