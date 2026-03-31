@@ -3345,7 +3345,6 @@ export default function ScheduleTab({
   const scheduleRaw = useStore(s => s.schedule)
   const scenesRaw = useStore(s => s.scenes)
   const scriptScenesRaw = useStore(s => s.scriptScenes)
-  const theme = useStore(s => s.theme)
   const getScheduleWithShots = useStore(s => s.getScheduleWithShots)
   const addShootingDay = useStore(s => s.addShootingDay)
   const removeShootingDay = useStore(s => s.removeShootingDay)
@@ -3370,7 +3369,7 @@ export default function ScheduleTab({
   const scriptScenes = Array.isArray(scriptScenesRaw) ? scriptScenesRaw : []
   const safeGetScheduleWithShots = typeof getScheduleWithShots === 'function' ? getScheduleWithShots : () => []
   const safeColumnConfig = Array.isArray(scheduleColumnConfig) ? scheduleColumnConfig : []
-  const isDark = theme === 'dark'
+  const isDark = false
 
   // ── Sub-view state ───────────────────────────────────────────────────────────
   const [scheduleView, setScheduleView] = useState(scheduleViewState.scheduleView || 'list') // 'list' | 'stripboard' | 'calendar'

@@ -17,12 +17,17 @@
 
   body {
     font-family: 'Sora', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-    background-color: #F5F2EC;
+    background-color: var(--app-workspace-bg-base);
     margin: 0;
     padding: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     color: #2C2C2C;
+  }
+
+  body[data-theme='dark'] {
+    --app-workspace-bg-base: #000000;
+    --app-workspace-grid-line: rgba(82, 82, 88, 0.45);
   }
 }
 
