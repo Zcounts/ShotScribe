@@ -9,6 +9,7 @@ import {
   deriveDayCrewRows,
 } from '../utils/callsheetSelectors'
 import { exportSingleDayCallsheetPDF } from './ExportModal'
+import { platformService } from '../services/platformService'
 
 function formatDate(isoDate) {
   if (!isoDate) return 'TBD'
@@ -591,20 +592,14 @@ export default function CallsheetTab({ configureOpen = true }) {
 
     const mailtoUrl = `mailto:?bcc=${encodeURIComponent(recipients)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     try {
-      if (window.electronAPI?.openExternal) {
-        await window.electronAPI.openExternal(mailtoUrl)
-      } else {
-        window.open(mailtoUrl, '_self')
-      }
+      await platformService.openExternal(mailtoUrl)
     } catch (err) {
       console.warn('Unable to open mail client:', err)
     }
 
-    if (exportResult.filePath && window.electronAPI?.revealFile) {
-      await window.electronAPI.revealFile(exportResult.filePath)
-      if (window.electronAPI?.copyText) {
-        await window.electronAPI.copyText(exportResult.filePath)
-      }
+    if (exportResult.filePath && platformService.isDesktop()) {
+      await platformService.revealFile(exportResult.filePath)
+      await platformService.copyText(exportResult.filePath)
     }
     setStatusMessage('Draft opened and PDF revealed in folder for attachment.')
     setEmailPreflightOpen(false)

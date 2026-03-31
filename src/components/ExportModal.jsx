@@ -4,6 +4,7 @@ import jsPDF from 'jspdf'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
+import { platformService } from '../services/platformService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -2053,7 +2054,7 @@ async function exportViaPrint(htmlContent, projectName, suffix = '', explicitFil
 
   let result
   try {
-    result = await window.electronAPI.printToPDF(htmlContent)
+    result = await platformService.printToPDF(htmlContent)
   } catch (ipcErr) {
     throw new Error(`IPC error during printToPDF: ${ipcErr.message || ipcErr}`)
   }
@@ -2070,7 +2071,7 @@ async function exportViaPrint(htmlContent, projectName, suffix = '', explicitFil
     : 'export'
   const fileName = explicitFileName || (suffix ? `${base}_${suffix}.pdf` : `${base}.pdf`)
 
-  const saveResult = await window.electronAPI.savePDF(fileName, buffer.buffer)
+  const saveResult = await platformService.savePDF(fileName, buffer.buffer)
   if (!saveResult?.success) {
     if (saveResult?.error) throw new Error(saveResult.error)
     console.log('[PDF Export] Save cancelled.')
@@ -2081,7 +2082,7 @@ async function exportViaPrint(htmlContent, projectName, suffix = '', explicitFil
 }
 
 // ── Browser fallback path: html2canvas ────────────────────────────────────────
-// Used when running outside Electron (no window.electronAPI.printToPDF).
+// Used when running outside Electron (no desktop print-to-PDF bridge).
 
 /**
  * Temporarily replace every <input> and <textarea> inside el with a
@@ -2229,7 +2230,7 @@ async function exportPagesBrowser(pages) {
  */
 export async function exportStoryboardPDF(pageRefs, projectName) {
   try {
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       const html = buildStoryboardPrintHtml()
       await exportViaPrint(html, projectName, 'storyboard')
     } else {
@@ -2253,7 +2254,7 @@ export async function exportStoryboardPDF(pageRefs, projectName) {
  */
 export async function exportShotlistPDF(shotlistRef, projectName) {
   try {
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       const html = buildShotlistPrintHtml()
       await exportViaPrint(html, projectName, 'shotlist')
     } else {
@@ -2282,7 +2283,7 @@ export async function exportShotlistPDF(shotlistRef, projectName) {
 export async function exportExpandedSchedulePDF(projectName) {
   try {
     const html = buildExpandedSchedulePrintHtml()
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'expanded_schedule')
     } else {
       const win = window.open('', '_blank', 'width=900,height=700')
@@ -2312,7 +2313,7 @@ export async function exportExpandedSchedulePDF(projectName) {
 export async function exportStripboardPDF(projectName) {
   try {
     const html = buildStripboardPrintHtml()
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'stripboard')
     } else {
       const win = window.open('', '_blank', 'width=1100,height=700')
@@ -2342,7 +2343,7 @@ export async function exportStripboardPDF(projectName) {
 export async function exportCalendarPDF(projectName) {
   try {
     const html = buildCalendarPrintHtml()
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'calendar')
     } else {
       const win = window.open('', '_blank', 'width=900,height=700')
@@ -2368,7 +2369,7 @@ export async function exportCalendarPDF(projectName) {
 export async function exportSchedulePDF(projectName) {
   try {
     const html = buildSchedulePrintHtml()
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'schedule')
     } else {
       // Browser fallback: open in a new window and trigger print
@@ -2405,7 +2406,7 @@ export async function exportSchedulePDF(projectName) {
 export async function exportCallsheetPDF(projectName) {
   try {
     const html = buildCallsheetPrintHtml()
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'callsheet')
     } else {
       const win = window.open('', '_blank', 'width=900,height=700')
@@ -2449,7 +2450,7 @@ export async function exportSingleDayCallsheetPDF({
   const fallbackName = `${projectName || 'Untitled Project'} - Callsheet - Day ${dayNumber || (dayIdx + 1)} - ${shootDate || 'TBD'}.pdf`
   const resolvedFileName = sanitizeExportFilename(explicitFileName || fallbackName) || `Callsheet-Day-${dayIdx + 1}.pdf`
 
-  if (window.electronAPI?.printToPDF) {
+  if (platformService.hasPrintToPDF()) {
     const saveResult = await exportViaPrint(html, projectName, '', resolvedFileName)
     return { filePath: saveResult?.filePath || '', fileName: resolvedFileName }
   }
@@ -2479,10 +2480,10 @@ export async function exportToPNG(pageRefs) {
       const canvas = await captureElementWithTimeout(pages[i], 2, 60000)
       const filename = pages.length === 1 ? 'storyboard.png' : `storyboard_page${i + 1}.png`
 
-      if (window.electronAPI) {
+      if (platformService.isDesktop()) {
         const dataURL = canvas.toDataURL('image/png')
         const base64 = dataURL.replace(/^data:image\/png;base64,/, '')
-        await window.electronAPI.savePNG(filename, base64)
+        await platformService.savePNG(filename, base64)
       } else {
         const link = document.createElement('a')
         link.download = filename
@@ -2591,7 +2592,7 @@ export async function exportDayPDF(dayIdx, options, projectName) {
   try {
     const html = buildDayCombinedHtml(dayIdx, options)
     if (!html) { alert('No documents selected.'); return }
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, `day${dayIdx + 1}`)
     } else {
       const win = window.open('', '_blank', 'width=900,height=700')
@@ -2680,7 +2681,7 @@ ${csBody}
 export async function exportAllCombinedPDF(projectName) {
   try {
     const html = buildCombinedPrintHtml()
-    if (window.electronAPI?.printToPDF) {
+    if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'complete')
     } else {
       const win = window.open('', '_blank', 'width=900,height=700')
