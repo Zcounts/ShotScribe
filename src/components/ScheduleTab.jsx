@@ -3289,6 +3289,7 @@ export default function ScheduleTab({
   const setScheduleColumnConfig = useStore(s => s.setScheduleColumnConfig)
   const scheduleViewState = useStore(s => s.tabViewState?.schedule || {})
   const setTabViewState = useStore(s => s.setTabViewState)
+  const scheduleCollapseState = useStore(s => s.scheduleCollapseState)
 
   const schedule = useMemo(() => {
     const src = Array.isArray(scheduleRaw) ? scheduleRaw : []
@@ -3725,6 +3726,7 @@ export default function ScheduleTab({
                         dayId={null}
                         isDark={isDark}
                         isOverlay
+                        isCollapsed={scheduleCollapseState?.blocks?.[activeDrag.id] ?? true}
                         pageCountByScene={pageCountByScene}
                       />
                     )
