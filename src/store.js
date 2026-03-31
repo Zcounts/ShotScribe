@@ -2630,10 +2630,22 @@ const useStore = create((set, get) => ({
       callsheetColumnConfig: normalizeCallsheetColumnConfig(data.callsheetColumnConfig),
       // Script import state — default to empty for older project files
       scriptScenes: Array.isArray(data.scriptScenes)
-        ? data.scriptScenes.map(s => deriveScriptSceneFromElements(
-          { ...s, sceneNumber: s?.sceneNumber != null ? String(s.sceneNumber) : '' },
-          s.screenplayElements,
-        ))
+        ? data.scriptScenes.map(s => {
+          const derived = deriveScriptSceneFromElements(
+            { ...s, sceneNumber: s?.sceneNumber != null ? String(s.sceneNumber) : '' },
+            s.screenplayElements,
+          )
+          // Restore manually saved field values over values re-derived from the
+          // raw screenplay elements, so manual Scene Properties edits survive reload.
+          return {
+            ...derived,
+            ...(s.slugline !== undefined && { slugline: s.slugline }),
+            ...(s.intExt !== undefined && { intExt: s.intExt }),
+            ...(s.dayNight !== undefined && { dayNight: s.dayNight }),
+            ...(s.location !== undefined && { location: s.location }),
+            ...(Array.isArray(s.characters) && { characters: s.characters }),
+          }
+        })
         : [],
       importedScripts: Array.isArray(data.importedScripts) ? data.importedScripts : [],
       scriptSettings: {
