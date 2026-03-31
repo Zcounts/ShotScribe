@@ -18,6 +18,7 @@ import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import ScenePropertiesPanel from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
+import LeftSidebarResources from './LeftSidebarResources'
 
 // ── Dropdown options (matching SpecsTable.jsx) ───────────────────────────────
 const SIZE_OPTIONS  = ['WIDE SHOT', 'MEDIUM', 'CLOSE UP', 'OTS', 'ECU', 'INSERT', 'ESTABLISHING']
@@ -1563,33 +1564,35 @@ export default function ShotlistTab({
       {schedule.length > 0 && activeDay && filteredScenes.length > 0 && (
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', borderTop: `1px solid ${c.border}` }}>
         {viewSettings.showSidebar && (
-          <aside style={{ width: 318, borderRight: `1px solid ${c.thickBorder}`, background: '#F8F5EF', overflow: 'auto' }}>
-            <div style={{ padding: '10px 12px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, opacity: 0.6 }}>
-              Day scenes
+          <aside className="ss-left-sidebar">
+            <div className="ss-left-sidebar-scroll">
+              <div className="ss-left-sidebar-section-label">Day scenes</div>
+              {filteredScenes.map((scene) => (
+                <button
+                  key={scene.id}
+                  onClick={() => jumpToScene(scene.id)}
+                  data-entity-type="scene"
+                  data-entity-id={scene.id}
+                  style={{
+                    width: '100%',
+                    border: 'none',
+                    background: activeNavSceneId === scene.id ? 'rgba(82, 101, 236, 0.12)' : 'transparent',
+                    textAlign: 'left',
+                    padding: '8px 12px',
+                    borderLeft: `3px solid ${scene._canonical?.color || scene.color || '#94a3b8'}`,
+                    cursor: 'pointer',
+                    color: '#d0d4dc',
+                  }}
+                >
+                  <div style={{ fontSize: 10, fontWeight: 800, fontFamily: 'monospace', opacity: 0.75 }}>{formatSceneNumber(scene._canonical?.sceneNumber || scene.sceneLabel)}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Untitled scene'}
+                  </div>
+                  <div style={{ marginTop: 2, fontSize: 10, opacity: 0.62 }}>{formatShotCountLabel(scene._filteredShots.length)}</div>
+                </button>
+              ))}
             </div>
-            {filteredScenes.map((scene) => (
-              <button
-                key={scene.id}
-                onClick={() => jumpToScene(scene.id)}
-                data-entity-type="scene"
-                data-entity-id={scene.id}
-                style={{
-                  width: '100%',
-                  border: 'none',
-                  background: activeNavSceneId === scene.id ? 'rgba(0,0,0,0.08)' : 'transparent',
-                  textAlign: 'left',
-                  padding: '8px 12px',
-                  borderLeft: `3px solid ${scene._canonical?.color || scene.color || '#94a3b8'}`,
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ fontSize: 10, fontWeight: 800, fontFamily: 'monospace', opacity: 0.75 }}>{formatSceneNumber(scene._canonical?.sceneNumber || scene.sceneLabel)}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {scene._canonical?.titleSlugline || scene.slugline || scene.location || 'Untitled scene'}
-                </div>
-                <div style={{ marginTop: 2, fontSize: 10, opacity: 0.62 }}>{formatShotCountLabel(scene._filteredShots.length)}</div>
-              </button>
-            ))}
+            <LeftSidebarResources />
           </aside>
         )}
 

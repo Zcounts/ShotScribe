@@ -287,8 +287,7 @@ export default function ScenesTab({
   return (
     <div style={{ display: 'flex', height: '100%' }} onClick={() => { onConfigureOpenChange(false) }}>
       <SidebarPane
-        width={240}
-        title={null}
+                title={null}
         footer={null}
       >
           <div style={{ padding: '10px 12px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>

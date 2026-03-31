@@ -24,6 +24,7 @@ import centeredIcon from '../../assets/script icons/align-center.svg'
 import writeIcon from '../../assets/script icons/write.svg'
 import breakdownIcon from '../../assets/script icons/breakdown.svg'
 import visualizeIcon from '../../assets/script icons/visualize.svg'
+import LeftSidebarResources from './LeftSidebarResources'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -1163,6 +1164,7 @@ export default function ScriptTab() {
               )}
             </div>
           </div>
+          <LeftSidebarResources />
         </div>
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
