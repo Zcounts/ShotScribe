@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect, useLayoutEffect } from 'react'
+import listIcon from '../../assets/script icons/list.svg'
+import stripIcon from '../../assets/script icons/strip.svg'
+import calendarIcon from '../../assets/script icons/calendar.svg'
 // ── Scene badge for schedule shot blocks ─────────────────────────────────────
 // Displays a colored SC badge when a shot is linked to a script scene.
 function SceneScheduleBadge({ linkedSceneData, onNavigate }) {
@@ -262,29 +265,18 @@ function hasReadableValue(value) {
 
 function AccordionSection({ title, isOpen, onToggle, children, grow = false }) {
   return (
-    <section style={{ display: 'grid', minHeight: 0, alignContent: 'start', ...(grow ? { flex: 1 } : {}) }}>
+    <section className="schedule-sidebar-section" style={{ display: 'grid', minHeight: 0, alignContent: 'start', ...(grow ? { flex: 1 } : {}) }}>
       <button
         onClick={onToggle}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-          padding: '9px 10px',
-          border: 'none',
-          borderBottom: '1px solid rgba(74,85,104,0.12)',
-          background: '#f6f3ec',
-          cursor: 'pointer',
-        }}
+        className="schedule-sidebar-section-toggle"
       >
-        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
           {title}
         </span>
         <ChevronIcon collapsed={!isOpen} color="#64748b" size={10} />
       </button>
       {isOpen && (
-        <div style={{ padding: '10px 10px 12px', borderBottom: '1px solid rgba(74,85,104,0.08)' }}>
+        <div className="schedule-sidebar-section-body">
           {children}
         </div>
       )}
@@ -327,19 +319,30 @@ function IconButton({ onClick, title, children, danger, small, onPointerDown }) 
 
 function Badge({ label }) {
   if (!label) return null
+  const rawLabel = String(label).trim()
+  if (!rawLabel) return null
+  const normalized = rawLabel.toUpperCase().replace(/\s+/g, '')
+  const variant = normalized === 'DAY'
+    ? 'is-day'
+    : normalized === 'NIGHT'
+      ? 'is-night'
+      : normalized === 'INT' || normalized === 'INT.'
+        ? 'is-int'
+        : normalized === 'EXT' || normalized === 'EXT.'
+          ? 'is-ext'
+          : ''
+  const shouldUppercase = variant === 'is-int' || variant === 'is-ext'
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '1px 5px',
-      borderRadius: 3,
+    <span className={`ss-chip schedule-chip ${variant}`.trim()} style={{
       fontSize: 10,
       fontFamily: 'monospace',
       fontWeight: 700,
       letterSpacing: '0.06em',
-      background: 'rgba(128,128,128,0.15)',
+      background: variant ? undefined : 'rgba(148,163,184,0.16)',
       flexShrink: 0,
+      textTransform: shouldUppercase ? 'uppercase' : 'none',
     }}>
-      {label}
+      {rawLabel}
     </span>
   )
 }
@@ -584,8 +587,10 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       </div>
 
       <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#1f2937', lineHeight: 1.25 }}>
-        <strong style={{ display: 'block', fontSize: 10 }}>{shotData.intOrExt || '—'}</strong>
-        <span style={{ opacity: 0.85 }}>{shotData.dayNight || '—'}</span>
+        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {shotData.intOrExt ? <Badge label={shotData.intOrExt} /> : <span>—</span>}
+          {shotData.dayNight ? <Badge label={shotData.dayNight} /> : null}
+        </span>
       </span>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
@@ -3653,28 +3658,22 @@ export default function ScheduleTab({
             width={258}
             title="Schedule"
             controls={
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+              <div className="schedule-view-switcher" role="group" aria-label="Schedule view">
                 {[
-                  { key: 'list', label: 'List' },
-                  { key: 'stripboard', label: 'Strip' },
-                  { key: 'calendar', label: 'Cal' },
+                  { key: 'list', label: 'List', icon: listIcon },
+                  { key: 'stripboard', label: 'Strip', icon: stripIcon },
+                  { key: 'calendar', label: 'Calendar', icon: calendarIcon },
                 ].map(view => (
                   <button
+                    type="button"
                     key={view.key}
                     onClick={() => setScheduleView(view.key)}
-                    style={{
-                      border: `1px solid ${scheduleView === view.key ? '#334155' : 'rgba(100,116,139,0.35)'}`,
-                      background: scheduleView === view.key ? '#e2e8f0' : '#fff',
-                      color: '#334155',
-                      borderRadius: 4,
-                      padding: '6px 4px',
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
+                    className={`ss-btn outline schedule-view-switcher-btn ${scheduleView === view.key ? 'is-active' : ''}`}
+                    aria-pressed={scheduleView === view.key}
+                    aria-label={`${view.label} view`}
+                    title={`${view.label} view`}
                   >
-                    {view.label}
+                    <img src={view.icon} alt="" aria-hidden="true" />
                   </button>
                 ))}
               </div>
@@ -3682,16 +3681,20 @@ export default function ScheduleTab({
           >
             <AccordionSection title="Selected Day" isOpen={sectionOpen.selectedDay} onToggle={() => setSectionOpen(prev => ({ ...prev, selectedDay: !prev.selectedDay }))}>
               <div style={{ display: 'grid', gap: 6, fontSize: 12, color: '#334155' }}>
-                <div>{selectedDay ? `Day ${selectedDayIndex + 1}` : 'No day selected'}</div>
+                <div>
+                  <span className="ss-chip schedule-sidebar-meta-chip" style={{ fontFamily: 'monospace', fontSize: 10 }}>
+                    {selectedDay ? `DAY ${selectedDayIndex + 1}` : 'NO DAY'}
+                  </span>
+                </div>
                 <div style={{ color: '#64748b', fontSize: 11 }}>{selectedDay?.date ? formatDate(selectedDay.date) : 'No date set'}</div>
               </div>
             </AccordionSection>
             <AccordionSection title="Summary" isOpen={sectionOpen.summary} onToggle={() => setSectionOpen(prev => ({ ...prev, summary: !prev.summary }))}>
               <div style={{ display: 'grid', gap: 5, fontSize: 11, color: '#334155' }}>
-                <div>Total: {totalStrips} strips · {schedule.length} days</div>
-                <div>Pages: {totalPages > 0 ? totalPages.toFixed(2) : '0.00'}</div>
-                <div>Time: {totalShootMins > 0 ? formatMins(totalShootMins) : '0m'} + breaks {totalBreakMins > 0 ? formatMins(totalBreakMins) : '0m'}</div>
-                <div>Selected: {selectedDayShotBlocks.length} strips · {selectedDayPages > 0 ? selectedDayPages.toFixed(2) : '0.00'} pgs · {selectedDayShootMins > 0 ? formatMins(selectedDayShootMins) : '0m'}</div>
+                <div className="schedule-sidebar-summary-row"><span>Total</span><strong>{totalStrips} strips · {schedule.length} days</strong></div>
+                <div className="schedule-sidebar-summary-row"><span>Pages</span><strong>{totalPages > 0 ? totalPages.toFixed(2) : '0.00'}</strong></div>
+                <div className="schedule-sidebar-summary-row"><span>Time</span><strong>{totalShootMins > 0 ? formatMins(totalShootMins) : '0m'} + breaks {totalBreakMins > 0 ? formatMins(totalBreakMins) : '0m'}</strong></div>
+                <div className="schedule-sidebar-summary-row"><span>Selected</span><strong>{selectedDayShotBlocks.length} strips · {selectedDayPages > 0 ? selectedDayPages.toFixed(2) : '0.00'} pgs · {selectedDayShootMins > 0 ? formatMins(selectedDayShootMins) : '0m'}</strong></div>
               </div>
             </AccordionSection>
           </SidebarPane>
