@@ -166,6 +166,14 @@ Important notes:
 
 ## SiteGround deployment
 
+### Automatic GitHub package (recommended)
+
+When you push to the `main` branch, GitHub Actions runs the **SiteGround Static Package** workflow and generates `shotscribe-siteground-upload.zip` as a downloadable artifact.
+
+You can download it from the workflow run page under **Artifacts**, then upload the zip contents to `public_html/` in SiteGround (for example `index.html`, `assets/`, and `.htaccess`).
+
+### Manual fallback
+
 1. Build the project with `npm run build:web`
 2. Upload the contents of `dist-siteground/` to `public_html/`
 3. Make sure `index.html`, `assets/`, and `.htaccess` are included
