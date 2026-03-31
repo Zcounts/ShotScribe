@@ -516,6 +516,29 @@ function updateRecentProjects(get, set, entry) {
   platformService.saveRecentProjects(newRecent)
 }
 
+function persistBrowserProjectState(get, set, {
+  data = null,
+  name = null,
+  markSaved = false,
+} = {}) {
+  if (platformService.isDesktop()) return null
+  const payload = data || get().getProjectData()
+  const browserProjectId = platformService.saveBrowserProjectSnapshot(get().browserProjectId, payload)
+  const fallbackName = `${payload.projectName || get().projectName || 'Untitled Shotlist'}.shotlist`
+  updateRecentProjects(get, set, buildRecentProjectEntry({
+    name: name || fallbackName,
+    path: `browser:${browserProjectId}`,
+    shots: getTotalShotsFromProjectData(payload),
+    browserProjectId,
+  }))
+  if (markSaved) {
+    set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false, browserProjectId })
+  } else if (browserProjectId !== get().browserProjectId) {
+    set({ browserProjectId })
+  }
+  return browserProjectId
+}
+
 const useStore = create((set, get) => ({
   // Project metadata
   projectPath: null,
@@ -2360,15 +2383,8 @@ const useStore = create((set, get) => ({
       }
     } else {
       try {
-        const browserProjectId = platformService.saveBrowserProjectSnapshot(get().browserProjectId, data)
         await platformService.saveProject(defaultName, json)
-        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false, browserProjectId })
-        updateRecentProjects(get, set, buildRecentProjectEntry({
-          name: defaultName,
-          path: `browser:${browserProjectId}`,
-          shots: getTotalShotsFromProjectData(data),
-          browserProjectId,
-        }))
+        persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
       } catch (err) {
         alert(`Save failed: ${err.message}`)
       }
@@ -2412,15 +2428,8 @@ const useStore = create((set, get) => ({
       }
     } else {
       try {
-        const browserProjectId = platformService.saveBrowserProjectSnapshot(get().browserProjectId, data)
         await platformService.saveProject(defaultName, json)
-        set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false, browserProjectId })
-        updateRecentProjects(get, set, buildRecentProjectEntry({
-          name: defaultName,
-          path: `browser:${browserProjectId}`,
-          shots: getTotalShotsFromProjectData(data),
-          browserProjectId,
-        }))
+        persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
       } catch (err) {
         alert(`Save failed: ${err.message}`)
       }
@@ -2773,14 +2782,8 @@ const useStore = create((set, get) => ({
           try {
             const data = JSON.parse(ev.target.result)
             get().loadProject(data)
-            const browserProjectId = platformService.saveBrowserProjectSnapshot(null, data)
-            set({ browserProjectId, projectPath: null })
-            updateRecentProjects(get, set, buildRecentProjectEntry({
-              name: file.name,
-              path: `browser:${browserProjectId}`,
-              shots: getTotalShotsFromProjectData(data),
-              browserProjectId,
-            }))
+            set({ projectPath: null })
+            persistBrowserProjectState(get, set, { data, name: file.name, markSaved: true })
           } catch {
             alert('Failed to load project: Invalid file format')
           }
@@ -2852,6 +2855,7 @@ const useStore = create((set, get) => ({
     const name = prompt('Project name:', 'Untitled Shotlist')
     if (name === null) return
     const scene = createScene({ id: 'scene_1', sceneLabel: 'SCENE 1', location: 'LOCATION' })
+    const browserProjectId = platformService.isDesktop() ? null : platformService.ensureBrowserProjectId()
     set({
       projectName: name,
       projectEmoji: '🎬',
@@ -2869,7 +2873,7 @@ const useStore = create((set, get) => ({
       scriptScenes: [],
       importedScripts: [],
       projectPath: null,
-      browserProjectId: platformService.isDesktop() ? null : platformService.ensureBrowserProjectId(),
+      browserProjectId,
       lastSaved: null,
       activeTab: 'script',
       contextMenu: null,
@@ -2889,11 +2893,25 @@ const useStore = create((set, get) => ({
       undoLastRecordedAt: 0,
       storyboardImageCache: {},
     })
+    if (!platformService.isDesktop()) {
+      persistBrowserProjectState(get, set, {
+        name: `${name.replace(/[^a-z0-9]/gi, '_') || 'Untitled_Shotlist'}.shotlist`,
+        markSaved: false,
+      })
+    }
   },
 
   // ── Auto-save ────────────────────────────────────────────────────────
 
   _autoSaveTimeout: null,
+  flushBrowserPersistence: ({ data = null, name = null, markSaved = false } = {}) => {
+    if (platformService.isDesktop()) return null
+    try {
+      return persistBrowserProjectState(get, set, { data, name, markSaved })
+    } catch {
+      return null
+    }
+  },
   _scheduleAutoSave: () => {
     set({ hasUnsavedChanges: true })
     const state = get()
@@ -2905,17 +2923,7 @@ const useStore = create((set, get) => ({
         const data = get().getProjectData()
         platformService.saveAutosave(data)
         if (!platformService.isDesktop()) {
-          const activeState = get()
-          const browserProjectId = platformService.saveBrowserProjectSnapshot(activeState.browserProjectId, data)
-          updateRecentProjects(get, set, buildRecentProjectEntry({
-            name: activeState.projectName || 'Untitled Shotlist',
-            path: `browser:${browserProjectId}`,
-            shots: getTotalShotsFromProjectData(data),
-            browserProjectId,
-          }))
-          if (browserProjectId !== activeState.browserProjectId) {
-            set({ browserProjectId })
-          }
+          persistBrowserProjectState(get, set, { data })
         }
         devPerfLog('store:autosave-timeout', {
           ms: Math.round((performance.now() - startedAt) * 100) / 100,

@@ -352,6 +352,7 @@ export default function App() {
   const projectName = useStore(s => s.projectName)
   const shortcutBindings = useStore(s => s.shortcutBindings)
   const executeCommand = useStore(s => s.executeCommand)
+  const flushBrowserPersistence = useStore(s => s.flushBrowserPersistence)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   // Autosave restore — kept as React state so we never call window.confirm()
   // (native OS dialogs steal focus from the webContents; after dismissal
@@ -477,6 +478,26 @@ export default function App() {
     }, 60000)
     return () => clearInterval(interval)
   }, [autoSave, getProjectData])
+
+  // Browser-only safety net: flush current project snapshot before refresh/close
+  // so static hosting workflows survive tab lifecycle events.
+  useEffect(() => {
+    if (platformService.isDesktop()) return undefined
+    const persistNow = () => {
+      flushBrowserPersistence()
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') persistNow()
+    }
+    window.addEventListener('beforeunload', persistNow)
+    window.addEventListener('pagehide', persistNow)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('beforeunload', persistNow)
+      window.removeEventListener('pagehide', persistNow)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [flushBrowserPersistence])
 
   // Restore from autosave on first load if no shots.
   // We set React state instead of calling window.confirm() so the dialog stays
