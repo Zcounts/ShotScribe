@@ -2728,6 +2728,7 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
   const [draggingId, setDraggingId] = useState(null)
   const [dragOverDate, setDragOverDate] = useState(null)
   const [detailDayId, setDetailDayId] = useState(null)
+  const [emptyDayContextMenu, setEmptyDayContextMenu] = useState(null) // { x, y, isoDate }
   const detailDay = detailDayId ? schedule.find(d => d.id === detailDayId) : null
 
   const handleCardDragStart = useCallback((e, dayId) => {
@@ -2764,6 +2765,28 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
     setDraggingId(null)
     setDragOverDate(null)
   }, [updateShootingDay])
+
+  const handleAddDayAtDate = useCallback((isoDate) => {
+    if (!isoDate) return
+    addShootingDay({ date: isoDate })
+    setEmptyDayContextMenu(null)
+  }, [addShootingDay])
+
+  useEffect(() => {
+    if (!emptyDayContextMenu) return undefined
+    const close = () => setEmptyDayContextMenu(null)
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') close()
+    }
+    document.addEventListener('click', close)
+    document.addEventListener('contextmenu', close)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('click', close)
+      document.removeEventListener('contextmenu', close)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [emptyDayContextMenu])
 
   // ── Colours ───────────────────────────────────────────────────────────────
   const bg = isDark ? '#111' : '#faf9f6'
@@ -2887,6 +2910,12 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
               onDragOver={isoDate ? (e) => handleCellDragOver(e, isoDate) : undefined}
               onDragLeave={isoDate ? handleCellDragLeave : undefined}
               onDrop={isoDate ? (e) => handleCellDrop(e, isoDate) : undefined}
+              onContextMenu={dayNum ? (event) => {
+                if (daysOnDate.length > 0) return
+                event.preventDefault()
+                event.stopPropagation()
+                setEmptyDayContextMenu({ x: event.clientX, y: event.clientY, isoDate })
+              } : undefined}
               style={{
                 minHeight: 90,
                 padding: '6px 5px 5px',
@@ -2970,8 +2999,8 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
                       marginBottom: 3,
                       padding: '5px 6px',
                       borderRadius: 4,
-                      background: isDark ? '#252525' : '#ede9df',
-                      border: `1px solid ${isDark ? '#333' : '#ccc8be'}`,
+                      background: isDark ? '#202020' : '#dfd7c9',
+                      border: `1px solid ${isDark ? '#333' : '#bcb19f'}`,
                       cursor: 'grab',
                       opacity: isDraggingThis ? 0.35 : 1,
                       transition: 'opacity 0.1s, box-shadow 0.12s',
@@ -3197,6 +3226,43 @@ function CalendarView({ schedule, scenes, isDark, onOpenDayInList, enrichedBlock
           Drag a day card to a new date to reschedule · Click a day card for details
         </span>
       </div>
+      {emptyDayContextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: emptyDayContextMenu.y,
+            left: emptyDayContextMenu.x,
+            zIndex: 1900,
+            minWidth: 172,
+            padding: 4,
+            borderRadius: 8,
+            border: `1px solid ${isDark ? '#333' : '#d4cfc6'}`,
+            background: isDark ? '#1e1e1e' : '#fff',
+            boxShadow: isDark ? '0 10px 28px rgba(0,0,0,0.5)' : '0 10px 28px rgba(15, 23, 42, 0.16)',
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => handleAddDayAtDate(emptyDayContextMenu.isoDate)}
+            style={{
+              width: '100%',
+              border: 'none',
+              borderRadius: 6,
+              background: 'transparent',
+              color: isDark ? '#e2e8f0' : '#334155',
+              cursor: 'pointer',
+              textAlign: 'left',
+              padding: '7px 9px',
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: 'monospace',
+            }}
+          >
+            Add Shoot Day
+          </button>
+        </div>
+      )}
       {detailDay && (
         <div
           onMouseDown={() => setDetailDayId(null)}
@@ -3580,12 +3646,10 @@ export default function ScheduleTab({
 
   return (
     <div
-      ref={containerRef}
-      className="flex flex-col h-full overflow-y-auto canvas-texture"
-      onScroll={(e) => setTabViewState('schedule', { scrollTop: e.currentTarget.scrollTop })}
+      className="flex flex-col h-full overflow-hidden canvas-texture"
     >
-      <div className="pb-6 pt-0">
-        <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520 }}>
+      <div className="flex-1 min-h-0 pb-6 pt-0">
+        <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, height: '100%' }}>
           <SidebarPane
             width={258}
             title="Schedule"
@@ -3632,7 +3696,11 @@ export default function ScheduleTab({
               </div>
             </AccordionSection>
           </SidebarPane>
-          <div style={{ flex: 1, minWidth: 0, paddingLeft: 10 }}>
+          <div
+            ref={containerRef}
+            onScroll={(e) => setTabViewState('schedule', { scrollTop: e.currentTarget.scrollTop })}
+            style={{ flex: 1, minWidth: 0, paddingLeft: 10, overflowY: 'auto', minHeight: 0 }}
+          >
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
       ) : scheduleView === 'calendar' ? (
