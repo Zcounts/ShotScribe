@@ -14,7 +14,9 @@
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "electron:build": "vite build && electron-builder",
     "electron:build:win": "vite build && electron-builder --win --x64",
-    "electron:build:mac": "vite build && electron-builder --mac"
+    "electron:build:mac": "vite build && electron-builder --mac",
+    "build:siteground": "vite build --mode siteground",
+    "preview:siteground": "vite preview --mode siteground"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
