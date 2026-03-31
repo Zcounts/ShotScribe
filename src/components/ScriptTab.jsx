@@ -427,7 +427,6 @@ export default function ScriptTab() {
   }, [breakdownTags])
 
   const documentModel = useMemo(() => {
-    const rowsPerPage = Math.max(1, Math.floor(pageContentHeightPx / documentSettings.blockStyles.action.lineHeightPx))
     const blocks = []
 
     orderedScenes.forEach(scene => {
@@ -438,6 +437,7 @@ export default function ScriptTab() {
         const blockStyle = getBlockStyleForType(documentSettings, block.type)
         const charsPerLine = computeCharsPerLine(blockStyle, pageContentWidthPx)
         const lineUnits = wrapLineCount(block.text, charsPerLine)
+        const blockHeightPx = (lineUnits * blockStyle.lineHeightPx) + (BLOCK_VERTICAL_PADDING * 2)
         blocks.push({
           sceneId: scene.id,
           blockId: block.id,
@@ -447,6 +447,7 @@ export default function ScriptTab() {
           sceneCharStart: sceneOffset,
           sceneCharEnd: sceneOffset + String(block.text || '').length,
           lineUnits,
+          blockHeightPx,
           lineHeightPx: blockStyle.lineHeightPx,
           isSceneStart: blockIndex === 0,
           isHeading: block.type === 'heading' || blockIndex === 0,
@@ -456,7 +457,7 @@ export default function ScriptTab() {
     })
 
     const pages = []
-    let currentPage = { id: 'p_1', number: 1, blocks: [], usedLineUnits: 0 }
+    let currentPage = { id: 'p_1', number: 1, blocks: [], usedHeightPx: 0 }
 
     blocks.forEach(block => {
       if (
@@ -465,22 +466,21 @@ export default function ScriptTab() {
         && currentPage.blocks.length
       ) {
         pages.push(currentPage)
-        currentPage = { id: `p_${pages.length + 1}`, number: pages.length + 1, blocks: [], usedLineUnits: 0 }
+        currentPage = { id: `p_${pages.length + 1}`, number: pages.length + 1, blocks: [], usedHeightPx: 0 }
       }
 
-      if (currentPage.usedLineUnits + block.lineUnits > rowsPerPage && currentPage.blocks.length) {
+      if (currentPage.usedHeightPx + block.blockHeightPx > pageContentHeightPx && currentPage.blocks.length) {
         pages.push(currentPage)
-        currentPage = { id: `p_${pages.length + 1}`, number: pages.length + 1, blocks: [], usedLineUnits: 0 }
+        currentPage = { id: `p_${pages.length + 1}`, number: pages.length + 1, blocks: [], usedHeightPx: 0 }
       }
 
       currentPage.blocks.push(block)
-      currentPage.usedLineUnits += block.lineUnits
+      currentPage.usedHeightPx += block.blockHeightPx
     })
 
     if (currentPage.blocks.length || pages.length === 0) pages.push(currentPage)
 
     return {
-      rowsPerPage,
       pages,
       blocks,
     }
