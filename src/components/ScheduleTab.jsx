@@ -51,6 +51,7 @@ import { CSS } from '@dnd-kit/utilities'
 import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import SidebarPane from './SidebarPane'
+import ConfigureSidebarShell from './ConfigureSidebarShell'
 
 class ScheduleSubviewBoundary extends React.Component {
   constructor(props) {
@@ -3924,38 +3925,18 @@ export default function ScheduleTab({
           transition: 'opacity 200ms ease',
         }}
       />
-      <aside
-        role="dialog"
-        aria-label="Schedule Configure"
-        aria-hidden={!configureOpen}
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          width: 'min(400px, calc(100vw - 24px))',
-          height: '100vh',
-          zIndex: 160,
-          background: '#F7F3EC',
-          borderLeft: '1px solid rgba(74,85,104,0.28)',
-          boxShadow: '-16px 0 36px rgba(0,0,0,0.22)',
-          transform: configureOpen ? 'translateX(0)' : 'translateX(104%)',
-          transition: 'transform 220ms ease',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
+      <ConfigureSidebarShell
+        open={configureOpen}
+        onClose={() => onConfigureOpenChange(false)}
+        ariaLabel="Schedule Configure"
+        context="Schedule"
       >
-        <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#1C1C1E' }}>
-          <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A0AEC0', fontWeight: 700 }}>Schedule</div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: '#FAF8F4', marginTop: 2 }}>Configure</div>
-        </div>
         <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gap: 10 }}>
           {scheduleView === 'list'
             ? <ScheduleColumnConfigList config={safeColumnConfig} onChange={setScheduleColumnConfig} />
             : <div style={{ fontSize: 11, color: '#64748b' }}>No additional options for this view.</div>}
         </div>
-      </aside>
+      </ConfigureSidebarShell>
     </div>
   )
 }

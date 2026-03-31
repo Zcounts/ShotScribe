@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import ConfigureSidebarShell from './ConfigureSidebarShell'
 import { STORYBOARD_INFO_FIELDS } from '../storyboardDisplayConfig'
 
 const ASPECT_RATIO_OPTIONS = [
@@ -50,6 +51,7 @@ function Section({ title, defaultOpen = true, children }) {
 
 export default function StoryboardConfigureSidebar({
   open,
+  onClose,
   showOutline,
   onShowOutlineChange,
   config,
@@ -69,36 +71,13 @@ export default function StoryboardConfigureSidebar({
   )
 
   return (
-    <aside
-      role="dialog"
-      aria-label="Storyboard Configure"
-      aria-hidden={!open}
-      style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        width: 'min(400px, calc(100vw - 24px))',
-        height: '100vh',
-        zIndex: 160,
-        background: '#F7F3EC',
-        borderLeft: '1px solid rgba(74,85,104,0.28)',
-        boxShadow: '-16px 0 36px rgba(0,0,0,0.22)',
-        transform: open ? 'translateX(0)' : 'translateX(104%)',
-        transition: 'transform 220ms ease',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
+    <ConfigureSidebarShell
+      open={open}
+      onClose={onClose}
+      ariaLabel="Storyboard Configure"
+      context="Storyboard"
+      meta={`${selectedAspect} layout · ${visibleCount} fields visible`}
     >
-      <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#1C1C1E' }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A0AEC0', fontWeight: 700 }}>Storyboard</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: '#FAF8F4', marginTop: 2 }}>Configure</div>
-        <div style={{ marginTop: 6, fontSize: 11, color: '#D6D3CD' }}>
-          {selectedAspect} layout · {visibleCount} fields visible
-        </div>
-      </div>
-
       <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gap: 10 }}>
         <Section title="Layout">
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#2C2C2E', marginBottom: 10 }}>
@@ -176,6 +155,6 @@ export default function StoryboardConfigureSidebar({
           </p>
         </Section>
       </div>
-    </aside>
+    </ConfigureSidebarShell>
   )
 }
