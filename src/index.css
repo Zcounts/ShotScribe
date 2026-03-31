@@ -25,6 +25,7 @@
     --ss-border-subtle: rgba(74,85,104,0.2);
     --ss-border-strong: rgba(74,85,104,0.32);
     --ss-button-border: rgba(74,85,104,0.3);
+    --ss-button-border-outline: rgba(74,85,104,0.1);
 
     --ss-input-bg: rgba(255,255,255,0.94);
     --ss-input-border: rgba(74,85,104,0.32);
@@ -124,7 +125,7 @@
 
   .script-view-btn.is-active {
     background: var(--ss-surface-blue);
-    border-color: rgba(82,101,236,0.36);
+    border-color: rgba(82,101,236,1);
     color: #1f2e56;
   }
 
@@ -145,18 +146,10 @@
   .schedule-view-switcher-btn img {
     width: 15px;
     height: 15px;
-    opacity: 0.72;
   }
 
   .schedule-view-switcher-btn.is-active {
-    background: var(--ss-surface-blue);
-    border-color: rgba(82,101,236,0.38);
     color: #22355f;
-    box-shadow: inset 0 0 0 1px rgba(82,101,236,0.18);
-  }
-
-  .schedule-view-switcher-btn.is-active img {
-    opacity: 1;
   }
 
   .schedule-sidebar-section {
@@ -824,13 +817,58 @@
   .ss-btn.outline,
   .ss-btn.is-outline {
     background: rgba(255,255,255,0.86);
-    border-color: var(--ss-button-border);
+    border-color: var(--ss-button-border-outline);
     color: #334155;
   }
 
   .ss-btn.outline:hover,
   .ss-btn.is-outline:hover {
     background: rgba(90,99,117,0.12);
+  }
+
+  .ss-btn.outline:focus-visible,
+  .ss-btn.is-outline:focus-visible {
+    outline: 2px solid rgba(82,101,236,0.45);
+    outline-offset: 1px;
+  }
+
+  .ss-btn.outline.is-active,
+  .ss-btn.outline[aria-pressed="true"],
+  .ss-btn.outline[aria-selected="true"],
+  .ss-btn.is-outline.is-active,
+  .ss-btn.is-outline[aria-pressed="true"],
+  .ss-btn.is-outline[aria-selected="true"] {
+    border-color: rgba(74,85,104,1);
+    background: color-mix(in srgb, var(--ss-surface-blue) 72%, white 28%);
+    color: #1f2e56;
+    box-shadow: inset 0 0 0 1px rgba(82,101,236,0.22);
+  }
+
+  .ss-btn.icon-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    line-height: 1;
+  }
+
+  .ss-btn.icon-toggle img {
+    width: 15px;
+    height: 15px;
+    opacity: 0.72;
+    transition: opacity 0.15s ease, filter 0.15s ease;
+  }
+
+  .ss-btn.icon-toggle:hover img,
+  .ss-btn.icon-toggle:focus-visible img {
+    opacity: 0.9;
+  }
+
+  .ss-btn.icon-toggle.is-active img,
+  .ss-btn.icon-toggle[aria-pressed="true"] img,
+  .ss-btn.icon-toggle[aria-selected="true"] img {
+    opacity: 1;
+    filter: saturate(1.05) contrast(1.05);
   }
 
   .ss-btn.ghost,
