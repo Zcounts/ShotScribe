@@ -8,9 +8,9 @@ import { estimateScreenplayPagination } from '../utils/screenplay'
 import SidebarPane from './SidebarPane'
 
 const VIEW_MODES = [
-  { value: 'compactGrid', label: 'Compact Grid' },
-  { value: 'visualGrid', label: 'Visual Grid' },
-  { value: 'productionList', label: 'Production List' },
+  { value: 'compactGrid', label: 'Compact' },
+  { value: 'visualGrid', label: 'Visual' },
+  { value: 'productionList', label: 'List' },
 ]
 
 const COLUMN_OPTIONS_BY_MODE = {
@@ -309,9 +309,27 @@ export default function ScenesTab({
           </div>
           <SidebarSection title="View Options" collapsed={panelCollapsed.viewOptions} onToggle={() => togglePanel('viewOptions')}>
             <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>View Mode</label>
-            <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={selectStyle}>
-              {VIEW_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
-            </select>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 8 }}>
+              {VIEW_MODES.map(mode => (
+                <button
+                  key={mode.value}
+                  onClick={() => setViewMode(mode.value)}
+                  style={{
+                    border: `1px solid ${viewMode === mode.value ? '#334155' : 'rgba(100,116,139,0.35)'}`,
+                    background: viewMode === mode.value ? '#e2e8f0' : '#fff',
+                    color: '#334155',
+                    borderRadius: 4,
+                    padding: '6px 4px',
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
             {showColumnControls && (
               <>
                 <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4, marginTop: 8 }}>Columns</label>
@@ -396,7 +414,7 @@ export default function ScenesTab({
           const castCount = (scene.characters || []).length
           const scheduledDays = scheduledDayCountByScene[scene.id] || 0
           return (
-            <div className="app-surface-card" key={scene.id} data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} style={{ borderRadius: 6 }}>
+            <div className="app-surface-card" key={scene.id} data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} style={{ borderRadius: 6, background: colorWithAlpha(scene.color, 0.12) }}>
               {viewMode === 'visualGrid' && metadataVisibility.showStoryboardThumb && (
                 <div style={{ padding: '8px 12px 0' }}>
                   <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(74,85,104,0.16)', background: '#f8fafc', aspectRatio: '16 / 9', position: 'relative' }}>
@@ -574,6 +592,16 @@ function Badge({ children }) {
 const selectStyle = { width: '100%', border: '1px solid rgba(128,128,128,0.3)', borderRadius: 4, padding: '6px 7px', fontSize: 12, marginBottom: 8, background: '#fff' }
 const pillStyle = { border: '1px solid rgba(74,85,104,0.2)', background: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 11, color: '#334155', cursor: 'pointer' }
 
+function colorWithAlpha(hexColor, alpha = 0.12) {
+  if (!hexColor) return '#ffffff'
+  const hex = hexColor.replace('#', '')
+  if (hex.length !== 6) return '#ffffff'
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 function ProductionList({
   scenes,
   linkedShotsMap,
@@ -624,7 +652,7 @@ function ProductionList({
             const hero = linkedShots.find(shot => !!shot.image)?.image || null
             const selected = selectedSceneIds.includes(scene.id)
             return (
-              <tr key={scene.id} style={{ borderTop: '1px solid rgba(148,163,184,0.25)' }}>
+              <tr key={scene.id} style={{ borderTop: '1px solid rgba(148,163,184,0.25)', background: colorWithAlpha(scene.color, 0.12) }}>
                 <td style={tdStyle}><input type="checkbox" checked={selected} onChange={(e) => setSelectedSceneIds(prev => e.target.checked ? [...new Set([...prev, scene.id])] : prev.filter(id => id !== scene.id))} /></td>
                 {metadataVisibility.showStoryboardThumb && <td style={tdStyle}>{hero ? <img src={hero} alt="" style={{ width: 28, height: 18, objectFit: 'cover', borderRadius: 3 }} /> : <span style={{ color: '#94a3b8' }}>—</span>}</td>}
                 <td style={tdStyle}>SC {scene.sceneNumber || '—'}</td>
