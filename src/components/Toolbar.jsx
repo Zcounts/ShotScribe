@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
+import { platformService } from '../services/platformService'
 
 let mobileExportServicePromise = null
 
@@ -376,7 +377,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                   key={i}
                   onClick={() => {
                     setOpenMenuOpen(false)
-                    if (window.electronAPI && project.path && project.path !== project.name) {
+                    if (platformService.isDesktop() && project.path && project.path !== project.name) {
                       guardUnsaved(() => openProjectFromPath(project.path))
                     } else {
                       guardUnsaved(openProject)

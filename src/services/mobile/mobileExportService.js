@@ -3,6 +3,7 @@ import {
   serializeMobileSnapshot,
 } from '../../../shared/src/serializers/mobileContracts.ts'
 import { getShotLetter } from '../../store'
+import { platformService } from '../platformService'
 
 function slugify(value) {
   return String(value || 'project')
@@ -247,22 +248,9 @@ export function createMobileSnapshotFromProject(projectData, options = {}) {
 }
 
 async function saveJsonToFile(defaultName, data) {
-  if (window.electronAPI?.saveJson) {
-    return window.electronAPI.saveJson(defaultName, data, [
-      { name: 'JSON', extensions: ['json'] },
-    ])
-  }
-
-  const blob = new Blob([data], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = defaultName
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-  return { success: true }
+  return platformService.saveJson(defaultName, data, [
+    { name: 'JSON', extensions: ['json'] },
+  ])
 }
 
 export async function exportMobilePackageFromProject(projectData, options = {}) {

@@ -20,6 +20,7 @@ import {
   normalizeCastCrewDisplayConfig,
 } from './castCrewDisplayConfig'
 import { devPerfLog } from './utils/devPerf'
+import { platformService } from './services/platformService'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -2317,13 +2318,13 @@ const useStore = create((set, get) => ({
     const defaultName = `${data.projectName.replace(/[^a-z0-9]/gi, '_')}.shotlist`
     const existingPath = get().projectPath
 
-    if (window.electronAPI) {
+    if (platformService.isDesktop()) {
       try {
         let result
         if (existingPath) {
-          result = await window.electronAPI.saveProjectSilent(existingPath, json)
+          result = await platformService.saveProjectSilent(existingPath, json)
         } else {
-          result = await window.electronAPI.saveProject(defaultName, json)
+          result = await platformService.saveProject(defaultName, json)
         }
         if (result.success) {
           set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
@@ -2376,9 +2377,9 @@ const useStore = create((set, get) => ({
 
     const defaultName = `${data.projectName.replace(/[^a-z0-9]/gi, '_')}.shotlist`
 
-    if (window.electronAPI) {
+    if (platformService.isDesktop()) {
       try {
-        const result = await window.electronAPI.saveProject(defaultName, json)
+        const result = await platformService.saveProject(defaultName, json)
         if (result.success) {
           set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
         } else if (result.error) {
@@ -2722,8 +2723,8 @@ const useStore = create((set, get) => ({
   },
 
   openProject: async () => {
-    if (window.electronAPI) {
-      const result = await window.electronAPI.openProject()
+    if (platformService.isDesktop()) {
+      const result = await platformService.openProject()
       if (!result.success) return
       try {
         const data = JSON.parse(result.data)
@@ -2775,8 +2776,8 @@ const useStore = create((set, get) => ({
   },
 
   openProjectFromPath: async (filePath) => {
-    if (!window.electronAPI) return
-    const result = await window.electronAPI.openProjectFromPath(filePath)
+    if (!platformService.isDesktop()) return
+    const result = await platformService.openProjectFromPath(filePath)
     if (!result.success) {
       alert(`Could not open file: ${result.error || 'File not found'}`)
       return
