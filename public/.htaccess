@@ -1,0 +1,19 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Serve existing files/directories directly.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Fallback all other routes to the SPA entrypoint.
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Keep HTML fresh so new deploys are picked up quickly.
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>

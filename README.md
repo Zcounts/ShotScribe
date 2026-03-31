@@ -218,3 +218,39 @@ The safest path is not to rewrite everything at once. The recommended approach i
 5. Retire Electron once the web version is proven stable.
 
 This approach reduces risk, protects the current working product, and makes the transition to a web application much more manageable.
+
+## Static web deployment (SiteGround)
+
+ShotScribe can be deployed as a static web app on SiteGround with local-only browser persistence.
+
+### Build for SiteGround
+
+From the repository root:
+
+```bash
+npm install
+npm run build:siteground
+```
+
+This creates a production-ready folder at `dist-siteground/`.
+
+### Upload to SiteGround
+
+1. Open Site Tools → **Site** → **File Manager** (or use FTP/SFTP).
+2. Go to your web root (`public_html/` for the main domain).
+3. Upload the **contents** of `dist-siteground/` (not the parent folder itself).
+4. Confirm `index.html`, `assets/`, and `.htaccess` are present in `public_html/`.
+5. Visit your domain and hard-refresh once after deployment.
+
+### Static hosting notes
+
+- The deployment is static-only and requires no backend services.
+- `.htaccess` includes an SPA fallback to `index.html` for deep-link refresh safety.
+- Browser project data remains local to each device/profile via browser storage.
+
+## Browser limitations (important)
+
+- **Local-only persistence:** project autosave/history stays in that browser profile; clearing browser storage removes local projects.
+- **No cross-device sync:** there is currently no account system or cloud sync.
+- **File access differences:** in browser mode, save/open uses download/upload workflows instead of desktop file system dialogs.
+- **PDF export differences:** desktop-only print-to-PDF integrations are unavailable in pure browser hosting.
