@@ -1,149 +1,146 @@
 # ShotScribe
 
-ShotScribe is a desktop preproduction app for filmmakers.
+ShotScribe is an end-to-end production planning platform for filmmakers.
 
-It is built for directors, cinematographers, and 1st ADs who want to move from script to storyboard to shotlist faster, without breaking that workflow across a pile of disconnected tools.
+It is built to take a project from script through prep and into production inside one connected system. Instead of splitting your workflow across separate writing, storyboarding, shotlisting, scheduling, and callsheet tools, ShotScribe keeps those pieces tied together so the work you do in prep is still useful on set.
 
-ShotScribe keeps visual planning and production planning connected inside one project, so the work you do in prep stays useful when it is time to shoot.
+The current codebase includes the main production planning app and a mobile web companion built for phones, so your team can bring shotlists, storyboards, schedules, and callsheet information to set in a field-friendly format.
 
-## What ShotScribe does
+## What ShotScribe is built for
 
-ShotScribe is designed to help film teams:
+ShotScribe is designed for directors, cinematographers, 1st ADs, producers, and lean film teams who want a more practical way to prep and run a shoot.
 
-- work with scripts and scenes inside the same prep environment
-- build storyboards scene by scene
-- turn boards into practical shotlists
-- organize cast and crew information
-- build shooting schedules
-- generate callsheet-ready production info
+It is especially useful for:
 
-The core goal is simple:
-
-**Turn a script into a shootable storyboard and shotlist fast.**
-
-## Who it is for
-
-ShotScribe is built primarily for:
-
-- director / cinematographer / 1st AD teams
 - narrative shorts
 - indie features
-- small film crews that want a leaner prep workflow
+- commercial productions
+- music videos
+- small and midsize crews that want one connected production workspace
 
-It is especially useful for productions that need a practical way to connect creative planning with real production documents.
+## Core idea
 
-## Why ShotScribe exists
+ShotScribe is built around a simple goal:
 
-A lot of indie film prep gets split between too many disconnected tools.
+**Go from script to production in one software ecosystem.**
 
-The script lives in one place. Storyboards live somewhere else. Shotlists become spreadsheets. Scheduling gets rebuilt later. Callsheet information gets duplicated again.
+That means keeping creative planning and production logistics connected across the same project instead of rebuilding the same information over and over.
 
-That process slows teams down and creates drift between documents.
+## Main workflow
 
-ShotScribe exists to reduce that friction by keeping the major parts of prep connected in one desktop app built specifically for filmmaking.
+ShotScribe is designed to support the full production workflow:
 
-## Core workflow
+1. Import or build the script
+2. Review, organize, and manage scenes
+3. Build storyboard coverage
+4. Turn boards into production-facing shotlists
+5. Organize cast and crew
+6. Build the shooting schedule
+7. Generate callsheet-ready production information
+8. Export mobile-ready day packages for use on set
 
-ShotScribe is built around a prep workflow that matches how many film teams actually work:
-
-1. Import or build out the script
-2. Review and organize scenes
-3. Create visual boards for coverage
-4. Turn that coverage into a practical shotlist
-5. Organize cast, crew, and production details
-6. Build schedules and callsheet information from the same project
-
-The point is not just to make documents.
-
-The point is to make prep faster, clearer, and more usable on real productions.
-
-## Main tabs
+## Main features
 
 ### Script
-Work with screenplay material inside the app and keep it tied to the rest of the project.
+Work with screenplay material inside the same project as the rest of your prep.
 
 ### Scenes
-Review, sort, and manage scenes in a way that feeds the storyboard and planning workflow.
+Organize scenes, manage metadata, and keep scene structure connected to storyboard and schedule planning.
 
 ### Storyboard
-Build visual boards scene by scene using a page-based layout designed for film prep.
-
-Use it to:
-- organize shots visually
-- add reference images
-- define shot specs
-- reorder coverage
-- keep scene-level notes visible
+Plan coverage visually, attach images, define shot specs, and keep scene-level notes tied to the same project data.
 
 ### Shotlist
-Convert visual planning into a practical production-facing shotlist.
-
-Use it to:
-- track shot numbers
-- log lens, movement, equipment, and notes
-- group shots by scene
-- review coverage in a more AD-friendly format
+Turn visual planning into a practical production document with shot details, coverage notes, timing, equipment, and status tracking.
 
 ### Cast/Crew
-Track cast and crew information in one place and tie it back to production days.
+Track cast and crew information in one place so it can stay connected to schedules and callsheets.
 
 ### Schedule
-Plan shooting days and organize scene coverage into a usable production schedule.
+Build shoot days, arrange blocks, and map production days against scenes and shots.
 
 ### Callsheet
-Generate day-based callsheet information from material already living in the project.
+Generate day-based production information from the same project data instead of rebuilding it somewhere else.
 
-## Product philosophy
+## Mobile web companion
 
-ShotScribe is not trying to be generic project management software.
+ShotScribe includes a mobile web app built for on-set use.
 
-It is built to feel filmmaker-native.
+The mobile experience is designed to let you bring production information into the field on a phone-friendly interface, including:
 
-That means the app should stay:
-
-- visual
-- practical
-- fast
-- clear
-- useful on real productions
-- affordable for indie teams
-
-The goal is to help filmmakers prep faster without turning the tool into something bloated, buggy, or overbuilt.
-
-## What makes it different
-
-ShotScribe is centered on the connection between visual planning and practical planning.
-
-Instead of treating storyboards, shotlists, schedules, and callsheets as completely separate documents, ShotScribe keeps them tied together inside one project so changes can carry across the prep workflow more naturally.
-
-It is designed for people who think in shots, scenes, pages, and production days — not generic tasks and business dashboards.
-
-## Project structure
-
-A ShotScribe project can include production planning data such as:
-
-- script content
-- scenes
-- shots
-- storyboard images
-- shot specifications
-- cast and crew assignments
-- scheduled shoot days
+- overview
+- schedule
+- shotlist
+- storyboard references
 - callsheet information
+- per-project / per-day access
+
+The current mobile workflow is centered on importing exported JSON packages from the main app. Imported projects are stored locally in the browser, making the mobile app useful as an on-set reference tool even when you want a lighter, phone-first workflow.
+
+## Mobile package system
+
+ShotScribe currently supports a shared mobile data contract for moving day-based production data from the main app into the mobile web app.
+
+Supported package formats include:
+
+- `mobile-day-package`
+- `mobile-snapshot`
+
+These packages can include:
+
+- project metadata
+- shoot day information
+- schedule items
+- storyboard references
+- callsheet data
+- shot status context
+
+## What makes ShotScribe different
+
+ShotScribe is built around the connection between visual planning and real production paperwork.
+
+Instead of treating storyboarding, shotlists, schedules, and callsheets as isolated documents, ShotScribe keeps them tied together inside one project so changes carry forward more naturally.
+
+It is designed for filmmakers who think in scenes, shots, shoot days, and production documents — not generic tasks and business dashboards.
+
+## Repository structure
+
+This repository currently contains multiple parts of the ShotScribe ecosystem:
+
+- `src/` — main planning app
+- `mobile/` — mobile web companion
+- `shared/` — shared mobile contracts, schemas, serializers, and utilities
+- `electron/` — desktop shell and native integration
+- `docs/` — supporting docs
+- `assets/` — icons and design assets
+
+## Tech stack
+
+### Main app
+- Electron
+- React
+- Vite
+- Zustand
+- Tailwind CSS
+- dnd-kit
+
+### Mobile web app
+- React
+- Vite
+- TypeScript
+
+### Shared layer
+- Zod for shared data schemas and validation
 
 ## Development
 
-### Install dependencies
+### Main app setup
 ```bash
 npm install
-```
-
-### Run in development
-```bash
 npm run electron:dev
 ```
 
-### Build desktop app
+### Main app build
 ```bash
 npm run electron:build
 ```
@@ -154,21 +151,70 @@ npm run electron:build:win
 npm run electron:build:mac
 ```
 
-## Tech stack
+### Mobile app setup
+```bash
+cd shared
+npm install
 
-ShotScribe is built with:
+cd ../mobile
+npm install
+npm run dev
+```
 
-- Electron
-- React
-- Vite
-- Zustand
-- Tailwind CSS
-- dnd-kit
+### Mobile app build
+```bash
+cd shared
+npm run build
 
-## Status
+cd ../mobile
+npm run build
+```
 
-ShotScribe is an actively evolving desktop tool built around real-world filmmaking prep and ongoing refinement.
+## Current status
+
+ShotScribe is actively evolving.
+
+The repository already includes the main planning app, the mobile web companion, shared mobile package contracts, and JSON export/import support for bringing day-based production data onto a phone.
+
+Some hosted publishing and mobile patch/update flows are scaffolded in the codebase but are not fully implemented yet.
+
+## Vision
+
+ShotScribe is being built as a connected filmmaking workflow system.
+
+The long-term vision is simple: one place to prep the project, one clean system to carry that information into production, and a mobile-friendly way to access the right information on set.
 
 ## License
 
 Add your preferred license here.
+
+
+## Web Migration Plan
+
+ShotScribe is currently built as a desktop app using Electron, but the long-term goal is to transition it into a web application. Because the core app already uses a web stack, this is less about rebuilding from scratch and more about carefully separating desktop-specific features from the main application.
+
+### Phase 1: Audit and isolate Electron dependencies
+The first step is identifying everything that currently depends on Electron or native desktop APIs. This includes things like opening and saving `.shotlist` files, export behavior, shell actions, and any filesystem access. The goal is to move these features behind a clean abstraction layer so the main React app no longer depends directly on Electron.
+
+### Phase 2: Browser-compatible local save workflow
+Before moving to a full cloud-based product, ShotScribe should work in the browser with local-first behavior. That means replacing desktop file handling with browser-friendly equivalents such as local autosave, import/export, and persistent browser storage. The goal in this phase is to preserve the current workflow as much as possible without requiring a backend rewrite on day one.
+
+### Phase 3: Establish web app parity
+Once the Electron-specific logic is separated and browser-based saving is working, the next step is reaching feature parity in the browser. The focus here is making sure the existing experience still feels complete and reliable as a web app before introducing larger product changes.
+
+### Phase 4: Introduce backend and cloud persistence
+After the browser version is stable, ShotScribe can begin moving from local-only storage to account-based cloud storage. This phase would include user accounts, project persistence, asset storage, autosave/versioning, and the foundation for future multi-device access.
+
+### Phase 5: Web-first cleanup and Electron retirement
+Once the browser version is stable and feature-complete, Electron can be phased out. At that point, desktop-only code can be removed, the app structure can be simplified, and ShotScribe can move forward as a fully web-first product.
+
+### Migration approach
+The safest path is not to rewrite everything at once. The recommended approach is:
+
+1. Preserve the current desktop version in a stable branch or tagged release.
+2. Isolate Electron-specific logic.
+3. Get the app working in the browser with local-first save behavior.
+4. Add cloud infrastructure only after browser parity is solid.
+5. Retire Electron once the web version is proven stable.
+
+This approach reduces risk, protects the current working product, and makes the transition to a web application much more manageable.
