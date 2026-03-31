@@ -588,7 +588,7 @@ const useStore = create((set, get) => ({
   settingsOpen: false,
   contextMenu: null, // { type: 'shot'|'scene', entityId, x, y } | { type: 'person', personType, personId, x, y }
   personDialog: null, // { type: 'cast'|'crew', id: string|null }
-  activeTab: 'script', // 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
+  activeTab: 'home', // 'home' | 'storyboard' | 'shotlist' | 'scenes' | 'script' | 'schedule' | 'callsheet' | 'castcrew'
   shotlistColumnConfig: DEFAULT_COLUMN_CONFIG,
   scheduleColumnConfig: DEFAULT_SCHEDULE_COLUMN_CONFIG,
   callsheetSectionConfig: DEFAULT_CALLSHEET_SECTION_CONFIG,

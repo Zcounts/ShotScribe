@@ -37,6 +37,17 @@ import ConfigureButton from './components/ConfigureButton'
 import StoryboardConfigureSidebar from './components/StoryboardConfigureSidebar'
 import CastCrewConfigureSidebar from './components/CastCrewConfigureSidebar'
 import CallsheetConfigureSidebar from './components/CallsheetConfigureSidebar'
+import HomeView from './components/HomeView'
+import {
+  Home,
+  FileText,
+  LayoutGrid,
+  Monitor,
+  Users,
+  List,
+  Calendar,
+  FilePlus,
+} from 'lucide-react'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
 import { getShotLetter } from './store'
 import {
@@ -860,14 +871,15 @@ export default function App() {
         paddingRight: '16px',
       }}>
         {[
-          { id: 'script',     label: 'Script' },
-          { id: 'scenes',     label: 'Scenes' },
-          { id: 'storyboard', label: 'Storyboard' },
-          { id: 'castcrew',   label: 'Cast/Crew' },
-          { id: 'shotlist',   label: 'Shotlist' },
-          { id: 'schedule',   label: 'Schedule' },
-          { id: 'callsheet',  label: 'Callsheet' },
-        ].map(({ id, label }) => (
+          { id: 'home',       label: 'Home', icon: Home },
+          { id: 'script',     label: 'Script', icon: FileText },
+          { id: 'scenes',     label: 'Scenes', icon: LayoutGrid },
+          { id: 'storyboard', label: 'Storyboard', icon: Monitor },
+          { id: 'castcrew',   label: 'Cast/Crew', icon: Users },
+          { id: 'shotlist',   label: 'Shotlist', icon: List },
+          { id: 'schedule',   label: 'Schedule', icon: Calendar },
+          { id: 'callsheet',  label: 'Callsheet', icon: FilePlus },
+        ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
@@ -887,10 +899,14 @@ export default function App() {
               cursor: 'pointer',
               transition: 'color 0.15s, border-color 0.15s',
               marginBottom: '-1px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
             onMouseEnter={e => { if (activeTab !== id) e.currentTarget.style.color = 'rgba(250,248,244,0.8)' }}
             onMouseLeave={e => { if (activeTab !== id) e.currentTarget.style.color = '#718096' }}
           >
+            <Icon size={14} strokeWidth={1.5} />
             {label}
           </button>
         ))}
@@ -900,7 +916,11 @@ export default function App() {
       </div>
 
       {/* Main content */}
-      {activeTab === 'storyboard' ? (
+      {activeTab === 'home' ? (
+        <div className="flex-1 overflow-hidden">
+          <HomeView />
+        </div>
+      ) : activeTab === 'storyboard' ? (
         <div
           ref={storyboardScrollRef}
           className="flex-1 py-4 px-4 overflow-auto canvas-texture"

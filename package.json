@@ -29,6 +29,7 @@
     "fountain-js": "^1.2.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
+    "lucide-react": "^1.7.0",
     "mammoth": "^1.12.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
@@ -51,7 +52,7 @@
   "build": {
     "appId": "com.shotscribe.shotlist",
     "productName": "ShotScribe",
-    "copyright": "Copyright \u00a9 2025",
+    "copyright": "Copyright © 2025",
     "icon": "assets/icon.png",
     "directories": {
       "output": "dist-electron"
