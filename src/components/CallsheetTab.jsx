@@ -293,6 +293,25 @@ function CallsheetSidebar({
   )
 }
 
+function CallsheetEmptyState({ title, message, actionLabel, onAction }) {
+  return (
+    <div className="canvas-texture" style={{ height: '100%', display: 'grid', placeItems: 'center', padding: 24 }}>
+      <div style={{ width: 'min(540px, 100%)', border: '1px solid #CBD5E1', borderRadius: 12, background: '#FAF8F4', boxShadow: 'var(--app-panel-shadow)', padding: 18, display: 'grid', gap: 10 }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700 }}>Callsheet</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#0F172A' }}>{title}</div>
+        <div style={{ fontSize: 13, color: '#475569' }}>{message}</div>
+        {onAction ? (
+          <div>
+            <button type="button" onClick={onAction} style={{ border: '1px solid #CBD5E1', background: '#fff', borderRadius: 7, padding: '8px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              {actionLabel}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export default function CallsheetTab({ configureOpen = true }) {
   const schedule = useStore(s => s.schedule)
   const projectName = useStore(s => s.projectName)
@@ -311,7 +330,7 @@ export default function CallsheetTab({ configureOpen = true }) {
   const callsheetViewState = useStore(s => s.tabViewState?.callsheet || {})
   const setTabViewState = useStore(s => s.setTabViewState)
 
-  const [selectedDayId, setSelectedDayId] = useState(callsheetViewState.selectedDayId || schedule[0]?.id || null)
+  const [selectedDayId, setSelectedDayId] = useState(callsheetViewState.selectedDayId || null)
   const [emailPreflightOpen, setEmailPreflightOpen] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [highlightTargetKey, setHighlightTargetKey] = useState('')
@@ -326,9 +345,12 @@ export default function CallsheetTab({ configureOpen = true }) {
   }, [collapseState, setTabViewState])
 
   const activeDay = useMemo(() => {
-    if (!schedule.length) return null
-    return schedule.find(day => day.id === selectedDayId) || schedule[0]
+    if (!selectedDayId) return null
+    return schedule.find(day => day.id === selectedDayId) || null
   }, [schedule, selectedDayId])
+  const hasScriptUploaded = Array.isArray(scriptScenes) && scriptScenes.length > 0
+  const hasScheduleDays = Array.isArray(schedule) && schedule.length > 0
+  const hasStaleSelectedDay = Boolean(selectedDayId) && !activeDay
 
   useEffect(() => {
     setTabViewState('callsheet', {
@@ -342,7 +364,7 @@ export default function CallsheetTab({ configureOpen = true }) {
     [activeDay, schedule]
   )
 
-  const callsheet = activeDay ? getCallsheet(activeDay.id) : null
+  const callsheet = activeDay ? getCallsheet(activeDay.id) : {}
   const scheduleWithShots = getScheduleWithShots()
 
   const scheduleRows = useMemo(() => (
@@ -454,53 +476,53 @@ export default function CallsheetTab({ configureOpen = true }) {
   const addCastToDay = useCallback((castId) => {
     const selected = (castRoster || []).find(entry => entry.id === castId)
     if (!selected) return
-    const nextCast = updateRowValue(callsheet.cast, selected.id, null, {
+    const nextCast = updateRowValue(callsheet?.cast, selected.id, null, {
       name: selected.name || '',
       character: selected.character || selected.characterIds?.[0] || '',
     })
-    const existingExcluded = new Set(Array.isArray(callsheet.castExcludedRosterIds) ? callsheet.castExcludedRosterIds : [])
+    const existingExcluded = new Set(Array.isArray(callsheet?.castExcludedRosterIds) ? callsheet.castExcludedRosterIds : [])
     existingExcluded.delete(selected.id)
     onDayUpdate({ cast: nextCast, castExcludedRosterIds: Array.from(existingExcluded) })
     setShowCastPicker(false)
-  }, [callsheet.cast, callsheet.castExcludedRosterIds, castRoster, onDayUpdate])
+  }, [callsheet?.cast, callsheet?.castExcludedRosterIds, castRoster, onDayUpdate])
 
   const addCrewToDay = useCallback((crewId) => {
     const selected = (crewRoster || []).find(entry => entry.id === crewId)
     if (!selected) return
-    const nextCrew = updateRowValue(callsheet.crew, selected.id, null, {
+    const nextCrew = updateRowValue(callsheet?.crew, selected.id, null, {
       name: selected.name || '',
       role: selected.role || selected.department || '',
     })
-    const existingExcluded = new Set(Array.isArray(callsheet.crewExcludedRosterIds) ? callsheet.crewExcludedRosterIds : [])
+    const existingExcluded = new Set(Array.isArray(callsheet?.crewExcludedRosterIds) ? callsheet.crewExcludedRosterIds : [])
     existingExcluded.delete(selected.id)
     onDayUpdate({ crew: nextCrew, crewExcludedRosterIds: Array.from(existingExcluded) })
     setShowCrewPicker(false)
-  }, [callsheet.crew, callsheet.crewExcludedRosterIds, crewRoster, onDayUpdate])
+  }, [callsheet?.crew, callsheet?.crewExcludedRosterIds, crewRoster, onDayUpdate])
 
   const removeCastFromDay = useCallback((row) => {
     if (!row?.rosterId) return
-    const hidden = new Set(Array.isArray(callsheet.castExcludedRosterIds) ? callsheet.castExcludedRosterIds : [])
+    const hidden = new Set(Array.isArray(callsheet?.castExcludedRosterIds) ? callsheet.castExcludedRosterIds : [])
     hidden.add(row.rosterId)
     onDayUpdate({ castExcludedRosterIds: Array.from(hidden) })
-  }, [callsheet.castExcludedRosterIds, onDayUpdate])
+  }, [callsheet?.castExcludedRosterIds, onDayUpdate])
 
   const removeCrewFromDay = useCallback((row) => {
     if (!row?.rosterId) return
-    const hidden = new Set(Array.isArray(callsheet.crewExcludedRosterIds) ? callsheet.crewExcludedRosterIds : [])
+    const hidden = new Set(Array.isArray(callsheet?.crewExcludedRosterIds) ? callsheet.crewExcludedRosterIds : [])
     hidden.add(row.rosterId)
     onDayUpdate({ crewExcludedRosterIds: Array.from(hidden) })
-  }, [callsheet.crewExcludedRosterIds, onDayUpdate])
+  }, [callsheet?.crewExcludedRosterIds, onDayUpdate])
 
   const addKeyContactCrew = useCallback((crewId) => {
     if (!crewId) return
-    const next = Array.from(new Set([...(callsheet.keyContactCrewIds || []), crewId]))
+    const next = Array.from(new Set([...(callsheet?.keyContactCrewIds || []), crewId]))
     onDayUpdate({ keyContactCrewIds: next })
     setShowKeyContactPicker(false)
-  }, [callsheet.keyContactCrewIds, onDayUpdate])
+  }, [callsheet?.keyContactCrewIds, onDayUpdate])
 
   const removeKeyContactCrew = useCallback((crewId) => {
-    onDayUpdate({ keyContactCrewIds: (callsheet.keyContactCrewIds || []).filter(id => id !== crewId) })
-  }, [callsheet.keyContactCrewIds, onDayUpdate])
+    onDayUpdate({ keyContactCrewIds: (callsheet?.keyContactCrewIds || []).filter(id => id !== crewId) })
+  }, [callsheet?.keyContactCrewIds, onDayUpdate])
 
   const availableKeyContacts = useMemo(() => {
     const selected = new Set(keyContactCrewIds)
@@ -599,8 +621,44 @@ export default function CallsheetTab({ configureOpen = true }) {
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [openColumnSectionKey])
 
-  if (!schedule.length) {
-    return <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#64748B', fontSize: 13 }}>Add a shoot day in Schedule to generate a callsheet.</div>
+  if (!hasScriptUploaded) {
+    return (
+      <CallsheetEmptyState
+        title="No script uploaded yet."
+        message="Upload a script first, then create a shoot day in Schedule to generate a callsheet."
+      />
+    )
+  }
+
+  if (!hasScheduleDays) {
+    return (
+      <CallsheetEmptyState
+        title="No shoot days available."
+        message="Add a shoot day in Schedule to generate a callsheet."
+      />
+    )
+  }
+
+  if (hasStaleSelectedDay) {
+    return (
+      <CallsheetEmptyState
+        title="Selected shoot day is no longer available."
+        message="Your previous callsheet day selection could not be found. Choose a valid day to continue."
+        actionLabel="Select Day 1"
+        onAction={() => setSelectedDayId(schedule[0]?.id || null)}
+      />
+    )
+  }
+
+  if (!activeDay) {
+    return (
+      <CallsheetEmptyState
+        title="No shoot day selected."
+        message="Select a day in Schedule to generate a callsheet."
+        actionLabel="Select Day 1"
+        onAction={() => setSelectedDayId(schedule[0]?.id || null)}
+      />
+    )
   }
 
   const dayTabs = schedule.map((day, idx) => ({ id: day.id, label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}` }))
