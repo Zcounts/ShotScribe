@@ -253,8 +253,7 @@ function CallsheetSidebar({
 }) {
   return (
     <SidebarPane
-      width={286}
-      title="Callsheet"
+            title="Callsheet"
     >
       <div style={{ padding: 10, display: 'grid', gap: 10 }}>
         <SidebarCard title="Actions" collapsed={collapseState.actions} onToggle={() => setCollapseState(prev => ({ ...prev, actions: !prev.actions }))}>

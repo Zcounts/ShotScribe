@@ -3,8 +3,6 @@ import useStore from '../store'
 import {
   Plus,
   FolderOpen,
-  BookOpen,
-  Settings,
   Pencil,
   LayoutGrid,
   Monitor,
@@ -16,6 +14,7 @@ import {
   Download,
 } from 'lucide-react'
 import './HomeView.css'
+import SidebarPane from './SidebarPane'
 
 function monogram(name) {
   const raw = String(name || 'Untitled').trim().split(/\s+/).filter(Boolean)
@@ -39,7 +38,6 @@ export default function HomeView() {
   const setActiveTab = useStore(s => s.setActiveTab)
   const newProject = useStore(s => s.newProject)
   const openProject = useStore(s => s.openProject)
-  const toggleSettings = useStore(s => s.toggleSettings)
 
   const shotCount = useMemo(
     () => scenes.reduce((sum, scene) => sum + ((scene?.shots || []).length), 0),
@@ -174,7 +172,7 @@ export default function HomeView() {
 
   return (
     <div className="home-view">
-      <aside className="home-sidebar">
+      <SidebarPane bodyClassName="home-sidebar-content">
         <div className="home-section-label">Recent Projects</div>
         <div className="home-recent-list">
           {sidebarRecent.map((project, index) => (
@@ -198,20 +196,7 @@ export default function HomeView() {
             Open Project
           </button>
         </div>
-
-        <div className="home-sidebar-footer">
-          <div className="home-sidebar-divider" />
-          <div className="home-section-label">Resources</div>
-          <button type="button" className="home-resource-item">
-            <BookOpen size={14} strokeWidth={1.5} />
-            Documentation
-          </button>
-          <button type="button" className="home-resource-item" onClick={() => toggleSettings()}>
-            <Settings size={14} strokeWidth={1.5} />
-            Settings
-          </button>
-        </div>
-      </aside>
+      </SidebarPane>
 
       <main className="home-main">
         <section className="home-hero">

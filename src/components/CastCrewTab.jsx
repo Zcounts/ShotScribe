@@ -125,8 +125,7 @@ export default function CastCrewTab() {
     >
       <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, minWidth: 0 }}>
         <SidebarPane
-          width={258}
-          title="Cast/Crew"
+                    title="Cast/Crew"
           controls={(
             <div style={{ display: 'grid', gap: 8 }}>
               <SubTabNav

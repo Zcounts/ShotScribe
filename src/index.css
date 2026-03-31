@@ -41,6 +41,11 @@
     --app-panel-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08);
     --app-panel-border: 1px solid rgba(74,85,104,0.14);
     --app-panel-bg: var(--ss-paper);
+    --ss-left-sidebar-width: 240px;
+    --ss-left-sidebar-bg: #1C1C1E;
+    --ss-left-sidebar-border: #3A3A3C;
+    --ss-left-sidebar-text: #d0d4dc;
+    --ss-left-sidebar-muted: #718096;
   }
 
   * {
@@ -106,8 +111,10 @@
   }
 
   .script-sidebar-left {
-    width: 290px;
-    border-right: 1px solid rgba(74,85,104,0.16);
+    width: var(--ss-left-sidebar-width);
+    border-right: 1px solid var(--ss-left-sidebar-border);
+    background: var(--ss-left-sidebar-bg);
+    color: var(--ss-left-sidebar-text);
   }
 
   .script-sidebar-right {
@@ -119,8 +126,70 @@
 
   .script-sidebar-top {
     padding: 10px 12px;
-    border-bottom: 1px solid rgba(74,85,104,0.16);
-    background: var(--ss-surface-slate);
+    border-bottom: 1px solid var(--ss-left-sidebar-border);
+    background: color-mix(in srgb, var(--ss-left-sidebar-bg) 92%, black 8%);
+  }
+
+  .ss-left-sidebar {
+    width: var(--ss-left-sidebar-width);
+    min-width: var(--ss-left-sidebar-width);
+    flex-shrink: 0;
+    background: var(--ss-left-sidebar-bg);
+    border-right: 1px solid var(--ss-left-sidebar-border);
+    color: var(--ss-left-sidebar-text);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .ss-left-sidebar-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .ss-left-sidebar-section-label {
+    padding: 14px 14px 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ss-left-sidebar-muted);
+  }
+
+  .ss-left-sidebar-controls {
+    padding: 0 10px 10px;
+  }
+
+  .ss-left-sidebar-footer {
+    margin-top: auto;
+    padding-bottom: 12px;
+  }
+
+  .ss-left-sidebar-divider {
+    border-top: 1px solid var(--ss-left-sidebar-border);
+    margin: 12px 14px 0;
+  }
+
+  .ss-left-sidebar-resource-item {
+    width: calc(100% - 20px);
+    margin: 0 10px;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #b8becb;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .ss-left-sidebar-resource-item:hover {
+    background: rgba(90, 99, 117, 0.2);
   }
 
   .script-view-btn.is-active {
