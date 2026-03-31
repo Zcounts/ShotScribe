@@ -1,10 +1,16 @@
 # Mobile Companion Scaffold — Implementation Summary
 
-Implemented the initial repository scaffolding for the ShotScribe mobile companion initiative:
+This repository includes the initial scaffolding for the ShotScribe mobile companion.
 
-1. Added `/mobile` as a standalone Vite + React PWA shell with a manifest and service worker placeholder.
-2. Added `/shared` as a reusable package for common types, schema placeholders, serialization helpers, versioning, and crypto utility.
-3. Added desktop-side placeholders at `/src/services/mobile` for future mobile package export, publish, and patch import workflows.
-4. Added repository-level `AGENTS.md` guidance and scaffold documentation in `/docs`.
+## Implemented
 
-No functional behavior changes were made to existing desktop app flows.
+1. Added `/mobile` as a standalone Vite + React PWA shell with manifest/service worker assets.
+2. Added `/shared` for shared mobile contracts, schemas, serializers, and utility helpers.
+3. Added desktop export support under `/src/services/mobile/mobileExportService.js` for generating mobile package JSON files from project data.
+4. Added scaffold docs under `/docs` for mobile/web integration guidance.
+
+## Scope guardrails for this phase
+
+- Static web hosting target.
+- Local-only persistence.
+- No backend/cloud publishing scaffolding.
