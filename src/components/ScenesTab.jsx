@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react'
 import useStore from '../store'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
-import ImportScriptModal from './ImportScriptModal'
 import SceneColorPicker from './SceneColorPicker'
 import ScenePropertiesPanel, { CharacterTagInput } from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
@@ -48,12 +47,10 @@ export default function ScenesTab({
   onConfigureOpenChange = () => {},
 }) {
   const scriptScenes = useStore(s => s.scriptScenes)
-  const importedScripts = useStore(s => s.importedScripts)
   const scenes = useStore(s => s.scenes)
   const updateScriptScene = useStore(s => s.updateScriptScene)
   const deleteScriptScene = useStore(s => s.deleteScriptScene)
   const importScriptScenes = useStore(s => s.importScriptScenes)
-  const deleteImportedScript = useStore(s => s.deleteImportedScript)
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
   const scenesViewState = useStore(s => s.tabViewState?.scenes || {})
@@ -61,7 +58,6 @@ export default function ScenesTab({
   const setActiveTab = useStore(s => s.setActiveTab)
   const schedule = useStore(s => s.schedule)
 
-  const [activeScript, setActiveScript] = useState(scenesViewState.activeScript ?? null)
   const [viewMode, setViewMode] = useState(() => scenesViewState.sceneViewMode || 'compactGrid')
   const [columnCount, setColumnCount] = useState(() => {
     const value = Number(scenesViewState.sceneColumnCount ?? scenesViewState.columnCount)
@@ -81,17 +77,13 @@ export default function ScenesTab({
   const [panelCollapsed, setPanelCollapsed] = useState(() => ({
     viewOptions: scenesViewState.sidebarPanelCollapsed?.viewOptions ?? false,
     sceneOrganization: scenesViewState.sidebarPanelCollapsed?.sceneOrganization ?? false,
-    importedScripts: scenesViewState.sidebarPanelCollapsed?.importedScripts ?? false,
   }))
-  const [importModalOpen, setImportModalOpen] = useState(false)
   const [expandedIds, setExpandedIds] = useState({})
   const [editingSceneNumberId, setEditingSceneNumberId] = useState(null)
   const [editSceneNumberValue, setEditSceneNumberValue] = useState('')
   const [invalidEdit, setInvalidEdit] = useState(false)
   const [selectedSceneIds, setSelectedSceneIds] = useState([])
   const [combineOpen, setCombineOpen] = useState(false)
-  const [scriptCtxMenu, setScriptCtxMenu] = useState(null)
-  const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const listRef = useRef(null)
 
   const linkedShotsMap = useMemo(() => {
@@ -135,9 +127,7 @@ export default function ScenesTab({
   }, [schedule, scenes])
 
   const visibleScenes = useMemo(() => {
-    const subset = !activeScript
-      ? scriptScenes
-      : scriptScenes.filter(s => s.importSource === (importedScripts.find(x => x.id === activeScript)?.filename))
+    const subset = scriptScenes
     const baseSorted = [...subset].sort(naturalSortSceneNumber)
     const directionMultiplier = sortDirection === 'desc' ? -1 : 1
     const safeTextCompare = (left, right) => String(left || '').localeCompare(String(right || ''), undefined, { sensitivity: 'base' })
@@ -172,7 +162,7 @@ export default function ScenesTab({
       return naturalSortSceneNumber(left, right)
     })
     return ordered
-  }, [scriptScenes, activeScript, importedScripts, sortBy, sortDirection, linkedShotsMap, pagination, scriptOrderMap])
+  }, [scriptScenes, sortBy, sortDirection, linkedShotsMap, pagination, scriptOrderMap])
 
   const groupedVisibleScenes = useMemo(() => {
     if (groupBy === 'none') return [{ key: 'all', label: null, scenes: visibleScenes }]
@@ -234,7 +224,6 @@ export default function ScenesTab({
 
   useEffect(() => {
     setTabViewState('scenes', {
-      activeScript,
       sceneViewMode: viewMode,
       sceneColumnCount: columnCount,
       columnCount,
@@ -244,7 +233,7 @@ export default function ScenesTab({
       metadataVisibility,
       sidebarPanelCollapsed: panelCollapsed,
     })
-  }, [activeScript, viewMode, columnCount, sortBy, sortDirection, groupBy, metadataVisibility, panelCollapsed, setTabViewState])
+  }, [viewMode, columnCount, sortBy, sortDirection, groupBy, metadataVisibility, panelCollapsed, setTabViewState])
 
   useEffect(() => {
     const node = listRef.current
@@ -276,35 +265,34 @@ export default function ScenesTab({
     setCombineOpen(false)
   }
 
-  if (scriptScenes.length === 0 && !importModalOpen) {
+  if (scriptScenes.length === 0) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontWeight: 700 }}>No script scenes available yet</div>
         <div style={{ color: '#4A5568', fontSize: 13 }}>Import your script from the Script tab to begin scene breakdown.</div>
         <button onClick={() => setActiveTab('script')} style={{ background: '#2C3E57', color: '#fff', border: 'none', borderRadius: 5, padding: '8px 14px' }}>Go to Script tab</button>
-        <ImportScriptModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
       </div>
     )
   }
 
   const togglePanel = (panelKey) => setPanelCollapsed(prev => ({ ...prev, [panelKey]: !prev[panelKey] }))
-  const expandAllPanels = () => setPanelCollapsed({ viewOptions: false, sceneOrganization: false, importedScripts: false })
-  const collapseAllPanels = () => setPanelCollapsed({ viewOptions: true, sceneOrganization: true, importedScripts: true })
+  const expandAllPanels = () => setPanelCollapsed({ viewOptions: false, sceneOrganization: false })
+  const collapseAllPanels = () => setPanelCollapsed({ viewOptions: true, sceneOrganization: true })
   const columnOptions = COLUMN_OPTIONS_BY_MODE[viewMode] || []
   const showColumnControls = viewMode !== 'productionList'
 
   return (
-    <div style={{ display: 'flex', height: '100%' }} onClick={() => { setScriptCtxMenu(null); onConfigureOpenChange(false) }}>
+    <div style={{ display: 'flex', height: '100%' }} onClick={() => { onConfigureOpenChange(false) }}>
       <SidebarPane
         width={240}
         title={null}
-        footer={<button onClick={() => setImportModalOpen(true)} style={{ width: '100%', background: '#E84040', color: '#fff', border: 'none', borderRadius: 5, padding: 7 }}>+ Import Script</button>}
+        footer={null}
       >
           <div style={{ padding: '10px 12px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>Panels</div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={collapseAllPanels} style={{ border: 'none', background: 'none', color: '#475569', fontSize: 11, cursor: 'pointer', padding: 0 }}>Collapse All</button>
-              <button onClick={expandAllPanels} style={{ border: 'none', background: 'none', color: '#475569', fontSize: 11, cursor: 'pointer', padding: 0 }}>Expand All</button>
+              <button title="Collapse All" onClick={collapseAllPanels} style={{ border: '1px solid rgba(100,116,139,0.35)', background: '#fff', color: '#334155', fontSize: 11, cursor: 'pointer', borderRadius: 4, width: 22, height: 22, padding: 0 }}>↑</button>
+              <button title="Expand All" onClick={expandAllPanels} style={{ border: '1px solid rgba(100,116,139,0.35)', background: '#fff', color: '#334155', fontSize: 11, cursor: 'pointer', borderRadius: 4, width: 22, height: 22, padding: 0 }}>↓</button>
             </div>
           </div>
           <SidebarSection title="View Options" collapsed={panelCollapsed.viewOptions} onToggle={() => togglePanel('viewOptions')}>
@@ -367,17 +355,6 @@ export default function ScenesTab({
             <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} style={{ ...selectStyle, marginBottom: 0 }}>
               {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-          </SidebarSection>
-          <SidebarSection title="Imported Scripts" collapsed={panelCollapsed.importedScripts} onToggle={() => togglePanel('importedScripts')}>
-            <button onClick={() => setActiveScript(null)} style={{ width: '100%', textAlign: 'left', border: 'none', background: activeScript ? 'none' : 'rgba(232,64,64,0.1)', borderLeft: activeScript ? '3px solid transparent' : '3px solid #E84040', padding: '7px 8px', borderRadius: 4 }}>All Scenes</button>
-            {importedScripts.map(sc => (
-              <div key={sc.id} onContextMenu={(e) => {
-                e.preventDefault()
-                setScriptCtxMenu({ x: e.clientX, y: e.clientY, script: sc })
-              }}>
-                <button onClick={() => setActiveScript(sc.id)} style={{ width: '100%', textAlign: 'left', border: 'none', borderBottom: '1px solid rgba(74,85,104,0.08)', background: activeScript === sc.id ? 'rgba(232,64,64,0.1)' : 'none', padding: '8px 8px' }}>{sc.filename}</button>
-              </div>
-            ))}
           </SidebarSection>
       </SidebarPane>
 
@@ -510,20 +487,6 @@ export default function ScenesTab({
         )}
       </div>
 
-      {scriptCtxMenu && (
-        <div style={{ position: 'fixed', left: scriptCtxMenu.x, top: scriptCtxMenu.y, zIndex: 95, background: '#1e1e2e', border: '1px solid #444', borderRadius: 6, overflow: 'hidden' }}>
-          <button
-            onClick={() => {
-              setScriptDeleteConfirm(scriptCtxMenu.script)
-              setScriptCtxMenu(null)
-            }}
-            style={{ display: 'block', width: '100%', border: 'none', background: 'none', color: '#fca5a5', padding: '7px 10px', textAlign: 'left' }}
-          >
-            Remove imported script…
-          </button>
-        </div>
-      )}
-
       {combineOpen && combineForm && (
         <div className="modal-overlay" onClick={() => setCombineOpen(false)}>
           <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
@@ -542,31 +505,6 @@ export default function ScenesTab({
         </div>
       )}
 
-      {scriptDeleteConfirm && (
-        <div className="modal-overlay" onClick={() => setScriptDeleteConfirm(null)}>
-          <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
-            <h3 className="dialog-title">Remove imported script?</h3>
-            <p className="dialog-description">
-              <strong>{scriptDeleteConfirm.filename}</strong> will be removed, including its imported scenes and derived script data in this project.
-            </p>
-            <p className="dialog-description" style={{ marginBottom: 18 }}>This action cannot be undone.</p>
-            <div className="dialog-actions">
-              <button className="dialog-button-secondary" onClick={() => setScriptDeleteConfirm(null)}>Cancel</button>
-              <button
-                className="dialog-button-danger"
-                onClick={() => {
-                  deleteImportedScript(scriptDeleteConfirm.id)
-                  setScriptDeleteConfirm(null)
-                }}
-              >
-                Remove Script
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ImportScriptModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
     </div>
   )
 }
@@ -599,7 +537,9 @@ function colorWithAlpha(hexColor, alpha = 0.12) {
   const r = parseInt(hex.slice(0, 2), 16)
   const g = parseInt(hex.slice(2, 4), 16)
   const b = parseInt(hex.slice(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  const blendAmount = Math.max(0, Math.min(1, 1 - alpha))
+  const tint = (channel) => Math.round((channel * alpha) + (255 * blendAmount))
+  return `rgb(${tint(r)}, ${tint(g)}, ${tint(b)})`
 }
 
 function ProductionList({
