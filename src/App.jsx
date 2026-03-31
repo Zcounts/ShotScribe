@@ -365,7 +365,7 @@ export default function App() {
   const [scenesConfigOpen, setScenesConfigOpen] = useState(false)
   const [shotlistConfigOpen, setShotlistConfigOpen] = useState(false)
   const [scheduleConfigOpen, setScheduleConfigOpen] = useState(false)
-  const [callsheetConfigOpen, setCallsheetConfigOpen] = useState(callsheetViewState.sidebarExpanded ?? true)
+  const [callsheetConfigOpen, setCallsheetConfigOpen] = useState(callsheetViewState.sidebarExpanded ?? false)
   const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
@@ -843,8 +843,8 @@ export default function App() {
           { id: 'script',     label: 'Script' },
           { id: 'scenes',     label: 'Scenes' },
           { id: 'storyboard', label: 'Storyboard' },
-          { id: 'shotlist',   label: 'Shotlist' },
           { id: 'castcrew',   label: 'Cast/Crew' },
+          { id: 'shotlist',   label: 'Shotlist' },
           { id: 'schedule',   label: 'Schedule' },
           { id: 'callsheet',  label: 'Callsheet' },
         ].map(({ id, label }) => (
