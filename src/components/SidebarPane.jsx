@@ -9,9 +9,10 @@ export default function SidebarPane({
 }) {
   return (
     <aside
+      className="ss-module"
       style={{
         width,
-        background: '#FAF8F4',
+        background: 'var(--ss-paper)',
         borderRight: '1px solid rgba(74,85,104,0.15)',
         display: 'flex',
         flexDirection: 'column',
@@ -20,11 +21,12 @@ export default function SidebarPane({
       }}
     >
       <div
+        className="ss-module-header"
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 2,
-          background: '#FAF8F4',
+          background: 'var(--ss-surface-slate)',
           borderBottom: '1px solid rgba(74,85,104,0.12)',
         }}
       >

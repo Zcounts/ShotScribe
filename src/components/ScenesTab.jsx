@@ -267,10 +267,10 @@ export default function ScenesTab({
 
   if (scriptScenes.length === 0) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
+        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontWeight: 700 }}>No script scenes available yet</div>
         <div style={{ color: '#4A5568', fontSize: 13 }}>Import your script from the Script tab to begin scene breakdown.</div>
-        <button onClick={() => setActiveTab('script')} style={{ background: '#2C3E57', color: '#fff', border: 'none', borderRadius: 5, padding: '8px 14px' }}>Go to Script tab</button>
+        <button className="ss-btn is-secondary" onClick={() => setActiveTab('script')}>Go to Script tab</button>
       </div>
     )
   }
@@ -291,8 +291,8 @@ export default function ScenesTab({
           <div style={{ padding: '10px 12px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>Panels</div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button title="Collapse All" onClick={collapseAllPanels} style={{ border: '1px solid rgba(100,116,139,0.35)', background: '#fff', color: '#334155', fontSize: 11, cursor: 'pointer', borderRadius: 4, width: 22, height: 22, padding: 0 }}>↑</button>
-              <button title="Expand All" onClick={expandAllPanels} style={{ border: '1px solid rgba(100,116,139,0.35)', background: '#fff', color: '#334155', fontSize: 11, cursor: 'pointer', borderRadius: 4, width: 22, height: 22, padding: 0 }}>↓</button>
+              <button title="Collapse All" onClick={collapseAllPanels} className="ss-btn outline" style={{ fontSize: 11, borderRadius: 4, width: 22, height: 22, padding: 0 }}>↑</button>
+              <button title="Expand All" onClick={expandAllPanels} className="ss-btn outline" style={{ fontSize: 11, borderRadius: 4, width: 22, height: 22, padding: 0 }}>↓</button>
             </div>
           </div>
           <SidebarSection title="View Options" collapsed={panelCollapsed.viewOptions} onToggle={() => togglePanel('viewOptions')}>
@@ -323,7 +323,7 @@ export default function ScenesTab({
                 <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4, marginTop: 8 }}>Columns</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginBottom: 8 }}>
                   {columnOptions.map(count => (
-                    <button key={count} onClick={() => setColumnCount(count)} style={{ ...pillStyle, background: columnCount === count ? 'rgba(232,64,64,0.12)' : '#fff' }}>
+                    <button key={count} onClick={() => setColumnCount(count)} style={{ ...pillStyle, background: columnCount === count ? 'rgba(82,101,236,0.14)' : '#fff' }}>
                       {count}
                     </button>
                   ))}
@@ -345,14 +345,14 @@ export default function ScenesTab({
           </SidebarSection>
           <SidebarSection title="Scene Organization" collapsed={panelCollapsed.sceneOrganization} onToggle={() => togglePanel('sceneOrganization')}>
             <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>Sort By</label>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle}>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle} className="ss-input">
               {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            <button onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ ...pillStyle, width: '100%', marginTop: 8 }}>
+            <button onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} className="ss-btn outline" style={{ ...pillStyle, width: '100%', marginTop: 8 }}>
               {sortDirection === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
             </button>
             <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4, marginTop: 8 }}>Group By</label>
-            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} style={{ ...selectStyle, marginBottom: 0 }}>
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} className="ss-input" style={{ ...selectStyle, marginBottom: 0 }}>
               {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </SidebarSection>
@@ -480,9 +480,9 @@ export default function ScenesTab({
         {selectedSceneIds.length >= 2 && (
           <div style={{ position: 'sticky', bottom: 0, background: '#1c1c1e', color: '#fff', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>{selectedSceneIds.length} scenes selected</span>
-            <button onClick={() => setCombineOpen(true)} style={{ border: 'none', borderRadius: 4, padding: '4px 8px', background: '#E84040', color: '#fff' }}>Combine Scenes</button>
-            <button onClick={() => selectedSceneIds.forEach(id => deleteScriptScene(id))} style={{ border: 'none', borderRadius: 4, padding: '4px 8px' }}>Delete</button>
-            <button onClick={() => setSelectedSceneIds([])} style={{ border: 'none', borderRadius: 4, padding: '4px 8px' }}>✕ Cancel</button>
+            <button className="ss-btn is-primary" onClick={() => setCombineOpen(true)}>Combine Scenes</button>
+            <button className="ss-btn destructive" onClick={() => selectedSceneIds.forEach(id => deleteScriptScene(id))}>Delete</button>
+            <button className="ss-btn ghost" onClick={() => setSelectedSceneIds([])}>✕ Cancel</button>
           </div>
         )}
       </div>
@@ -492,9 +492,9 @@ export default function ScenesTab({
           <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
             <h3 className="dialog-title">Combine {combineForm.selected.length} Scenes</h3>
             <label className="dialog-label">New scene number</label>
-            <input className="dialog-input" value={combineForm.sceneNumber} onChange={e => setCombineForm(f => ({ ...f, sceneNumber: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
+            <input className="dialog-input ss-input" value={combineForm.sceneNumber} onChange={e => setCombineForm(f => ({ ...f, sceneNumber: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
             <label className="dialog-label">New slugline</label>
-            <input className="dialog-input" value={combineForm.slugline} onChange={e => setCombineForm(f => ({ ...f, slugline: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
+            <input className="dialog-input ss-input" value={combineForm.slugline} onChange={e => setCombineForm(f => ({ ...f, slugline: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
             <label className="dialog-label">Merged characters</label>
             <CharacterTagInput characters={combineForm.characters} allCharacters={allCharacters} onChange={(chars) => setCombineForm(f => ({ ...f, characters: chars }))} />
             <div className="dialog-actions">
@@ -512,8 +512,8 @@ export default function ScenesTab({
 function SidebarSection({ title, collapsed, onToggle, children }) {
   return (
     <div style={{ padding: 10, paddingTop: 6 }}>
-      <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: 'rgba(255,255,255,0.65)', overflow: 'hidden' }}>
-        <button onClick={onToggle} style={{ width: '100%', border: 'none', background: 'transparent', padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="ss-module" style={{ borderRadius: 6, background: 'rgba(255,255,255,0.65)', overflow: 'hidden' }}>
+        <button onClick={onToggle} className="ss-module-header" style={{ width: '100%', borderLeft: 'none', borderRight: 'none', borderTop: 'none', padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>{title}</span>
           <span style={{ color: '#64748b', fontSize: 11 }}>{collapsed ? '▸' : '▾'}</span>
         </button>
@@ -524,11 +524,26 @@ function SidebarSection({ title, collapsed, onToggle, children }) {
 }
 
 function Badge({ children }) {
-  return <span style={{ fontSize: 10, color: '#475569', border: '1px solid rgba(100,116,139,0.3)', borderRadius: 999, padding: '2px 7px', background: '#fff' }}>{children}</span>
+  const text = String(children || '')
+  const variant = getChipVariantFromText(text)
+  return <span className={`ss-chip ${variant}`} style={{ fontSize: 10 }}>{children}</span>
 }
 
 const selectStyle = { width: '100%', border: '1px solid rgba(128,128,128,0.3)', borderRadius: 4, padding: '6px 7px', fontSize: 12, marginBottom: 8, background: '#fff' }
 const pillStyle = { border: '1px solid rgba(74,85,104,0.2)', background: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 11, color: '#334155', cursor: 'pointer' }
+
+function getChipVariantFromText(text) {
+  const upper = text.toUpperCase()
+  if (upper.includes('INT')) return 'is-int'
+  if (upper.includes('EXT')) return 'is-ext'
+  if (upper.includes('DAY')) return 'is-day'
+  if (upper.includes('NIGHT')) return 'is-night'
+  if (upper.includes('ACTIVE')) return 'is-active'
+  if (upper.includes('PENDING')) return 'is-pending'
+  if (upper.includes('LOCKED')) return 'is-locked'
+  if (upper.includes('DROPPED')) return 'is-dropped'
+  return ''
+}
 
 function colorWithAlpha(hexColor, alpha = 0.12) {
   if (!hexColor) return '#ffffff'
@@ -570,10 +585,10 @@ function ProductionList({
     { key: 'castCount', label: 'Cast' },
   ]
   return (
-    <div className="app-surface-card" style={{ borderRadius: 8, overflow: 'hidden' }}>
+    <div className="app-surface-card ss-module" style={{ borderRadius: 8, overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
-          <tr style={{ background: '#f8fafc' }}>
+          <tr className="ss-module-header is-blue" style={{ background: '#f8fafc' }}>
             <th style={thStyle}>Sel</th>
             {headers.map(header => (
               <th key={header.key} style={thStyle}>

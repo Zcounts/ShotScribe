@@ -1,40 +1,14 @@
 import React, { useMemo, useState } from 'react'
 import SceneColorPicker from './SceneColorPicker'
 
-const chipStyles = {
-  default: {
-    fontSize: 10,
-    background: '#E8EEF8',
-    border: '1px solid #B6C7E6',
-    color: '#1F355F',
-    borderRadius: 999,
-    padding: '2px 8px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 5,
-    lineHeight: 1.4,
-  },
-  removeButton: {
-    border: 'none',
-    background: 'none',
-    color: '#1F355F',
-    cursor: 'pointer',
-    padding: 0,
-    fontSize: 11,
-    lineHeight: 1,
-  },
-}
-
 export function CharacterChip({ name, onRemove }) {
   return (
-    <span style={chipStyles.default}>
+    <span className="ss-chip is-active" style={{ fontSize: 10, gap: 5 }}>
       {name}
       {onRemove && (
         <button
           onClick={onRemove}
-          style={chipStyles.removeButton}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#12223f' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = '#1F355F' }}
+          style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}
         >
           ×
         </button>
@@ -65,7 +39,7 @@ export function CharacterTagInput({ characters = [], allCharacters = [], onChang
 
   return (
     <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, border: '1px solid rgba(74,85,104,0.26)', borderRadius: 6, padding: 6, background: 'rgba(255,255,255,0.72)' }}>
+      <div className="ss-module" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, borderRadius: 6, padding: 6, background: 'rgba(255,255,255,0.72)' }}>
         {(characters || []).map(name => (
           <CharacterChip
             key={name}
@@ -83,7 +57,8 @@ export function CharacterTagInput({ characters = [], allCharacters = [], onChang
             }
           }}
           placeholder="+ add"
-          style={{ border: 'none', outline: 'none', background: 'transparent', color: '#334155', fontSize: 11, minWidth: 80 }}
+          className="ss-input"
+          style={{ border: 'none', outline: 'none', background: 'transparent', color: '#334155', fontSize: 11, minWidth: 80, minHeight: 'auto', padding: 0, width: 'auto' }}
         />
       </div>
       {filtered.length > 0 && (
@@ -129,7 +104,7 @@ export default function ScenePropertiesPanel({
   ]
 
   return (
-    <div style={{ border: '1px solid rgba(74,85,104,0.16)', borderRadius: 6, background: 'rgba(255,255,255,0.55)', padding: 10 }} onClick={e => e.stopPropagation()}>
+    <div className="ss-module" style={{ borderRadius: 6, background: 'rgba(255,255,255,0.55)', padding: 10 }} onClick={e => e.stopPropagation()}>
       <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: '7px 12px', alignItems: 'center' }}>
         {rows.map(({ label, key }) => (
           <React.Fragment key={key}>
@@ -138,7 +113,8 @@ export default function ScenePropertiesPanel({
               <input
                 value={values[key] || ''}
                 onChange={(e) => onChange?.({ [key]: e.target.value })}
-                style={{ border: '1px solid rgba(128,128,128,0.3)', borderRadius: 4, background: '#fff', padding: '5px 7px', fontSize: 12, color: '#1f2937' }}
+                className="ss-input"
+                style={{ borderRadius: 4, background: '#fff', padding: '5px 7px', fontSize: 12, color: '#1f2937' }}
               />
             ) : (
               <div style={{ fontSize: 12, color: '#1f2937' }}>{readOnlyValue(values[key])}</div>
