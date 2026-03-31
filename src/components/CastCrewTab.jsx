@@ -43,7 +43,7 @@ export default function CastCrewTab() {
   const castCrewViewState = useStore(s => s.tabViewState?.castcrew || {})
   const setTabViewState = useStore(s => s.setTabViewState)
   const openPersonDialog = useStore(s => s.openPersonDialog)
-  const [activeSubTab, setActiveSubTab] = useState(castCrewViewState.activeSubTab || 'Quick Reference')
+  const [activeSubTab, setActiveSubTab] = useState(castCrewViewState.activeSubTab || 'Visual')
   const scrollRef = useRef(null)
 
   const openProfile = (type, id) => openPersonDialog(type, id || null)
@@ -128,7 +128,7 @@ export default function CastCrewTab() {
           controls={(
             <div style={{ display: 'grid', gap: 8 }}>
               <SubTabNav
-                tabs={['Quick Reference', 'List']}
+                tabs={['Visual', 'List']}
                 active={activeSubTab}
                 onChange={setActiveSubTab}
                 fullWidth
@@ -144,7 +144,7 @@ export default function CastCrewTab() {
           )}
         />
         <div style={{ flex: 1, minWidth: 0, paddingLeft: 10 }} className="space-y-4">
-          {activeSubTab === 'Quick Reference' ? (
+          {activeSubTab === 'Visual' ? (
             <>
               <SectionShell title="Cast" subtitle="Fast day-by-day availability matrix for on-set lookup.">
                 <div className="overflow-x-auto">
