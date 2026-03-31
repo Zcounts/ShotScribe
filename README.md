@@ -166,6 +166,8 @@ Important notes:
 
 ## SiteGround deployment
 
+The static web build is path-portable: the same `dist-siteground/` output can be hosted at a domain root (for example `https://shotscribe.com/`) or inside a subfolder (for example `https://fairlyodd.org/shotscribe/`) without rebuilding.
+
 ### Automatic GitHub package (recommended)
 
 When you push to the `main` branch, GitHub Actions runs the **SiteGround Static Package** workflow and generates `shotscribe-siteground-upload.zip` as a downloadable artifact.
@@ -175,7 +177,7 @@ You can download it from the workflow run page under **Artifacts**, then upload 
 ### Manual fallback
 
 1. Build the project with `npm run build:web`
-2. Upload the contents of `dist-siteground/` to `public_html/`
+2. Upload the contents of `dist-siteground/` to either `public_html/` (root deploy) or a subfolder such as `public_html/shotscribe/`
 3. Make sure `index.html`, `assets/`, and `.htaccess` are included
 4. Hard refresh after deployment
 
@@ -197,4 +199,3 @@ It is built to feel native to real film workflows:
 ShotScribe is actively evolving as a web-first production planning platform for filmmakers.
 
 The current focus is keeping the app **web-safe, portable, and practical**, while preserving a connected workflow from script through production.
-

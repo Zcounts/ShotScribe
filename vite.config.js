@@ -6,10 +6,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // Electron desktop builds require relative asset paths.
-    // SiteGround static hosting should use root-absolute paths so SPA refresh
-    // fallbacks can still load compiled assets.
-    base: isSiteGroundMode ? '/' : './',
+    // Use relative asset URLs so a single static build can be deployed either
+    // at a domain root (https://example.com/) or under a subfolder
+    // (https://example.com/shotscribe/).
+    base: './',
     server: {
       port: 5173,
       host: true,
