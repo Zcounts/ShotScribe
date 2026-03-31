@@ -1,3 +1,4 @@
+import ConfigureSidebarShell from './ConfigureSidebarShell'
 import React from 'react'
 
 function ColorRow({ label, value, onChange }) {
@@ -19,40 +20,18 @@ function ColorRow({ label, value, onChange }) {
 
 export default function CastCrewConfigureSidebar({
   open,
+  onClose,
   config,
   onChange,
 }) {
   return (
-    <aside
-      role="dialog"
-      aria-label="Cast/Crew Configure"
-      aria-hidden={!open}
-      style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        width: 'min(400px, calc(100vw - 24px))',
-        height: '100vh',
-        zIndex: 160,
-        background: '#F7F3EC',
-        borderLeft: '1px solid rgba(74,85,104,0.28)',
-        boxShadow: '-16px 0 36px rgba(0,0,0,0.22)',
-        transform: open ? 'translateX(0)' : 'translateX(104%)',
-        transition: 'transform 220ms ease',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
+    <ConfigureSidebarShell
+      open={open}
+      onClose={onClose}
+      ariaLabel="Cast/Crew Configure"
+      context="Cast/Crew"
+      meta="Availability display colors"
     >
-      <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#1C1C1E' }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A0AEC0', fontWeight: 700 }}>Cast/Crew</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: '#FAF8F4', marginTop: 2 }}>Configure</div>
-        <div style={{ marginTop: 6, fontSize: 11, color: '#D6D3CD' }}>
-          Availability display colors
-        </div>
-      </div>
-
       <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gap: 10 }}>
         <section style={{ border: '1px solid rgba(74,85,104,0.22)', borderRadius: 8, overflow: 'hidden', background: '#FAF8F4' }}>
           <div style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#2C2C2E', background: '#F2EEE6', borderBottom: '1px solid rgba(74,85,104,0.2)' }}>
@@ -67,6 +46,6 @@ export default function CastCrewConfigureSidebar({
           </div>
         </section>
       </div>
-    </aside>
+    </ConfigureSidebarShell>
   )
 }

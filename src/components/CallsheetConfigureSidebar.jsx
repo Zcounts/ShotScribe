@@ -1,3 +1,4 @@
+import ConfigureSidebarShell from './ConfigureSidebarShell'
 import React, { useMemo, useState } from 'react'
 import { DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
 
@@ -36,6 +37,7 @@ function Section({ title, meta, defaultOpen = true, children }) {
 
 export default function CallsheetConfigureSidebar({
   open,
+  onClose,
   sectionConfig,
   onSectionConfigChange,
   headerBgColor,
@@ -47,36 +49,13 @@ export default function CallsheetConfigureSidebar({
   )
 
   return (
-    <aside
-      role="dialog"
-      aria-label="Callsheet Configure"
-      aria-hidden={!open}
-      style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        width: 'min(400px, calc(100vw - 24px))',
-        height: '100vh',
-        zIndex: 160,
-        background: '#F7F3EC',
-        borderLeft: '1px solid rgba(74,85,104,0.28)',
-        boxShadow: '-16px 0 36px rgba(0,0,0,0.22)',
-        transform: open ? 'translateX(0)' : 'translateX(104%)',
-        transition: 'transform 220ms ease',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
+    <ConfigureSidebarShell
+      open={open}
+      onClose={onClose}
+      ariaLabel="Callsheet Configure"
+      context="Callsheet"
+      meta={`${visibleCount} visible sections`}
     >
-      <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#1C1C1E' }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A0AEC0', fontWeight: 700 }}>Callsheet</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: '#FAF8F4', marginTop: 2 }}>Configure</div>
-        <div style={{ marginTop: 6, fontSize: 11, color: '#D6D3CD' }}>
-          {visibleCount} visible sections
-        </div>
-      </div>
-
       <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gap: 10 }}>
         <Section title="Visible Sections" meta={`(${visibleCount})`}>
           <div style={{ display: 'grid', gap: 7 }}>
@@ -108,6 +87,6 @@ export default function CallsheetConfigureSidebar({
           </label>
         </Section>
       </div>
-    </aside>
+    </ConfigureSidebarShell>
   )
 }

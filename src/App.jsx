@@ -1094,6 +1094,7 @@ export default function App() {
           />
           <StoryboardConfigureSidebar
             open={storyboardConfigOpen}
+            onClose={() => setStoryboardConfigOpen(false)}
             showOutline={showStoryboardOutline}
             onShowOutlineChange={setShowStoryboardOutline}
             config={storyboardDisplayConfig}
@@ -1124,6 +1125,7 @@ export default function App() {
           />
           <CastCrewConfigureSidebar
             open={castCrewConfigOpen}
+            onClose={() => setCastCrewConfigOpen(false)}
             config={castCrewDisplayConfig}
             onChange={updateCastCrewDisplayConfig}
           />
@@ -1145,6 +1147,7 @@ export default function App() {
           />
           <CallsheetConfigureSidebar
             open={callsheetConfigOpen}
+            onClose={() => setCallsheetConfigOpen(false)}
             sectionConfig={callsheetSectionConfig}
             onSectionConfigChange={setCallsheetSectionConfig}
             headerBgColor={activeCallsheet?.headerBgColor || '#0B1220'}
