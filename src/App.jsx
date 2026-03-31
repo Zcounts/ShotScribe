@@ -36,6 +36,7 @@ import SidebarPane from './components/SidebarPane'
 import ConfigureButton from './components/ConfigureButton'
 import StoryboardConfigureSidebar from './components/StoryboardConfigureSidebar'
 import CastCrewConfigureSidebar from './components/CastCrewConfigureSidebar'
+import CallsheetConfigureSidebar from './components/CallsheetConfigureSidebar'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
 import { getShotLetter } from './store'
 import {
@@ -326,6 +327,11 @@ export default function App() {
   const setActiveTab = useStore(s => s.setActiveTab)
   const storyboardViewState = useStore(s => s.tabViewState?.storyboard || {})
   const callsheetViewState = useStore(s => s.tabViewState?.callsheet || {})
+  const schedule = useStore(s => s.schedule)
+  const callsheetSectionConfig = useStore(s => s.callsheetSectionConfig)
+  const setCallsheetSectionConfig = useStore(s => s.setCallsheetSectionConfig)
+  const getCallsheet = useStore(s => s.getCallsheet)
+  const updateCallsheet = useStore(s => s.updateCallsheet)
   const setTabViewState = useStore(s => s.setTabViewState)
   const documentSession = useStore(s => s.documentSession)
   const scriptScenes = useStore(s => s.scriptScenes)
@@ -721,6 +727,9 @@ export default function App() {
     ? sceneNavItems.find(item => item.id === activeOutlineDragId) || null
     : null
 
+  const activeCallsheetDayId = callsheetViewState.selectedDayId || schedule[0]?.id || null
+  const activeCallsheet = activeCallsheetDayId ? getCallsheet(activeCallsheetDayId) : null
+
   const configureHandlers = {
     storyboard: {
       isActive: storyboardConfigOpen,
@@ -1115,6 +1124,32 @@ export default function App() {
             open={castCrewConfigOpen}
             config={castCrewDisplayConfig}
             onChange={updateCastCrewDisplayConfig}
+          />
+        </>
+      )}
+      {activeTab === 'callsheet' && (
+        <>
+          <div
+            onClick={() => setCallsheetConfigOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.3)',
+              zIndex: 150,
+              opacity: callsheetConfigOpen ? 1 : 0,
+              pointerEvents: callsheetConfigOpen ? 'auto' : 'none',
+              transition: 'opacity 200ms ease',
+            }}
+          />
+          <CallsheetConfigureSidebar
+            open={callsheetConfigOpen}
+            sectionConfig={callsheetSectionConfig}
+            onSectionConfigChange={setCallsheetSectionConfig}
+            headerBgColor={activeCallsheet?.headerBgColor || '#0B1220'}
+            onHeaderBgColorChange={(headerBgColor) => {
+              if (!activeCallsheetDayId) return
+              updateCallsheet(activeCallsheetDayId, { headerBgColor })
+            }}
           />
         </>
       )}

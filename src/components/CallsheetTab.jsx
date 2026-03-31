@@ -240,8 +240,6 @@ function SidebarCard({ title, meta, tone = 'default', collapsed = false, onToggl
 
 function CallsheetSidebar({
   warnings,
-  callsheetSectionConfig,
-  setCallsheetSectionConfig,
   collapseState,
   setCollapseState,
   onWarningJump,
@@ -252,12 +250,10 @@ function CallsheetSidebar({
   readinessLabel,
   statusMessage,
 }) {
-  const visibleCount = (callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).filter(section => section.visible).length
   return (
     <SidebarPane
       width={286}
       title="Callsheet"
-      controls={<div style={{ fontSize: 11, color: '#64748B' }}>Missing info and section visibility</div>}
     >
       <div style={{ padding: 10, display: 'grid', gap: 10 }}>
         <SidebarCard title="Actions" collapsed={collapseState.actions} onToggle={() => setCollapseState(prev => ({ ...prev, actions: !prev.actions }))}>
@@ -277,20 +273,7 @@ function CallsheetSidebar({
           </div>
         </SidebarCard>
 
-        <SidebarCard title="Visible sections" meta={`(${visibleCount})`} collapsed={collapseState.visibleSections} onToggle={() => setCollapseState(prev => ({ ...prev, visibleSections: !prev.visibleSections }))}>
-          <div style={{ display: 'grid', gap: 7 }}>
-            {(callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(section => (
-              <label key={section.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 9px', border: '1px solid #CBD5E1', borderRadius: 7, fontSize: 12, background: '#fff' }}>
-                <span>{section.label}</span>
-                <input
-                  type="checkbox"
-                  checked={section.visible}
-                  onChange={(e) => setCallsheetSectionConfig((callsheetSectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(item => item.key === section.key ? { ...item, visible: e.target.checked } : item))}
-                />
-              </label>
-            ))}
-          </div>
-        </SidebarCard>
+
 
         <SidebarCard title="Missing critical info" meta={`(${warnings.length})`} tone="alert" collapsed={collapseState.missingInfo} onToggle={() => setCollapseState(prev => ({ ...prev, missingInfo: !prev.missingInfo }))}>
           {warnings.length > 0 ? (
@@ -627,27 +610,23 @@ export default function CallsheetTab({ configureOpen = true }) {
       <DayTabBar days={dayTabs} activeDay={activeDay.id} onSelect={setSelectedDayId} />
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        {configureOpen ? (
-          <CallsheetSidebar
-            warnings={warnings}
-            callsheetSectionConfig={callsheetSectionConfig}
-            setCallsheetSectionConfig={setCallsheetSectionConfig}
-            collapseState={collapseState}
-            setCollapseState={setCollapseState}
-            onWarningJump={handleWarningJump}
-            onExportPdf={exportCurrentDayPDF}
-            onOpenEmailPreflight={() => setEmailPreflightOpen(true)}
-            recipientsReadyCount={recipientSummary.ready.length}
-            missingEmailCount={recipientSummary.missing.length}
-            readinessLabel={readinessLabel}
-            statusMessage={statusMessage}
-          />
-        ) : null}
+        <CallsheetSidebar
+          warnings={warnings}
+          collapseState={collapseState}
+          setCollapseState={setCollapseState}
+          onWarningJump={handleWarningJump}
+          onExportPdf={exportCurrentDayPDF}
+          onOpenEmailPreflight={() => setEmailPreflightOpen(true)}
+          recipientsReadyCount={recipientSummary.ready.length}
+          missingEmailCount={recipientSummary.missing.length}
+          readinessLabel={readinessLabel}
+          statusMessage={statusMessage}
+        />
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
           <div style={{ maxWidth: 1280, margin: '0 auto', display: 'grid', gap: 14 }}>
-            <header style={{ background: '#0B1220', color: '#F8FAFC', borderRadius: 10, padding: 16, display: 'grid', gap: 14, boxShadow: 'var(--app-panel-shadow)' }}>
+            <header style={{ background: callsheet.headerBgColor || '#0B1220', color: '#F8FAFC', borderRadius: 10, padding: 16, display: 'grid', gap: 14, boxShadow: 'var(--app-panel-shadow)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
                 <div>
                   <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8', fontWeight: 700 }}>Production Callsheet</div>
