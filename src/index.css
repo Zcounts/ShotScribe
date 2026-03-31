@@ -125,7 +125,7 @@
 
   .script-view-btn.is-active {
     background: var(--ss-surface-blue);
-    border-color: rgba(82,101,236,1);
+    border-color: rgba(82,101,236,0.56);
     color: #1f2e56;
   }
 
@@ -933,10 +933,10 @@
   .ss-btn.is-outline.is-active,
   .ss-btn.is-outline[aria-pressed="true"],
   .ss-btn.is-outline[aria-selected="true"] {
-    border-color: rgba(74,85,104,1);
+    border-color: rgba(74,85,104,0.46);
     background: color-mix(in srgb, var(--ss-surface-blue) 72%, white 28%);
     color: #1f2e56;
-    box-shadow: inset 0 0 0 1px rgba(82,101,236,0.22);
+    box-shadow: inset 0 0 0 1px rgba(82,101,236,0.12);
   }
 
   .ss-btn.icon-toggle {
