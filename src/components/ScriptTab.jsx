@@ -14,6 +14,13 @@ import {
   getBlockStyleForType,
   normalizeDocumentSettings,
 } from '../utils/scriptDocumentFormatting'
+import headingIcon from '../../assets/script icons/heading.svg'
+import actionIcon from '../../assets/script icons/action.svg'
+import characterIcon from '../../assets/script icons/character.svg'
+import dialogueIcon from '../../assets/script icons/Dialogue.svg'
+import parentheticalIcon from '../../assets/script icons/parentheses.svg'
+import transitionIcon from '../../assets/script icons/arrow-right.svg'
+import centeredIcon from '../../assets/script icons/align-center.svg'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write' },
@@ -66,6 +73,16 @@ const BLOCK_TYPE_OPTIONS = [
   { value: 'centered', label: 'Centered Text' },
 ]
 
+const BLOCK_TYPE_ICON_MAP = {
+  heading: headingIcon,
+  action: actionIcon,
+  character: characterIcon,
+  dialogue: dialogueIcon,
+  parenthetical: parentheticalIcon,
+  transition: transitionIcon,
+  centered: centeredIcon,
+}
+
 function inchesToPx(value) {
   return Math.round((Number(value) || 0) * PX_PER_INCH)
 }
@@ -109,15 +126,41 @@ function InlineInchField({ label, valuePx, onChangePx, min = 0, max = null }) {
     <label style={{ display: 'grid', gridTemplateColumns: '1fr 74px', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
       <span>{label}</span>
       <input
+        className="ss-input"
         type="number"
         step="0.05"
         min={min != null ? pxToInches(min) : undefined}
         max={max != null ? pxToInches(max) : undefined}
         value={pxToInches(valuePx)}
         onChange={(event) => onChangePx(inchesToPx(event.target.value))}
-        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 5, padding: '4px 6px', fontSize: 12 }}
+        style={{ width: '100%', padding: '4px 6px', fontSize: 12 }}
       />
     </label>
+  )
+}
+
+function BlockTypeIconSelector({ value, onChange, disabled = false }) {
+  return (
+    <div className="script-block-type-selector" role="radiogroup" aria-label="Current line / block type">
+      {BLOCK_TYPE_OPTIONS.map((option) => {
+        const selected = option.value === value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            aria-label={option.label}
+            title={option.label}
+            disabled={disabled}
+            className={`script-block-type-btn ${selected ? 'is-selected' : ''}`}
+            onClick={() => onChange(option.value)}
+          >
+            <img src={BLOCK_TYPE_ICON_MAP[option.value]} alt="" aria-hidden="true" />
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -939,21 +982,16 @@ export default function ScriptTab() {
   return (
     <>
       <div style={{ display: 'flex', height: '100%' }}>
-        <div style={{ width: 290, borderRight: '1px solid rgba(148,163,184,0.3)', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(148,163,184,0.25)' }}>
+        <div className="script-sidebar script-sidebar-left">
+          <div className="script-sidebar-top">
             <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8 }}>SCRIPT</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {VIEW_OPTIONS.map(option => (
                 <button
                   key={option.id}
                   onClick={() => setView(option.id)}
-                  style={{
-                    border: '1px solid rgba(100,116,139,0.35)',
-                    borderRadius: 999,
-                    padding: '5px 10px',
-                    fontSize: 12,
-                    background: view === option.id ? 'rgba(30,41,59,0.1)' : '#fff',
-                  }}
+                  className={`ss-btn outline script-view-btn ${view === option.id ? 'is-active' : ''}`}
+                  style={{ borderRadius: 999, padding: '5px 10px', fontSize: 12 }}
                 >
                   {option.label}
                 </button>
@@ -965,54 +1003,43 @@ export default function ScriptTab() {
             <div style={{ height: viewHeight, minHeight: PANEL_HEADER_HEIGHT, borderBottom: '1px solid rgba(148,163,184,0.2)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <button
                 onClick={() => setIsViewPanelCollapsed(value => !value)}
-                style={{
-                  height: PANEL_HEADER_HEIGHT,
-                  width: '100%',
-                  border: 'none',
-                  borderBottom: '1px solid rgba(148,163,184,0.15)',
-                  padding: '8px 12px',
-                  textAlign: 'left',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  background: '#eef2ff',
-                }}
+                className="script-pane-header-btn"
+                style={{ height: PANEL_HEADER_HEIGHT, width: '100%' }}
               >
                 {isViewPanelCollapsed ? '▸ View Panel' : `▾ ${VIEW_OPTIONS.find(option => option.id === view)?.label} Panel`}
               </button>
 
               {!isViewPanelCollapsed && (
-                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12 }}>
+                <div className="script-sidebar-scroll">
                   {view === 'write' && (
                     <>
                       <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
                       <select
+                        className="ss-input"
                         value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
                         onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 8 }}
+                        style={{ width: '100%', padding: '5px 6px', fontSize: 12, marginBottom: 8 }}
                       >
                         <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
                         <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
                       </select>
 
                       <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Current line / block type</label>
-                      <select
+                      <BlockTypeIconSelector
                         value={selectedStyleType}
-                        onChange={(event) => {
+                        onChange={(nextType) => {
                           if (!selectedBlock) return
-                          setBlockType(selectedBlock.sceneId, selectedBlock.blockId, event.target.value)
+                          setBlockType(selectedBlock.sceneId, selectedBlock.blockId, nextType)
                         }}
                         disabled={!selectedBlock}
-                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 8 }}
-                      >
-                        {BLOCK_TYPE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
+                      />
 
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Write options</div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 }}>
+                      <label className="script-checkbox-row">
                         <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
                         Bold Slugline
                       </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8 }}>
+                      <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
                         <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
                         Bold Character
                       </label>
@@ -1027,9 +1054,10 @@ export default function ScriptTab() {
                     <div>
                       <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
                       <select
+                        className="ss-input"
                         value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
                         onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
+                        style={{ width: '100%', padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
                       >
                         <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
                         <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
@@ -1051,9 +1079,10 @@ export default function ScriptTab() {
                     <div>
                       <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
                       <select
+                        className="ss-input"
                         value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
                         onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
+                        style={{ width: '100%', padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
                       >
                         <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
                         <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
@@ -1094,17 +1123,8 @@ export default function ScriptTab() {
             <div style={{ height: sceneHeight, minHeight: PANEL_HEADER_HEIGHT, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <button
                 onClick={() => setIsScenePanelCollapsed(value => !value)}
-                style={{
-                  height: PANEL_HEADER_HEIGHT,
-                  width: '100%',
-                  border: 'none',
-                  borderBottom: '1px solid rgba(148,163,184,0.2)',
-                  padding: '8px 12px',
-                  textAlign: 'left',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  background: '#eef2ff',
-                }}
+                className="script-pane-header-btn"
+                style={{ height: PANEL_HEADER_HEIGHT, width: '100%' }}
               >
                 {isScenePanelCollapsed ? '▸ Scenes' : '▾ Scenes'}
               </button>
@@ -1305,42 +1325,40 @@ export default function ScriptTab() {
             </div>
           </div>
 
-          <div style={{ width: 318, borderLeft: '1px solid rgba(148,163,184,0.25)', background: '#f8fafc', padding: 12, overflowY: 'auto' }}>
+          <div className="script-sidebar script-sidebar-right">
             {[
               { id: 'currentBlock', title: 'Current line / block type' },
               { id: 'writeOptions', title: 'Write panel options' },
               { id: 'pageSetup', title: 'Page Setup' },
               { id: 'elementStyles', title: 'Element Styles' },
             ].map(section => (
-              <section key={section.id} style={{ border: '1px solid rgba(148,163,184,0.3)', borderRadius: 8, background: '#fff', marginBottom: 10 }}>
+              <section key={section.id} className="ss-module script-inspector-section">
                 <button
                   onClick={() => setInspectorSections(prev => ({ ...prev, [section.id]: !prev[section.id] }))}
-                  style={{ width: '100%', border: 'none', background: '#f8fafc', borderBottom: inspectorSections[section.id] ? '1px solid rgba(148,163,184,0.2)' : 'none', padding: '8px 10px', textAlign: 'left', fontSize: 12, fontWeight: 700 }}
+                  className="ss-module-header script-inspector-header"
+                  style={{ width: '100%', borderBottom: inspectorSections[section.id] ? '1px solid rgba(148,163,184,0.2)' : 'none', textAlign: 'left', fontSize: 12, fontWeight: 700 }}
                 >
                   {inspectorSections[section.id] ? '▾' : '▸'} {section.title}
                 </button>
                 {inspectorSections[section.id] && (
                   <div style={{ padding: 10 }}>
                     {section.id === 'currentBlock' && (
-                      <select
+                      <BlockTypeIconSelector
                         value={selectedStyleType}
-                        onChange={(event) => {
+                        onChange={(nextType) => {
                           if (!selectedBlock) return
-                          setBlockType(selectedBlock.sceneId, selectedBlock.blockId, event.target.value)
+                          setBlockType(selectedBlock.sceneId, selectedBlock.blockId, nextType)
                         }}
                         disabled={!selectedBlock || view !== 'write'}
-                        style={{ width: '100%', border: '1px solid rgba(100,116,139,0.35)', borderRadius: 6, padding: '5px 6px', fontSize: 12 }}
-                      >
-                        {BLOCK_TYPE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
+                      />
                     )}
                     {section.id === 'writeOptions' && (
                       <>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8 }}>
+                        <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
                           <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
                           Bold Slugline
                         </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                        <label className="script-checkbox-row">
                           <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
                           Bold Character
                         </label>
@@ -1386,8 +1404,8 @@ export default function ScriptTab() {
               </section>
             ))}
 
-            <section style={{ border: '1px solid rgba(148,163,184,0.3)', borderRadius: 8, background: '#fff', marginBottom: 10 }}>
-              <div style={{ width: '100%', background: '#f8fafc', borderBottom: '1px solid rgba(148,163,184,0.2)', padding: '8px 10px', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
+            <section className="ss-module script-inspector-section">
+              <div className="ss-module-header script-inspector-header" style={{ width: '100%', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
                 Imported Scripts
               </div>
               <div style={{ padding: 10 }}>
@@ -1398,7 +1416,7 @@ export default function ScriptTab() {
                     <button onClick={() => setScriptDeleteConfirm(sc)} style={{ border: 'none', background: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer', padding: 0 }}>✕</button>
                   </div>
                 ))}
-                <button onClick={() => setShowImportModal(true)} style={{ width: '100%', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 5, padding: 7, marginTop: 8 }}>+ Import Script</button>
+                <button className="ss-btn secondary" onClick={() => setShowImportModal(true)} style={{ width: '100%', marginTop: 8 }}>+ Import Script</button>
               </div>
             </section>
           </div>

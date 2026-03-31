@@ -96,6 +96,132 @@
   .ss-module-header.is-burgundy { background: var(--ss-surface-burgundy); }
   .ss-module-header.is-mustard { background: var(--ss-surface-mustard); }
 
+  .script-sidebar {
+    background: color-mix(in srgb, var(--ss-paper) 92%, white 8%);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .script-sidebar-left {
+    width: 290px;
+    border-right: 1px solid rgba(74,85,104,0.16);
+  }
+
+  .script-sidebar-right {
+    width: 318px;
+    border-left: 1px solid rgba(74,85,104,0.16);
+    padding: 12px;
+    overflow-y: auto;
+  }
+
+  .script-sidebar-top {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(74,85,104,0.16);
+    background: var(--ss-surface-slate);
+  }
+
+  .script-view-btn.is-active {
+    background: var(--ss-surface-blue);
+    border-color: rgba(82,101,236,0.36);
+    color: #1f2e56;
+  }
+
+  .script-pane-header-btn {
+    border: none;
+    border-bottom: 1px solid rgba(74,85,104,0.14);
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--ss-surface-blue);
+    color: #2c3e65;
+    cursor: pointer;
+  }
+
+  .script-sidebar-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+  }
+
+  .script-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    margin-bottom: 6px;
+    color: #334155;
+  }
+
+  .script-inspector-section {
+    overflow: hidden;
+    margin-bottom: 10px;
+    border-radius: 8px;
+  }
+
+  .script-inspector-header {
+    padding: 8px 10px;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    cursor: pointer;
+  }
+
+  .script-block-type-selector {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--ss-input-border);
+    border-radius: 8px;
+    background: var(--ss-input-bg);
+    margin-bottom: 8px;
+  }
+
+  .script-block-type-btn {
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ss-muted-ink);
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+
+  .script-block-type-btn:hover {
+    background: rgba(82,101,236,0.08);
+    border-color: rgba(82,101,236,0.22);
+  }
+
+  .script-block-type-btn:focus-visible {
+    outline: none;
+    border-color: var(--ss-input-focus);
+    box-shadow: 0 0 0 2px var(--ss-input-focus-ring);
+  }
+
+  .script-block-type-btn.is-selected {
+    background: var(--ss-surface-blue);
+    border-color: rgba(82,101,236,0.36);
+    color: #22396d;
+  }
+
+  .script-block-type-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .script-block-type-btn img {
+    width: 15px;
+    height: 15px;
+    display: block;
+  }
+
   /* Pages container — centres all page-document divs vertically */
   .pages-container {
     display: flex;
