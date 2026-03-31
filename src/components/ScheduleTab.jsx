@@ -3314,7 +3314,6 @@ export default function ScheduleTab({
     actions: true,
     selectedDay: true,
     display: true,
-    configure: true,
     summary: true,
   }))
 
@@ -3356,12 +3355,6 @@ export default function ScheduleTab({
 
   const [listActiveDayId, setListActiveDayId] = useState(scheduleViewState.listActiveDayId || null)
   const containerRef = useRef(null)
-
-  useEffect(() => {
-    if (!configureOpen) return
-    setSectionOpen(prev => ({ ...prev, configure: true }))
-    onConfigureOpenChange(false)
-  }, [configureOpen, onConfigureOpenChange])
 
   // ── DnD state ───────────────────────────────────────────────────────────────
 
@@ -3553,6 +3546,11 @@ export default function ScheduleTab({
     }
   }, [listActiveDayId, removeShootingDay])
 
+  const handleAddDay = useCallback(() => {
+    const newDayId = addShootingDay()
+    if (newDayId) setListActiveDayId(newDayId)
+  }, [addShootingDay])
+
   useEffect(() => {
     const node = containerRef.current
     if (!node) return
@@ -3632,17 +3630,27 @@ export default function ScheduleTab({
                 <div>Selected: {selectedDayShotBlocks.length} strips · {selectedDayPages > 0 ? selectedDayPages.toFixed(2) : '0.00'} pgs · {selectedDayShootMins > 0 ? formatMins(selectedDayShootMins) : '0m'}</div>
               </div>
             </AccordionSection>
-            <AccordionSection title="Configure" isOpen={sectionOpen.configure} onToggle={() => setSectionOpen(prev => ({ ...prev, configure: !prev.configure }))}>
-              {scheduleView === 'list'
-                ? <ScheduleColumnConfigList config={safeColumnConfig} onChange={setScheduleColumnConfig} />
-                : <div style={{ fontSize: 11, color: '#64748b' }}>No additional options for this view.</div>}
-            </AccordionSection>
           </SidebarPane>
           <div style={{ flex: 1, minWidth: 0, paddingLeft: 10 }}>
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
       ) : scheduleView === 'calendar' ? (
-        // ── Calendar view ──────────────────────────────────────────────────
+        <>
+          <div style={{ position: 'sticky', top: LIST_DAY_TAB_BAR_TOP, zIndex: 30, marginBottom: 4 }}>
+            <DayTabBar
+              days={dayTabs}
+              activeDay={listActiveDayId}
+              onSelect={(dayId) => {
+                setListActiveDayId(dayId)
+                if (scheduleView !== 'list') return
+                const el = document.getElementById(`sched-day-${dayId}`)
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+              onAddDay={handleAddDay}
+              onDeleteDay={handleDeleteDay}
+              enableDayContextMenu
+            />
+          </div>
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>Calendar view is temporarily unavailable for this data. Switch to List or Stripboard.</div>}>
         <CalendarView
           schedule={schedule}
@@ -3653,6 +3661,7 @@ export default function ScheduleTab({
           pageCountByScene={pageCountByScene}
         />
         </ScheduleSubviewBoundary>
+        </>
       ) : scheduleView === 'list' ? (
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>List view failed to render for current data. Try another view.</div>}>
         <div>
@@ -3665,6 +3674,7 @@ export default function ScheduleTab({
                     const el = document.getElementById(`sched-day-${dayId}`)
                     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                   }}
+                  onAddDay={handleAddDay}
                   onDeleteDay={handleDeleteDay}
                   enableDayContextMenu
                 />
@@ -3724,7 +3734,17 @@ export default function ScheduleTab({
             </div>
         </ScheduleSubviewBoundary>
           ) : (
-        // ── Stripboard view ────────────────────────────────────────────────────
+        <>
+        <div style={{ position: 'sticky', top: LIST_DAY_TAB_BAR_TOP, zIndex: 30, marginBottom: 4 }}>
+          <DayTabBar
+            days={dayTabs}
+            activeDay={listActiveDayId}
+            onSelect={(dayId) => setListActiveDayId(dayId)}
+            onAddDay={handleAddDay}
+            onDeleteDay={handleDeleteDay}
+            enableDayContextMenu
+          />
+        </div>
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>Stripboard view is temporarily unavailable for this data. Switch to List or Calendar.</div>}>
         <DndContext
           sensors={sensors}
@@ -3815,10 +3835,55 @@ export default function ScheduleTab({
               </DragOverlay>
             </DndContext>
         </ScheduleSubviewBoundary>
+        </>
       )}
           </div>
         </div>
       </div>
+      <div
+        onClick={() => onConfigureOpenChange(false)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.3)',
+          zIndex: 150,
+          opacity: configureOpen ? 1 : 0,
+          pointerEvents: configureOpen ? 'auto' : 'none',
+          transition: 'opacity 200ms ease',
+        }}
+      />
+      <aside
+        role="dialog"
+        aria-label="Schedule Configure"
+        aria-hidden={!configureOpen}
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          width: 'min(400px, calc(100vw - 24px))',
+          height: '100vh',
+          zIndex: 160,
+          background: '#F7F3EC',
+          borderLeft: '1px solid rgba(74,85,104,0.28)',
+          boxShadow: '-16px 0 36px rgba(0,0,0,0.22)',
+          transform: configureOpen ? 'translateX(0)' : 'translateX(104%)',
+          transition: 'transform 220ms ease',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid rgba(74,85,104,0.2)', background: '#1C1C1E' }}>
+          <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A0AEC0', fontWeight: 700 }}>Schedule</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#FAF8F4', marginTop: 2 }}>Configure</div>
+        </div>
+        <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gap: 10 }}>
+          {scheduleView === 'list'
+            ? <ScheduleColumnConfigList config={safeColumnConfig} onChange={setScheduleColumnConfig} />
+            : <div style={{ fontSize: 11, color: '#64748b' }}>No additional options for this view.</div>}
+        </div>
+      </aside>
     </div>
   )
 }
