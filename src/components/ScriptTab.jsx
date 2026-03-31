@@ -302,6 +302,8 @@ export default function ScriptTab() {
   const setScriptSettings = useStore(s => s.setScriptSettings)
   const updateScriptSceneScreenplay = useStore(s => s.updateScriptSceneScreenplay)
   const importScriptScenes = useStore(s => s.importScriptScenes)
+  const importedScripts = useStore(s => s.importedScripts)
+  const deleteImportedScript = useStore(s => s.deleteImportedScript)
   const openShotDialog = useStore(s => s.openShotDialog)
   const linkShotToScene = useStore(s => s.linkShotToScene)
 
@@ -309,6 +311,7 @@ export default function ScriptTab() {
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
 
   const [isViewPanelCollapsed, setIsViewPanelCollapsed] = useState(() => readStoredBoolean(SIDEBAR_STORAGE_KEYS.viewCollapsed, false))
   const [isScenePanelCollapsed, setIsScenePanelCollapsed] = useState(() => readStoredBoolean(SIDEBAR_STORAGE_KEYS.sceneCollapsed, false))
@@ -1382,6 +1385,22 @@ export default function ScriptTab() {
                 )}
               </section>
             ))}
+
+            <section style={{ border: '1px solid rgba(148,163,184,0.3)', borderRadius: 8, background: '#fff', marginBottom: 10 }}>
+              <div style={{ width: '100%', background: '#f8fafc', borderBottom: '1px solid rgba(148,163,184,0.2)', padding: '8px 10px', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
+                Imported Scripts
+              </div>
+              <div style={{ padding: 10 }}>
+                {importedScripts.length === 0 && <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>No imported scripts yet.</div>}
+                {importedScripts.map(sc => (
+                  <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid rgba(74,85,104,0.08)', padding: '6px 0' }}>
+                    <div style={{ flex: 1, fontSize: 11, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={sc.filename}>{sc.filename}</div>
+                    <button onClick={() => setScriptDeleteConfirm(sc)} style={{ border: 'none', background: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer', padding: 0 }}>✕</button>
+                  </div>
+                ))}
+                <button onClick={() => setShowImportModal(true)} style={{ width: '100%', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 5, padding: 7, marginTop: 8 }}>+ Import Script</button>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -1432,6 +1451,30 @@ export default function ScriptTab() {
           </div>
           <div style={{ padding: 10, borderTop: '1px solid rgba(148,163,184,0.2)', textAlign: 'right' }}>
             <button className="toolbar-btn" onClick={() => setSelectionDraft(null)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {scriptDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => setScriptDeleteConfirm(null)}>
+          <div className="modal app-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <h3 className="dialog-title">Remove imported script?</h3>
+            <p className="dialog-description">
+              <strong>{scriptDeleteConfirm.filename}</strong> will be removed, including its imported scenes and derived script data in this project.
+            </p>
+            <p className="dialog-description" style={{ marginBottom: 18 }}>This action cannot be undone.</p>
+            <div className="dialog-actions">
+              <button className="dialog-button-secondary" onClick={() => setScriptDeleteConfirm(null)}>Cancel</button>
+              <button
+                className="dialog-button-danger"
+                onClick={() => {
+                  deleteImportedScript(scriptDeleteConfirm.id)
+                  setScriptDeleteConfirm(null)
+                }}
+              >
+                Remove Script
+              </button>
+            </div>
           </div>
         </div>
       )}
