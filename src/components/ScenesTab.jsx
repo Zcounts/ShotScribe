@@ -5,11 +5,14 @@ import SceneColorPicker from './SceneColorPicker'
 import ScenePropertiesPanel, { CharacterTagInput } from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 import SidebarPane from './SidebarPane'
+import compactIcon from '../../assets/script icons/compct.svg'
+import visualIcon from '../../assets/script icons/visual.svg'
+import listIcon from '../../assets/script icons/list.svg'
 
 const VIEW_MODES = [
-  { value: 'compactGrid', label: 'Compact' },
-  { value: 'visualGrid', label: 'Visual' },
-  { value: 'productionList', label: 'List' },
+  { value: 'compactGrid', label: 'Compact', icon: compactIcon },
+  { value: 'visualGrid', label: 'Visual', icon: visualIcon },
+  { value: 'productionList', label: 'List', icon: listIcon },
 ]
 
 const COLUMN_OPTIONS_BY_MODE = {
@@ -302,19 +305,16 @@ export default function ScenesTab({
                 <button
                   key={mode.value}
                   onClick={() => setViewMode(mode.value)}
+                  className={`ss-btn outline icon-toggle ${viewMode === mode.value ? 'is-active' : ''}`}
+                  aria-label={mode.label}
+                  title={mode.label}
+                  aria-pressed={viewMode === mode.value}
                   style={{
-                    border: `1px solid ${viewMode === mode.value ? '#334155' : 'rgba(100,116,139,0.35)'}`,
-                    background: viewMode === mode.value ? '#e2e8f0' : '#fff',
-                    color: '#334155',
                     borderRadius: 4,
                     padding: '6px 4px',
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                    fontWeight: 700,
-                    cursor: 'pointer',
                   }}
                 >
-                  {mode.label}
+                  <img src={mode.icon} alt="" aria-hidden="true" />
                 </button>
               ))}
             </div>

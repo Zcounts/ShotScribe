@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react'
 import useStore from '../store'
 import { SubTabNav } from './SubTabNav'
 import SidebarPane from './SidebarPane'
+import visualIcon from '../../assets/script icons/visual.svg'
+import listIcon from '../../assets/script icons/list.svg'
 
 function isNightShot(shotData) {
   const dayNight = String(shotData?.dayNight || '').toUpperCase()
@@ -128,7 +130,10 @@ export default function CastCrewTab() {
           controls={(
             <div style={{ display: 'grid', gap: 8 }}>
               <SubTabNav
-                tabs={['Visual', 'List']}
+                tabs={[
+                  { value: 'Visual', label: 'Visual', icon: visualIcon },
+                  { value: 'List', label: 'List', icon: listIcon },
+                ]}
                 active={activeSubTab}
                 onChange={setActiveSubTab}
                 fullWidth

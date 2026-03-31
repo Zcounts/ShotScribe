@@ -3668,7 +3668,7 @@ export default function ScheduleTab({
                     type="button"
                     key={view.key}
                     onClick={() => setScheduleView(view.key)}
-                    className={`ss-btn outline schedule-view-switcher-btn ${scheduleView === view.key ? 'is-active' : ''}`}
+                    className={`ss-btn outline icon-toggle schedule-view-switcher-btn ${scheduleView === view.key ? 'is-active' : ''}`}
                     aria-pressed={scheduleView === view.key}
                     aria-label={`${view.label} view`}
                     title={`${view.label} view`}

@@ -21,11 +21,14 @@ import dialogueIcon from '../../assets/script icons/Dialogue.svg'
 import parentheticalIcon from '../../assets/script icons/parentheses.svg'
 import transitionIcon from '../../assets/script icons/arrow-right.svg'
 import centeredIcon from '../../assets/script icons/align-center.svg'
+import writeIcon from '../../assets/script icons/write.svg'
+import breakdownIcon from '../../assets/script icons/breakdown.svg'
+import visualizeIcon from '../../assets/script icons/visualize.svg'
 
 const VIEW_OPTIONS = [
-  { id: 'write', label: 'Write' },
-  { id: 'breakdown', label: 'Breakdown' },
-  { id: 'visualize', label: 'Visualize' },
+  { id: 'write', label: 'Write', icon: writeIcon },
+  { id: 'breakdown', label: 'Breakdown', icon: breakdownIcon },
+  { id: 'visualize', label: 'Visualize', icon: visualizeIcon },
 ]
 
 const BREAKDOWN_CATEGORIES = [
@@ -990,10 +993,13 @@ export default function ScriptTab() {
                 <button
                   key={option.id}
                   onClick={() => setView(option.id)}
-                  className={`ss-btn outline script-view-btn ${view === option.id ? 'is-active' : ''}`}
-                  style={{ borderRadius: 999, padding: '5px 10px', fontSize: 12 }}
+                  className={`ss-btn outline icon-toggle script-view-btn ${view === option.id ? 'is-active' : ''}`}
+                  aria-label={option.label}
+                  title={option.label}
+                  aria-pressed={view === option.id}
+                  style={{ borderRadius: 999, padding: '5px 10px', fontSize: 12, minWidth: 56 }}
                 >
-                  {option.label}
+                  <img src={option.icon} alt="" aria-hidden="true" />
                 </button>
               ))}
             </div>
