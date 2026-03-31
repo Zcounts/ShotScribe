@@ -21,7 +21,6 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const activeTab = useStore(s => s.activeTab)
   const shotCount = scenes.reduce((acc, s) => acc + s.shots.length, 0)
   const sceneCount = scenes.length
-  const toggleSettings = useStore(s => s.toggleSettings)
   const saveProject = useStore(s => s.saveProject)
   const saveProjectAs = useStore(s => s.saveProjectAs)
   const openProject = useStore(s => s.openProject)
@@ -33,16 +32,18 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
   const [editingName, setEditingName] = useState(false)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const [emojiInput, setEmojiInput] = useState('')
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportTab, setExportTab] = useState('pdf')
   const [pdfMenuOpen, setPdfMenuOpen] = useState(false)
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
   const [unsavedDialog, setUnsavedDialog] = useState(null) // { action: fn }
+  const exportMenuRef = useRef(null)
   const pdfMenuRef = useRef(null)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
-  const mobileMenuRef = useRef(null)
   const emojiPickerRef = useRef(null)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileExportMode, setMobileExportMode] = useState(null) // 'day' | 'snapshot' | null
   const schedule = useStore(s => s.schedule)
   const getProjectData = useStore(s => s.getProjectData)
@@ -69,6 +70,17 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [pdfMenuOpen])
+
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    const handler = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [exportMenuOpen])
 
   // Close Save menu when clicking outside it
   useEffect(() => {
@@ -104,17 +116,6 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [emojiPickerOpen])
-
-  useEffect(() => {
-    if (!mobileMenuOpen) return
-    const handler = (e) => {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
-        setMobileMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [mobileMenuOpen])
 
   useEffect(() => {
     if (!schedule.length) {
@@ -159,6 +160,11 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
         ? 'Callsheet'
         : 'Storyboard'
   const emojiChoices = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
+  const openExportModal = (tab = 'pdf') => {
+    setExportTab(tab)
+    setExportModalOpen(true)
+    setExportMenuOpen(false)
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
@@ -473,23 +479,21 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
         </div>
       </div>
 
-      {/* Right: Export + Settings */}
+      {/* Right: Export */}
       <div className="flex items-center gap-2">
-
-        {/* Split PDF button: left half exports for the active tab, right half opens a choice menu */}
-        <div ref={pdfMenuRef} style={{ position: 'relative', display: 'flex' }}>
+        <div ref={exportMenuRef} style={{ position: 'relative', display: 'flex' }}>
           <button
             className="toolbar-btn"
-            onClick={handlePdfMain}
-            title={`Export ${tabPdfLabel} PDF`}
+            onClick={() => openExportModal('pdf')}
+            title="Open export options"
             style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
           >
-            PDF
+            EXPORT
           </button>
           <button
             className="toolbar-btn"
-            onClick={() => setPdfMenuOpen(o => !o)}
-            title="Choose PDF export type"
+            onClick={() => setExportMenuOpen(o => !o)}
+            title="Choose export type"
             style={{
               borderRadius: '0 4px 4px 0',
               borderLeft: '1px solid rgba(255,255,255,0.15)',
@@ -500,7 +504,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
             ▾
           </button>
 
-          {pdfMenuOpen && (
+          {exportMenuOpen && (
             <div style={{
               position: 'absolute',
               top: 'calc(100% + 4px)',
@@ -514,7 +518,7 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
               overflow: 'hidden',
             }}>
               <button
-                onClick={() => handlePdfExplicit('storyboard')}
+                onClick={() => openExportModal('pdf')}
                 style={{
                   display: 'block',
                   width: '100%',
@@ -530,10 +534,10 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
-                Export Storyboard PDF
+                PDF
               </button>
               <button
-                onClick={() => handlePdfExplicit('shotlist')}
+                onClick={() => openExportModal('png')}
                 style={{
                   display: 'block',
                   width: '100%',
@@ -550,10 +554,10 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
-                Export Shotlist PDF
+                PNG
               </button>
               <button
-                onClick={() => handlePdfExplicit('schedule')}
+                onClick={() => openExportModal('mobile')}
                 style={{
                   display: 'block',
                   width: '100%',
@@ -570,161 +574,178 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
-                Export Schedule PDF
-              </button>
-              <button
-                onClick={() => handlePdfExplicit('callsheet')}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 14px',
-                  textAlign: 'left',
-                  background: 'none',
-                  border: 'none',
-                  borderTop: '1px solid rgba(255,255,255,0.08)',
-                  color: '#e0e0e0',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
-              >
-                Export Callsheet PDF
-              </button>
-              <button
-                onClick={() => handlePdfExplicit('all')}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 14px',
-                  textAlign: 'left',
-                  background: 'none',
-                  border: 'none',
-                  borderTop: '2px solid rgba(255,255,255,0.15)',
-                  color: '#93c5fd',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  fontWeight: 600,
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
-              >
-                Export All…
+                Mobile
               </button>
             </div>
           )}
         </div>
-
-        <button className="toolbar-btn" onClick={onExportPNG} title="Export Storyboard to PNG">
-          PNG
-        </button>
-        <div ref={mobileMenuRef} style={{ position: 'relative', display: 'flex' }}>
-          <button
-            className="toolbar-btn"
-            onClick={() => {
-              setMobileMenuOpen(false)
-              if (!schedule.length) {
-                alert('Add at least one shooting day in the Schedule tab before exporting a mobile package.')
-                return
-              }
-              setMobileExportMode('day')
-            }}
-            title="Export mobile day package"
-            style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
-          >
-            Mobile
-          </button>
-          <button
-            className="toolbar-btn"
-            onClick={() => setMobileMenuOpen(o => !o)}
-            title="Choose mobile export type"
-            style={{
-              borderRadius: '0 4px 4px 0',
-              borderLeft: '1px solid rgba(255,255,255,0.15)',
-              padding: '4px 6px',
-              fontSize: 9,
-            }}
-          >
-            ▾
-          </button>
-          {mobileMenuOpen && (
-            <div style={{
-              position: 'absolute',
-              top: 'calc(100% + 4px)',
-              right: 0,
-              zIndex: 500,
-              background: '#2a2a2a',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 4,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-              minWidth: 220,
-              overflow: 'hidden',
-            }}>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false)
-                  if (!schedule.length) {
-                    alert('Add at least one shooting day in the Schedule tab before exporting.')
-                    return
-                  }
-                  setMobileExportMode('day')
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 14px',
-                  textAlign: 'left',
-                  background: 'none',
-                  border: 'none',
-                  color: '#e0e0e0',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
-              >
-                Export Shoot Day Package…
-              </button>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false)
-                  if (!schedule.length) {
-                    alert('Add at least one shooting day in the Schedule tab before exporting.')
-                    return
-                  }
-                  setMobileExportMode('snapshot')
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 14px',
-                  textAlign: 'left',
-                  background: 'none',
-                  border: 'none',
-                  borderTop: '1px solid rgba(255,255,255,0.08)',
-                  color: '#e0e0e0',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
-              >
-                Export Project Snapshot…
-              </button>
-            </div>
-          )}
-        </div>
-        <button className="toolbar-btn" onClick={toggleSettings} title="Settings">
-          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="10" cy="10" r="3" />
-            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.9 4.9l1.4 1.4M13.7 13.7l1.4 1.4M4.9 15.1l1.4-1.4M13.7 6.3l1.4-1.4" />
-          </svg>
-        </button>
       </div>
+
+      {exportModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 9000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => setExportModalOpen(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#1e1e1e',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 8,
+              padding: '18px 20px',
+              maxWidth: 520,
+              width: '100%',
+            }}
+          >
+            <h3 style={{ margin: 0, color: '#FAF8F4', fontSize: 16 }}>Export</h3>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, marginBottom: 14 }}>
+              {['pdf', 'png', 'mobile'].map(tab => (
+                <button
+                  key={tab}
+                  className="toolbar-btn"
+                  onClick={() => setExportTab(tab)}
+                  style={exportTab === tab ? { background: '#E84040', borderColor: '#E84040', color: '#fff' } : {}}
+                >
+                  {tab === 'pdf' ? 'PDF' : tab === 'png' ? 'PNG' : 'Mobile'}
+                </button>
+              ))}
+            </div>
+
+            {exportTab === 'pdf' && (
+              <div ref={pdfMenuRef} style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', marginBottom: 10 }}>
+                  <button
+                    className="toolbar-btn"
+                    onClick={handlePdfMain}
+                    title={`Export ${tabPdfLabel} PDF`}
+                    style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
+                  >
+                    Export {tabPdfLabel} PDF
+                  </button>
+                  <button
+                    className="toolbar-btn"
+                    onClick={() => setPdfMenuOpen(o => !o)}
+                    title="Choose PDF export type"
+                    style={{
+                      borderRadius: '0 4px 4px 0',
+                      borderLeft: '1px solid rgba(255,255,255,0.15)',
+                      padding: '4px 6px',
+                      fontSize: 9,
+                    }}
+                  >
+                    ▾
+                  </button>
+                </div>
+
+                {pdfMenuOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% - 6px)',
+                    left: 0,
+                    zIndex: 500,
+                    background: '#2a2a2a',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: 4,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                    minWidth: 220,
+                    overflow: 'hidden',
+                  }}>
+                    <button
+                      onClick={() => handlePdfExplicit('storyboard')}
+                      style={{ display: 'block', width: '100%', padding: '8px 14px', textAlign: 'left', background: 'none', border: 'none', color: '#e0e0e0', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                    >
+                      Export Storyboard PDF
+                    </button>
+                    <button
+                      onClick={() => handlePdfExplicit('shotlist')}
+                      style={{ display: 'block', width: '100%', padding: '8px 14px', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', color: '#e0e0e0', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                    >
+                      Export Shotlist PDF
+                    </button>
+                    <button
+                      onClick={() => handlePdfExplicit('schedule')}
+                      style={{ display: 'block', width: '100%', padding: '8px 14px', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', color: '#e0e0e0', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                    >
+                      Export Schedule PDF
+                    </button>
+                    <button
+                      onClick={() => handlePdfExplicit('callsheet')}
+                      style={{ display: 'block', width: '100%', padding: '8px 14px', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', color: '#e0e0e0', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                    >
+                      Export Callsheet PDF
+                    </button>
+                    <button
+                      onClick={() => handlePdfExplicit('all')}
+                      style={{ display: 'block', width: '100%', padding: '8px 14px', textAlign: 'left', background: 'none', border: 'none', borderTop: '2px solid rgba(255,255,255,0.15)', color: '#93c5fd', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                    >
+                      Export All…
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {exportTab === 'png' && (
+              <button className="toolbar-btn" onClick={onExportPNG} title="Export Storyboard to PNG">
+                Export PNG
+              </button>
+            )}
+
+            {exportTab === 'mobile' && (
+              <div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="toolbar-btn"
+                    onClick={() => {
+                      if (!schedule.length) {
+                        alert('Add at least one shooting day in the Schedule tab before exporting.')
+                        return
+                      }
+                      setMobileExportMode('day')
+                    }}
+                  >
+                    Export Shoot Day Package…
+                  </button>
+                  <button
+                    className="toolbar-btn"
+                    onClick={() => {
+                      if (!schedule.length) {
+                        alert('Add at least one shooting day in the Schedule tab before exporting.')
+                        return
+                      }
+                      setMobileExportMode('snapshot')
+                    }}
+                  >
+                    Export Project Snapshot…
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+              <button className="toolbar-btn" onClick={() => setExportModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Unsaved changes dialog */}
       {mobileExportMode && (
