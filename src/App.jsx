@@ -503,7 +503,9 @@ export default function App() {
     }
   }, []) // eslint-disable-line
 
-  const isDark = theme === 'dark'
+  useEffect(() => {
+    document.body.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light')
+  }, [theme])
 
   // Compute page offset for each scene (for global page numbering)
   const scenePageOffsets = []
@@ -810,7 +812,7 @@ export default function App() {
   return (
     <div
       className="flex flex-col"
-      style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#F5F2EC' }}
+      style={{ height: '100vh', overflow: 'hidden', backgroundColor: 'var(--app-workspace-bg-base)' }}
       onClick={() => hideContextMenu()}
       onContextMenuCapture={handleEntityContextMenuCapture}
       onDoubleClickCapture={handleEntityDoubleClickCapture}

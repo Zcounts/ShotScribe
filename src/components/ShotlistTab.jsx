@@ -1110,7 +1110,6 @@ export default function ShotlistTab({
   const addShotBlock            = useStore(s => s.addShotBlock)
   const deleteShot              = useStore(s => s.deleteShot)
   const reorderShots            = useStore(s => s.reorderShots)
-  const theme                   = useStore(s => s.theme)
   const shotlistColumnConfig    = useStore(s => s.shotlistColumnConfig)
   const setShotlistColumnConfig = useStore(s => s.setShotlistColumnConfig)
   const customColumns           = useStore(s => s.customColumns)
@@ -1121,7 +1120,7 @@ export default function ShotlistTab({
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
   const shotlistViewState = useStore(s => s.tabViewState?.shotlist || {})
   const setTabViewState = useStore(s => s.setTabViewState)
-  const isDark = theme === 'dark'
+  const isDark = false
 
   const [selectedDayId, setSelectedDayId] = useState(shotlistViewState.selectedDayId || null)
   const [activeNavSceneId, setActiveNavSceneId] = useState(shotlistViewState.activeNavSceneId || null)
