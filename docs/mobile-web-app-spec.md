@@ -1,22 +1,23 @@
-# ShotScribe Mobile Web App Spec (Scaffold Placeholder)
+# ShotScribe Mobile Web App Spec (Current Scaffold)
 
 ## Summary
-This document defines the initial architecture direction for a separate ShotScribe mobile web companion app.
+This document defines the architecture direction for the ShotScribe mobile web companion.
 
-- Desktop Electron app remains the source of truth.
+- Main app target is static web-first.
 - Mobile app lives under `/mobile` as a standalone Vite React PWA.
 - Shared contracts/schemas/serialization/versioning/crypto helpers live under `/shared`.
-- Desktop includes placeholder services for export/publish/import flows.
-- Hosted project feed remains optional and deferred.
-
+- Main app can export mobile package JSON via `/src/services/mobile/mobileExportService.js`.
+- No hosted backend feed is included in this phase.
 
 ## Package setup choice
-To minimize risk to the existing desktop build and lockfile behavior, this scaffold uses **separate package folders** (`/mobile` and `/shared`) without introducing npm workspaces yet.
+To minimize risk to existing builds and lockfile behavior, mobile/shared remain separate package folders (`/mobile` and `/shared`) without npm workspaces.
 
 ## Current scaffold status
-- `/mobile`: created with buildable Vite React PWA skeleton.
-- `/shared`: created with placeholder TypeScript types, Zod schemas, and utilities.
-- `/src/services/mobile`: desktop placeholder service layer added.
+- `/mobile`: buildable Vite React PWA shell.
+- `/shared`: TypeScript types, Zod schemas, serializers, and helpers.
+- `/src/services/mobile`: export-only service for generating mobile package payloads.
 
 ## Deferred
-- End-to-end feature implementation (import/export UX, offline data sync behavior, hosted feed endpoints, and conflict resolution).
+- Cloud publish/sync flows.
+- Account-based distribution.
+- Server-side conflict resolution.

@@ -1,13 +1,20 @@
-# Platform service layer (desktop-first abstraction)
+# Platform service layer (web-first with desktop fallback)
 
-This phase introduces a single renderer-side abstraction in `src/services/platformService.js`.
+`src/services/platformService.js` is the single renderer-side platform boundary.
 
 ## Why this exists
 
-The React renderer should not call `window.electronAPI` directly from many components/stores.
-Instead, renderer code now routes desktop/native operations through one service boundary.
+UI/state code should not call `window.electronAPI` directly.
 
-## Current platform capabilities
+`platformService` centralizes environment differences so browser behavior stays stable while preserving legacy desktop support.
+
+## Current priority
+
+- Primary target: static browser deployment.
+- Persistence target: local browser storage + import/export files.
+- Desktop path: preserved as fallback/archive behavior.
+
+## Current capabilities
 
 `platformService` exposes:
 
@@ -15,29 +22,26 @@ Instead, renderer code now routes desktop/native operations through one service 
 - Export/file flows: `printToPDF`, `savePDF`, `savePNG`, `saveJson`
 - OS integration: `openExternal`, `revealFile`, `copyText`
 - Environment checks: `isDesktop`, `hasPrintToPDF`
+- Browser local persistence helpers: autosave/recent projects/local snapshots
+
+## Browser behavior
+
+In browser mode, desktop-only APIs fail safely with structured `{ success: false, error }` responses.
+
+Browser-safe fallbacks are implemented for key flows:
+
+- Save project/json → file download via Blob URL.
+- Open project → `<input type="file">` + `FileReader`.
+- Open external URLs → `window.open`.
+- Copy text → `navigator.clipboard.writeText` when available.
+- Autosave/recent project metadata → localStorage.
 
 ## Desktop behavior
 
-When running in Electron, calls delegate to preload bridge methods on `window.electronAPI`.
-Existing desktop behavior and IPC contracts are unchanged.
+When `window.electronAPI` is present, methods delegate to preload bridge APIs so legacy desktop behavior remains available.
 
-## Browser behavior and guardrails
+## Out of scope for this phase
 
-For browser/web execution, desktop-only calls fail safely with structured `{ success: false, error }` results instead of crashes.
-Where practical, browser-safe fallbacks are used:
-
-- Save project/json: download via blob URL.
-- Open project: file picker + FileReader.
-- Open external links: `window.open` fallback.
-- Clipboard: `navigator.clipboard.writeText` fallback when available.
-
-## Remaining web blockers (next phases)
-
-These are still desktop-only and will need web implementations:
-
-1. Silent overwrite save to existing absolute file paths (`saveProjectSilent`).
-2. Open recent project by absolute filesystem path (`openProjectFromPath`).
-3. Reveal exported file in OS file manager (`revealFile`).
-4. Chromium `printToPDF` parity for deterministic PDF output and save dialogs.
-5. Main-process temp-file print pipeline (`dialog:print-to-pdf`) is Electron-specific.
-
+- Backend/cloud persistence
+- Account/auth features
+- Hosted publishing pipelines
