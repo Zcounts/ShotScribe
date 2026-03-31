@@ -1,0 +1,42 @@
+name: SiteGround Static Package
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-siteground-package:
+    name: Build SiteGround upload zip
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static SiteGround output
+        run: npm run build:web
+
+      - name: Create SiteGround upload zip
+        run: |
+          test -f dist-siteground/index.html
+          rm -f shotscribe-siteground-upload.zip
+          cd dist-siteground
+          zip -r ../shotscribe-siteground-upload.zip .
+
+      - name: Upload SiteGround artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shotscribe-siteground-upload
+          path: shotscribe-siteground-upload.zip
+          if-no-files-found: error
