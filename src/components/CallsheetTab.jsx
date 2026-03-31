@@ -345,13 +345,25 @@ export default function CallsheetTab({ configureOpen = true }) {
     setTabViewState('callsheet', { sidebarCollapseState: next })
   }, [collapseState, setTabViewState])
 
+  const availableDays = useMemo(() => (
+    Array.isArray(schedule)
+      ? schedule.filter(day => day?.id)
+      : []
+  ), [schedule])
+
+  const resolvedSelectedDayId = useMemo(() => {
+    const selectedIsAvailable = Boolean(selectedDayId) && availableDays.some(day => day.id === selectedDayId)
+    if (selectedIsAvailable) return selectedDayId
+    return availableDays[0]?.id || null
+  }, [availableDays, selectedDayId])
+
   const activeDay = useMemo(() => {
-    if (!selectedDayId) return null
-    return schedule.find(day => day.id === selectedDayId) || null
-  }, [schedule, selectedDayId])
+    if (!resolvedSelectedDayId) return null
+    return availableDays.find(day => day.id === resolvedSelectedDayId) || null
+  }, [availableDays, resolvedSelectedDayId])
+
   const hasScriptUploaded = Array.isArray(scriptScenes) && scriptScenes.length > 0
-  const hasScheduleDays = Array.isArray(schedule) && schedule.length > 0
-  const hasStaleSelectedDay = Boolean(selectedDayId) && !activeDay
+  const hasScheduleDays = availableDays.length > 0
 
   useEffect(() => {
     setTabViewState('callsheet', {
@@ -360,9 +372,19 @@ export default function CallsheetTab({ configureOpen = true }) {
     })
   }, [activeDay?.id, configureOpen, setTabViewState])
 
+  useEffect(() => {
+    if (!resolvedSelectedDayId) {
+      if (selectedDayId !== null) setSelectedDayId(null)
+      return
+    }
+    if (selectedDayId !== resolvedSelectedDayId) {
+      setSelectedDayId(resolvedSelectedDayId)
+    }
+  }, [resolvedSelectedDayId, selectedDayId])
+
   const activeDayIdx = useMemo(
-    () => (activeDay ? Math.max(0, schedule.findIndex(day => day.id === activeDay.id)) : 0),
-    [activeDay, schedule]
+    () => (activeDay ? Math.max(0, availableDays.findIndex(day => day.id === activeDay.id)) : 0),
+    [activeDay, availableDays]
   )
 
   const callsheet = activeDay ? getCallsheet(activeDay.id) : {}
@@ -634,29 +656,18 @@ export default function CallsheetTab({ configureOpen = true }) {
     )
   }
 
-  if (hasStaleSelectedDay) {
-    return (
-      <CallsheetEmptyState
-        title="Selected shoot day is no longer available."
-        message="Your previous callsheet day selection could not be found. Choose a valid day to continue."
-        actionLabel="Select Day 1"
-        onAction={() => setSelectedDayId(schedule[0]?.id || null)}
-      />
-    )
-  }
-
   if (!activeDay) {
     return (
       <CallsheetEmptyState
         title="No shoot day selected."
         message="Select a day in Schedule to generate a callsheet."
         actionLabel="Select Day 1"
-        onAction={() => setSelectedDayId(schedule[0]?.id || null)}
+        onAction={() => setSelectedDayId(availableDays[0]?.id || null)}
       />
     )
   }
 
-  const dayTabs = schedule.map((day, idx) => ({ id: day.id, label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}` }))
+  const dayTabs = availableDays.map((day, idx) => ({ id: day.id, label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}` }))
 
   return (
     <div className="canvas-texture" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
