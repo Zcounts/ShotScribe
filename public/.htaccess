@@ -1,6 +1,7 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /
+  # Keep this portable for both root and subfolder deployments by avoiding a
+  # hardcoded RewriteBase.
 
   # Serve existing files/directories directly.
   RewriteCond %{REQUEST_FILENAME} -f [OR]
