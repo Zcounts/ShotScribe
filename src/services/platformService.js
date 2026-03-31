@@ -32,6 +32,7 @@ function writeLocalStorageJson(key, value) {
 }
 
 function downloadTextFile(defaultName, data, mimeType = 'application/json') {
+  if (typeof document === 'undefined') return unsupportedResult(`downloadTextFile(${defaultName})`)
   const blob = new Blob([data], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -136,7 +137,7 @@ export const platformService = {
   openExternal(url) {
     const api = getElectronApi()
     if (api?.openExternal) return api.openExternal(url)
-    window.open(url, '_self')
+    window.open(url, '_blank', 'noopener,noreferrer')
     return Promise.resolve({ success: true })
   },
 
