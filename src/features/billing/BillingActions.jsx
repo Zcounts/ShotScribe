@@ -15,7 +15,9 @@ const buttonStyle = {
 export default function BillingActions({ compact = false }) {
   const entitlement = useQuery('billing:getMyEntitlement')
   const createCheckoutSession = useAction('billing:createCheckoutSession')
+  const createPortalSession = useAction('billing:createPortalSession')
   const [isLoading, setIsLoading] = useState(false)
+  const [isPortalLoading, setIsPortalLoading] = useState(false)
 
   const label = useMemo(() => {
     if (entitlement?.canUseCloudFeatures) return compact ? 'Pro active' : 'Cloud access active'
@@ -40,6 +42,39 @@ export default function BillingActions({ compact = false }) {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const openPortal = async () => {
+    setIsPortalLoading(true)
+    try {
+      const origin = window.location.origin
+      const result = await createPortalSession({
+        returnUrl: `${origin}/?billing=portal-return`,
+      })
+      if (result?.url) {
+        window.location.assign(result.url)
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-alert
+      alert(error?.message || 'Unable to open billing portal')
+    } finally {
+      setIsPortalLoading(false)
+    }
+  }
+
+  const showPortal = Boolean(entitlement?.portalAvailable && entitlement?.subscriptionStatus)
+  if (showPortal) {
+    return (
+      <button
+        type="button"
+        style={buttonStyle}
+        onClick={openPortal}
+        disabled={isPortalLoading}
+        title="Manage payment method, invoices, and cancellation in Stripe"
+      >
+        {isPortalLoading ? 'Opening portal…' : compact ? 'Manage billing' : 'Open billing portal'}
+      </button>
+    )
   }
 
   if (!entitlement?.checkoutAvailable || entitlement?.canUseCloudFeatures) {

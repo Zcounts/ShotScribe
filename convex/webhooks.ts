@@ -1,5 +1,6 @@
 import { httpAction } from './_generated/server'
 import { internal } from './_generated/api'
+import { getStripeWebhookSecret } from './stripeConfig'
 
 function parseStripeSignature(header: string | null) {
   if (!header) return { timestamp: null, signatures: [] as string[] }
@@ -58,7 +59,7 @@ function extractSubscriptionData(event: any) {
 }
 
 export const stripeWebhook = httpAction(async (ctx, request) => {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET
+  const secret = getStripeWebhookSecret()
   if (!secret) return new Response('Missing STRIPE_WEBHOOK_SECRET', { status: 500 })
 
   const signatureHeader = request.headers.get('stripe-signature')
