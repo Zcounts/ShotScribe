@@ -61,6 +61,7 @@ import { platformService } from './services/platformService'
 import AuthSessionBar from './auth/AuthSessionBar'
 import AccountPage from './features/account/AccountPage'
 import AdminConsolePage from './features/admin/AdminConsolePage'
+import AcceptInvitePage from './features/sharing/AcceptInvitePage'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -878,6 +879,8 @@ export default function App() {
         <AccountPage />
       ) : pathname === '/admin' ? (
         <AdminConsolePage />
+      ) : pathname === '/accept-invite' ? (
+        <AcceptInvitePage />
       ) : (
         <>
       {/* Top-level tab navigation — sticky, never scrolls out of view */}

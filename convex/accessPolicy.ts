@@ -1,4 +1,5 @@
 import {
+  canAccessCloudProject,
   canAccessCloudAssets,
   canCollaborateOnCloudProject,
   canEditCloudProject,
@@ -42,6 +43,47 @@ async function getProjectRoleForUser(ctx: any, projectId: any, userId: any) {
     .unique()
   if (!membership || membership.revokedAt) return null
   return membership.role
+}
+
+export async function assertCanAccessSharedCloudProject(ctx: any, userId: any, projectId: any) {
+  const [flags, role] = await Promise.all([
+    getUserPolicyFlags(ctx, userId),
+    getProjectRoleForUser(ctx, projectId, userId),
+  ])
+
+  const canAccess = canAccessCloudProject({
+    isAuthenticated: true,
+    ...flags,
+    hasProjectMembership: Boolean(role),
+  })
+  if (!canAccess || !role) {
+    throw new Error('Forbidden')
+  }
+
+  if (role !== 'owner' && !hasPaidCloudAccess({ isAuthenticated: true, ...flags })) {
+    throw new Error('Shared cloud collaboration requires an active paid subscription')
+  }
+
+  return { role, flags }
+}
+
+export async function assertAllActiveCollaboratorsHavePaidAccess(ctx: any, projectId: any) {
+  const memberships = await ctx.db
+    .query('projectMembers')
+    .withIndex('by_project_id', (q: any) => q.eq('projectId', projectId))
+    .collect()
+
+  const activeMembers = memberships.filter((member: any) => !member.revokedAt)
+  for (const member of activeMembers) {
+    const memberFlags = await getUserPolicyFlags(ctx, member.userId)
+    const isEntitled = hasPaidCloudAccess({
+      isAuthenticated: true,
+      ...memberFlags,
+    })
+    if (!isEntitled) {
+      throw new Error('All collaborators on shared cloud projects must have paid cloud access')
+    }
+  }
 }
 
 export async function getUserPolicyFlags(ctx: any, userId: any) {

@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import { assertHasPaidCloudAccess } from './accessPolicy'
+import { assertCanAccessSharedCloudProject, assertHasPaidCloudAccess, getUserPolicyFlags } from './accessPolicy'
+import { hasPaidCloudAccess } from '../shared/src/policies/accessPolicy'
 import { getProjectAccessRole, requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
@@ -45,6 +46,7 @@ export const getProjectById = query({
     const currentUserId = await requireCurrentUserId(ctx)
     const { project, role } = await getProjectAccessRole(ctx, args.projectId, currentUserId)
     if (!role) throw new Error('Forbidden')
+    await assertCanAccessSharedCloudProject(ctx, currentUserId, args.projectId)
     return {
       ...project,
       currentUserRole: role,
@@ -56,6 +58,11 @@ export const listProjectsForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
     const currentUserId = await requireCurrentUserId(ctx)
+    const currentUserFlags = await getUserPolicyFlags(ctx, currentUserId)
+    const hasPaidAccess = hasPaidCloudAccess({
+      isAuthenticated: true,
+      ...currentUserFlags,
+    })
 
     const ownedProjects = await ctx.db
       .query('projects')
@@ -72,6 +79,7 @@ export const listProjectsForCurrentUser = query({
 
     const sharedProjects = await Promise.all(
       activeMemberRows.map(async (row: any) => {
+        if (!hasPaidAccess) return null
         const project = await ctx.db.get(row.projectId)
         if (!project) return null
         return { ...project, currentUserRole: row.role }

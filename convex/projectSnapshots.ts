@@ -18,6 +18,7 @@ export const createSnapshot = mutation({
     ),
     payload: v.any(),
     expectedLatestSnapshotId: v.optional(v.id('projectSnapshots')),
+    conflictStrategy: v.optional(v.union(v.literal('fail_on_conflict'), v.literal('last_write_wins'))),
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
@@ -31,14 +32,19 @@ export const createSnapshot = mutation({
     const now = Date.now()
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
     const currentLatestSnapshotId = project.latestSnapshotId || null
+    const conflictStrategy = args.conflictStrategy || 'last_write_wins'
     if (
       args.expectedLatestSnapshotId !== undefined
       && String(args.expectedLatestSnapshotId || '') !== String(currentLatestSnapshotId || '')
     ) {
+      if (conflictStrategy === 'last_write_wins') {
+        // Continue and write a newer snapshot; latest write becomes authoritative for beta.
+      } else {
       return {
         ok: false,
         reason: 'version_conflict',
         latestSnapshotId: currentLatestSnapshotId,
+      }
       }
     }
 
