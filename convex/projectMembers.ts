@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { requireCloudEntitlement } from './billing'
+import { requireCloudWritesEnabled } from './ops'
 
 const ROLE_RANK: Record<string, number> = {
   viewer: 1,
@@ -119,6 +120,7 @@ export const inviteProjectMember = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
 
     const normalizedInviteEmail = normalizeEmail(args.email)
     if (!normalizedInviteEmail) throw new Error('Email is required')
@@ -185,6 +187,7 @@ export const acceptProjectInvite = mutation({
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
+    await requireCloudWritesEnabled(ctx)
     const user = await ctx.db.get(currentUserId)
     const normalizedUserEmail = normalizeEmail(user?.email || '')
 
@@ -241,6 +244,7 @@ export const revokeProjectMember = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
     if (String(project.ownerUserId) === String(args.userId)) throw new Error('Cannot revoke project owner')
 
     const membership = await ctx.db
@@ -270,6 +274,7 @@ export const updateProjectMemberRole = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
     if (String(project.ownerUserId) === String(args.userId)) throw new Error('Cannot change owner role')
 
     const membership = await ctx.db

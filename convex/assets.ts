@@ -2,6 +2,8 @@ import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { requireCloudEntitlement } from './billing'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
+import { requireCloudWritesEnabled } from './ops'
+import { writeOperationalEvent } from './opsLog'
 
 export const createAssetUploadUrl = mutation({
   args: {
@@ -11,6 +13,7 @@ export const createAssetUploadUrl = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
     const uploadUrl = await ctx.storage.generateUploadUrl()
     return { uploadUrl }
   },
@@ -31,6 +34,7 @@ export const completeAssetUpload = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()
     const assetId = await ctx.db.insert('projectAssets', {
@@ -96,6 +100,7 @@ export const pruneOrphanedAssets = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
 
     const keep = new Set(args.keepAssetIds.map((id: any) => String(id)))
     const allAssets = await ctx.db
@@ -114,6 +119,17 @@ export const pruneOrphanedAssets = mutation({
         updatedAt: now,
       })
       removedCount += 1
+    }
+
+    if (removedCount > 0) {
+      await writeOperationalEvent(ctx, {
+        event: 'project.assets.pruned',
+        details: {
+          projectId: String(args.projectId),
+          removedCount,
+          userId: String(currentUserId),
+        },
+      })
     }
 
     return { removedCount }

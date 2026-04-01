@@ -142,4 +142,19 @@ export default defineSchema({
   })
     .index('by_project_id_user_id', ['projectId', 'userId'])
     .index('by_project_id_expires_at', ['projectId', 'expiresAt']),
+
+  operationalFlags: defineTable({
+    key: v.string(),
+    enabled: v.boolean(),
+    reason: v.optional(v.string()),
+    updatedByUserId: v.optional(v.id('users')),
+    updatedAt: v.number(),
+  }).index('by_key', ['key']),
+
+  operationalEvents: defineTable({
+    level: v.union(v.literal('info'), v.literal('warn'), v.literal('error')),
+    event: v.string(),
+    details: v.optional(v.any()),
+    createdAt: v.number(),
+  }).index('by_created_at', ['createdAt']),
 })
