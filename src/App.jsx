@@ -58,6 +58,7 @@ import {
 } from './utils/entityDialog'
 import { devPerfLog, useDevRenderCounter } from './utils/devPerf'
 import { platformService } from './services/platformService'
+import AuthSessionBar from './auth/AuthSessionBar'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -861,6 +862,8 @@ export default function App() {
           setExportModalOpen(true)
         }}
       />
+
+      <AuthSessionBar />
 
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
       <div className="tab-nav" style={{

@@ -25,4 +25,5 @@ export const runtimeConfig = Object.freeze({
   stripePublishableKey: readOptionalEnv('VITE_STRIPE_PUBLISHABLE_KEY', ''),
   authIssuerUrl: readOptionalEnv('VITE_AUTH_ISSUER_URL', ''),
   authAudience: readOptionalEnv('VITE_AUTH_AUDIENCE', ''),
+  authClientId: readOptionalEnv('VITE_AUTH_CLIENT_ID', ''),
 })
