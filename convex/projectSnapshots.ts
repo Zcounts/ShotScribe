@@ -2,6 +2,8 @@ import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { requireCloudEntitlement } from './billing'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
+import { requireCloudWritesEnabled } from './ops'
+import { writeOperationalEvent } from './opsLog'
 
 export const createSnapshot = mutation({
   args: {
@@ -25,6 +27,7 @@ export const createSnapshot = mutation({
 
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
@@ -53,6 +56,16 @@ export const createSnapshot = mutation({
     await ctx.db.patch(args.projectId, {
       latestSnapshotId: snapshotId,
       updatedAt: now,
+    })
+
+    await writeOperationalEvent(ctx, {
+      event: 'project.snapshot.created',
+      details: {
+        projectId: String(args.projectId),
+        snapshotId: String(snapshotId),
+        source: args.source,
+        userId: String(currentUserId),
+      },
     })
 
     return {

@@ -16,7 +16,7 @@ This tracker keeps migration work incremental and reversible while preserving cu
 | 5 | Beta-safe script collaboration | Not started | Guardrail-first collaboration model. |
 | 6 | Cloud asset storage | Not started | Asset sync/storage for cloud projects. |
 | 7 | Stripe billing + entitlement gating | Not started | Plan-based gating and subscription state wiring. |
-| 8 | Public beta hardening | Not started | Reliability, monitoring, launch checklist. |
+| 8 | Public beta hardening | In progress | Observability, rollback toggle, support/go-live runbooks added. |
 
 ## Operating rules for each phase
 
@@ -24,3 +24,9 @@ This tracker keeps migration work incremental and reversible while preserving cu
 2. Introduce flags first, behavior changes second.
 3. Keep changes small, testable, and reversible.
 4. Update this tracker and phase notes in the same PR that changes phase state.
+
+## Phase 8 artifacts
+
+- `docs/migration/public-beta-go-live-checklist.md`
+- `docs/migration/incident-toggle-and-recovery.md`
+- `docs/migration/support-export-restore-runbook.md`

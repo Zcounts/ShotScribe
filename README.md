@@ -210,8 +210,30 @@ The app now includes a runtime config loader for future cloud migration wiring:
 - `VITE_STRIPE_PUBLISHABLE_KEY` (optional)
 - `VITE_AUTH_ISSUER_URL` (optional)
 - `VITE_AUTH_AUDIENCE` (optional)
+- `VITE_MONITORING_ENDPOINT` (optional structured log sink for browser events)
 
 If these values are not set, ShotScribe remains in local-only mode by default (`localOnly: true`, `cloudEnabled: false`).
+
+### Operational kill switch (public beta)
+
+Cloud writes can be disabled quickly during an incident by setting Convex operational flag `cloud_writes_enabled=false`.
+
+Example:
+
+```bash
+npx convex run ops:setOperationalFlag '{"adminToken":"<OPERATIONAL_ADMIN_TOKEN>","key":"cloud_writes_enabled","enabled":false,"reason":"incident-2026-04-01"}'
+```
+
+Re-enable:
+
+```bash
+npx convex run ops:setOperationalFlag '{"adminToken":"<OPERATIONAL_ADMIN_TOKEN>","key":"cloud_writes_enabled","enabled":true,"reason":"incident-resolved"}'
+```
+
+Operational docs:
+- `docs/migration/public-beta-go-live-checklist.md`
+- `docs/migration/incident-toggle-and-recovery.md`
+- `docs/migration/support-export-restore-runbook.md`
 
 ### Preview build locally
 

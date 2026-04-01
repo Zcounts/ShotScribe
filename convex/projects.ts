@@ -2,6 +2,8 @@ import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { requireCloudEntitlement } from './billing'
 import { getProjectAccessRole, requireCurrentUserId, requireProjectRole } from './projectMembers'
+import { requireCloudWritesEnabled } from './ops'
+import { writeOperationalEvent } from './opsLog'
 
 export const createProject = mutation({
   args: {
@@ -16,6 +18,7 @@ export const createProject = mutation({
     }
 
     await requireCloudEntitlement(ctx, currentUserId)
+    await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()
     const projectId = await ctx.db.insert('projects', {
@@ -96,6 +99,7 @@ export const seedTestCloudProject = mutation({
   handler: async (ctx, args) => {
     const ownerUserId = await requireCurrentUserId(ctx)
     await requireCloudEntitlement(ctx, ownerUserId)
+    await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()
     const projectName = args.name || `Seed Cloud Project ${new Date(now).toISOString()}`
@@ -128,6 +132,13 @@ export const seedTestCloudProject = mutation({
     })
 
     await requireProjectRole(ctx, projectId, ownerUserId, 'owner')
+    await writeOperationalEvent(ctx, {
+      event: 'project.seed.created',
+      details: {
+        projectId: String(projectId),
+        ownerUserId: String(ownerUserId),
+      },
+    })
 
     return {
       projectId,
