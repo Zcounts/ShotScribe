@@ -120,13 +120,12 @@ export default function CastCrewTab() {
   return (
     <div
       ref={scrollRef}
-      className="h-full canvas-texture px-6 py-5 overflow-auto space-y-4"
+      className="h-full canvas-texture overflow-auto"
       onScroll={(e) => setTabViewState('castcrew', { scrollTop: e.currentTarget.scrollTop })}
     >
-      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, minWidth: 0, height: '100%' }}>
         <SidebarPane
-          width={258}
-          title="Cast/Crew"
+                    title="Cast/Crew"
           controls={(
             <div style={{ display: 'grid', gap: 8 }}>
               <SubTabNav
@@ -139,16 +138,16 @@ export default function CastCrewTab() {
                 fullWidth
                 minButtonWidth={0}
               />
-              <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#5265E0]/45 text-[#2E3E9A] bg-[#5265E0]/15 hover:bg-[#5265E0]/22" onClick={() => openProfile('cast', null)}>
+              <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#8299FF]/70 text-[#EAF0FF] bg-[#5265E0]/32 hover:bg-[#5265E0]/42" onClick={() => openProfile('cast', null)}>
                 + Add Cast
               </button>
-              <button className="px-3 py-1.5 text-xs font-semibold rounded border border-slate/30 text-ink bg-canvas-dark/50 hover:bg-canvas-dark" onClick={() => openProfile('crew', null)}>
+              <button className="px-3 py-1.5 text-xs font-semibold rounded border border-slate/45 text-[#D8E1F0] bg-white/10 hover:bg-white/16" onClick={() => openProfile('crew', null)}>
                 + Add Crew
               </button>
             </div>
           )}
         />
-        <div style={{ flex: 1, minWidth: 0, paddingLeft: 10 }} className="space-y-4">
+        <div style={{ flex: 1, minWidth: 0, padding: '16px 18px 20px 10px' }} className="space-y-4">
           {activeSubTab === 'Visual' ? (
             <>
               <SectionShell title="Cast" subtitle="Fast day-by-day availability matrix for on-set lookup.">

@@ -923,15 +923,14 @@ export default function App() {
       ) : activeTab === 'storyboard' ? (
         <div
           ref={storyboardScrollRef}
-          className="flex-1 py-4 px-4 overflow-auto canvas-texture"
+          className="flex-1 overflow-auto canvas-texture"
           onScroll={handleStoryboardScroll}
         >
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', paddingTop: 0, paddingRight: 14, paddingBottom: 14, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
             {showStoryboardOutline && (
-              <div style={{ width: 260, position: 'sticky', top: 0, alignSelf: 'flex-start', height: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }}>
+              <div style={{ width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'flex-start', height: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }}>
                 <SidebarPane
-                  width={260}
-                  controls={(
+                                    controls={(
                     <div style={{ display: 'flex', gap: 6 }}>
                       {['Scenes', 'Pages'].map(tab => (
                         <button key={tab} onClick={() => setStoryboardOutlineTab(tab)} style={{ border: '1px solid rgba(74,85,104,0.2)', borderRadius: 999, padding: '3px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', background: storyboardOutlineTab === tab ? '#2C2C2E' : 'transparent', color: storyboardOutlineTab === tab ? '#FAF8F4' : '#4A5568' }}>{tab}</button>

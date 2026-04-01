@@ -3653,11 +3653,10 @@ export default function ScheduleTab({
     <div
       className="flex flex-col h-full overflow-hidden canvas-texture"
     >
-      <div className="flex-1 min-h-0 pb-6 pt-0">
+      <div className="flex-1 min-h-0 pt-0">
         <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, height: '100%' }}>
           <SidebarPane
-            width={258}
-            title="Schedule"
+                        title="Schedule"
             controls={
               <div className="schedule-view-switcher" role="group" aria-label="Schedule view">
                 {[

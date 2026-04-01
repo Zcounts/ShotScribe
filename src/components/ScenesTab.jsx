@@ -287,19 +287,18 @@ export default function ScenesTab({
   return (
     <div style={{ display: 'flex', height: '100%' }} onClick={() => { onConfigureOpenChange(false) }}>
       <SidebarPane
-        width={240}
-        title={null}
+                title={null}
         footer={null}
       >
           <div style={{ padding: '10px 12px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>Panels</div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#9fb0d1', fontWeight: 700, letterSpacing: '0.06em' }}>Panels</div>
             <div style={{ display: 'flex', gap: 6 }}>
               <button title="Collapse All" onClick={collapseAllPanels} className="ss-btn outline" style={{ fontSize: 11, borderRadius: 4, width: 22, height: 22, padding: 0 }}>↑</button>
               <button title="Expand All" onClick={expandAllPanels} className="ss-btn outline" style={{ fontSize: 11, borderRadius: 4, width: 22, height: 22, padding: 0 }}>↓</button>
             </div>
           </div>
           <SidebarSection title="View Options" collapsed={panelCollapsed.viewOptions} onToggle={() => togglePanel('viewOptions')}>
-            <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>View Mode</label>
+            <label style={{ display: 'block', fontSize: 10, color: '#9fb0d1', marginBottom: 4 }}>View Mode</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 8 }}>
               {VIEW_MODES.map(mode => (
                 <button
@@ -320,10 +319,10 @@ export default function ScenesTab({
             </div>
             {showColumnControls && (
               <>
-                <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4, marginTop: 8 }}>Columns</label>
+                <label style={{ display: 'block', fontSize: 10, color: '#9fb0d1', marginBottom: 4, marginTop: 8 }}>Columns</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginBottom: 8 }}>
                   {columnOptions.map(count => (
-                    <button key={count} onClick={() => setColumnCount(count)} style={{ ...pillStyle, background: columnCount === count ? 'rgba(82,101,236,0.14)' : '#fff' }}>
+                    <button key={count} onClick={() => setColumnCount(count)} style={{ ...pillStyle, background: columnCount === count ? 'rgba(82,101,236,0.38)' : 'rgba(255,255,255,0.08)', borderColor: columnCount === count ? 'rgba(130,153,255,0.85)' : 'rgba(148,163,184,0.34)', color: columnCount === count ? '#f4f7ff' : '#dbe5f5' }}>
                       {count}
                     </button>
                   ))}
@@ -332,7 +331,7 @@ export default function ScenesTab({
             )}
             <div style={{ display: 'grid', gap: 6 }}>
               {METADATA_TOGGLE_OPTIONS.map(toggle => (
-                <label key={toggle.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#334155' }}>
+                <label key={toggle.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#dbe5f5' }}>
                   <input
                     type="checkbox"
                     checked={!!metadataVisibility[toggle.key]}
@@ -344,14 +343,14 @@ export default function ScenesTab({
             </div>
           </SidebarSection>
           <SidebarSection title="Scene Organization" collapsed={panelCollapsed.sceneOrganization} onToggle={() => togglePanel('sceneOrganization')}>
-            <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4 }}>Sort By</label>
+            <label style={{ display: 'block', fontSize: 10, color: '#9fb0d1', marginBottom: 4 }}>Sort By</label>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle} className="ss-input">
               {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <button onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')} className="ss-btn outline" style={{ ...pillStyle, width: '100%', marginTop: 8 }}>
               {sortDirection === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
             </button>
-            <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 4, marginTop: 8 }}>Group By</label>
+            <label style={{ display: 'block', fontSize: 10, color: '#9fb0d1', marginBottom: 4, marginTop: 8 }}>Group By</label>
             <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} className="ss-input" style={{ ...selectStyle, marginBottom: 0 }}>
               {GROUP_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
@@ -512,12 +511,12 @@ export default function ScenesTab({
 function SidebarSection({ title, collapsed, onToggle, children }) {
   return (
     <div style={{ padding: 10, paddingTop: 6 }}>
-      <div className="ss-module" style={{ borderRadius: 6, background: 'rgba(255,255,255,0.65)', overflow: 'hidden' }}>
-        <button onClick={onToggle} className="ss-module-header" style={{ width: '100%', borderLeft: 'none', borderRight: 'none', borderTop: 'none', padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>{title}</span>
-          <span style={{ color: '#64748b', fontSize: 11 }}>{collapsed ? '▸' : '▾'}</span>
+      <div className="ss-module" style={{ borderRadius: 6, background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(148,163,184,0.28)', overflow: 'hidden' }}>
+        <button onClick={onToggle} className="ss-module-header" style={{ width: '100%', borderLeft: 'none', borderRight: 'none', borderTop: 'none', padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(82,101,236,0.14)' }}>
+          <span style={{ fontSize: 10, textTransform: 'uppercase', color: '#9fb0d1', fontWeight: 700, letterSpacing: '0.06em' }}>{title}</span>
+          <span style={{ color: '#b5c1d7', fontSize: 11 }}>{collapsed ? '▸' : '▾'}</span>
         </button>
-        {!collapsed && <div style={{ padding: 10, borderTop: '1px solid rgba(74,85,104,0.1)' }}>{children}</div>}
+        {!collapsed && <div style={{ padding: 10, borderTop: '1px solid rgba(148,163,184,0.2)' }}>{children}</div>}
       </div>
     </div>
   )
@@ -529,8 +528,8 @@ function Badge({ children }) {
   return <span className={`ss-chip ${variant}`} style={{ fontSize: 10 }}>{children}</span>
 }
 
-const selectStyle = { width: '100%', border: '1px solid rgba(128,128,128,0.3)', borderRadius: 4, padding: '6px 7px', fontSize: 12, marginBottom: 8, background: '#fff' }
-const pillStyle = { border: '1px solid rgba(74,85,104,0.2)', background: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 11, color: '#334155', cursor: 'pointer' }
+const selectStyle = { width: '100%', border: '1px solid rgba(148,163,184,0.34)', borderRadius: 4, padding: '6px 7px', fontSize: 12, marginBottom: 8, background: 'rgba(255,255,255,0.08)', color: '#e2e8f0' }
+const pillStyle = { border: '1px solid rgba(148,163,184,0.34)', background: 'rgba(255,255,255,0.08)', borderRadius: 4, padding: '6px 8px', fontSize: 11, color: '#dbe5f5', cursor: 'pointer' }
 
 function getChipVariantFromText(text) {
   const upper = text.toUpperCase()

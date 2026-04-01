@@ -1,56 +1,43 @@
 import React from 'react'
+import LeftSidebarResources from './LeftSidebarResources'
 
 export default function SidebarPane({
-  width = 260,
+  width = null,
   title,
   controls = null,
   footer = null,
   children,
+  className = '',
+  bodyClassName = '',
+  showResources = true,
 }) {
+  const sidebarStyle = width == null
+    ? undefined
+    : { width, minWidth: width }
+
   return (
     <aside
-      className="ss-module"
-      style={{
-        width,
-        background: 'var(--ss-paper)',
-        borderRight: '1px solid rgba(74,85,104,0.15)',
-        display: 'flex',
-        flexDirection: 'column',
-        minWidth: width,
-        height: '100%',
-      }}
+      className={`ss-left-sidebar ${className}`.trim()}
+      style={sidebarStyle}
     >
-      <div
-        className="ss-module-header"
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 2,
-          background: 'var(--ss-surface-slate)',
-          borderBottom: '1px solid rgba(74,85,104,0.12)',
-        }}
-      >
+      <div className="ss-left-sidebar-scroll">
         {title && (
-          <div style={{ padding: '10px 12px', fontSize: 10, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>
+          <div className="ss-left-sidebar-section-label">
             {title}
           </div>
         )}
         {controls && (
-          <div style={{ padding: '8px 10px 10px', borderTop: title ? '1px solid rgba(74,85,104,0.08)' : 'none' }}>
+          <div className="ss-left-sidebar-controls">
             {controls}
           </div>
         )}
-      </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {children}
-      </div>
-
-      {footer && (
-        <div style={{ padding: 10, borderTop: '1px solid rgba(74,85,104,0.12)', background: '#FAF8F4' }}>
-          {footer}
+        <div className={bodyClassName}>
+          {children}
         </div>
-      )}
+      </div>
+
+      {footer || (showResources ? <LeftSidebarResources /> : null)}
     </aside>
   )
 }
