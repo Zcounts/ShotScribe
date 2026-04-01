@@ -109,6 +109,10 @@ export default function AdminConsolePage() {
       { label: 'Total paid users', value: overview.totals.totalPaidUsers },
       { label: 'Active subscriptions', value: overview.totals.totalActiveSubscriptions },
       { label: 'Grandfathered/comped users', value: overview.totals.totalGrandfatheredOrCompedUsers },
+      { label: 'Cloud projects (all)', value: overview.totals.totalCloudProjects },
+      { label: 'Cloud projects (active)', value: overview.totals.totalActiveCloudProjects },
+      { label: 'Shared projects', value: overview.totals.totalSharedProjects },
+      { label: 'Shared memberships', value: overview.totals.totalSharedMemberships },
     ]
   }, [overview])
 

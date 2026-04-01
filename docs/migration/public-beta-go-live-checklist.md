@@ -1,8 +1,13 @@
-# Public Beta Go-Live Checklist
+# Public Beta Go-Live Checklist (Legacy Migration Copy)
 
 Last updated: 2026-04-01
 
-## Exit criteria
+> Canonical checklist has moved to `docs/public-beta-launch-checklist.md`.  
+> Canonical rollback steps have moved to `docs/public-beta-rollback-checklist.md`.
+
+This file is kept for migration-history context only.
+
+## Historical exit criteria
 
 - [ ] Staging checklist green.
 - [ ] Production smoke checklist green.

@@ -73,6 +73,7 @@ Route: `/admin`
 
 Surface includes:
 - Dashboard totals: signups, paid users, active subscriptions, grandfathered/comped users.
+- Dashboard project visibility totals: cloud projects (all/active), shared projects, shared memberships.
 - Recent signups.
 - Recent subscription changes (from `billingSubscriptions.updatedAt` stream).
 - Search user by email.

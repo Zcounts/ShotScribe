@@ -64,3 +64,7 @@ Date: 2026-04-01
 4. **Local-only user unaffected**
    - In local-only project mode, confirm existing storyboard image upload/edit behavior still works.
    - Confirm local image workflow does not require cloud entitlement.
+
+For rollout sequencing and incident response, also use:
+- `docs/public-beta-launch-checklist.md`
+- `docs/public-beta-rollback-checklist.md`
