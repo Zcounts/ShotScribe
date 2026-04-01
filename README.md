@@ -39,19 +39,11 @@ This repository currently contains:
 - App: `https://app.shot-scribe.com`
 
 ### Current repository behavior
-The root Vite build currently emits two HTML entrypoints:
-- `index.html` (auth landing)
-- `app/index.html` (main app)
-
-The app and auth flows still hardcode `/app/` redirects/return URLs.
-
-So the codebase is still fundamentally aligned to **path-based app hosting (`/app`)** even though production intent is **subdomain app hosting (`app.shot-scribe.com`)**.
-
-If you move fully to app-subdomain-root behavior, update these `/app/` assumptions in:
-- `src/auth/AuthProvider.jsx`
-- `src/auth/AuthLanding.jsx`
-- `src/auth/AuthSessionBar.jsx`
-- `public/_redirects`
+The app is configured for **domain-root behavior** (for example `https://app.shot-scribe.com/`):
+- main app entrypoint at `index.html`
+- auth redirect URLs pointed to `/`
+- SPA fallback rewrite to `index.html`
+- legacy `/app` routes redirected to `/`
 
 ---
 
@@ -152,8 +144,8 @@ Behavior:
 
 ## Known mismatches to clean up next
 
-1. **Subdomain vs `/app` path assumptions**
-   - Code still uses `/app/` redirects and rewrite assumptions.
+1. **Legacy `/app` compatibility debt**
+   - Legacy `app/` entry artifacts still exist in the repo and can be removed after rollout confidence is high.
 2. **Docs drift**
    - Some docs still describe older static/local-only posture and/or Cloudflare-target plans that are not the active production deployment process.
 3. **Legacy desktop messaging**

@@ -6,8 +6,8 @@ This note defines the current maintenance target for ShotScribe.
 
 - Primary runtime: static web app.
 - Host target: SiteGround static hosting.
-- Persistence: local-only (browser storage + file import/export).
-- Backend/cloud features: out of scope.
+- Persistence: local-first baseline with cloud-capable project flows when enabled.
+- Backend/cloud features: in scope for public beta (Convex + Clerk + Stripe-backed entitlement wiring).
 
 ## Build commands
 
@@ -38,5 +38,5 @@ Electron remains in `electron/` as a legacy fallback/archive path.
 ## Cleanup policy for this phase
 
 - Remove dead code only when an active browser flow already exists.
-- Avoid speculative architecture for future SaaS/backend systems.
+- Avoid speculative architecture that is not tied to active public-beta flows.
 - Keep docs synchronized with actual shipping behavior.

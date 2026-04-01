@@ -36,7 +36,7 @@ const buttonBaseStyle = {
 
 function RedirectToApp() {
   React.useEffect(() => {
-    window.location.replace('/app/')
+    window.location.replace('/')
   }, [])
 
   return null
@@ -46,8 +46,8 @@ function AuthActions() {
   const { openSignIn, openSignUp } = useClerk()
 
   const afterAuth = useMemo(() => ({
-    afterSignInUrl: '/app/',
-    afterSignUpUrl: '/app/',
+    afterSignInUrl: '/',
+    afterSignUpUrl: '/',
   }), [])
 
   return (
