@@ -10,7 +10,7 @@ const convexClient = authConfig.convexUrl
 
 function CloudAuthProviders({ children }) {
   return (
-    <ClerkProvider publishableKey={authConfig.clerkPublishableKey} afterSignOutUrl="/app/">
+    <ClerkProvider publishableKey={authConfig.clerkPublishableKey} afterSignOutUrl="/">
       <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
         <SignedIn>{children}</SignedIn>
         <SignedOut>

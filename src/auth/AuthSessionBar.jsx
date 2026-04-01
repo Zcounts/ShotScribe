@@ -60,7 +60,7 @@ function CloudAuthBar() {
           <button
             type="button"
             style={buttonStyle}
-            onClick={() => signOut({ redirectUrl: '/app/' })}
+            onClick={() => signOut({ redirectUrl: '/' })}
           >
             Sign out
           </button>
@@ -69,7 +69,7 @@ function CloudAuthBar() {
         <button
           type="button"
           style={buttonStyle}
-          onClick={() => openSignIn({ afterSignInUrl: '/app/', afterSignUpUrl: '/app/' })}
+          onClick={() => openSignIn({ afterSignInUrl: '/', afterSignUpUrl: '/' })}
         >
           Sign in
         </button>

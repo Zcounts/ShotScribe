@@ -2,34 +2,34 @@
 
 Date: 2026-04-01
 
-This document audits current repo reality and provides an incremental migration plan from the current local-first/SiteGround-oriented state to a Public Beta SaaS architecture.
+This document is a historical migration plan. Some early-phase audit bullets below are now outdated because Convex, Clerk wiring, and cloud/billing scaffolding have since landed in the repo.
 
 ---
 
 ## A) Repo audit summary
 
-### 1) Current deployment assumptions
+### 1) Current deployment assumptions (historical snapshot)
 
-- Root web build currently uses Vite with `base: './'`, which assumes relative static deployment rather than explicit `/` + `/app` route separation.
+- Root web build uses Vite with `base: '/'`.
 - Build scripts are still explicitly SiteGround-oriented (`build:web` and `preview:web` run `--mode siteground` and output to `dist-siteground`).
-- `docs/developer-notes-web-first.md` explicitly states static SiteGround hosting and no cloud backend.
-- Root app entrypoint (`index.html`) directly mounts the app; there is no dedicated landing/app split in the active build.
+- `docs/developer-notes-web-first.md` now reflects public-beta cloud scope while keeping SiteGround hosting reality.
+- Root app entrypoint (`index.html`) mounts the app.
 - A separate static landing file exists (`shotscribe-home.html`) but is not integrated into a production routing pipeline.
 
-### 2) Current persistence model
+### 2) Current persistence model (historical snapshot)
 
 - Current platform abstraction (`src/services/platformService.js`) writes autosave, recent projects, and browser snapshots to `localStorage`.
 - Save/open flows are file download + file picker in browser mode, and Electron bridge when available.
 - `docs/platform-service-layer.md` and `docs/developer-notes-web-first.md` define local-only persistence and import/export as the current contract.
-- No Convex schema/functions exist yet in repo.
-- No Stripe backend/webhooks exist yet in repo.
-- No auth provider integration is present.
+- Convex schema/functions now exist in `convex/`.
+- Stripe webhook handling now exists in `convex/http.ts` + `convex/webhooks.ts`.
+- Clerk + Convex auth provider integration is now present in frontend auth wiring.
 
 ### 3) Current routing/path assumptions
 
 - App currently assumes a single mount path via `index.html` + `src/main.jsx`.
 - No React Router currently defines route namespaces (`/`, `/app`, etc.).
-- `vite.config.js` relative base works for static folders, but can create ambiguity for deploying app as a strict subpath (`/app`) with modern SPA fallback.
+- `vite.config.js` now uses absolute-root base (`'/'`), which aligns with app-subdomain-root deployments.
 
 ### 4) What will break (or be risky) when moving to landing at `/` and app at `/app`
 
