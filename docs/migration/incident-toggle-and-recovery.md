@@ -2,6 +2,9 @@
 
 Last updated: 2026-04-01
 
+> Canonical rollback flow: `docs/public-beta-rollback-checklist.md`.  
+> Canonical support workflow: `docs/public-beta-support-checklist.md`.
+
 ## Purpose
 
 Provide a migration-safe way to quickly reduce blast radius by disabling cloud writes while preserving read access and export paths.

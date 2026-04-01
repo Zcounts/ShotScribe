@@ -81,6 +81,10 @@ Behavior:
 - [ ] Comped/grandfathered user: with override enabled and inactive Stripe status, paid cloud access remains enabled.
 - [ ] Promo-code checkout: promo code field appears in Stripe Checkout and valid code is applied.
 
+For launch/support operation, also run:
+- `docs/public-beta-launch-checklist.md`
+- `docs/public-beta-support-checklist.md`
+
 ## SiteGround/domain-root compatibility notes
 
 - Checkout success/cancel and portal return URLs use domain root routing (`/?billing=...`).

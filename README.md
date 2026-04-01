@@ -18,13 +18,16 @@ This repository currently contains:
 - Main web app with Script, Scenes, Storyboard, Shotlist, Cast/Crew, Schedule, and Callsheet flows.
 - Convex backend schema and functions for users, projects, snapshots, sharing, presence, screenplay locks, assets, ops flags, and Stripe webhook ingestion.
 - Clerk + Convex auth wiring in the frontend when cloud mode/env vars are enabled.
+- Account page (`/account`) with entitlement status, Checkout launch, and Stripe customer portal launch.
+- Admin console (`/admin`) behind admin role checks with lightweight operational analytics and safe kill-switch controls.
+- Invite accept flow at `/accept-invite?token=...` for shared cloud projects.
 - Local-only mode fallback when cloud env is not configured.
 - Google sign-in is expected to work through Clerk production configuration (provider settings are managed in Clerk dashboard, not in this repo).
 
 ### Partially working / in-progress
 - Cloud project workflows exist in code, but production rollout still relies on feature flags/env setup and operational controls.
 - Stripe billing integration exists in Convex (`billingSubscriptions` + webhook handler), but depends on production Stripe + Convex environment configuration.
-- Shared project invites and collaboration controls exist, but should be validated with staging/production smoke tests before broad rollout.
+- Shared project invites and collaboration controls exist, but still require routine smoke-test discipline before each deploy.
 
 ### Not the priority for beta
 - Desktop installer workflows are not the primary release path for public beta.
@@ -77,6 +80,10 @@ Convex/backend env requirements (as used by current code/docs):
 
 Billing setup runbook:
 - `docs/billing-stripe-runbook.md`
+
+Operational/admin setup:
+- `docs/admin-role-runbook.md`
+- `docs/public-beta-env-setup.md`
 
 ---
 
@@ -183,3 +190,10 @@ Current priority is stable public beta operation of the web app with:
 - clear operational controls (including cloud-write kill switch)
 
 Keep changes incremental and documentation synchronized with actual shipped behavior.
+
+## Public beta operations checklists
+
+- Launch checklist: `docs/public-beta-launch-checklist.md`
+- Rollback checklist: `docs/public-beta-rollback-checklist.md`
+- Support/operator checklist: `docs/public-beta-support-checklist.md`
+- Deferred-after-beta items: `docs/public-beta-deferred-items.md`

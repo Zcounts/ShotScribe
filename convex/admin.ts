@@ -184,10 +184,12 @@ export const getAdminDashboardOverview = query({
     await requireCurrentAdmin(ctx)
     const recentLimit = Math.min(Math.max(args.recentLimit || 10, 1), 50)
 
-    const [users, profiles, subscriptions] = await Promise.all([
+    const [users, profiles, subscriptions, projects, memberships] = await Promise.all([
       ctx.db.query('users').collect(),
       ctx.db.query('accountProfiles').collect(),
       ctx.db.query('billingSubscriptions').collect(),
+      ctx.db.query('projects').collect(),
+      ctx.db.query('projectMembers').collect(),
     ])
 
     const profileByUserId = new Map<string, any>()
@@ -220,6 +222,15 @@ export const getAdminDashboardOverview = query({
       return normalizedStatus === 'active' || normalizedStatus === 'trialing'
     }).length
 
+    const totalCloudProjects = projects.length
+    const totalActiveCloudProjects = projects.filter((project: any) => !project.archivedAt).length
+    const totalSharedMemberships = memberships.filter((membership: any) => !membership.revokedAt).length
+    const sharedProjectIds = new Set(
+      memberships
+        .filter((membership: any) => !membership.revokedAt)
+        .map((membership: any) => String(membership.projectId)),
+    )
+
     const recentSignups = [...users]
       .sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
       .slice(0, recentLimit)
@@ -248,6 +259,10 @@ export const getAdminDashboardOverview = query({
         totalPaidUsers,
         totalActiveSubscriptions,
         totalGrandfatheredOrCompedUsers,
+        totalCloudProjects,
+        totalActiveCloudProjects,
+        totalSharedProjects: sharedProjectIds.size,
+        totalSharedMemberships,
       },
       recentSignups,
       recentSubscriptionChanges,

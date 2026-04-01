@@ -88,3 +88,7 @@ Expected:
 - Conflict handling is intentionally last-write-wins (not CRDT).
 - Locking is lease-based guardrail, not hard transactional locking.
 - Realtime is near-realtime via polling/subscription updates and heartbeats.
+
+For release-day sequencing and escalation flow, pair this with:
+- `docs/public-beta-launch-checklist.md`
+- `docs/public-beta-support-checklist.md`
