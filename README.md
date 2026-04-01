@@ -2,30 +2,7 @@
 
 ShotScribe is a **web-based production planning app for filmmakers**.
 
-It is built to carry a project from **script through production** inside one connected workflow. Instead of splitting prep across separate writing, storyboard, shotlist, schedule, and callsheet tools, ShotScribe keeps that work tied together in one project so the information created in prep is still useful when you're on set.
-
-ShotScribe is moving toward a **web-first SaaS release** built around:
-
-- a public landing page at the site root
-- the application living under `/app`
-- a free local-only tier
-- paid cloud features
-- shared cloud projects
-- live project sync for paid cloud workspaces
-- a long-term backend that can support subscriptions, promotions, discounts, and account management
-- a collaboration architecture that can grow into true multiplayer screenplay editing after beta
-
-## Public site structure
-
-ShotScribe should be deployed with a split between the marketing site and the product:
-
-- `/` — landing page / marketing site
-- `/app` — main ShotScribe application
-- `/app/*` — all in-app routes, authenticated screens, shared production views, and future product surfaces
-
-This is a core product and deployment requirement.
-
-The application should **not** assume it lives at the domain root. Any routing, assets, redirects, auth flows, deep links, or deployment configuration must be safe for an app that runs from `/app` while a separate landing page exists at `/`.
+It is built to carry a project from **script through production** inside one connected workflow. Instead of breaking prep across separate writing, storyboard, shotlist, schedule, and callsheet tools, ShotScribe keeps that work tied together in one project so the information you create in prep is still useful when you're on set.
 
 ## What ShotScribe does
 
@@ -101,6 +78,69 @@ Build shoot days and organize production planning around scenes, shots, and day 
 ### Callsheet
 Generate day-based production information from the same project data instead of rebuilding it elsewhere.
 
+## Product direction
+
+ShotScribe is moving from a **local-first static web app** into a **public beta SaaS workflow**.
+
+### Frontend
+- landing page at `/`
+- main app at `/app`
+- deployed on **Cloudflare Pages**
+
+### Backend
+- **Convex** for backend functions, database, and live-sync application state
+- **Convex file storage** for cloud assets and uploads
+- **Stripe** for subscriptions, discounts, promo codes, and billing workflows
+
+Convex’s official docs position Convex as a reactive database plus backend functions with client libraries, and Convex is “automatically realtime” when using its query functions and client libraries. Convex also supports built-in file storage for uploads and served files. citeturn126328search7turn126328search3turn126328search2
+
+## Pricing / access model
+
+ShotScribe is being designed around two modes:
+
+### Free tier
+- local-only projects
+- import/export
+- no cloud save
+- no cloud collaboration
+- no cloud asset storage
+
+### Paid cloud tier
+- authenticated account
+- cloud-backed projects
+- shared cloud projects
+- live sync across connected users
+- cloud asset storage
+- subscription-managed access
+
+## Public beta target
+
+The public beta target is not the same as the current repo behavior.
+
+### Public beta goals
+- landing page at `/`
+- app at `/app`
+- free local-only tier remains available
+- paid cloud tier unlocks cloud projects
+- shared cloud projects for paid users
+- live project sync for paid cloud projects
+- cloud assets/uploads for paid projects
+- subscription billing through Stripe
+- internal backend foundation for discounts, promo codes, and future sales workflows
+
+## Script collaboration plan
+
+For public beta, the screenplay portion should support a **beta-safe collaborative model**, not necessarily full Google Docs-style character-by-character multiplayer editing on day one.
+
+That means beta can ship with a combination of:
+- cloud save
+- presence or awareness
+- safe conflict handling
+- scene-level or document-level collaboration guardrails
+- version history / recoverability patterns
+
+True high-end screenplay multiplayer editing can be added later as a dedicated collaboration layer if needed.
+
 ## On-set web workflow
 
 ShotScribe is not just for prep.
@@ -115,187 +155,121 @@ With the web app workflow, you can bring production information onto set in a ph
 
 That makes ShotScribe useful not only during planning, but during production when the crew actually needs the information.
 
-## Product tiers
+## Current repo reality
 
-ShotScribe is being designed with two core usage modes.
+The repository is still in the middle of this transition.
 
-### Free tier
-The free tier is intended to carry through beta and public launch.
+Right now, the current version is still closer to:
 
-Free users should be able to:
+- local-first browser persistence
+- static deployment assumptions
+- SiteGround-oriented build/output behavior
+- import/export as the backup and transfer path
+- no finished public beta cloud stack yet
 
-- create and edit projects locally
-- save locally in the browser or local device context
-- import/export project files for backup and transfer
-- use the app without cloud storage or collaboration
-
-Free tier limits:
-
-- no cloud project sync
-- no shared cloud workspaces
-- no live collaboration features
-- no cloud asset storage
-- no paid production workspace features
-
-### Paid cloud tier
-The paid tier unlocks ShotScribe's connected production workspace.
-
-Paid users should be able to:
-
-- sign in with an account
-- save projects to the cloud
-- upload and manage project assets
-- collaborate with other users on shared productions
-- receive live project updates inside shared projects
-- access future cloud-based team and production workspace features
-
-## Collaboration direction
-
-ShotScribe's collaboration strategy is being split into two stages.
-
-### Public beta collaboration target
-Public beta should support **shared paid cloud projects** with practical live collaboration features, including:
-
-- cloud-backed shared projects
-- project membership and shared access
-- live project/module updates for paid cloud users
-- presence indicators where useful
-- locking or conflict-safe editing patterns for high-risk areas like screenplay editing
-- version-aware cloud workflows that reduce overwrite problems
-
-For beta, the script editor does **not** need to behave like Google Docs at the keystroke level.
-
-### Post-beta screenplay collaboration target
-True multiplayer screenplay editing is still an important long-term feature.
-
-After beta, the collaboration architecture should be able to grow into:
-
-- character-by-character collaborative script editing
-- live cursors and selections
-- stronger merge/conflict handling for simultaneous text edits
-- a specialized collaborative document layer, likely built around **Yjs + Hocuspocus** or an equivalent dedicated multiplayer text architecture
-
-This means the beta should be designed so the script editor can evolve into true realtime collaboration later without forcing a full rewrite of the app.
-
-## Current product phase
-
-ShotScribe is currently moving toward **Public Beta v0.1**.
-
-The target beta direction is:
-
-- web-first deployment
-- landing page at `/`
-- main application at `/app`
-- browser-first workflow
-- free local-only project saving
-- paid cloud-backed project saving
-- shared paid cloud projects
-- live project sync for paid users
-- presence and conflict-safe collaboration patterns where needed
-- mobile-friendly access for use on set
-- account-based access for cloud features
-- subscription-gated cloud functionality
-
-At this stage, the repository is still transitioning from an earlier static-hosting, local-first setup into a fuller cloud-backed product.
-
-## Target production stack
-
-The long-term production stack is planned around:
-
-- **Supabase** for backend infrastructure
-- **Supabase Postgres** for relational project and account data
-- **Supabase Auth** for login and identity
-- **Supabase Realtime** for collaborative cloud project updates, presence, and live app sync
-- **Supabase Storage** for uploaded files and images
-- **Supabase Edge Functions** for secure server-side logic and backend workflows
-- **Stripe** for subscription billing, discounts, promo logic, sales workflows, and customer billing
-- **Cloudflare Pages** for frontend hosting
-
-Planned post-beta collaboration expansion:
-
-- **Yjs + Hocuspocus** or an equivalent dedicated collaborative text layer for true multiplayer screenplay editing
-
-This keeps the product stack focused on:
-
-- **Supabase** as the primary backend platform
-- **Cloudflare Pages** as the frontend host
-- **Stripe** as the billing platform
-- a future dedicated screenplay-collaboration layer only when the product is ready for true live script editing
-
-## Why this stack
-
-ShotScribe is being optimized for the long term, not only the cheapest short-term launch path.
-
-This stack was chosen because the product is expected to grow into:
-
-- collaborative cloud projects
-- shared workspaces
-- subscriptions and account management
-- discounts and promo handling
-- future seat-based or role-based access
-- more relational production data over time
-- stronger multiplayer screenplay editing after beta
-
-Supabase provides a better long-term fit for a product that is expected to grow beyond single-user local project storage and into collaborative production workspaces.
-
-Cloudflare Pages is the frontend host for the public web layer, with the landing page at `/` and the app mounted at `/app`.
-
-## Deployment architecture
-
-The intended deployment model is:
-
-- landing page served at the domain root
-- app served from `/app`
-- future authenticated app routes nested under `/app/*`
-- marketing pages and product app treated as separate surfaces on the same domain
-- frontend deployed to Cloudflare Pages
-- backend services handled by Supabase
-
-For production, deployment should support:
-
-- a dedicated landing page at `/`
-- SPA rewrites for `/app` and `/app/*`
-- working deep links inside the application
-- asset loading that does not break when the app is mounted under `/app`
-- auth redirects that return users to `/app`
-- billing success/cancel flows that return users to app-safe routes under `/app`
-
-## Important path requirements
-
-Because the app lives at `/app`, the codebase and deployment setup must avoid root-only assumptions.
-
-Important rules:
-
-- app routes should resolve under `/app`
-- landing page links should point into `/app`
-- asset paths should be relative or `/app`-aware in production
-- auth callbacks and redirect URLs should return to `/app`
-- deep-linked pages inside the app should still load on refresh
-- billing success/cancel redirects should point to routes under `/app`
-- shared collaboration links should be safe under `/app`
-- future mobile-web entry points should not assume the app is served from `/`
-
-If any build logic, router config, redirects, or asset references still assume the application lives at the domain root, those should be updated before public beta deployment.
-
-## Backend and business operations direction
-
-ShotScribe will need backend workflows beyond simple app data.
-
-The backend should be designed to support:
-
-- subscription status and access control
-- discounts, promo codes, and sales campaigns
-- customer billing management
-- internal admin workflows
-- support tooling for account/project access issues
-- future seat, role, and team-based account logic
-
-This should be handled as part of the long-term SaaS architecture, not as an afterthought layered on top later.
+This means the repository still needs migration work to reach the public beta target.
 
 ## Repository structure
+
+Current key folders:
 
 - `src/` — main web app
 - `mobile/` — mobile web companion
 - `shared/` — shared contracts, types, and utilities
 - `electron/` — legacy desktop shell kept for archive/fallback
 - `docs/` — specs and developer notes
+- `assets/` — static assets
+
+Target structure will likely expand to include backend and deployment folders such as:
+
+- `convex/` — Convex schema, functions, and backend logic
+- `site/` — landing page source if split cleanly from the app
+- `docs/migration/` — public beta migration notes and prompts
+
+## Development
+
+### Main web app
+
+```bash
+npm install
+npm run dev:web
+```
+
+### Build web app
+
+```bash
+npm run build:web
+```
+
+### Preview build locally
+
+```bash
+npm run preview:web
+```
+
+### Legacy desktop workflow
+
+```bash
+npm run electron:dev
+npm run build:desktop
+```
+
+Use Electron only when desktop packaging behavior is explicitly needed.
+
+## Local-only persistence
+
+Browser mode currently stores project state locally in the current browser profile.
+
+Important notes:
+
+- clearing browser data can remove local projects
+- there is no finished built-in cross-device sync in the current version
+- import/export should be used for backup and transfer
+- file compatibility should be preserved across ShotScribe project workflows
+
+## Deployment direction
+
+### Current
+The current repo still reflects older static deployment assumptions.
+
+### Target
+The intended production direction is:
+
+- **Cloudflare Pages** serves the frontend
+- root path (`/`) serves the landing page
+- `/app` serves the actual application
+- **Convex** powers the backend and live data layer
+- **Stripe** manages paid cloud access
+
+Cloudflare Pages’ free plan currently includes 500 builds per month, custom domains per project, and unlimited static requests/bandwidth for static assets. Convex pricing includes a Starter pay-as-you-go plan and a Professional plan, and Convex offers startup credits/program terms for qualifying companies. citeturn126328search0turn126328search12
+
+## Convex notes
+
+Convex is being chosen because it better matches the long-term product direction for:
+
+- live-updating app state
+- backend functions living close to app data
+- shared cloud projects
+- future collaboration features
+- future internal business/admin workflows
+
+Convex supports authentication through JWT/OpenID Connect-compatible providers, and Convex Auth exists as an integrated option, though the official docs currently describe Convex Auth as being in beta. citeturn126328search5turn126328search1
+
+## Product philosophy
+
+ShotScribe is not meant to feel like generic project management software.
+
+It is built to feel native to real film workflows:
+
+- visual
+- practical
+- fast
+- production-focused
+- useful in prep and on set
+- accessible for indie teams
+
+## Status
+
+ShotScribe is actively evolving from a **local-first web app** into a **cloud-backed collaborative production platform for filmmakers**.
+
+The current build is not yet the final public beta architecture. The immediate focus is migrating safely from the current local/SiteGround-oriented version into a Cloudflare + Convex + Stripe public beta while preserving the existing workflow and maintaining a free local-only tier.
