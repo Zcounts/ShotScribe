@@ -46,6 +46,7 @@ function CloudAuthBar() {
   const { isAdmin } = useAdminAccess()
   const isLoading = !userLoaded || convexLoading
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Signed-in user'
+  const onAccountPage = typeof window !== 'undefined' && window.location.pathname === '/account'
 
   return (
     <div style={barStyle}>
@@ -58,6 +59,13 @@ function CloudAuthBar() {
       </span>
       {isSignedIn ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            type="button"
+            style={buttonStyle}
+            onClick={() => window.location.assign(onAccountPage ? '/' : '/account')}
+          >
+            {onAccountPage ? 'Back to app' : 'Account'}
+          </button>
           <BillingActions compact />
           <button
             type="button"

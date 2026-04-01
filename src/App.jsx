@@ -59,6 +59,7 @@ import {
 import { devPerfLog, useDevRenderCounter } from './utils/devPerf'
 import { platformService } from './services/platformService'
 import AuthSessionBar from './auth/AuthSessionBar'
+import AccountPage from './features/account/AccountPage'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -385,6 +386,7 @@ export default function App() {
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
   const [activeStoryboardShotId, setActiveStoryboardShotId] = useState(null)
+  const [pathname, setPathname] = useState(() => window.location.pathname)
   const storyboardScrollRef = useRef(null)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
@@ -540,6 +542,12 @@ export default function App() {
   useEffect(() => {
     document.body.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light')
   }, [theme])
+
+  useEffect(() => {
+    const onPopstate = () => setPathname(window.location.pathname)
+    window.addEventListener('popstate', onPopstate)
+    return () => window.removeEventListener('popstate', onPopstate)
+  }, [])
 
   // Compute page offset for each scene (for global page numbering)
   const scenePageOffsets = []
@@ -865,6 +873,10 @@ export default function App() {
 
       <AuthSessionBar />
 
+      {pathname === '/account' ? (
+        <AccountPage />
+      ) : (
+        <>
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
       <div className="tab-nav" style={{
         display: 'flex',
@@ -1216,6 +1228,9 @@ export default function App() {
       )}
 
       {/* Export Modal */}
+      </>
+      )}
+
       <ExportModal
         isOpen={exportModalOpen}
         onClose={() => { setExportModalOpen(false); setForcedExportTab(null) }}

@@ -174,6 +174,9 @@ export const getMyEntitlement = query({
       isAdmin: Boolean(profile?.isAdmin),
       isLocalOnlyUser: !canUseCloud,
       billingState,
+      currentPeriodEnd: subscription?.currentPeriodEnd || null,
+      cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
+      planTier: profile?.planTier || (canUseCloud ? 'paid' : 'free'),
     }
   },
 })
