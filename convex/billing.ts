@@ -1,15 +1,20 @@
 import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, query } from './_generated/server'
 import { api } from './_generated/api'
-
-const ENTITLED_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing'])
+import {
+  hasPaidCloudAccess,
+  isGrandfatheredOrComped,
+} from '../shared/src/policies/accessPolicy'
 
 function normalizeEmail(email: string | undefined | null) {
   return typeof email === 'string' ? email.trim().toLowerCase() : ''
 }
 
 export function subscriptionStatusAllowsCloudFeatures(status: string | undefined | null) {
-  return ENTITLED_SUBSCRIPTION_STATUSES.has(String(status || '').toLowerCase())
+  return hasPaidCloudAccess({
+    isAuthenticated: true,
+    subscriptionStatus: status,
+  })
 }
 
 export async function canUseCloudFeatures(ctx: any, userId: any) {
@@ -18,8 +23,17 @@ export async function canUseCloudFeatures(ctx: any, userId: any) {
     .withIndex('by_user_id', (q: any) => q.eq('userId', userId))
     .unique()
 
-  if (!subscription) return false
-  return subscriptionStatusAllowsCloudFeatures(subscription.status)
+  const profile = await ctx.db
+    .query('accountProfiles')
+    .withIndex('by_user_id', (q: any) => q.eq('userId', userId))
+    .unique()
+
+  return hasPaidCloudAccess({
+    isAuthenticated: true,
+    subscriptionStatus: subscription?.status,
+    hasGrandfatheredAccess: Boolean(profile?.grandfatheredAccess),
+    hasCompedAccess: Boolean(profile?.compedAccess),
+  })
 }
 
 async function patchAccountTierForUser(ctx: any, userId: any, canUseCloud: boolean, now: number) {
@@ -74,12 +88,31 @@ export const getMyEntitlement = query({
       .query('billingSubscriptions')
       .withIndex('by_user_id', (q: any) => q.eq('userId', user._id))
       .unique()
+    const profile = await ctx.db
+      .query('accountProfiles')
+      .withIndex('by_user_id', (q: any) => q.eq('userId', user._id))
+      .unique()
 
     const subscriptionStatus = subscription?.status || null
+    const grandfatheredOrComped = isGrandfatheredOrComped({
+      isAuthenticated: true,
+      hasGrandfatheredAccess: Boolean(profile?.grandfatheredAccess),
+      hasCompedAccess: Boolean(profile?.compedAccess),
+    })
+    const canUseCloud = hasPaidCloudAccess({
+      isAuthenticated: true,
+      subscriptionStatus,
+      hasGrandfatheredAccess: Boolean(profile?.grandfatheredAccess),
+      hasCompedAccess: Boolean(profile?.compedAccess),
+    })
+
     return {
-      canUseCloudFeatures: subscriptionStatusAllowsCloudFeatures(subscriptionStatus),
+      canUseCloudFeatures: canUseCloud,
       checkoutAvailable: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID),
       subscriptionStatus,
+      grandfatheredOrComped,
+      isAdmin: Boolean(profile?.isAdmin),
+      isLocalOnlyUser: !canUseCloud,
     }
   },
 })

@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import { requireCloudEntitlement } from './billing'
+import { assertCanCollaborateOnCloudProject, assertHasPaidCloudAccess } from './accessPolicy'
 import { requireCloudWritesEnabled } from './ops'
 
 const ROLE_RANK: Record<string, number> = {
@@ -119,7 +119,7 @@ export const inviteProjectMember = mutation({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertCanCollaborateOnCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
 
     const normalizedInviteEmail = normalizeEmail(args.email)
@@ -187,6 +187,7 @@ export const acceptProjectInvite = mutation({
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
+    await assertHasPaidCloudAccess(ctx, currentUserId)
     await requireCloudWritesEnabled(ctx)
     const user = await ctx.db.get(currentUserId)
     const normalizedUserEmail = normalizeEmail(user?.email || '')
@@ -243,7 +244,7 @@ export const revokeProjectMember = mutation({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertCanCollaborateOnCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
     if (String(project.ownerUserId) === String(args.userId)) throw new Error('Cannot revoke project owner')
 
@@ -273,7 +274,7 @@ export const updateProjectMemberRole = mutation({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertCanCollaborateOnCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
     if (String(project.ownerUserId) === String(args.userId)) throw new Error('Cannot change owner role')
 

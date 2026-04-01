@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import { requireCloudEntitlement } from './billing'
+import { assertCanAccessCloudAssets, assertCanEditCloudProject } from './accessPolicy'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
@@ -11,8 +11,7 @@ export const createAssetUploadUrl = mutation({
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
-    await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
     const uploadUrl = await ctx.storage.generateUploadUrl()
     return { uploadUrl }
@@ -32,8 +31,7 @@ export const completeAssetUpload = mutation({
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
-    await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()
@@ -71,6 +69,7 @@ export const getAssetView = query({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
 
     const asset = await ctx.db.get(args.assetId)
     if (!asset || String(asset.projectId) !== String(args.projectId) || asset.deletedAt) {
@@ -98,8 +97,7 @@ export const pruneOrphanedAssets = mutation({
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
-    await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
 
     const keep = new Set(args.keepAssetIds.map((id: any) => String(id)))

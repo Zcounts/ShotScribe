@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import { requireCloudEntitlement } from './billing'
+import { assertCanEditCloudProject } from './accessPolicy'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
@@ -25,8 +25,7 @@ export const createSnapshot = mutation({
       throw new Error('Forbidden')
     }
 
-    await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()

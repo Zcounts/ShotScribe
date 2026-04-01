@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import { requireCloudEntitlement } from './billing'
+import { assertHasPaidCloudAccess } from './accessPolicy'
 import { getProjectAccessRole, requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
@@ -17,7 +17,7 @@ export const createProject = mutation({
       throw new Error('Forbidden')
     }
 
-    await requireCloudEntitlement(ctx, currentUserId)
+    await assertHasPaidCloudAccess(ctx, currentUserId)
     await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()
@@ -98,7 +98,7 @@ export const seedTestCloudProject = mutation({
   },
   handler: async (ctx, args) => {
     const ownerUserId = await requireCurrentUserId(ctx)
-    await requireCloudEntitlement(ctx, ownerUserId)
+    await assertHasPaidCloudAccess(ctx, ownerUserId)
     await requireCloudWritesEnabled(ctx)
 
     const now = Date.now()
