@@ -1,7 +1,7 @@
 import React from 'react'
-import { Auth0Provider, useAuth0 } from '@auth0/auth0-react'
+import { ClerkProvider, RedirectToSignIn, SignedIn, SignedOut, useAuth } from '@clerk/clerk-react'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
-import { ConvexProviderWithAuth0 } from 'convex/react-auth0'
+import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { authConfig, isCloudAuthConfigured } from './authConfig'
 
 const convexClient = authConfig.convexUrl
@@ -10,20 +10,14 @@ const convexClient = authConfig.convexUrl
 
 function CloudAuthProviders({ children }) {
   return (
-    <Auth0Provider
-      domain={authConfig.domain}
-      clientId={authConfig.clientId}
-      authorizationParams={{
-        audience: authConfig.audience,
-        redirect_uri: window.location.origin,
-      }}
-      useRefreshTokens
-      cacheLocation="localstorage"
-    >
-      <ConvexProviderWithAuth0 client={convexClient} useAuth0={useAuth0}>
-        {children}
-      </ConvexProviderWithAuth0>
-    </Auth0Provider>
+    <ClerkProvider publishableKey={authConfig.clerkPublishableKey} afterSignOutUrl="/app/">
+      <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
+        <SignedIn>{children}</SignedIn>
+        <SignedOut>
+          <RedirectToSignIn />
+        </SignedOut>
+      </ConvexProviderWithClerk>
+    </ClerkProvider>
   )
 }
 
