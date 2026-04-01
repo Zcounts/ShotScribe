@@ -10,7 +10,12 @@ async function getMobileExportService() {
   return mobileExportServicePromise
 }
 
-export default function Toolbar({ onExportPDF, onExportPNG }) {
+export default function Toolbar({
+  onExportPDF,
+  onExportPNG,
+  cloudExportBlocked = false,
+  cloudExportBlockedMessage = '',
+}) {
   const projectName = useStore(s => s.projectName)
   const projectEmoji = useStore(s => s.projectEmoji)
   const projectPath = useStore(s => s.projectPath)
@@ -161,6 +166,10 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
         : 'Storyboard'
   const emojiChoices = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
   const openExportModal = (tab = 'pdf') => {
+    if (cloudExportBlocked) {
+      alert(cloudExportBlockedMessage || 'Cloud project export is unavailable while billing is inactive. Local-only projects can still be exported.')
+      return
+    }
     setExportTab(tab)
     setExportModalOpen(true)
     setExportMenuOpen(false)
@@ -485,15 +494,29 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
           <button
             className="toolbar-btn"
             onClick={() => openExportModal('pdf')}
-            title="Open export options"
-            style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
+            title={cloudExportBlocked ? (cloudExportBlockedMessage || 'Cloud exports are blocked while billing is inactive') : 'Open export options'}
+            disabled={cloudExportBlocked}
+            style={{
+              borderRadius: '4px 0 0 4px',
+              borderRight: 'none',
+              paddingRight: 8,
+              opacity: cloudExportBlocked ? 0.6 : 1,
+              cursor: cloudExportBlocked ? 'not-allowed' : 'pointer',
+            }}
           >
             EXPORT
           </button>
           <button
             className="toolbar-btn"
-            onClick={() => setExportMenuOpen(o => !o)}
-            title="Choose export type"
+            onClick={() => {
+              if (cloudExportBlocked) {
+                alert(cloudExportBlockedMessage || 'Cloud project export is unavailable while billing is inactive. Local-only projects can still be exported.')
+                return
+              }
+              setExportMenuOpen(o => !o)
+            }}
+            title={cloudExportBlocked ? (cloudExportBlockedMessage || 'Cloud exports are blocked while billing is inactive') : 'Choose export type'}
+            disabled={cloudExportBlocked}
             style={{
               borderRadius: '0 4px 4px 0',
               borderLeft: '1px solid rgba(255,255,255,0.15)',
@@ -580,6 +603,11 @@ export default function Toolbar({ onExportPDF, onExportPNG }) {
           )}
         </div>
       </div>
+      {cloudExportBlocked && (
+        <div style={{ color: '#fbbf24', fontSize: 11, marginTop: 6, textAlign: 'right' }}>
+          Cloud project export is disabled while billing is inactive. Local-only export still works.
+        </div>
+      )}
 
       {exportModalOpen && (
         <div

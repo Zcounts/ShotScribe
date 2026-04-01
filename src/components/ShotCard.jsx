@@ -11,6 +11,7 @@ import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { uploadStoryboardAssetToCloud } from '../services/assetService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
+import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
@@ -41,9 +42,11 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const projectRef = useStore(s => s.projectRef)
   const createAssetUploadUrl = useMutation('assets:createAssetUploadUrl')
   const completeAssetUpload = useMutation('assets:completeAssetUpload')
+  const cloudAccessPolicy = useCloudAccessPolicy()
+  const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
   const cloudAssetView = useQuery(
     'assets:getAssetView',
-    (projectRef?.type === 'cloud' && shot?.imageAsset?.cloud?.assetId)
+    (projectRef?.type === 'cloud' && shot?.imageAsset?.cloud?.assetId && !cloudAssetBlocked)
       ? { projectId: projectRef.projectId, assetId: shot.imageAsset.cloud.assetId }
       : 'skip'
   )
@@ -90,6 +93,11 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     try {
       const isCloudProject = projectRef?.type === 'cloud'
       if (isCloudProject) {
+        if (cloudAssetBlocked || !cloudAccessPolicy.canEditCloudProject) {
+          alert('Cloud image uploads are blocked while billing is inactive. You can continue local-only workflows.')
+          e.target.value = ''
+          return
+        }
         if (!CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES.includes(file.type)) {
           alert('Cloud uploads support JPG, PNG, or WEBP files for beta.')
           e.target.value = ''
@@ -132,7 +140,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, updateShotImage, projectRef, createAssetUploadUrl, completeAssetUpload])
+  }, [shot.id, updateShotImage, projectRef, createAssetUploadUrl, completeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
@@ -168,7 +176,9 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
   )
 
-  const storyboardImageSrc = cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null
+  const storyboardImageSrc = cloudAssetBlocked
+    ? null
+    : (cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
 
   return (
     <div
@@ -245,6 +255,11 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
       >
         {storyboardImageSrc ? (
           <img src={storyboardImageSrc} alt="Shot frame" loading="lazy" decoding="async" />
+        ) : cloudAssetBlocked ? (
+          <div className="flex flex-col items-center gap-1 text-amber-300">
+            <span className="text-xs font-medium">Cloud image unavailable</span>
+            <span className="text-[10px] text-gray-400">Billing inactive: cloud assets are blocked.</span>
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-1 text-gray-500">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

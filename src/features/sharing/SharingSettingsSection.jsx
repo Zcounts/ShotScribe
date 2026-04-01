@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import useStore from '../../store'
+import useCloudAccessPolicy from '../billing/useCloudAccessPolicy'
 
 const cardStyle = {
   border: '1px solid #374151',
@@ -15,6 +16,7 @@ export default function SharingSettingsSection() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('viewer')
   const [lastInviteUrl, setLastInviteUrl] = useState('')
+  const cloudAccessPolicy = useCloudAccessPolicy()
 
   const membersResult = useQuery(
     'projectMembers:listProjectMembers',
@@ -32,6 +34,20 @@ export default function SharingSettingsSection() {
       <div style={cardStyle}>
         <div className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1">Project Sharing</div>
         <div className="text-xs text-gray-400">Open a cloud project to manage collaborators and roles.</div>
+      </div>
+    )
+  }
+
+  if (!cloudAccessPolicy.canCollaborateOnCloudProject) {
+    return (
+      <div style={cardStyle}>
+        <div className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1">Project Sharing</div>
+        <div className="text-xs text-amber-300 mb-2">
+          Collaboration is unavailable for this cloud project while your paid cloud access is inactive.
+        </div>
+        <div className="text-xs text-gray-400">
+          You can still view existing project data. Local-only projects and local import/export continue to work normally.
+        </div>
       </div>
     )
   }
