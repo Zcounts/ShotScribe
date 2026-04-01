@@ -39,15 +39,10 @@ export async function uploadStoryboardAssetToCloud({
   createAssetUploadUrl: (args: { projectId: string }) => Promise<{ uploadUrl: string }>,
   completeAssetUpload: (args: any) => Promise<any>,
 }) {
-  const [thumbTarget, fullTarget] = await Promise.all([
-    createAssetUploadUrl({ projectId }),
-    createAssetUploadUrl({ projectId }),
-  ])
+  const thumbTarget = await createAssetUploadUrl({ projectId })
 
-  const [thumbStorageId, fullStorageId] = await Promise.all([
-    uploadBlobToConvex(thumbTarget.uploadUrl, processed.thumbBlob),
-    uploadBlobToConvex(fullTarget.uploadUrl, processed.fullBlob),
-  ])
+  const thumbStorageId = await uploadBlobToConvex(thumbTarget.uploadUrl, processed.thumbBlob)
+  const fullStorageId = thumbStorageId
 
   const completed = await completeAssetUpload({
     projectId,
