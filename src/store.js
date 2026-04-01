@@ -21,6 +21,8 @@ import {
 } from './castCrewDisplayConfig'
 import { devPerfLog } from './utils/devPerf'
 import { platformService } from './services/platformService'
+import { runtimeConfig } from './config/runtimeConfig'
+import { logTelemetry } from './utils/telemetry'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -548,6 +550,7 @@ const useStore = create((set, get) => ({
   lastSaved: null,
   hasUnsavedChanges: false,
   documentSession: 0,
+  appMode: runtimeConfig.appMode,
 
   // Scenes (multi-scene support)
   scenes: [initialScene],
@@ -714,6 +717,12 @@ const useStore = create((set, get) => ({
           }),
         }
       }
+    })
+    logTelemetry('script_import_result', {
+      success: true,
+      mode,
+      importedSceneCount: Array.isArray(parsedScenes) ? parsedScenes.length : 0,
+      source: scriptMeta?.filename || 'unknown',
     })
     get()._scheduleAutoSave()
   },
@@ -2374,18 +2383,23 @@ const useStore = create((set, get) => ({
         }
         if (result.success) {
           set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
+          logTelemetry('project_export_result', { success: true, mode: 'save', platform: 'desktop', hasPath: !!result.filePath })
         } else if (result.error) {
+          logTelemetry('project_export_result', { success: false, mode: 'save', platform: 'desktop', error: result.error })
           alert(`Save failed: ${result.error}`)
         }
         // result.success === false with no error means user cancelled the dialog — no message needed
       } catch (err) {
+        logTelemetry('project_export_result', { success: false, mode: 'save', platform: 'desktop', error: err?.message || 'unknown' })
         alert(`Save failed: ${err.message}`)
       }
     } else {
       try {
         await platformService.saveProject(defaultName, json)
         persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
+        logTelemetry('project_export_result', { success: true, mode: 'save', platform: 'browser' })
       } catch (err) {
+        logTelemetry('project_export_result', { success: false, mode: 'save', platform: 'browser', error: err?.message || 'unknown' })
         alert(`Save failed: ${err.message}`)
       }
     }
@@ -2420,17 +2434,22 @@ const useStore = create((set, get) => ({
         const result = await platformService.saveProject(defaultName, json)
         if (result.success) {
           set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
+          logTelemetry('project_export_result', { success: true, mode: 'save_as', platform: 'desktop', hasPath: !!result.filePath })
         } else if (result.error) {
+          logTelemetry('project_export_result', { success: false, mode: 'save_as', platform: 'desktop', error: result.error })
           alert(`Save failed: ${result.error}`)
         }
       } catch (err) {
+        logTelemetry('project_export_result', { success: false, mode: 'save_as', platform: 'desktop', error: err?.message || 'unknown' })
         alert(`Save failed: ${err.message}`)
       }
     } else {
       try {
         await platformService.saveProject(defaultName, json)
         persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
+        logTelemetry('project_export_result', { success: true, mode: 'save_as', platform: 'browser' })
       } catch (err) {
+        logTelemetry('project_export_result', { success: false, mode: 'save_as', platform: 'browser', error: err?.message || 'unknown' })
         alert(`Save failed: ${err.message}`)
       }
     }
@@ -2754,12 +2773,12 @@ const useStore = create((set, get) => ({
   },
 
   openProject: async () => {
-    if (platformService.isDesktop()) {
-      const result = await platformService.openProject()
-      if (!result.success) return
-      try {
-        const data = JSON.parse(result.data)
-        get().loadProject(data)
+    const result = await platformService.openProject()
+    if (!result.success) return
+    try {
+      const data = JSON.parse(result.data)
+      get().loadProject(data)
+      if (platformService.isDesktop()) {
         const fileName = result.filePath.split(/[\\/]/).pop()
         set({ projectPath: result.filePath, browserProjectId: null })
         updateRecentProjects(get, set, buildRecentProjectEntry({
@@ -2767,32 +2786,19 @@ const useStore = create((set, get) => ({
           path: result.filePath,
           shots: getTotalShotsFromProjectData(data),
         }))
-      } catch {
-        alert('Failed to load project: Invalid file format')
+        logTelemetry('project_import_result', { success: true, platform: 'desktop', source: result.filePath })
+      } else {
+        set({ projectPath: null })
+        persistBrowserProjectState(get, set, { data, name: result.filePath, markSaved: true })
+        logTelemetry('project_import_result', { success: true, platform: 'browser', source: result.filePath || 'picker' })
       }
-    } else {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = '.shotlist,.json'
-      input.onchange = (e) => {
-        const file = e.target.files[0]
-        if (!file) return
-        const reader = new FileReader()
-        reader.onload = (ev) => {
-          try {
-            const data = JSON.parse(ev.target.result)
-            get().loadProject(data)
-            set({ projectPath: null })
-            persistBrowserProjectState(get, set, { data, name: file.name, markSaved: true })
-          } catch {
-            alert('Failed to load project: Invalid file format')
-          }
-        }
-        reader.readAsText(file)
-      }
-      document.body.appendChild(input)
-      input.click()
-      document.body.removeChild(input)
+    } catch {
+      logTelemetry('project_import_result', {
+        success: false,
+        platform: platformService.isDesktop() ? 'desktop' : 'browser',
+        error: 'invalid_file_format',
+      })
+      alert('Failed to load project: Invalid file format')
     }
   },
 
@@ -2813,7 +2819,9 @@ const useStore = create((set, get) => ({
         path: filePath,
         shots: getTotalShotsFromProjectData(data),
       }))
+      logTelemetry('project_open_recent_result', { success: true, platform: 'desktop', source: filePath })
     } catch {
+      logTelemetry('project_open_recent_result', { success: false, platform: 'desktop', source: filePath, error: 'invalid_file_format' })
       alert('Failed to load project: Invalid file format')
     }
   },

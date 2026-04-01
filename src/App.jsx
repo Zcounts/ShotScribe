@@ -359,6 +359,7 @@ export default function App() {
   const castCrewDisplayConfig = useStore(s => s.castCrewDisplayConfig)
   const updateStoryboardDisplayConfig = useStore(s => s.updateStoryboardDisplayConfig)
   const updateCastCrewDisplayConfig = useStore(s => s.updateCastCrewDisplayConfig)
+  const appMode = useStore(s => s.appMode)
 
   const projectName = useStore(s => s.projectName)
   const shortcutBindings = useStore(s => s.shortcutBindings)
@@ -410,8 +411,9 @@ export default function App() {
   useEffect(() => {
     if (import.meta.env.DEV) {
       devPerfLog('storyboard:mounted-pages', { totalPages, mountedRefs: Object.keys(storyboardPageRefs.current).length })
+      devPerfLog('app:mode-flags', appMode)
     }
-  }, [totalPages, storyboardVisibleRange.start, storyboardVisibleRange.end])
+  }, [totalPages, storyboardVisibleRange.start, storyboardVisibleRange.end, appMode])
 
   const updateStoryboardVisibleRange = useCallback(() => {
     const container = storyboardScrollRef.current

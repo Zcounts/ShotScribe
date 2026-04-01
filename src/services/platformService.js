@@ -1,3 +1,5 @@
+import { logTelemetry } from '../utils/telemetry'
+
 const DESKTOP_ONLY_ERROR = 'Desktop-only capability is unavailable in this environment.'
 const AUTOSAVE_KEY = 'autosave'
 const AUTOSAVE_TIME_KEY = 'autosave_time'
@@ -88,8 +90,15 @@ export const platformService = {
 
   saveProject(defaultName, data) {
     const api = getElectronApi()
-    if (api?.saveProject) return api.saveProject(defaultName, data)
-    return Promise.resolve(downloadTextFile(defaultName, data))
+    if (api?.saveProject) {
+      return api.saveProject(defaultName, data).then((result) => {
+        logTelemetry('project_save_result', { method: 'desktop', success: !!result?.success, hasError: !!result?.error })
+        return result
+      })
+    }
+    const result = downloadTextFile(defaultName, data)
+    logTelemetry('project_save_result', { method: 'browser-download', success: !!result?.success, hasError: !!result?.error })
+    return Promise.resolve(result)
   },
 
   saveProjectSilent(filePath, data) {
@@ -100,8 +109,16 @@ export const platformService = {
 
   openProject() {
     const api = getElectronApi()
-    if (api?.openProject) return api.openProject()
-    return openJsonFilePicker()
+    if (api?.openProject) {
+      return api.openProject().then((result) => {
+        logTelemetry('project_open_result', { method: 'desktop', success: !!result?.success, cancelled: !!result?.cancelled, hasError: !!result?.error })
+        return result
+      })
+    }
+    return openJsonFilePicker().then((result) => {
+      logTelemetry('project_open_result', { method: 'browser-picker', success: !!result?.success, cancelled: !!result?.cancelled, hasError: !!result?.error })
+      return result
+    })
   },
 
   openProjectFromPath(filePath) {
@@ -130,8 +147,15 @@ export const platformService = {
 
   saveJson(defaultName, data, filters) {
     const api = getElectronApi()
-    if (api?.saveJson) return api.saveJson(defaultName, data, filters)
-    return Promise.resolve(downloadTextFile(defaultName, data))
+    if (api?.saveJson) {
+      return api.saveJson(defaultName, data, filters).then((result) => {
+        logTelemetry('json_export_result', { method: 'desktop', success: !!result?.success, hasError: !!result?.error })
+        return result
+      })
+    }
+    const result = downloadTextFile(defaultName, data)
+    logTelemetry('json_export_result', { method: 'browser-download', success: !!result?.success, hasError: !!result?.error })
+    return Promise.resolve(result)
   },
 
   openExternal(url) {
