@@ -923,10 +923,10 @@ export default function App() {
       ) : activeTab === 'storyboard' ? (
         <div
           ref={storyboardScrollRef}
-          className="flex-1 py-4 px-4 overflow-auto canvas-texture"
+          className="flex-1 overflow-auto canvas-texture"
           onScroll={handleStoryboardScroll}
         >
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', paddingTop: 0, paddingRight: 14, paddingBottom: 14, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
             {showStoryboardOutline && (
               <div style={{ width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'flex-start', height: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }}>
                 <SidebarPane

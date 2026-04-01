@@ -988,7 +988,7 @@ export default function ScriptTab() {
       <div style={{ display: 'flex', height: '100%' }}>
         <div className="script-sidebar script-sidebar-left">
           <div className="script-sidebar-top">
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8 }}>SCRIPT</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#b6c5dd', marginBottom: 8 }}>SCRIPT</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {VIEW_OPTIONS.map(option => (
                 <button
@@ -1020,7 +1020,7 @@ export default function ScriptTab() {
                 <div className="script-sidebar-scroll">
                   {view === 'write' && (
                     <>
-                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
+                      <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Pagination mode</label>
                       <select
                         className="ss-input"
                         value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
@@ -1031,7 +1031,7 @@ export default function ScriptTab() {
                         <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
                       </select>
 
-                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Current line / block type</label>
+                      <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Current line / block type</label>
                       <BlockTypeIconSelector
                         value={selectedStyleType}
                         onChange={(nextType) => {
@@ -1041,7 +1041,7 @@ export default function ScriptTab() {
                         disabled={!selectedBlock}
                       />
 
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Write options</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#dbe5f5', marginBottom: 6 }}>Write options</div>
                       <label className="script-checkbox-row">
                         <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
                         Bold Slugline
@@ -1051,7 +1051,7 @@ export default function ScriptTab() {
                         Bold Character
                       </label>
                       <div style={{ height: 1, background: 'rgba(148,163,184,0.25)', marginBottom: 8 }} />
-                      <div style={{ fontSize: 12, color: '#475569' }}>
+                      <div style={{ fontSize: 12, color: '#9fb0d1' }}>
                         8.5" × 11", margins 1"/1"/1"/1.5"
                       </div>
                     </>
@@ -1059,7 +1059,7 @@ export default function ScriptTab() {
 
                   {view === 'breakdown' && (
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
+                      <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Pagination mode</label>
                       <select
                         className="ss-input"
                         value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
@@ -1069,14 +1069,14 @@ export default function ScriptTab() {
                         <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
                         <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
                       </select>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Breakdown Categories</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#dbe5f5', marginBottom: 8 }}>Breakdown Categories</div>
                       {BREAKDOWN_CATEGORIES.map(category => (
                         <div key={category} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0' }}>
                           <span>{category}</span>
-                          <span style={{ color: '#64748b' }}>{breakdownCountByCategory[category] || 0}</span>
+                          <span style={{ color: '#a7b5cf' }}>{breakdownCountByCategory[category] || 0}</span>
                         </div>
                       ))}
-                      <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+                      <div style={{ marginTop: 10, fontSize: 11, color: '#9fb0d1' }}>
                         Select script text to create a category tag.
                       </div>
                     </div>
@@ -1084,7 +1084,7 @@ export default function ScriptTab() {
 
                   {view === 'visualize' && (
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 4 }}>Pagination mode</label>
+                      <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Pagination mode</label>
                       <select
                         className="ss-input"
                         value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
@@ -1094,20 +1094,20 @@ export default function ScriptTab() {
                         <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
                         <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
                       </select>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Scene-linked shots</div>
-                      {currentSceneShots.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>No shots linked to this scene.</div>}
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#dbe5f5', marginBottom: 8 }}>Scene-linked shots</div>
+                      {currentSceneShots.length === 0 && <div style={{ fontSize: 12, color: '#9fb0d1' }}>No shots linked to this scene.</div>}
                       {currentSceneShots.map(shot => (
-                        <div key={shot.id} style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 6, padding: 8, marginBottom: 6, background: '#fff' }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{shot.label}</div>
-                          <div style={{ fontSize: 11, color: '#475569' }}>{shot.description}</div>
-                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                        <div key={shot.id} style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: 6, padding: 8, marginBottom: 6, background: 'rgba(255,255,255,0.08)' }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#e8eefb' }}>{shot.label}</div>
+                          <div style={{ fontSize: 11, color: '#c8d4e9' }}>{shot.description}</div>
+                          <div style={{ fontSize: 11, color: '#9fb0d1', marginTop: 4 }}>
                             {Number.isFinite(shot.linkedScriptRangeStart) && Number.isFinite(shot.linkedScriptRangeEnd)
                               ? `Linked range: ${shot.linkedScriptRangeStart} → ${shot.linkedScriptRangeEnd}`
                               : 'No linked range'}
                           </div>
                         </div>
                       ))}
-                      <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+                      <div style={{ marginTop: 10, fontSize: 11, color: '#9fb0d1' }}>
                         Select script text and choose a shot to link.
                       </div>
                     </div>
@@ -1154,9 +1154,9 @@ export default function ScriptTab() {
                           cursor: 'pointer',
                         }}
                       >
-                        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>SC {scene.sceneNumber || '—'}</div>
-                        <div style={{ fontSize: 12, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sceneHeader(scene)}</div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{linkCount} linked shot ranges</div>
+                        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9fb0d1' }}>SC {scene.sceneNumber || '—'}</div>
+                        <div style={{ fontSize: 12, color: '#e8eefb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sceneHeader(scene)}</div>
+                        <div style={{ fontSize: 11, color: '#9fb0d1', marginTop: 2 }}>{linkCount} linked shot ranges</div>
                       </button>
                     )
                   })}
