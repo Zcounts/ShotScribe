@@ -70,10 +70,42 @@ export default defineSchema({
   projectSnapshots: defineTable({
     projectId: v.id('projects'),
     createdByUserId: v.id('users'),
-    source: v.union(v.literal('manual_save'), v.literal('autosave'), v.literal('local_conversion')),
+    source: v.union(
+      v.literal('manual_save'),
+      v.literal('autosave'),
+      v.literal('local_conversion'),
+      v.literal('restore'),
+      v.literal('conflict_recovery'),
+    ),
     payload: v.any(),
+    versionToken: v.string(),
     createdAt: v.number(),
   })
     .index('by_project_id_created_at', ['projectId', 'createdAt'])
     .index('by_created_by_user_id_created_at', ['createdByUserId', 'createdAt']),
+
+  screenplayLocks: defineTable({
+    projectId: v.id('projects'),
+    sceneId: v.string(),
+    holderUserId: v.id('users'),
+    holderName: v.optional(v.string()),
+    leaseExpiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_project_id_scene_id', ['projectId', 'sceneId'])
+    .index('by_project_id_lease_expires_at', ['projectId', 'leaseExpiresAt']),
+
+  presence: defineTable({
+    projectId: v.id('projects'),
+    userId: v.id('users'),
+    sceneId: v.optional(v.string()),
+    mode: v.union(v.literal('viewing'), v.literal('editing')),
+    userName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    lastSeenAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index('by_project_id_user_id', ['projectId', 'userId'])
+    .index('by_project_id_expires_at', ['projectId', 'expiresAt']),
 })

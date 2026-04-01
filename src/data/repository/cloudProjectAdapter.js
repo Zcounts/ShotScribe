@@ -25,13 +25,26 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
       }
     },
 
-    async createSnapshot({ projectId, createdByUserId, source, payload }) {
+    async createSnapshot({ projectId, createdByUserId, source, payload, expectedLatestSnapshotId = undefined }) {
       const result = await runMutation('projectSnapshots:createSnapshot', {
         projectId,
         createdByUserId,
         source,
         payload,
+        ...(expectedLatestSnapshotId ? { expectedLatestSnapshotId } : {}),
       })
+      if (!result?.ok) {
+        return {
+          id: null,
+          projectId,
+          createdByUserId,
+          source,
+          createdAt: null,
+          payload,
+          conflict: true,
+          latestSnapshotId: result?.latestSnapshotId ? String(result.latestSnapshotId) : null,
+        }
+      }
       return {
         id: String(result.snapshotId),
         projectId,
@@ -39,6 +52,8 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
         source,
         createdAt: result.createdAt,
         payload,
+        versionToken: result.versionToken || null,
+        conflict: false,
       }
     },
 

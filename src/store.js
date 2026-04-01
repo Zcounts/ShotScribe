@@ -3011,6 +3011,18 @@ const useStore = create((set, get) => ({
     })
   },
 
+  setCloudSnapshotId: (snapshotId) => {
+    set((state) => {
+      if (state.projectRef?.type !== 'cloud') return state
+      return {
+        projectRef: {
+          ...state.projectRef,
+          snapshotId: snapshotId || null,
+        },
+      }
+    })
+  },
+
   // ── Auto-save ────────────────────────────────────────────────────────
 
   _autoSaveTimeout: null,
