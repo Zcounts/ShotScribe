@@ -303,7 +303,6 @@
   align-items: center;
   gap: 6px;
   color: #374151;
-  font-family: 'Barlow Condensed', sans-serif;
   font-size: 12px;
   text-align: left;
 }
@@ -366,9 +365,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: absolute;
+  position: fixed;
   bottom: 0;
-  left: 0;
+  left: var(--ss-left-sidebar-width);
   right: 0;
   z-index: 4;
 }
