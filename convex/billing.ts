@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, query } from './_generated/server'
 import { api } from './_generated/api'
+import { getStripeBillingConfig, getStripeSecretKey } from './stripeConfig'
 import {
   hasPaidCloudAccess,
   isGrandfatheredOrComped,
@@ -36,13 +37,15 @@ export async function canUseCloudFeatures(ctx: any, userId: any) {
   })
 }
 
-async function patchAccountTierForUser(ctx: any, userId: any, canUseCloud: boolean, now: number) {
+async function patchAccountTierForUser(ctx: any, userId: any, now: number) {
   const profile = await ctx.db
     .query('accountProfiles')
     .withIndex('by_user_id', (q: any) => q.eq('userId', userId))
     .unique()
 
   if (!profile) return
+
+  const canUseCloud = await canUseCloudFeatures(ctx, userId)
 
   await ctx.db.patch(profile._id, {
     planTier: canUseCloud ? 'paid' : 'free',
@@ -57,6 +60,51 @@ export async function requireCloudEntitlement(ctx: any, userId: any) {
   if (!allowed) {
     throw new Error('Cloud features require an active paid subscription')
   }
+}
+
+async function getBillingCustomerForUser(ctx: any, userId: any) {
+  return ctx.db
+    .query('billingCustomers')
+    .withIndex('by_user_id', (q: any) => q.eq('userId', userId))
+    .unique()
+}
+
+async function upsertBillingCustomer(ctx: any, args: { userId: any, stripeCustomerId: string, email?: string | null }) {
+  const now = Date.now()
+  const existing = await ctx.db
+    .query('billingCustomers')
+    .withIndex('by_stripe_customer_id', (q: any) => q.eq('stripeCustomerId', args.stripeCustomerId))
+    .unique()
+
+  const normalizedEmail = normalizeEmail(args.email)
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      userId: args.userId,
+      email: normalizedEmail || existing.email,
+      updatedAt: now,
+    })
+    return existing.stripeCustomerId
+  }
+
+  const byUser = await getBillingCustomerForUser(ctx, args.userId)
+  if (byUser) {
+    await ctx.db.patch(byUser._id, {
+      stripeCustomerId: args.stripeCustomerId,
+      email: normalizedEmail || byUser.email,
+      updatedAt: now,
+    })
+    return args.stripeCustomerId
+  }
+
+  await ctx.db.insert('billingCustomers', {
+    userId: args.userId,
+    stripeCustomerId: args.stripeCustomerId,
+    email: normalizedEmail || undefined,
+    createdAt: now,
+    updatedAt: now,
+  })
+
+  return args.stripeCustomerId
 }
 
 export const getMyEntitlement = query({
@@ -84,14 +132,16 @@ export const getMyEntitlement = query({
       }
     }
 
-    const subscription = await ctx.db
+    const [subscription, profile] = await Promise.all([
+      ctx.db
       .query('billingSubscriptions')
       .withIndex('by_user_id', (q: any) => q.eq('userId', user._id))
-      .unique()
-    const profile = await ctx.db
-      .query('accountProfiles')
-      .withIndex('by_user_id', (q: any) => q.eq('userId', user._id))
-      .unique()
+      .unique(),
+      ctx.db
+        .query('accountProfiles')
+        .withIndex('by_user_id', (q: any) => q.eq('userId', user._id))
+        .unique(),
+    ])
 
     const subscriptionStatus = subscription?.status || null
     const grandfatheredOrComped = isGrandfatheredOrComped({
@@ -106,13 +156,24 @@ export const getMyEntitlement = query({
       hasCompedAccess: Boolean(profile?.compedAccess),
     })
 
+    const stripeConfig = getStripeBillingConfig()
+    const billingState = grandfatheredOrComped
+      ? 'manual_override_active'
+      : canUseCloud
+        ? 'active'
+        : subscriptionStatus
+          ? 'inactive'
+          : 'none'
+
     return {
       canUseCloudFeatures: canUseCloud,
-      checkoutAvailable: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID),
+      checkoutAvailable: stripeConfig.checkoutAvailable,
+      portalAvailable: stripeConfig.portalAvailable,
       subscriptionStatus,
       grandfatheredOrComped,
       isAdmin: Boolean(profile?.isAdmin),
       isLocalOnlyUser: !canUseCloud,
+      billingState,
     }
   },
 })
@@ -136,7 +197,7 @@ export const getUserForBillingToken = internalQuery({
 })
 
 async function stripeRequest(path: string, body: URLSearchParams) {
-  const secretKey = process.env.STRIPE_SECRET_KEY
+  const secretKey = getStripeSecretKey()
   if (!secretKey) throw new Error('Missing STRIPE_SECRET_KEY')
 
   const response = await fetch(`https://api.stripe.com/v1${path}`, {
@@ -155,6 +216,32 @@ async function stripeRequest(path: string, body: URLSearchParams) {
   return payload
 }
 
+async function ensureStripeCustomer(ctx: any, user: { _id: string, email: string | null, name: string | null }) {
+  const existing = await getBillingCustomerForUser(ctx, user._id)
+  if (existing?.stripeCustomerId) return existing.stripeCustomerId
+
+  const createBody = new URLSearchParams()
+  const email = normalizeEmail(user.email)
+  if (email) {
+    createBody.set('email', email)
+  }
+  if (user.name) {
+    createBody.set('name', user.name)
+  }
+  createBody.set('metadata[userId]', String(user._id))
+
+  const customer = await stripeRequest('/customers', createBody)
+  if (!customer?.id) throw new Error('Failed to create Stripe customer')
+
+  await upsertBillingCustomer(ctx, {
+    userId: user._id,
+    stripeCustomerId: String(customer.id),
+    email: user.email,
+  })
+
+  return String(customer.id)
+}
+
 export const createCheckoutSession = action({
   args: {
     successUrl: v.string(),
@@ -164,13 +251,15 @@ export const createCheckoutSession = action({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
 
-    const priceId = process.env.STRIPE_PRICE_ID
+    const { priceId } = getStripeBillingConfig()
     if (!priceId) throw new Error('Missing STRIPE_PRICE_ID')
 
     const user = await ctx.runQuery(api.billing.getUserForBillingToken, {
       tokenIdentifier: identity.tokenIdentifier,
     })
     if (!user) throw new Error('User not found')
+
+    const stripeCustomerId = await ensureStripeCustomer(ctx, user)
 
     const body = new URLSearchParams()
     body.set('mode', 'subscription')
@@ -179,6 +268,7 @@ export const createCheckoutSession = action({
     body.set('line_items[0][price]', priceId)
     body.set('line_items[0][quantity]', '1')
     body.set('allow_promotion_codes', 'true')
+    body.set('customer', stripeCustomerId)
     body.set('client_reference_id', String(user._id))
     body.set('metadata[userId]', String(user._id))
 
@@ -191,6 +281,34 @@ export const createCheckoutSession = action({
 
     return {
       sessionId: session.id,
+      url: session.url,
+    }
+  },
+})
+
+export const createPortalSession = action({
+  args: {
+    returnUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+
+    const { portalAvailable } = getStripeBillingConfig()
+    if (!portalAvailable) throw new Error('Stripe portal is not configured')
+
+    const user = await ctx.runQuery(api.billing.getUserForBillingToken, {
+      tokenIdentifier: identity.tokenIdentifier,
+    })
+    if (!user) throw new Error('User not found')
+
+    const stripeCustomerId = await ensureStripeCustomer(ctx, user)
+    const body = new URLSearchParams()
+    body.set('customer', stripeCustomerId)
+    body.set('return_url', args.returnUrl)
+
+    const session = await stripeRequest('/billing_portal/sessions', body)
+    return {
       url: session.url,
     }
   },
@@ -241,6 +359,14 @@ export const syncStripeSubscription = internalMutation({
 
     const status = args.status || 'incomplete'
 
+    if (resolvedUserId && args.customerId) {
+      await upsertBillingCustomer(ctx, {
+        userId: resolvedUserId,
+        stripeCustomerId: args.customerId,
+        email: args.customerEmail,
+      })
+    }
+
     const patch = {
       userId: resolvedUserId,
       stripeCustomerId: args.customerId || record?.stripeCustomerId || '',
@@ -263,7 +389,7 @@ export const syncStripeSubscription = internalMutation({
     }
 
     if (resolvedUserId) {
-      await patchAccountTierForUser(ctx, resolvedUserId, subscriptionStatusAllowsCloudFeatures(status), now)
+      await patchAccountTierForUser(ctx, resolvedUserId, now)
     }
 
     return { ok: true }

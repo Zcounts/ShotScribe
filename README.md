@@ -69,9 +69,14 @@ Main frontend runtime flags:
 Convex/backend env requirements (as used by current code/docs):
 - `AUTH_ISSUER_URL`
 - `AUTH_AUDIENCE`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PRICE_ID`
 - `STRIPE_WEBHOOK_SECRET`
 - `OPERATIONAL_ADMIN_TOKEN`
 - optional invite URL base (`INVITE_URL_BASE` or `CONVEX_INVITE_URL_BASE`)
+
+Billing setup runbook:
+- `docs/billing-stripe-runbook.md`
 
 ---
 
