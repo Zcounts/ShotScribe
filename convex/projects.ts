@@ -128,6 +128,7 @@ export const seedTestCloudProject = mutation({
         scenes: [],
         schedule: [],
       },
+      versionToken: `seed:${projectId}:${now}`,
       createdAt: now,
     })
 

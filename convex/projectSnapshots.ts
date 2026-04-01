@@ -6,8 +6,15 @@ export const createSnapshot = mutation({
   args: {
     projectId: v.id('projects'),
     createdByUserId: v.id('users'),
-    source: v.union(v.literal('manual_save'), v.literal('autosave'), v.literal('local_conversion')),
+    source: v.union(
+      v.literal('manual_save'),
+      v.literal('autosave'),
+      v.literal('local_conversion'),
+      v.literal('restore'),
+      v.literal('conflict_recovery'),
+    ),
     payload: v.any(),
+    expectedLatestSnapshotId: v.optional(v.id('projectSnapshots')),
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
@@ -18,11 +25,26 @@ export const createSnapshot = mutation({
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
 
     const now = Date.now()
+    const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    const currentLatestSnapshotId = project.latestSnapshotId || null
+    if (
+      args.expectedLatestSnapshotId !== undefined
+      && String(args.expectedLatestSnapshotId || '') !== String(currentLatestSnapshotId || '')
+    ) {
+      return {
+        ok: false,
+        reason: 'version_conflict',
+        latestSnapshotId: currentLatestSnapshotId,
+      }
+    }
+
+    const versionToken = `${args.projectId}:${now}:${Math.random().toString(36).slice(2, 8)}`
     const snapshotId = await ctx.db.insert('projectSnapshots', {
       projectId: args.projectId,
       createdByUserId: args.createdByUserId,
       source: args.source,
       payload: args.payload,
+      versionToken,
       createdAt: now,
     })
 
@@ -32,7 +54,9 @@ export const createSnapshot = mutation({
     })
 
     return {
+      ok: true,
       snapshotId,
+      versionToken,
       createdAt: now,
     }
   },
@@ -57,5 +81,22 @@ export const getLatestSnapshotForProject = query({
       .take(1)
 
     return snapshots[0] || null
+  },
+})
+
+export const listSnapshotsForProject = query({
+  args: {
+    projectId: v.id('projects'),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    const safeLimit = Math.max(1, Math.min(30, Number(args.limit) || 10))
+    return ctx.db
+      .query('projectSnapshots')
+      .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', args.projectId))
+      .order('desc')
+      .take(safeLimit)
   },
 })

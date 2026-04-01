@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery } from 'convex/react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
@@ -268,7 +269,7 @@ function createRangeForOffsets(blockElement, start, end) {
   return range
 }
 
-function ScriptEditableBlock({ block, blockStyle, isSelected, fontWeight, onFocusBlock, onCommit, onKeyDown, onRegisterHeading }) {
+function ScriptEditableBlock({ block, blockStyle, isSelected, fontWeight, onFocusBlock, onCommit, onKeyDown, onRegisterHeading, readOnly = false }) {
   const ref = useRef(null)
   const [draftText, setDraftText] = useState(block.blockText || '')
   const composingRef = useRef(false)
@@ -318,7 +319,7 @@ function ScriptEditableBlock({ block, blockStyle, isSelected, fontWeight, onFocu
       data-block-id={block.blockId}
       data-block-type={block.blockType}
       data-scene-heading={block.isHeading ? 'true' : undefined}
-      contentEditable
+      contentEditable={!readOnly}
       suppressContentEditableWarning
       spellCheck
       onFocus={onFocusBlock}
@@ -353,12 +354,29 @@ export default function ScriptTab() {
   const deleteImportedScript = useStore(s => s.deleteImportedScript)
   const openShotDialog = useStore(s => s.openShotDialog)
   const linkShotToScene = useStore(s => s.linkShotToScene)
+  const projectRef = useStore(s => s.projectRef)
+  const getProjectData = useStore(s => s.getProjectData)
+  const loadProject = useStore(s => s.loadProject)
+  const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
+
+  const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
+  const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
+  const cloudUser = useQuery('users:currentUser')
+  const presenceRows = useQuery('presence:listProjectPresence', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const locks = useQuery('screenplayLocks:listProjectLocks', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const snapshotHistory = useQuery('projectSnapshots:listSnapshotsForProject', cloudProjectId ? { projectId: cloudProjectId, limit: 8 } : 'skip')
+  const heartbeatPresence = useMutation('presence:heartbeat')
+  const acquireSceneLock = useMutation('screenplayLocks:acquireSceneLock')
+  const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
+  const createSnapshot = useMutation('projectSnapshots:createSnapshot')
 
   const [view, setView] = useState('write')
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
+  const [collabNotice, setCollabNotice] = useState('')
+  const [isSavingSnapshot, setIsSavingSnapshot] = useState(false)
 
   const [isViewPanelCollapsed, setIsViewPanelCollapsed] = useState(() => readStoredBoolean(SIDEBAR_STORAGE_KEYS.viewCollapsed, false))
   const [isScenePanelCollapsed, setIsScenePanelCollapsed] = useState(() => readStoredBoolean(SIDEBAR_STORAGE_KEYS.sceneCollapsed, false))
@@ -421,6 +439,20 @@ export default function ScriptTab() {
       return
     }
   }, [view])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    const tick = () => {
+      heartbeatPresence({
+        projectId: cloudProjectId,
+        sceneId: activeSceneId || undefined,
+        mode: view === 'write' ? 'editing' : 'viewing',
+      }).catch(() => {})
+    }
+    tick()
+    const timer = window.setInterval(tick, 4000)
+    return () => window.clearInterval(timer)
+  }, [activeSceneId, cloudProjectId, heartbeatPresence, view])
 
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
@@ -576,6 +608,21 @@ export default function ScriptTab() {
     : null
   const selectedStyleType = selectedBlockData?.type || 'action'
   const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
+  const currentUserId = cloudUser?.user ? String(cloudUser.user._id) : null
+  const lockBySceneId = useMemo(() => {
+    const map = {}
+    ;(locks || []).forEach((lock) => {
+      map[lock.sceneId] = lock
+    })
+    return map
+  }, [locks])
+  const activeSceneLock = activeSceneId ? lockBySceneId[activeSceneId] : null
+  const activeLockOwnedByCurrentUser = !!(activeSceneLock && currentUserId && String(activeSceneLock.holderUserId) === String(currentUserId))
+  const isWriteBlockedByLock = view === 'write' && !!(activeSceneLock && !activeLockOwnedByCurrentUser)
+  const activePresence = useMemo(
+    () => (presenceRows || []).filter((row) => String(row.userId) !== String(currentUserId || '')),
+    [currentUserId, presenceRows],
+  )
 
   const updateDocumentSettings = useCallback((updater) => {
     const current = normalizeDocumentSettings(scriptSettings?.documentSettings || DEFAULT_SCRIPT_DOCUMENT_SETTINGS)
@@ -732,7 +779,7 @@ export default function ScriptTab() {
   }, [importScriptScenes])
 
   const handleBlockKeyDown = useCallback((event, block) => {
-    if (view !== 'write') return
+    if (view !== 'write' || isWriteBlockedByLock) return
     const element = event.currentTarget
 
     if (event.key === 'Tab') {
@@ -756,7 +803,54 @@ export default function ScriptTab() {
         mergeWithPrevious(block.sceneId, block.blockId)
       }
     }
-  }, [cycleType, insertBlockAfter, mergeWithPrevious, nextTypeForEnter, view])
+  }, [cycleType, insertBlockAfter, isWriteBlockedByLock, mergeWithPrevious, nextTypeForEnter, view])
+
+  const handleAcquireActiveSceneLock = useCallback(async () => {
+    if (!cloudProjectId || !activeSceneId) return
+    const result = await acquireSceneLock({ projectId: cloudProjectId, sceneId: activeSceneId })
+    if (!result?.ok) {
+      setCollabNotice(`Scene is locked by ${result?.holderName || 'another collaborator'}.`)
+      return
+    }
+    setCollabNotice('Scene lock acquired.')
+  }, [acquireSceneLock, activeSceneId, cloudProjectId])
+
+  const handleReleaseActiveSceneLock = useCallback(async () => {
+    if (!cloudProjectId || !activeSceneId) return
+    await releaseSceneLock({ projectId: cloudProjectId, sceneId: activeSceneId })
+    setCollabNotice('Scene lock released.')
+  }, [activeSceneId, cloudProjectId, releaseSceneLock])
+
+  const handleSaveScreenplaySnapshot = useCallback(async () => {
+    if (!cloudProjectId || !currentUserId) return
+    setIsSavingSnapshot(true)
+    try {
+      const result = await createSnapshot({
+        projectId: cloudProjectId,
+        createdByUserId: currentUserId,
+        source: 'manual_save',
+        payload: getProjectData(),
+        ...(currentSnapshotId ? { expectedLatestSnapshotId: currentSnapshotId } : {}),
+      })
+      if (!result?.ok) {
+        setCollabNotice('Save blocked: remote changes were detected. Restore or reload latest snapshot before retrying.')
+        return
+      }
+      setCloudSnapshotId(String(result.snapshotId))
+      setCollabNotice('Screenplay snapshot saved.')
+    } finally {
+      setIsSavingSnapshot(false)
+    }
+  }, [cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, setCloudSnapshotId])
+
+  const handleRestoreSnapshot = useCallback((snapshot) => {
+    if (!snapshot?.payload) return
+    loadProject(snapshot.payload)
+    if (projectRef?.type === 'cloud') {
+      setCloudSnapshotId(String(snapshot._id))
+    }
+    setCollabNotice(`Restored snapshot from ${new Date(snapshot.createdAt).toLocaleString()}.`)
+  }, [loadProject, projectRef?.type, setCloudSnapshotId])
 
   const resolveStackHeights = useCallback(() => {
     const stackHeight = sidebarStackRef.current?.clientHeight || 0
@@ -1134,7 +1228,11 @@ export default function ScriptTab() {
                       >
                         <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9fb0d1' }}>SC {scene.sceneNumber || '—'}</div>
                         <div style={{ fontSize: 12, color: '#e8eefb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sceneHeader(scene)}</div>
-                        <div style={{ fontSize: 11, color: '#9fb0d1', marginTop: 2 }}>{linkCount} linked shot ranges</div>
+                        <div style={{ fontSize: 11, color: '#9fb0d1', marginTop: 2 }}>
+                          {linkCount} linked shot ranges
+                          {lockBySceneId[scene.id] && ` · 🔒 ${lockBySceneId[scene.id].holderName || 'Locked'}`}
+                          {activePresence.some((row) => row.sceneId === scene.id) && ` · 👀 ${activePresence.filter((row) => row.sceneId === scene.id).length}`}
+                        </div>
                       </button>
                     )
                   })}
@@ -1147,9 +1245,26 @@ export default function ScriptTab() {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
+            <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 12px' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Script Document</span>
+              {cloudProjectId && (
+                <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot}>
+                  {isSavingSnapshot ? 'Saving…' : 'Save Snapshot'}
+                </button>
+              )}
             </div>
+            {cloudProjectId && (
+              <div style={{ padding: '6px 12px', borderBottom: '1px solid rgba(148,163,184,0.2)', background: isWriteBlockedByLock ? '#fff7ed' : '#f8fafc', fontSize: 12, color: '#475569', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>
+                  {isWriteBlockedByLock ? `Locked by ${activeSceneLock?.holderName || 'another collaborator'}.` : 'Collaboration safety active.'}
+                  {collabNotice ? ` ${collabNotice}` : ''}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="toolbar-btn" onClick={handleAcquireActiveSceneLock}>Lock scene</button>
+                  <button className="toolbar-btn" onClick={handleReleaseActiveSceneLock}>Unlock</button>
+                </div>
+              </div>
+            )}
 
             <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
               <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
@@ -1221,6 +1336,7 @@ export default function ScriptTab() {
                                   }}
                                   onCommit={(text) => updateBlockText(block.sceneId, block.blockId, block.blockType, text)}
                                   onKeyDown={(event) => handleBlockKeyDown(event, block)}
+                                  readOnly={isWriteBlockedByLock}
                                   onRegisterHeading={(node) => {
                                     if (!block.isHeading) return
                                     if (!node) {
@@ -1454,6 +1570,34 @@ export default function ScriptTab() {
                 <button className="ss-btn secondary" onClick={() => setShowImportModal(true)} style={{ width: '100%', marginTop: 8 }}>+ Import Script</button>
               </div>
             </section>
+            {cloudProjectId && (
+              <section className="ss-module script-inspector-section">
+                <div className="ss-module-header script-inspector-header" style={{ width: '100%', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
+                  Presence & Snapshot History
+                </div>
+                <div style={{ padding: 10 }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+                    Active collaborators: {activePresence.length}
+                  </div>
+                  {(activePresence || []).slice(0, 5).map((row) => (
+                    <div key={row._id} style={{ fontSize: 11, color: '#334155', marginBottom: 4 }}>
+                      {(row.userName || row.userEmail || 'Collaborator')} · {row.mode}{row.sceneId ? ` · ${row.sceneId}` : ''}
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', marginBottom: 4 }}>Recent snapshots</div>
+                  {(snapshotHistory || []).map((snapshot) => (
+                    <button
+                      key={snapshot._id}
+                      className="toolbar-btn"
+                      onClick={() => handleRestoreSnapshot(snapshot)}
+                      style={{ width: '100%', marginBottom: 6, textAlign: 'left' }}
+                    >
+                      {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.source}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         </div>
       </div>
