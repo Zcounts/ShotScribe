@@ -1057,7 +1057,7 @@
   .ss-left-sidebar .ss-btn.is-outline[aria-selected="true"] {
     border-color: rgba(130,153,255,0.82);
     background: rgba(82,101,236,0.36);
-    color: #f4f7ff;
+    color: #2c2c2c;
     box-shadow: inset 0 0 0 1px rgba(171,188,255,0.25);
   }
 
