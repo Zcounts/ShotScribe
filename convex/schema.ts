@@ -23,4 +23,26 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index('by_user_id', ['userId']),
+
+  projects: defineTable({
+    ownerUserId: v.id('users'),
+    name: v.string(),
+    emoji: v.string(),
+    latestSnapshotId: v.optional(v.id('projectSnapshots')),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_owner_user_id', ['ownerUserId'])
+    .index('by_owner_user_id_updated_at', ['ownerUserId', 'updatedAt']),
+
+  projectSnapshots: defineTable({
+    projectId: v.id('projects'),
+    createdByUserId: v.id('users'),
+    source: v.union(v.literal('manual_save'), v.literal('autosave'), v.literal('local_conversion')),
+    payload: v.any(),
+    createdAt: v.number(),
+  })
+    .index('by_project_id_created_at', ['projectId', 'createdAt'])
+    .index('by_created_by_user_id_created_at', ['createdByUserId', 'createdAt']),
 })

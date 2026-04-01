@@ -14,6 +14,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "cloud:seed:test": "npx convex run projects:seedTestCloudProject",
     "build:siteground": "vite build --mode siteground",
     "preview:siteground": "vite preview --mode siteground",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
