@@ -236,55 +236,6 @@ export default function SettingsPanel() {
         </SettingsRow>
 
         <div style={{ borderTop: '1px solid #374151', paddingTop: 14, marginTop: 4, marginBottom: 14 }}>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-            Script & Estimation
-          </p>
-
-          <SettingsRow label="Base Minutes Per Page">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="range"
-                min={3}
-                max={10}
-                step={0.5}
-                value={scriptSettings?.baseMinutesPerPage ?? 5}
-                onChange={e => setScriptSettings({ baseMinutesPerPage: parseFloat(e.target.value) })}
-                style={{ flex: 1, accentColor: '#3b82f6' }}
-              />
-              <span style={{ fontSize: 12, color: '#ddd', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
-                {scriptSettings?.baseMinutesPerPage ?? 5}
-              </span>
-            </div>
-            <div style={{ fontSize: 10, color: '#555', marginTop: 2 }}>
-              1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
-            </div>
-          </SettingsRow>
-
-          <SettingsRow label="Scene Pagination">
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => setScriptSettings({ scenePaginationMode: 'natural' })}
-                className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
-                  (scriptSettings?.scenePaginationMode || 'natural') === 'natural'
-                    ? 'bg-blue-600/20 border-blue-400 text-white'
-                    : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
-                }`}
-              >
-                Continue naturally <span className="text-xs text-gray-400">· Standard screenplay flow</span>
-              </button>
-              <button
-                onClick={() => setScriptSettings({ scenePaginationMode: 'newPagePerScene' })}
-                className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
-                  (scriptSettings?.scenePaginationMode || 'natural') === 'newPagePerScene'
-                    ? 'bg-blue-600/20 border-blue-400 text-white'
-                    : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-400'
-                }`}
-              >
-                Start each scene on a new page <span className="text-xs text-gray-400">· Planning view mode</span>
-              </button>
-            </div>
-          </SettingsRow>
-
           <SettingsRow label="Auto-Suggest Tags">
             <div className="flex items-center gap-2">
               <button

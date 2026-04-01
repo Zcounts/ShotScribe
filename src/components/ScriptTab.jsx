@@ -368,7 +368,9 @@ export default function ScriptTab() {
   const [breakdownDraft, setBreakdownDraft] = useState({ name: '', quantity: 1, category: BREAKDOWN_CATEGORIES[1], tagAllMentions: false })
   const [overlayFragmentsByBlock, setOverlayFragmentsByBlock] = useState({})
   const [inspectorSections, setInspectorSections] = useState(() => readStoredObject(SIDEBAR_STORAGE_KEYS.inspectorSections, {
-    currentBlock: true,
+    scriptEstimation: true,
+    scenePagination: true,
+    paginationMode: true,
     writeOptions: true,
     pageSetup: true,
     elementStyles: true,
@@ -1020,17 +1022,6 @@ export default function ScriptTab() {
                 <div className="script-sidebar-scroll">
                   {view === 'write' && (
                     <>
-                      <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Pagination mode</label>
-                      <select
-                        className="ss-input"
-                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
-                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', padding: '5px 6px', fontSize: 12, marginBottom: 8 }}
-                      >
-                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
-                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
-                      </select>
-
                       <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Current line / block type</label>
                       <BlockTypeIconSelector
                         value={selectedStyleType}
@@ -1041,19 +1032,6 @@ export default function ScriptTab() {
                         disabled={!selectedBlock}
                       />
 
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#dbe5f5', marginBottom: 6 }}>Write options</div>
-                      <label className="script-checkbox-row">
-                        <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
-                        Bold Slugline
-                      </label>
-                      <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
-                        <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
-                        Bold Character
-                      </label>
-                      <div style={{ height: 1, background: 'rgba(148,163,184,0.25)', marginBottom: 8 }} />
-                      <div style={{ fontSize: 12, color: '#9fb0d1' }}>
-                        8.5" × 11", margins 1"/1"/1"/1.5"
-                      </div>
                     </>
                   )}
 
@@ -1335,7 +1313,9 @@ export default function ScriptTab() {
 
           <div className="script-sidebar script-sidebar-right">
             {[
-              { id: 'currentBlock', title: 'Current line / block type' },
+              { id: 'scriptEstimation', title: 'Script & Estimation' },
+              { id: 'scenePagination', title: 'Scene Pagination' },
+              { id: 'paginationMode', title: 'Pagination Mode' },
               { id: 'writeOptions', title: 'Write panel options' },
               { id: 'pageSetup', title: 'Page Setup' },
               { id: 'elementStyles', title: 'Element Styles' },
@@ -1350,15 +1330,62 @@ export default function ScriptTab() {
                 </button>
                 {inspectorSections[section.id] && (
                   <div style={{ padding: 10 }}>
-                    {section.id === 'currentBlock' && (
-                      <BlockTypeIconSelector
-                        value={selectedStyleType}
-                        onChange={(nextType) => {
-                          if (!selectedBlock) return
-                          setBlockType(selectedBlock.sceneId, selectedBlock.blockId, nextType)
-                        }}
-                        disabled={!selectedBlock || view !== 'write'}
-                      />
+                    {section.id === 'scriptEstimation' && (
+                      <>
+                        <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input
+                            type="range"
+                            min={3}
+                            max={10}
+                            step={0.5}
+                            value={scriptSettings?.baseMinutesPerPage ?? 5}
+                            onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
+                            style={{ flex: 1, accentColor: '#2563eb' }}
+                          />
+                          <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
+                            {scriptSettings?.baseMinutesPerPage ?? 5}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                          1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
+                        </div>
+                      </>
+                    )}
+                    {section.id === 'scenePagination' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <button
+                          onClick={() => setScriptSettings({ scenePaginationMode: SCENE_PAGINATION_MODES.CONTINUE })}
+                          className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
+                            (scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE) === SCENE_PAGINATION_MODES.CONTINUE
+                              ? 'bg-blue-600/20 border-blue-400 text-slate-700'
+                              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                          }`}
+                        >
+                          Continue naturally <span style={{ fontSize: 11, color: '#64748b' }}>· Standard screenplay flow</span>
+                        </button>
+                        <button
+                          onClick={() => setScriptSettings({ scenePaginationMode: SCENE_PAGINATION_MODES.NEW_PAGE })}
+                          className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
+                            (scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE) === SCENE_PAGINATION_MODES.NEW_PAGE
+                              ? 'bg-blue-600/20 border-blue-400 text-slate-700'
+                              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                          }`}
+                        >
+                          Start each scene on a new page <span style={{ fontSize: 11, color: '#64748b' }}>· Planning view mode</span>
+                        </button>
+                      </div>
+                    )}
+                    {section.id === 'paginationMode' && (
+                      <select
+                        className="ss-input"
+                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                        style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
+                      >
+                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                      </select>
                     )}
                     {section.id === 'writeOptions' && (
                       <>
