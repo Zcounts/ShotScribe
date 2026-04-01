@@ -24,6 +24,23 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index('by_user_id', ['userId']),
 
+
+
+  billingSubscriptions: defineTable({
+    userId: v.optional(v.id('users')),
+    stripeCustomerId: v.string(),
+    stripeSubscriptionId: v.optional(v.string()),
+    stripePriceId: v.optional(v.string()),
+    status: v.string(),
+    currentPeriodEnd: v.optional(v.number()),
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    lastStripeEventId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user_id', ['userId'])
+    .index('by_stripe_customer_id', ['stripeCustomerId'])
+    .index('by_stripe_subscription_id', ['stripeSubscriptionId']),
   projects: defineTable({
     ownerUserId: v.id('users'),
     name: v.string(),

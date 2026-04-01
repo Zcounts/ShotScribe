@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import { requireCloudEntitlement } from './billing'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 
 export const createSnapshot = mutation({
@@ -23,6 +24,7 @@ export const createSnapshot = mutation({
     }
 
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
+    await requireCloudEntitlement(ctx, currentUserId)
 
     const now = Date.now()
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
