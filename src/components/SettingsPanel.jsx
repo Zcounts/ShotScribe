@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import useStore from '../store'
+import SharingSettingsSection from '../features/sharing/SharingSettingsSection'
 import {
   NON_REBINDABLE_SHORTCUT_NOTES,
   SHORTCUT_ACTIONS,
@@ -234,6 +235,8 @@ export default function SettingsPanel() {
             </span>
           </div>
         </SettingsRow>
+
+        <SharingSettingsSection />
 
         <div style={{ borderTop: '1px solid #374151', paddingTop: 14, marginTop: 4, marginBottom: 14 }}>
           <SettingsRow label="Auto-Suggest Tags">

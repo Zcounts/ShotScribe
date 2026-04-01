@@ -36,6 +36,37 @@ export default defineSchema({
     .index('by_owner_user_id', ['ownerUserId'])
     .index('by_owner_user_id_updated_at', ['ownerUserId', 'updatedAt']),
 
+
+
+  projectMembers: defineTable({
+    projectId: v.id('projects'),
+    userId: v.id('users'),
+    role: v.union(v.literal('editor'), v.literal('viewer')),
+    invitedByUserId: v.id('users'),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_project_id', ['projectId'])
+    .index('by_user_id', ['userId'])
+    .index('by_project_id_user_id', ['projectId', 'userId']),
+
+  projectInvites: defineTable({
+    projectId: v.id('projects'),
+    email: v.string(),
+    role: v.union(v.literal('editor'), v.literal('viewer')),
+    token: v.string(),
+    invitedByUserId: v.id('users'),
+    status: v.union(v.literal('pending'), v.literal('accepted'), v.literal('revoked')),
+    acceptedByUserId: v.optional(v.id('users')),
+    acceptedAt: v.optional(v.number()),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_project_id', ['projectId'])
+    .index('by_email_status', ['email', 'status'])
+    .index('by_token', ['token']),
   projectSnapshots: defineTable({
     projectId: v.id('projects'),
     createdByUserId: v.id('users'),
