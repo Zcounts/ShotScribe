@@ -87,10 +87,13 @@
 }
 
 .home-main {
+  --home-footer-height: 44px;
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  position: relative;
+  padding-bottom: calc(var(--home-footer-height) + 20px);
   background-color: #e8e6e1;
   background-image:
     linear-gradient(rgba(124, 98, 60, 0.1) 1px, transparent 1px),
@@ -359,9 +362,15 @@
   border-top: 1px solid #ccc9c2;
   border-bottom: none;
   padding: 10px 20px;
+  min-height: var(--home-footer-height);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
 }
 
 .home-footer-brand {
