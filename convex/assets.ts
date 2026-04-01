@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import { requireCloudEntitlement } from './billing'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 
 export const createAssetUploadUrl = mutation({
@@ -9,6 +10,7 @@ export const createAssetUploadUrl = mutation({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
+    await requireCloudEntitlement(ctx, currentUserId)
     const uploadUrl = await ctx.storage.generateUploadUrl()
     return { uploadUrl }
   },
@@ -28,6 +30,7 @@ export const completeAssetUpload = mutation({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
+    await requireCloudEntitlement(ctx, currentUserId)
 
     const now = Date.now()
     const assetId = await ctx.db.insert('projectAssets', {
@@ -92,6 +95,7 @@ export const pruneOrphanedAssets = mutation({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
+    await requireCloudEntitlement(ctx, currentUserId)
 
     const keep = new Set(args.keepAssetIds.map((id: any) => String(id)))
     const allAssets = await ctx.db

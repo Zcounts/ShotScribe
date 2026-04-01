@@ -3,6 +3,7 @@ import { useAuth0 } from '@auth0/auth0-react'
 import { useConvexAuth } from 'convex/react'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from './authConfig'
+import BillingActions from '../features/billing/BillingActions'
 
 const barStyle = {
   display: 'flex',
@@ -52,13 +53,16 @@ function CloudAuthBar() {
             : 'Signed out. You can still use local projects.'}
       </span>
       {isAuthenticated ? (
-        <button
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <BillingActions compact />
+          <button
           type="button"
           style={buttonStyle}
           onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
         >
           Sign out
         </button>
+        </div>
       ) : (
         <button
           type="button"

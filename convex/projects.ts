@@ -1,17 +1,7 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import { requireCloudEntitlement } from './billing'
 import { getProjectAccessRole, requireCurrentUserId, requireProjectRole } from './projectMembers'
-
-async function requirePaidPlan(ctx: any, userId: any) {
-  const profile = await ctx.db
-    .query('accountProfiles')
-    .withIndex('by_user_id', (q: any) => q.eq('userId', userId))
-    .unique()
-
-  if (!profile || profile.planTier !== 'paid') {
-    throw new Error('Cloud projects require a paid plan')
-  }
-}
 
 export const createProject = mutation({
   args: {
@@ -25,7 +15,7 @@ export const createProject = mutation({
       throw new Error('Forbidden')
     }
 
-    await requirePaidPlan(ctx, currentUserId)
+    await requireCloudEntitlement(ctx, currentUserId)
 
     const now = Date.now()
     const projectId = await ctx.db.insert('projects', {
@@ -105,7 +95,7 @@ export const seedTestCloudProject = mutation({
   },
   handler: async (ctx, args) => {
     const ownerUserId = await requireCurrentUserId(ctx)
-    await requirePaidPlan(ctx, ownerUserId)
+    await requireCloudEntitlement(ctx, ownerUserId)
 
     const now = Date.now()
     const projectName = args.name || `Seed Cloud Project ${new Date(now).toISOString()}`
