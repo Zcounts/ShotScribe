@@ -26,6 +26,7 @@ import writeIcon from '../../assets/script icons/write.svg'
 import breakdownIcon from '../../assets/script icons/breakdown.svg'
 import visualizeIcon from '../../assets/script icons/visualize.svg'
 import LeftSidebarResources from './LeftSidebarResources'
+import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -369,6 +370,7 @@ export default function ScriptTab() {
   const acquireSceneLock = useMutation('screenplayLocks:acquireSceneLock')
   const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
+  const pruneOrphanedAssets = useMutation('assets:pruneOrphanedAssets')
 
   const [view, setView] = useState('write')
   const [activeSceneId, setActiveSceneId] = useState(null)
@@ -825,23 +827,26 @@ export default function ScriptTab() {
     if (!cloudProjectId || !currentUserId) return
     setIsSavingSnapshot(true)
     try {
+      const payload = getProjectData()
       const result = await createSnapshot({
         projectId: cloudProjectId,
         createdByUserId: currentUserId,
         source: 'manual_save',
-        payload: getProjectData(),
+        payload,
         ...(currentSnapshotId ? { expectedLatestSnapshotId: currentSnapshotId } : {}),
       })
       if (!result?.ok) {
         setCollabNotice('Save blocked: remote changes were detected. Restore or reload latest snapshot before retrying.')
         return
       }
+      const keepAssetIds = collectCloudAssetIdsFromProjectData(payload)
+      await pruneOrphanedAssets({ projectId: cloudProjectId, keepAssetIds })
       setCloudSnapshotId(String(result.snapshotId))
       setCollabNotice('Screenplay snapshot saved.')
     } finally {
       setIsSavingSnapshot(false)
     }
-  }, [cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, setCloudSnapshotId])
+  }, [cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
 
   const handleRestoreSnapshot = useCallback((snapshot) => {
     if (!snapshot?.payload) return

@@ -84,6 +84,23 @@ export default defineSchema({
     .index('by_project_id_created_at', ['projectId', 'createdAt'])
     .index('by_created_by_user_id_created_at', ['createdByUserId', 'createdAt']),
 
+  projectAssets: defineTable({
+    projectId: v.id('projects'),
+    uploadedByUserId: v.id('users'),
+    shotId: v.optional(v.string()),
+    kind: v.union(v.literal('storyboard_image')),
+    mime: v.string(),
+    sourceName: v.optional(v.string()),
+    thumbStorageId: v.id('_storage'),
+    fullStorageId: v.id('_storage'),
+    meta: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index('by_project_id', ['projectId'])
+    .index('by_project_id_shot_id', ['projectId', 'shotId']),
+
   screenplayLocks: defineTable({
     projectId: v.id('projects'),
     sceneId: v.string(),
