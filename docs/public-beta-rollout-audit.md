@@ -3,6 +3,8 @@
 Date: 2026-04-01  
 Auditor mode: repo-only implementation audit (no product behavior changes)
 
+Policy centralization follow-up: see `docs/access-policy.md` for the canonical public-beta entitlement/access helper contract and current enforcement wiring.
+
 ## Scope and guardrails used for this audit
 
 - Audited current repository behavior against public-beta rollout requirements.
@@ -308,4 +310,3 @@ These can be postponed until after public-beta stabilization:
   - paid-loss downgrade transitions
   - webhook lag/failure handling
   - operational kill-switch behavior
-

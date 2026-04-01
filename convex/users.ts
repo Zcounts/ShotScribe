@@ -58,6 +58,9 @@ export const upsertCurrentUser = mutation({
       displayName: name,
       planTier: 'free',
       localOnlyEligible: true,
+      grandfatheredAccess: false,
+      compedAccess: false,
+      isAdmin: false,
       createdAt: now,
       updatedAt: now,
     })
