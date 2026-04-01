@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -6,10 +7,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // Use relative asset URLs so a single static build can be deployed either
-    // at a domain root (https://example.com/) or under a subfolder
-    // (https://example.com/shotscribe/).
-    base: './',
+    // Keep absolute asset URLs so the app can be served under /app while the
+    // landing page is served from /. Cloudflare Pages handles the route split.
+    base: '/',
     server: {
       port: 5173,
       host: true,
@@ -17,6 +17,10 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: isSiteGroundMode ? 'dist-siteground' : 'dist',
       rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'index.html'),
+          app: resolve(__dirname, 'app/index.html'),
+        },
         // pdfreader and its dependencies use Node.js APIs (fs, events, stream).
         // In Electron's renderer process these are available at runtime via
         // Node integration, so we mark them as external to keep the browser
@@ -29,7 +33,7 @@ export default defineConfig(({ mode }) => {
       // Without this, Vite scans /mobile/index.html too, which imports the
       // local @shotscribe/shared package and can crash desktop dev startup
       // before Electron loads the renderer.
-      entries: ['index.html', 'src/main.jsx'],
+      entries: ['index.html', 'app/index.html', 'src/main.jsx'],
       exclude: ['pdfreader'],
     },
   }
