@@ -201,6 +201,18 @@ npm run dev:web
 npm run build:web
 ```
 
+### Optional migration env scaffolding (no local setup required)
+
+The app now includes a runtime config loader for future cloud migration wiring:
+
+- `VITE_ENABLE_CLOUD_FEATURES` (defaults to `false`)
+- `VITE_CONVEX_URL` (optional)
+- `VITE_STRIPE_PUBLISHABLE_KEY` (optional)
+- `VITE_AUTH_ISSUER_URL` (optional)
+- `VITE_AUTH_AUDIENCE` (optional)
+
+If these values are not set, ShotScribe remains in local-only mode by default (`localOnly: true`, `cloudEnabled: false`).
+
 ### Preview build locally
 
 ```bash
