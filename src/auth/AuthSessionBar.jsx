@@ -4,6 +4,7 @@ import { useConvexAuth } from 'convex/react'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from './authConfig'
 import BillingActions from '../features/billing/BillingActions'
+import { useAdminAccess } from '../features/admin/useAdminAccess'
 
 const barStyle = {
   display: 'flex',
@@ -42,6 +43,7 @@ function CloudAuthBar() {
   const { signOut, openSignIn } = useClerk()
   const { isAuthenticated: hasConvexIdentity, isLoading: convexLoading } = useConvexAuth()
 
+  const { isAdmin } = useAdminAccess()
   const isLoading = !userLoaded || convexLoading
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Signed-in user'
 
@@ -51,7 +53,7 @@ function CloudAuthBar() {
         {isLoading
           ? 'Checking session…'
           : isSignedIn
-            ? `Signed in as ${displayName}${hasConvexIdentity ? '' : ' (syncing account…)'}`
+            ? `Signed in as ${displayName}${isAdmin ? ' (admin)' : ''}${hasConvexIdentity ? '' : ' (syncing account…)'}`
             : 'Signed out.'}
       </span>
       {isSignedIn ? (

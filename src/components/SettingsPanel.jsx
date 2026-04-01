@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import useStore from '../store'
 import SharingSettingsSection from '../features/sharing/SharingSettingsSection'
+import AdminFeatureGuard from '../features/admin/AdminFeatureGuard'
 import {
   NON_REBINDABLE_SHORTCUT_NOTES,
   SHORTCUT_ACTIONS,
@@ -237,6 +238,19 @@ export default function SettingsPanel() {
         </SettingsRow>
 
         <SharingSettingsSection />
+
+        <AdminFeatureGuard
+          fallback={null}
+          loadingFallback={null}
+        >
+          <div style={{ borderTop: '1px solid #374151', paddingTop: 14, marginTop: 4, marginBottom: 14 }}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Admin Access</p>
+            <p className="text-xs text-gray-500">
+              Internal admin tools are enabled for this account. Future admin-only screens should be wrapped in <code>AdminFeatureGuard</code>.
+            </p>
+          </div>
+        </AdminFeatureGuard>
+
 
         <div style={{ borderTop: '1px solid #374151', paddingTop: 14, marginTop: 4, marginBottom: 14 }}>
           <SettingsRow label="Auto-Suggest Tags">
