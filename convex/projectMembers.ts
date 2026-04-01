@@ -1,6 +1,11 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import { assertCanCollaborateOnCloudProject, assertHasPaidCloudAccess } from './accessPolicy'
+import {
+  assertAllActiveCollaboratorsHavePaidAccess,
+  assertCanAccessSharedCloudProject,
+  assertCanCollaborateOnCloudProject,
+  assertHasPaidCloudAccess,
+} from './accessPolicy'
 import { requireCloudWritesEnabled } from './ops'
 
 const ROLE_RANK: Record<string, number> = {
@@ -59,6 +64,7 @@ export async function requireProjectRole(ctx: any, projectId: any, userId: any, 
   if (!role || ROLE_RANK[role] < ROLE_RANK[minimumRole]) {
     throw new Error('Forbidden')
   }
+  await assertCanAccessSharedCloudProject(ctx, userId, projectId)
   return { project, role }
 }
 
@@ -120,6 +126,7 @@ export const inviteProjectMember = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
     await assertCanCollaborateOnCloudProject(ctx, currentUserId, args.projectId)
+    await assertAllActiveCollaboratorsHavePaidAccess(ctx, args.projectId)
     await requireCloudWritesEnabled(ctx)
 
     const normalizedInviteEmail = normalizeEmail(args.email)
@@ -131,6 +138,7 @@ export const inviteProjectMember = mutation({
       .unique()
 
     if (existingUser) {
+      await assertHasPaidCloudAccess(ctx, existingUser._id)
       const existingMembership = await ctx.db
         .query('projectMembers')
         .withIndex('by_project_id_user_id', (q: any) => q.eq('projectId', args.projectId).eq('userId', existingUser._id))
@@ -198,9 +206,15 @@ export const acceptProjectInvite = mutation({
       .unique()
 
     if (!invite) throw new Error('Invite not found')
+    if (invite.status === 'accepted' && String(invite.acceptedByUserId || '') === String(currentUserId)) {
+      return { projectId: String(invite.projectId), role: invite.role, alreadyAccepted: true }
+    }
     if (invite.status !== 'pending') throw new Error('Invite is no longer valid')
     if (invite.expiresAt < Date.now()) throw new Error('Invite has expired')
     if (normalizeEmail(invite.email) !== normalizedUserEmail) throw new Error('Invite email does not match your account')
+
+    const project = await ctx.db.get(invite.projectId)
+    if (!project) throw new Error('Project not found')
 
     const membership = await ctx.db
       .query('projectMembers')

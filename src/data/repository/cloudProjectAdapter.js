@@ -25,12 +25,20 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
       }
     },
 
-    async createSnapshot({ projectId, createdByUserId, source, payload, expectedLatestSnapshotId = undefined }) {
+    async createSnapshot({
+      projectId,
+      createdByUserId,
+      source,
+      payload,
+      expectedLatestSnapshotId = undefined,
+      conflictStrategy = 'last_write_wins',
+    }) {
       const result = await runMutation('projectSnapshots:createSnapshot', {
         projectId,
         createdByUserId,
         source,
         payload,
+        conflictStrategy,
         ...(expectedLatestSnapshotId ? { expectedLatestSnapshotId } : {}),
       })
       if (!result?.ok) {
