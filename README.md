@@ -207,9 +207,7 @@ The app now includes a runtime config loader for future cloud migration wiring:
 
 - `VITE_ENABLE_CLOUD_FEATURES` (defaults to `false`)
 - `VITE_CONVEX_URL` (optional)
-- `VITE_STRIPE_PUBLISHABLE_KEY` (optional)
-- `VITE_AUTH_ISSUER_URL` (optional)
-- `VITE_AUTH_AUDIENCE` (optional)
+- `VITE_CLERK_PUBLISHABLE_KEY` (required when cloud mode is enabled)
 - `VITE_MONITORING_ENDPOINT` (optional structured log sink for browser events)
 
 If these values are not set, ShotScribe remains in local-only mode by default (`localOnly: true`, `cloudEnabled: false`).

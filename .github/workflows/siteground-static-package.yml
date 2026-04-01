@@ -27,14 +27,9 @@ jobs:
       - name: Build production web app (SiteGround mode)
         run: npm run build:web
         env:
-          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
-          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
-          VITE_AUTH_ISSUER_URL: ${{ secrets.VITE_AUTH_ISSUER_URL }}
-          VITE_AUTH_AUDIENCE: ${{ secrets.VITE_AUTH_AUDIENCE }}
-          VITE_AUTH_CLIENT_ID: ${{ secrets.VITE_AUTH_CLIENT_ID }}
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           VITE_ENABLE_CLOUD_FEATURES: ${{ secrets.VITE_ENABLE_CLOUD_FEATURES }}
-          VITE_MONITORING_ENDPOINT: ${{ secrets.VITE_MONITORING_ENDPOINT }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
 
       - name: Verify build output directory
         run: test -f dist-siteground/index.html

@@ -22,9 +22,5 @@ export const APP_MODE_FLAGS = Object.freeze({
 export const runtimeConfig = Object.freeze({
   appMode: APP_MODE_FLAGS,
   convexUrl: readOptionalEnv('VITE_CONVEX_URL', ''),
-  stripePublishableKey: readOptionalEnv('VITE_STRIPE_PUBLISHABLE_KEY', ''),
-  authIssuerUrl: readOptionalEnv('VITE_AUTH_ISSUER_URL', ''),
-  authAudience: readOptionalEnv('VITE_AUTH_AUDIENCE', ''),
-  authClientId: readOptionalEnv('VITE_AUTH_CLIENT_ID', ''),
   clerkPublishableKey: readOptionalEnv('VITE_CLERK_PUBLISHABLE_KEY', ''),
 })
