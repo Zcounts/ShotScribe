@@ -4,13 +4,19 @@ ShotScribe is a **web-based production planning app for filmmakers**.
 
 It is built to carry a project from **script through production** inside one connected workflow. Instead of breaking prep across separate writing, storyboard, shotlist, schedule, and callsheet tools, ShotScribe keeps that work tied together in one project so the information you create in prep is still useful when you're on set.
 
-The current direction for this repository is **web-first**:
+ShotScribe is moving toward a **web-first SaaS release** built for public beta, with a dedicated landing page at the site root and the application living under `/app`.
 
-- static web app deployment
-- SiteGround hosting target
-- local-only browser storage
-- import/export for backup and transfer
-- mobile-friendly access for use on set
+## Public site structure
+
+ShotScribe should be deployed with a split between the marketing site and the product:
+
+- `/` — landing page / marketing site
+- `/app` — main ShotScribe application
+- `/app/*` — all in-app routes, authenticated screens, and future product views
+
+This is an important product and deployment requirement.
+
+The application should **not** assume it lives at the domain root. Any routing, assets, redirects, auth flows, links, or deployment configuration must be safe for an app that runs from `/app` while a separate landing page exists at `/`.
 
 ## What ShotScribe does
 
@@ -100,17 +106,70 @@ With the web app workflow, you can bring production information onto set in a ph
 
 That makes ShotScribe useful not only during planning, but during production when the crew actually needs the information.
 
-## Current product scope
+## Current product phase
 
-ShotScribe is currently a **static web production planning app**.
+ShotScribe is currently moving toward **Public Beta v0.1**.
 
-That means:
+The current beta direction is:
 
-- the browser build is the primary target
-- hosting is designed around static deployment
-- persistence is local to the browser
-- project data can be backed up and transferred through import/export
-- there is no backend, account system, or cloud sync in this phase
+- web-first deployment
+- landing page at `/`
+- main application at `/app`
+- browser-first workflow
+- local-first project persistence during the current phase
+- import/export for backup and transfer
+- mobile-friendly access for use on set
+
+At this stage, the repository is still transitioning from an earlier static-hosting setup into a fuller cloud-backed product.
+
+## Target production stack
+
+The long-term production stack is planned around:
+
+- **Firebase Hosting** for web hosting
+- **Firebase Authentication** for login
+- **Firestore** for cloud project data
+- **Cloud Storage** for uploaded files and images
+- **Cloud Functions** for backend automation and billing hooks
+- **Stripe** for subscription billing
+
+This keeps the product stack focused on two main vendors:
+
+- **Firebase / Google Cloud**
+- **Stripe**
+
+## Deployment architecture
+
+The intended deployment model is:
+
+- landing page served at the domain root
+- app served from `/app`
+- future authenticated app routes nested under `/app/*`
+- marketing pages and product app treated as separate surfaces on the same domain
+
+For hosting, production configuration should support:
+
+- a dedicated landing page at `/`
+- SPA rewrites for `/app` and `/app/*`
+- working deep links inside the application
+- asset loading that does not break when the app is mounted under `/app`
+- future auth redirects that return users to `/app`
+
+## Important path requirements
+
+Because the app lives at `/app`, the codebase and deployment setup should avoid root-only assumptions.
+
+Important rules:
+
+- app routes should resolve under `/app`
+- landing page links should point into `/app`
+- asset paths should be relative or `/app`-aware in production
+- auth callbacks and redirect URLs should return to `/app`
+- deep-linked pages inside the app should still load on refresh
+- future billing success/cancel redirects should point to app-safe routes under `/app`
+- future mobile-web entry points should not assume the app is served from `/`
+
+If any existing build logic, router config, redirects, or asset references still assume the application lives at the domain root, those should be updated before public beta deployment.
 
 ## Repository structure
 
@@ -136,7 +195,13 @@ npm run dev:web
 npm run build:web
 ```
 
-Output folder: `dist-siteground/`
+Current output folder in the existing workflow:
+
+```bash
+dist-siteground/
+```
+
+That output naming may change as deployment is migrated away from the earlier SiteGround-oriented setup.
 
 ### Preview static build locally
 
@@ -153,49 +218,46 @@ npm run build:desktop
 
 Use Electron only when desktop packaging behavior is explicitly needed.
 
-## Local-only persistence
+## Current persistence model
 
-Browser mode stores project state locally in the current browser profile.
+Browser mode currently stores project state locally in the current browser profile.
 
 Important notes:
 
 - clearing browser data can remove local projects
-- there is no built-in cross-device sync
+- there is no built-in cross-device sync in the current phase
 - import/export should be used for backup and transfer
 - file compatibility should be preserved across ShotScribe project workflows
 
-## SiteGround deployment
+Cloud sync, authentication, uploaded media storage, and subscription-gated access are planned migration stages rather than fully completed parts of the current beta.
 
-The static web build is path-portable: the same `dist-siteground/` output can be hosted at a domain root (for example `https://shotscribe.com/`) or inside a subfolder (for example `https://fairlyodd.org/shotscribe/`) without rebuilding.
+## Migration roadmap
 
-### Automatic GitHub package (recommended)
+### Stage 1 — Hosting migration
+Move the web app away from the current SiteGround-oriented deployment flow and host the product on Firebase Hosting while preserving the landing-page-at-root and app-at-`/app` structure.
 
-When you push to the `main` branch, GitHub Actions runs the **SiteGround Static Package** workflow and generates `shotscribe-siteground-upload.zip` as a downloadable artifact.
+### Stage 2 — Login and identity
+Add Firebase Authentication so users can create accounts, sign in, recover passwords, and access protected app routes.
 
-You can download it from the workflow run page under **Artifacts**, then upload the zip contents to `public_html/` in SiteGround (for example `index.html`, `assets/`, and `.htaccess`).
+### Stage 3 — Cloud project data
+Add Firestore-backed project storage so users can access projects across devices instead of relying only on local browser persistence.
 
-### Manual fallback
+### Stage 4 — Uploaded files and images
+Add Cloud Storage support for storyboard assets, reference images, and other uploaded project files.
 
-1. Build the project with `npm run build:web`
-2. Upload the contents of `dist-siteground/` to either `public_html/` (root deploy) or a subfolder such as `public_html/shotscribe/`
-3. Make sure `index.html`, `assets/`, and `.htaccess` are included
-4. Hard refresh after deployment
+### Stage 5 — Billing and access control
+Add Stripe subscriptions and connect billing state to app access through Firebase-backed logic.
+
+### Stage 6 — Public beta hardening
+Finalize deployment, security rules, redirects, cloud persistence behavior, and billing flows for a stable public beta release.
 
 ## Product philosophy
 
 ShotScribe is not meant to feel like generic project management software.
-
-It is built to feel native to real film workflows:
-
-- visual
-- practical
-- fast
-- production-focused
-- useful in prep and on set
-- accessible for indie teams
+It is built to feel native to real film workflows.
 
 ## Status
 
 ShotScribe is actively evolving as a web-first production planning platform for filmmakers.
 
-The current focus is keeping the app **web-safe, portable, and practical**, while preserving a connected workflow from script through production.
+The current focus is preparing the app for a public beta transition from a local-first static workflow into a cloud-backed product with login, subscriptions, and a clean split between the landing page at `/` and the application at `/app`.
