@@ -1,7 +1,7 @@
 # Admin Role Bootstrap and Management Runbook
 
 Date: 2026-04-01  
-Scope: internal admin-role assignment for ShotScribe in-app admin foundation.
+Scope: internal admin-role assignment and in-app admin console operations for ShotScribe.
 
 ## Purpose
 
@@ -10,6 +10,7 @@ ShotScribe admin access is an **internal operational role** and is independent f
 - Paid users are **not** automatically admins.
 - Admin role is stored on `accountProfiles.isAdmin`.
 - Assignment is controlled server-side only.
+- The internal admin console is available at `/admin` and is guarded by admin role checks on both UI and Convex queries/mutations.
 
 ## Prerequisites
 
@@ -66,6 +67,35 @@ Safety:
 - Caller must already be admin.
 - Prevents revoking the last remaining admin.
 
+## In-app admin console (day-one)
+
+Route: `/admin`
+
+Surface includes:
+- Dashboard totals: signups, paid users, active subscriptions, grandfathered/comped users.
+- Recent signups.
+- Recent subscription changes (from `billingSubscriptions.updatedAt` stream).
+- Search user by email.
+- User detail inspection:
+  - billing state and subscription state,
+  - cloud access state,
+  - plan and override flags,
+  - owned/shared project counts,
+  - admin role.
+- Override-light controls:
+  - set/clear comped access,
+  - set/clear grandfathered access,
+  - grant/revoke admin role.
+- Safe operational control exposure:
+  - `cloud_writes_enabled` only (incident kill switch), with reason capture.
+
+### Guardrails
+
+- All admin console data/actions require authenticated admin role checks in Convex (`requireCurrentAdmin`).
+- UI is read-heavy by design; only small manual overrides are exposed.
+- Every override/role mutation and cloud write kill-switch update requires a confirmation prompt.
+- Stripe coupon/promo creation is intentionally **not** implemented in-app; use Stripe Dashboard.
+
 ## Verify admin state
 
 Current signed-in user:
@@ -80,14 +110,26 @@ List all admins (admin-only):
 npx convex run admin:listAdmins
 ```
 
+Admin dashboard snapshot (admin-only):
+
+```bash
+npx convex run admin:getAdminDashboardOverview
+```
+
+Inspect admin-safe ops controls:
+
+```bash
+npx convex run admin:getSafeOperationalControls
+```
+
 Billing entitlement surface also returns admin status for frontend guards:
 - `billing:getMyEntitlement -> isAdmin`
 
 ## Admin-only feature guard guidance (frontend)
 
-Use `AdminFeatureGuard` for any future internal admin screen/components.
+Use `AdminFeatureGuard` for internal admin screen/components.
 
 - File: `src/features/admin/AdminFeatureGuard.jsx`
 - Hook: `src/features/admin/useAdminAccess.js`
 
-This ensures admin-only UX remains isolated from paid membership checks.
+This keeps admin UX isolated from paid membership checks.

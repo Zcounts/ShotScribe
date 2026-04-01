@@ -60,6 +60,7 @@ import { devPerfLog, useDevRenderCounter } from './utils/devPerf'
 import { platformService } from './services/platformService'
 import AuthSessionBar from './auth/AuthSessionBar'
 import AccountPage from './features/account/AccountPage'
+import AdminConsolePage from './features/admin/AdminConsolePage'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -875,6 +876,8 @@ export default function App() {
 
       {pathname === '/account' ? (
         <AccountPage />
+      ) : pathname === '/admin' ? (
+        <AdminConsolePage />
       ) : (
         <>
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
