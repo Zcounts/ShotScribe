@@ -1892,9 +1892,13 @@ const useStore = create((set, get) => ({
 
   updateShotImage: (shotId, imagePayload) => {
     const isLegacyPayload = typeof imagePayload === 'string' || imagePayload == null
-    const thumb = isLegacyPayload ? (imagePayload || null) : (imagePayload.thumb || null)
-    const full = isLegacyPayload ? null : (imagePayload.full || null)
-    const meta = isLegacyPayload ? null : (imagePayload.meta || null)
+    const thumb = isLegacyPayload
+      ? (imagePayload || null)
+      : (imagePayload?.thumb || imagePayload?.imageAsset?.thumb || imagePayload?.image || null)
+    const full = isLegacyPayload ? null : (imagePayload?.full || imagePayload?.imageAsset?.full || null)
+    const meta = isLegacyPayload ? null : (imagePayload?.meta || imagePayload?.imageAsset?.meta || null)
+    const cloud = isLegacyPayload ? null : (imagePayload?.cloud || imagePayload?.imageAsset?.cloud || null)
+    const mime = isLegacyPayload ? 'image/webp' : (imagePayload?.mime || imagePayload?.imageAsset?.mime || 'image/webp')
     set(state => ({
       storyboardImageCache: {
         ...state.storyboardImageCache,
@@ -1911,10 +1915,11 @@ const useStore = create((set, get) => ({
               ? (sh.imageAsset || null)
               : {
                   version: 1,
-                  mime: imagePayload.mime || 'image/webp',
+                  mime,
                   thumb,
                   full: null,
                   meta,
+                  cloud: cloud || null,
                 },
           }
         }),
@@ -2219,6 +2224,7 @@ const useStore = create((set, get) => ({
               thumb: s.imageAsset.thumb || s.image || null,
               full: null,
               meta: s.imageAsset.meta || null,
+              cloud: s.imageAsset.cloud || null,
             } : null,
             specs: s.specs
               ? { size: s.specs.size, type: s.specs.type, move: s.specs.move, equip: s.specs.equip }
@@ -2497,6 +2503,7 @@ const useStore = create((set, get) => ({
             thumb: s.imageAsset.thumb || s.image || null,
             full: null,
             meta: s.imageAsset.meta || null,
+            cloud: s.imageAsset.cloud || null,
           }
         : (s.image
             ? {

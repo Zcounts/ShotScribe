@@ -1,13 +1,15 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
 import CustomDropdown from './CustomDropdown'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
-import { processStoryboardUpload } from '../utils/storyboardImagePipeline'
+import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { uploadStoryboardAssetToCloud } from '../services/assetService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 
 function parseAspectRatioValue(value) {
@@ -34,6 +36,15 @@ function sanitizeNumericInput(value) {
 function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
+  const projectRef = useStore(s => s.projectRef)
+  const createAssetUploadUrl = useMutation('assets:createAssetUploadUrl')
+  const completeAssetUpload = useMutation('assets:completeAssetUpload')
+  const cloudAssetView = useQuery(
+    'assets:getAssetView',
+    (projectRef?.type === 'cloud' && shot?.imageAsset?.cloud?.assetId)
+      ? { projectId: projectRef.projectId, assetId: shot.imageAsset.cloud.assetId }
+      : 'skip'
+  )
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
   const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
@@ -75,17 +86,33 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
       return
     }
     try {
-      const processed = await processStoryboardUpload(file, {
-        thumbnailWidth: 480,
-        fullLongEdge: 1600,
-        quality: 0.84,
-      })
-      updateShotImage(shot.id, processed)
+      const isCloudProject = projectRef?.type === 'cloud'
+      if (isCloudProject) {
+        const processed = await processStoryboardUploadForCloud(file, {
+          thumbnailWidth: 480,
+          fullLongEdge: 1600,
+          quality: 0.84,
+        })
+        const uploaded = await uploadStoryboardAssetToCloud({
+          projectId: projectRef.projectId,
+          shotId: shot.id,
+          processed,
+          createAssetUploadUrl,
+          completeAssetUpload,
+        })
+        updateShotImage(shot.id, uploaded)
+      } else {
+        const processed = await processStoryboardUpload(file, {
+          thumbnailWidth: 480,
+          fullLongEdge: 1600,
+          quality: 0.84,
+        })
+        updateShotImage(shot.id, processed)
+      }
       devPerfLog('storyboard:image-upload', {
         shotId: shot.id,
         sourceBytes: file.size,
-        thumbBytes: processed?.meta?.thumbBytes,
-        fullBytes: processed?.meta?.fullBytes,
+        cloudProject: isCloudProject,
       })
     } catch (err) {
       console.error('Image processing failed', err)
@@ -93,7 +120,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, updateShotImage])
+  }, [shot.id, updateShotImage, projectRef, createAssetUploadUrl, completeAssetUpload])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
@@ -129,7 +156,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
   )
 
-  const storyboardImageSrc = shot.imageAsset?.thumb || shot.image || null
+  const storyboardImageSrc = cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null
 
   return (
     <div
