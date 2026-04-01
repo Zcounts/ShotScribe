@@ -34,6 +34,8 @@ export default function HomeView() {
   const schedule = useStore(s => s.schedule)
   const castRoster = useStore(s => s.castRoster)
   const projectName = useStore(s => s.projectName)
+  const projectPath = useStore(s => s.projectPath)
+  const browserProjectId = useStore(s => s.browserProjectId)
   const recentProjects = useStore(s => s.recentProjects)
   const setActiveTab = useStore(s => s.setActiveTab)
   const newProject = useStore(s => s.newProject)
@@ -51,6 +53,7 @@ export default function HomeView() {
   )
   const dayCount = Array.isArray(schedule) ? schedule.length : 0
   const firstShootDate = schedule?.[0]?.date || null
+  const hasLoadedProject = Boolean(projectPath || browserProjectId)
 
   const sidebarRecent = (Array.isArray(recentProjects) && recentProjects.length > 0)
     ? recentProjects.slice(0, 3)
@@ -199,22 +202,24 @@ export default function HomeView() {
       </SidebarPane>
 
       <main className="home-main">
-        <section className="home-hero">
-          <div>
-            <div className="home-hero-kicker">// ShotScribe · Production Suite</div>
-            <div className="home-hero-title">
-              Plan the <span className="is-blue">Shot.</span><br />
-              Run the <span className="is-blue">Day.</span>
+        {!hasLoadedProject && (
+          <section className="home-hero">
+            <div>
+              <div className="home-hero-kicker">// ShotScribe · Production Suite</div>
+              <div className="home-hero-title">
+                Build the <span className="is-blue">Shot.</span><br />
+                Run the <span className="is-blue">Day.</span>
+              </div>
+              <div className="home-hero-copy">
+                Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.
+              </div>
             </div>
-            <div className="home-hero-copy">
-              Script import, scene breakdown, storyboards, scheduling — everything a director needs from page to set, in one desktop workspace.
+            <div className="home-hero-actions">
+              <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
+              <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
             </div>
-          </div>
-          <div className="home-hero-actions">
-            <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
-            <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
-          </div>
-        </section>
+          </section>
+        )}
 
         <section className="home-stat-strip">
           {[
