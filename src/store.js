@@ -23,6 +23,7 @@ import { devPerfLog } from './utils/devPerf'
 import { platformService } from './services/platformService'
 import { runtimeConfig } from './config/runtimeConfig'
 import { logTelemetry } from './utils/telemetry'
+import { createProjectRepository } from './data/repository'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -541,10 +542,13 @@ function persistBrowserProjectState(get, set, {
   return browserProjectId
 }
 
+const projectRepository = createProjectRepository()
+
 const useStore = create((set, get) => ({
   // Project metadata
   projectPath: null,
   browserProjectId: null,
+  projectRef: { type: 'local', path: null, browserProjectId: null },
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
   lastSaved: null,
@@ -2382,7 +2386,12 @@ const useStore = create((set, get) => ({
           result = await platformService.saveProject(defaultName, json)
         }
         if (result.success) {
-          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
+          set({
+            lastSaved: new Date().toISOString(),
+            projectPath: result.filePath,
+            hasUnsavedChanges: false,
+            projectRef: { type: 'local', path: result.filePath, browserProjectId: null },
+          })
           logTelemetry('project_export_result', { success: true, mode: 'save', platform: 'desktop', hasPath: !!result.filePath })
         } else if (result.error) {
           logTelemetry('project_export_result', { success: false, mode: 'save', platform: 'desktop', error: result.error })
@@ -2396,7 +2405,10 @@ const useStore = create((set, get) => ({
     } else {
       try {
         await platformService.saveProject(defaultName, json)
-        persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
+        const browserProjectId = persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
+        set({
+          projectRef: { type: 'local', path: null, browserProjectId: browserProjectId || get().browserProjectId || null },
+        })
         logTelemetry('project_export_result', { success: true, mode: 'save', platform: 'browser' })
       } catch (err) {
         logTelemetry('project_export_result', { success: false, mode: 'save', platform: 'browser', error: err?.message || 'unknown' })
@@ -2433,7 +2445,12 @@ const useStore = create((set, get) => ({
       try {
         const result = await platformService.saveProject(defaultName, json)
         if (result.success) {
-          set({ lastSaved: new Date().toISOString(), projectPath: result.filePath, hasUnsavedChanges: false })
+          set({
+            lastSaved: new Date().toISOString(),
+            projectPath: result.filePath,
+            hasUnsavedChanges: false,
+            projectRef: { type: 'local', path: result.filePath, browserProjectId: null },
+          })
           logTelemetry('project_export_result', { success: true, mode: 'save_as', platform: 'desktop', hasPath: !!result.filePath })
         } else if (result.error) {
           logTelemetry('project_export_result', { success: false, mode: 'save_as', platform: 'desktop', error: result.error })
@@ -2446,7 +2463,10 @@ const useStore = create((set, get) => ({
     } else {
       try {
         await platformService.saveProject(defaultName, json)
-        persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
+        const browserProjectId = persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
+        set({
+          projectRef: { type: 'local', path: null, browserProjectId: browserProjectId || get().browserProjectId || null },
+        })
         logTelemetry('project_export_result', { success: true, mode: 'save_as', platform: 'browser' })
       } catch (err) {
         logTelemetry('project_export_result', { success: false, mode: 'save_as', platform: 'browser', error: err?.message || 'unknown' })
@@ -2731,6 +2751,11 @@ const useStore = create((set, get) => ({
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
       browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
+      projectRef: {
+        type: 'local',
+        path: platformService.isDesktop() ? get().projectPath : null,
+        browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
+      },
       activeTab: 'script',
       contextMenu: null,
       personDialog: null,
@@ -2780,7 +2805,11 @@ const useStore = create((set, get) => ({
       get().loadProject(data)
       if (platformService.isDesktop()) {
         const fileName = result.filePath.split(/[\\/]/).pop()
-        set({ projectPath: result.filePath, browserProjectId: null })
+        set({
+          projectPath: result.filePath,
+          browserProjectId: null,
+          projectRef: { type: 'local', path: result.filePath, browserProjectId: null },
+        })
         updateRecentProjects(get, set, buildRecentProjectEntry({
           name: fileName,
           path: result.filePath,
@@ -2789,7 +2818,8 @@ const useStore = create((set, get) => ({
         logTelemetry('project_import_result', { success: true, platform: 'desktop', source: result.filePath })
       } else {
         set({ projectPath: null })
-        persistBrowserProjectState(get, set, { data, name: result.filePath, markSaved: true })
+        const browserProjectId = persistBrowserProjectState(get, set, { data, name: result.filePath, markSaved: true })
+        set({ projectRef: { type: 'local', path: null, browserProjectId: browserProjectId || get().browserProjectId || null } })
         logTelemetry('project_import_result', { success: true, platform: 'browser', source: result.filePath || 'picker' })
       }
     } catch {
@@ -2813,7 +2843,11 @@ const useStore = create((set, get) => ({
       const data = JSON.parse(result.data)
       get().loadProject(data)
       const fileName = filePath.split(/[\\/]/).pop()
-      set({ projectPath: filePath, browserProjectId: null })
+      set({
+        projectPath: filePath,
+        browserProjectId: null,
+        projectRef: { type: 'local', path: filePath, browserProjectId: null },
+      })
       updateRecentProjects(get, set, buildRecentProjectEntry({
         name: fileName,
         path: filePath,
@@ -2847,7 +2881,11 @@ const useStore = create((set, get) => ({
     }
     try {
       get().loadProject(data)
-      set({ browserProjectId, projectPath: null })
+      set({
+        browserProjectId,
+        projectPath: null,
+        projectRef: { type: 'local', path: null, browserProjectId },
+      })
       updateRecentProjects(get, set, buildRecentProjectEntry({
         name: recentProject.name || `${data.projectName || 'Untitled Shotlist'}.shotlist`,
         path: `browser:${browserProjectId}`,
@@ -2882,6 +2920,7 @@ const useStore = create((set, get) => ({
       importedScripts: [],
       projectPath: null,
       browserProjectId,
+      projectRef: { type: 'local', path: null, browserProjectId },
       lastSaved: null,
       activeTab: 'script',
       contextMenu: null,
@@ -2907,6 +2946,69 @@ const useStore = create((set, get) => ({
         markSaved: false,
       })
     }
+  },
+
+  createCloudProjectFromLocal: async ({
+    cloudRepository = projectRepository.cloud,
+    ownerUserId,
+    accountProfile,
+  }) => {
+    if (!cloudRepository) {
+      throw new Error('Cloud repository is not configured')
+    }
+    if (!ownerUserId) {
+      throw new Error('ownerUserId is required')
+    }
+    if (!accountProfile || accountProfile.planTier !== 'paid') {
+      throw new Error('Cloud projects require a paid account')
+    }
+
+    const payload = get().getProjectData()
+    const cloudProject = await cloudRepository.createProject({
+      ownerUserId,
+      name: payload.projectName || get().projectName || 'Untitled Shotlist',
+      emoji: payload.projectEmoji || get().projectEmoji || '🎬',
+    })
+    const snapshot = await cloudRepository.createSnapshot({
+      projectId: cloudProject.id,
+      createdByUserId: ownerUserId,
+      source: 'local_conversion',
+      payload,
+    })
+
+    set({
+      projectRef: {
+        type: 'cloud',
+        projectId: cloudProject.id,
+        snapshotId: snapshot.id,
+      },
+    })
+    return { project: cloudProject, snapshot }
+  },
+
+  openCloudProject: async ({ cloudRepository = projectRepository.cloud, projectId }) => {
+    if (!cloudRepository) {
+      throw new Error('Cloud repository is not configured')
+    }
+    if (!projectId) {
+      throw new Error('projectId is required')
+    }
+
+    const snapshot = await cloudRepository.getLatestSnapshot(projectId)
+    if (!snapshot?.payload) {
+      throw new Error('Cloud project has no snapshots')
+    }
+
+    get().loadProject(snapshot.payload)
+    set({
+      projectPath: null,
+      browserProjectId: null,
+      projectRef: {
+        type: 'cloud',
+        projectId,
+        snapshotId: snapshot.id,
+      },
+    })
   },
 
   // ── Auto-save ────────────────────────────────────────────────────────
