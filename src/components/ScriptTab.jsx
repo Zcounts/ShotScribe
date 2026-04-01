@@ -27,6 +27,7 @@ import breakdownIcon from '../../assets/script icons/breakdown.svg'
 import visualizeIcon from '../../assets/script icons/visualize.svg'
 import LeftSidebarResources from './LeftSidebarResources'
 import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
+import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -371,6 +372,7 @@ export default function ScriptTab() {
   const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
   const pruneOrphanedAssets = useMutation('assets:pruneOrphanedAssets')
+  const cloudAccessPolicy = useCloudAccessPolicy()
 
   const [view, setView] = useState('write')
   const [activeSceneId, setActiveSceneId] = useState(null)
@@ -441,6 +443,12 @@ export default function ScriptTab() {
       return
     }
   }, [view])
+
+  useEffect(() => {
+    if (cloudProjectId && !cloudAccessPolicy.canEditCloudProject && view === 'write') {
+      setView('visualize')
+    }
+  }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, view])
 
   useEffect(() => {
     if (!cloudProjectId) return
@@ -809,13 +817,17 @@ export default function ScriptTab() {
 
   const handleAcquireActiveSceneLock = useCallback(async () => {
     if (!cloudProjectId || !activeSceneId) return
+    if (!cloudAccessPolicy.canEditCloudProject) {
+      setCollabNotice('Cloud collaboration is read-only while billing is inactive.')
+      return
+    }
     const result = await acquireSceneLock({ projectId: cloudProjectId, sceneId: activeSceneId })
     if (!result?.ok) {
       setCollabNotice(`Scene is locked by ${result?.holderName || 'another collaborator'}.`)
       return
     }
     setCollabNotice('Scene lock acquired.')
-  }, [acquireSceneLock, activeSceneId, cloudProjectId])
+  }, [acquireSceneLock, activeSceneId, cloudAccessPolicy.canEditCloudProject, cloudProjectId])
 
   const handleReleaseActiveSceneLock = useCallback(async () => {
     if (!cloudProjectId || !activeSceneId) return
@@ -825,6 +837,10 @@ export default function ScriptTab() {
 
   const handleSaveScreenplaySnapshot = useCallback(async () => {
     if (!cloudProjectId || !currentUserId) return
+    if (!cloudAccessPolicy.canEditCloudProject) {
+      setCollabNotice('Cloud saves are blocked while billing is inactive. You can still view this project.')
+      return
+    }
     setIsSavingSnapshot(true)
     try {
       const payload = getProjectData()
@@ -847,7 +863,7 @@ export default function ScriptTab() {
     } finally {
       setIsSavingSnapshot(false)
     }
-  }, [cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
+  }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
 
   const handleRestoreSnapshot = useCallback((snapshot) => {
     if (!snapshot?.payload) return
@@ -1095,11 +1111,18 @@ export default function ScriptTab() {
               {VIEW_OPTIONS.map(option => (
                 <button
                   key={option.id}
-                  onClick={() => setView(option.id)}
+                  onClick={() => {
+                    if (option.id === 'write' && cloudProjectId && !cloudAccessPolicy.canEditCloudProject) {
+                      setCollabNotice('Write mode is disabled while this cloud project is read-only due to inactive billing.')
+                      return
+                    }
+                    setView(option.id)
+                  }}
                   className={`ss-btn outline icon-toggle script-view-btn ${view === option.id ? 'is-active' : ''}`}
                   aria-label={option.label}
                   title={option.label}
                   aria-pressed={view === option.id}
+                  disabled={option.id === 'write' && cloudProjectId && !cloudAccessPolicy.canEditCloudProject}
                   style={{ borderRadius: 999, padding: '5px 10px', fontSize: 12, minWidth: 56 }}
                 >
                   <img src={option.icon} alt="" aria-hidden="true" />
@@ -1254,20 +1277,22 @@ export default function ScriptTab() {
             <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 12px' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Script Document</span>
               {cloudProjectId && (
-                <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot}>
+                <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot || !cloudAccessPolicy.canEditCloudProject}>
                   {isSavingSnapshot ? 'Saving…' : 'Save Snapshot'}
                 </button>
               )}
             </div>
             {cloudProjectId && (
-              <div style={{ padding: '6px 12px', borderBottom: '1px solid rgba(148,163,184,0.2)', background: isWriteBlockedByLock ? '#fff7ed' : '#f8fafc', fontSize: 12, color: '#475569', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ padding: '6px 12px', borderBottom: '1px solid rgba(148,163,184,0.2)', background: (isWriteBlockedByLock || !cloudAccessPolicy.canEditCloudProject) ? '#fff7ed' : '#f8fafc', fontSize: 12, color: '#475569', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <span>
-                  {isWriteBlockedByLock ? `Locked by ${activeSceneLock?.holderName || 'another collaborator'}.` : 'Collaboration safety active.'}
+                  {!cloudAccessPolicy.canEditCloudProject
+                    ? 'Read-only cloud mode: billing inactive.'
+                    : (isWriteBlockedByLock ? `Locked by ${activeSceneLock?.holderName || 'another collaborator'}.` : 'Collaboration safety active.')}
                   {collabNotice ? ` ${collabNotice}` : ''}
                 </span>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="toolbar-btn" onClick={handleAcquireActiveSceneLock}>Lock scene</button>
-                  <button className="toolbar-btn" onClick={handleReleaseActiveSceneLock}>Unlock</button>
+                  <button className="toolbar-btn" onClick={handleAcquireActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Lock scene</button>
+                  <button className="toolbar-btn" onClick={handleReleaseActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Unlock</button>
                 </div>
               </div>
             )}

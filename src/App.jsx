@@ -62,6 +62,7 @@ import AuthSessionBar from './auth/AuthSessionBar'
 import AccountPage from './features/account/AccountPage'
 import AdminConsolePage from './features/admin/AdminConsolePage'
 import AcceptInvitePage from './features/sharing/AcceptInvitePage'
+import useCloudAccessPolicy from './features/billing/useCloudAccessPolicy'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -369,6 +370,7 @@ export default function App() {
   const shortcutBindings = useStore(s => s.shortcutBindings)
   const executeCommand = useStore(s => s.executeCommand)
   const flushBrowserPersistence = useStore(s => s.flushBrowserPersistence)
+  const cloudAccessPolicy = useCloudAccessPolicy()
   const [exportModalOpen, setExportModalOpen] = useState(false)
   // Autosave restore — kept as React state so we never call window.confirm()
   // (native OS dialogs steal focus from the webContents; after dismissal
@@ -871,6 +873,8 @@ export default function App() {
           setForcedExportTab(null)
           setExportModalOpen(true)
         }}
+        cloudExportBlocked={cloudAccessPolicy.isCloudProject && !cloudAccessPolicy.canExportCloudProject}
+        cloudExportBlockedMessage={`${cloudAccessPolicy.readOnlyReason || 'Cloud project export is blocked.'} Manage billing in Account.`}
       />
 
       <AuthSessionBar />
@@ -883,6 +887,11 @@ export default function App() {
         <AcceptInvitePage />
       ) : (
         <>
+      {cloudAccessPolicy.readOnly && (
+        <div style={{ padding: '8px 16px', background: '#3f2d0b', borderBottom: '1px solid rgba(251,191,36,0.45)', color: '#fde68a', fontSize: 12 }}>
+          <strong>Cloud project is read-only.</strong> You can view project data, but editing, cloud export, and cloud asset access are blocked while billing is inactive. Local-only projects continue to work normally. Manage billing from Account.
+        </div>
+      )}
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
       <div className="tab-nav" style={{
         display: 'flex',
