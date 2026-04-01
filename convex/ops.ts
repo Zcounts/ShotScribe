@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { requireCurrentUserId } from './projectMembers'
+import { requireCurrentAdmin } from './admin'
 
 const CLOUD_WRITES_ENABLED_KEY = 'cloud_writes_enabled'
 
@@ -89,6 +90,46 @@ export const setOperationalFlag = mutation({
     }
   },
 })
+
+export const setOperationalFlagAsAdmin = mutation({
+  args: {
+    key: v.string(),
+    enabled: v.boolean(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireCurrentAdmin(ctx)
+
+    const now = Date.now()
+    const existing = await ctx.db
+      .query('operationalFlags')
+      .withIndex('by_key', (q: any) => q.eq('key', args.key))
+      .unique()
+
+    const patch = {
+      enabled: args.enabled,
+      reason: normalizeOptionalText(args.reason),
+      updatedByUserId: user._id,
+      updatedAt: now,
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch)
+    } else {
+      await ctx.db.insert('operationalFlags', {
+        key: args.key,
+        ...patch,
+      })
+    }
+
+    return {
+      key: args.key,
+      enabled: args.enabled,
+      updatedAt: now,
+    }
+  },
+})
+
 
 export const getOperationalDiagnostics = query({
   args: {},
