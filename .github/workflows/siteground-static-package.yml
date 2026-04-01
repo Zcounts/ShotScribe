@@ -1,4 +1,4 @@
-name: SiteGround Static Package
+name: Production Web Build Artifact
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-siteground-package:
-    name: Build SiteGround upload zip
+  build-web-artifact:
+    name: Build production web artifact
     runs-on: ubuntu-latest
 
     steps:
@@ -24,19 +24,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build static SiteGround output
+      - name: Build production web app (SiteGround mode)
         run: npm run build:web
+        env:
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+          VITE_AUTH_ISSUER_URL: ${{ secrets.VITE_AUTH_ISSUER_URL }}
+          VITE_AUTH_AUDIENCE: ${{ secrets.VITE_AUTH_AUDIENCE }}
+          VITE_AUTH_CLIENT_ID: ${{ secrets.VITE_AUTH_CLIENT_ID }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_ENABLE_CLOUD_FEATURES: ${{ secrets.VITE_ENABLE_CLOUD_FEATURES }}
+          VITE_MONITORING_ENDPOINT: ${{ secrets.VITE_MONITORING_ENDPOINT }}
+
+      - name: Verify build output directory
+        run: test -f dist-siteground/index.html
 
       - name: Create SiteGround upload zip
         run: |
-          test -f dist-siteground/index.html
-          rm -f shotscribe-siteground-upload.zip
+          rm -f shot-scribe-siteground-package.zip
           cd dist-siteground
-          zip -r ../shotscribe-siteground-upload.zip .
+          zip -r ../shot-scribe-siteground-package.zip .
 
-      - name: Upload SiteGround artifact
+      - name: Upload production web build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: shotscribe-siteground-upload
-          path: shotscribe-siteground-upload.zip
+          name: shot-scribe-siteground-package
+          path: |
+            dist-siteground
+            shot-scribe-siteground-package.zip
           if-no-files-found: error
