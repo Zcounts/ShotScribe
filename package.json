@@ -24,7 +24,7 @@
     "electron:build:mac": "vite build && electron-builder --mac"
   },
   "dependencies": {
-    "@auth0/auth0-react": "^2.16.1",
+    "@clerk/clerk-react": "^5.39.0",
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -55,7 +55,7 @@
   "build": {
     "appId": "com.shotscribe.shotlist",
     "productName": "ShotScribe",
-    "copyright": "Copyright © 2025",
+    "copyright": "Copyright \u00a9 2025",
     "icon": "assets/icon.png",
     "directories": {
       "output": "dist-electron"

@@ -1,5 +1,5 @@
 import React from 'react'
-import { useAuth0 } from '@auth0/auth0-react'
+import { useAuth, useClerk, useUser } from '@clerk/clerk-react'
 import { useConvexAuth } from 'convex/react'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from './authConfig'
@@ -37,37 +37,39 @@ function LocalModeBar() {
 }
 
 function CloudAuthBar() {
-  const { isAuthenticated, isLoading: auth0Loading, user, loginWithRedirect, logout } = useAuth0()
+  const { isSignedIn } = useAuth()
+  const { user, isLoaded: userLoaded } = useUser()
+  const { signOut, openSignIn } = useClerk()
   const { isAuthenticated: hasConvexIdentity, isLoading: convexLoading } = useConvexAuth()
 
-  const isLoading = auth0Loading || convexLoading
-  const displayName = user?.name || user?.email || 'Signed-in user'
+  const isLoading = !userLoaded || convexLoading
+  const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Signed-in user'
 
   return (
     <div style={barStyle}>
       <span>
         {isLoading
           ? 'Checking session…'
-          : isAuthenticated
+          : isSignedIn
             ? `Signed in as ${displayName}${hasConvexIdentity ? '' : ' (syncing account…)'}`
-            : 'Signed out. You can still use local projects.'}
+            : 'Signed out.'}
       </span>
-      {isAuthenticated ? (
+      {isSignedIn ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <BillingActions compact />
           <button
-          type="button"
-          style={buttonStyle}
-          onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
-        >
-          Sign out
-        </button>
+            type="button"
+            style={buttonStyle}
+            onClick={() => signOut({ redirectUrl: '/app/' })}
+          >
+            Sign out
+          </button>
         </div>
       ) : (
         <button
           type="button"
           style={buttonStyle}
-          onClick={() => loginWithRedirect()}
+          onClick={() => openSignIn({ afterSignInUrl: '/app/', afterSignUpUrl: '/app/' })}
         >
           Sign in
         </button>

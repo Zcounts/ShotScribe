@@ -26,4 +26,5 @@ export const runtimeConfig = Object.freeze({
   authIssuerUrl: readOptionalEnv('VITE_AUTH_ISSUER_URL', ''),
   authAudience: readOptionalEnv('VITE_AUTH_AUDIENCE', ''),
   authClientId: readOptionalEnv('VITE_AUTH_CLIENT_ID', ''),
+  clerkPublishableKey: readOptionalEnv('VITE_CLERK_PUBLISHABLE_KEY', ''),
 })
