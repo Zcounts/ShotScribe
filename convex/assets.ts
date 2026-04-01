@@ -5,6 +5,13 @@ import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
 
+const CLOUD_ASSET_ALLOWED_MIME_TYPES = new Set(['image/webp'])
+const CLOUD_ASSET_ALLOWED_SOURCE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const CLOUD_ASSET_MAX_SOURCE_BYTES = 15 * 1024 * 1024
+const CLOUD_ASSET_MAX_NORMALIZED_BYTES = 4 * 1024 * 1024
+const CLOUD_ASSET_NORMALIZED_WIDTH = 640
+const CLOUD_ASSET_NORMALIZED_HEIGHT = 360
+
 export const createAssetUploadUrl = mutation({
   args: {
     projectId: v.id('projects'),
@@ -33,6 +40,34 @@ export const completeAssetUpload = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
+
+    if (!CLOUD_ASSET_ALLOWED_MIME_TYPES.has(String(args.mime || '').toLowerCase())) {
+      throw new Error('Unsupported cloud asset mime type')
+    }
+
+    const sourceMime = String(args?.meta?.sourceMime || '').toLowerCase()
+    if (sourceMime && !CLOUD_ASSET_ALLOWED_SOURCE_MIME_TYPES.has(sourceMime)) {
+      throw new Error('Unsupported cloud asset source file type')
+    }
+
+    const sourceBytes = Number(args?.meta?.sourceBytes || 0)
+    if (sourceBytes <= 0 || sourceBytes > CLOUD_ASSET_MAX_SOURCE_BYTES) {
+      throw new Error('Source file exceeds cloud upload limit')
+    }
+
+    const normalizedWidth = Number(args?.meta?.fullWidth || 0)
+    const normalizedHeight = Number(args?.meta?.fullHeight || 0)
+    if (normalizedWidth !== CLOUD_ASSET_NORMALIZED_WIDTH || normalizedHeight !== CLOUD_ASSET_NORMALIZED_HEIGHT) {
+      throw new Error('Cloud assets must be normalized to 640x360')
+    }
+
+    const normalizedBytes = Math.max(
+      Number(args?.meta?.thumbBytes || 0),
+      Number(args?.meta?.fullBytes || 0),
+    )
+    if (normalizedBytes <= 0 || normalizedBytes > CLOUD_ASSET_MAX_NORMALIZED_BYTES) {
+      throw new Error('Normalized cloud asset exceeds size limit')
+    }
 
     const now = Date.now()
     const assetId = await ctx.db.insert('projectAssets', {

@@ -22,6 +22,8 @@ function parseAspectRatioValue(value) {
 }
 
 const SHOT_ASPECT_RATIO_PRESETS = ['1:1', '4:3', '16:9', '3:2', '2.39:1']
+const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
+const CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 function sanitizeNumericInput(value) {
   if (value == null) return ''
@@ -88,9 +90,19 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     try {
       const isCloudProject = projectRef?.type === 'cloud'
       if (isCloudProject) {
+        if (!CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES.includes(file.type)) {
+          alert('Cloud uploads support JPG, PNG, or WEBP files for beta.')
+          e.target.value = ''
+          return
+        }
+        if (file.size > CLOUD_IMAGE_MAX_SOURCE_BYTES) {
+          alert('Cloud uploads are limited to 15MB source files for beta.')
+          e.target.value = ''
+          return
+        }
         const processed = await processStoryboardUploadForCloud(file, {
-          thumbnailWidth: 480,
-          fullLongEdge: 1600,
+          outputWidth: 640,
+          outputHeight: 360,
           quality: 0.84,
         })
         const uploaded = await uploadStoryboardAssetToCloud({
