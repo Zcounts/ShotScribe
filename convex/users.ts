@@ -25,7 +25,8 @@ export const upsertCurrentUser = mutation({
       .unique()
 
     const subject = typeof identity.subject === 'string' ? identity.subject : undefined
-    const email = args.email ?? (typeof identity.email === 'string' ? identity.email : undefined)
+    const rawEmail = args.email ?? (typeof identity.email === 'string' ? identity.email : undefined)
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : undefined
     const name = args.name ?? (typeof identity.name === 'string' ? identity.name : undefined)
     const pictureUrl = args.pictureUrl ?? (typeof identity.pictureUrl === 'string' ? identity.pictureUrl : undefined)
 

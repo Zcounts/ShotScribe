@@ -1,38 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-
-async function requireIdentity(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) {
-    throw new Error('Not authenticated')
-  }
-  return identity
-}
-
-async function requireCurrentUserId(ctx: any) {
-  const identity = await requireIdentity(ctx)
-  const user = await ctx.db
-    .query('users')
-    .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', identity.tokenIdentifier))
-    .unique()
-
-  if (!user) {
-    throw new Error('User not found')
-  }
-
-  return user._id
-}
-
-async function requireProjectOwnership(ctx: any, projectId: any, userId: any) {
-  const project = await ctx.db.get(projectId)
-  if (!project) {
-    throw new Error('Project not found')
-  }
-  if (String(project.ownerUserId) !== String(userId)) {
-    throw new Error('Forbidden')
-  }
-  return project
-}
+import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 
 export const createSnapshot = mutation({
   args: {
@@ -47,7 +15,7 @@ export const createSnapshot = mutation({
       throw new Error('Forbidden')
     }
 
-    await requireProjectOwnership(ctx, args.projectId, currentUserId)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
 
     const now = Date.now()
     const snapshotId = await ctx.db.insert('projectSnapshots', {
@@ -76,7 +44,7 @@ export const getLatestSnapshotForProject = query({
   },
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
-    const project = await requireProjectOwnership(ctx, args.projectId, currentUserId)
+    const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
 
     if (project.latestSnapshotId) {
       return ctx.db.get(project.latestSnapshotId)
