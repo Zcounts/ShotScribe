@@ -447,7 +447,7 @@ export default function App() {
   )
 
   const totalPages = storyboardScenes.reduce((acc, scene) => {
-    const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
+    const cardsPerPage = CARDS_PER_PAGE[storyboardColumnCount] || 8
     return acc + Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }, 0)
   pageRefs.current = pageRefs.current.slice(0, totalPages)
@@ -618,7 +618,7 @@ export default function App() {
   let runningOffset = 0
   for (const scene of storyboardScenes) {
     scenePageOffsets.push(runningOffset)
-    const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
+    const cardsPerPage = CARDS_PER_PAGE[storyboardColumnCount] || 8
     runningOffset += Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
   }
 
@@ -735,7 +735,7 @@ export default function App() {
     if (activeTab !== 'storyboard') return
     const raf = requestAnimationFrame(() => updateStoryboardVisibleRange())
     return () => cancelAnimationFrame(raf)
-  }, [activeTab, totalPages, columnCount, updateStoryboardVisibleRange])
+  }, [activeTab, totalPages, storyboardColumnCount, updateStoryboardVisibleRange])
 
   const handleStoryboardScroll = useCallback((e) => {
     setTabViewState('storyboard', { scrollTop: e.currentTarget.scrollTop })
@@ -771,14 +771,14 @@ export default function App() {
     }
 
     return () => observer.disconnect()
-  }, [activeTab, storyboardOutlineTab, storyboardScenes, columnCount])
+  }, [activeTab, storyboardOutlineTab, storyboardScenes, storyboardColumnCount])
 
   const storyboardPageItems = useMemo(() => storyboardScenes.flatMap((scene, sceneIdx) => {
     const linkedScene = scene.linkedScriptSceneId
       ? scriptScenes.find(sc => sc.id === scene.linkedScriptSceneId)
       : null
     const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
-    const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
+    const cardsPerPage = CARDS_PER_PAGE[storyboardColumnCount] || 8
     const count = Math.max(1, Math.ceil(scene.shots.length / cardsPerPage))
     return Array.from({ length: count }).map((_, pageIdx) => ({
       id: `${scene.id}__page_${pageIdx}`,
@@ -786,7 +786,7 @@ export default function App() {
       subtitle: `SC ${canonical?.sceneNumber || scene.sceneLabel || `Scene ${sceneIdx + 1}`} · ${canonical?.titleSlugline || canonical?.location || scene.slugline || scene.location || ''}`,
       sceneColor: canonical?.color || scene.color || linkedScene?.color || '#94a3b8',
     }))
-  }), [storyboardScenes, scenePageOffsets, columnCount, scriptScenes, getCanonicalStoryboardSceneMetadata])
+  }), [storyboardScenes, scenePageOffsets, storyboardColumnCount, scriptScenes, getCanonicalStoryboardSceneMetadata])
 
   const storyboardShotsWithIds = useMemo(() => storyboardScenes.flatMap((scene) => {
     const sceneNumber = scenes.findIndex(candidate => candidate.id === scene.id) + 1
@@ -870,6 +870,7 @@ export default function App() {
   }
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
   const { tier, isDesktopDown } = useResponsiveViewport()
+  const storyboardColumnCount = isDesktopDown ? 1 : columnCount
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
     const target = event.target
@@ -1030,8 +1031,14 @@ export default function App() {
         >
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', paddingTop: 0, paddingRight: 14, paddingBottom: 14, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
             {showStoryboardOutline && (
-              <div style={{ width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'flex-start', height: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }}>
+              <div
+                style={isDesktopDown
+                  ? { width: 0, position: 'relative', alignSelf: 'stretch', height: '100%', display: 'flex' }
+                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'flex-start', height: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }
+                }
+              >
                 <SidebarPane
+                  responsiveLabel="Open storyboard navigation"
                                     controls={(
                     <div style={{ display: 'flex', gap: 6 }}>
                       {['Scenes', 'Pages'].map(tab => (
@@ -1125,7 +1132,7 @@ export default function App() {
 
                   <MemoSceneSection
                     scene={scene}
-                    columnCount={columnCount}
+                    columnCount={storyboardColumnCount}
                     useDropdowns={useDropdowns}
                     storyboardDisplayConfig={storyboardDisplayConfig}
                     pageIndexOffset={scenePageOffsets[sceneIdx]}

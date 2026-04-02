@@ -1463,6 +1463,47 @@
     background: rgba(74,85,104,0.04);
   }
 
+  .storyboard-shot-grid {
+    width: 100%;
+  }
+
+  .shot-card.is-compact .shot-card-header {
+    padding-top: 7px;
+    padding-bottom: 7px;
+    gap: 6px;
+  }
+
+  .shot-card.is-compact .shot-card-title {
+    min-width: 0;
+  }
+
+  .shot-card.is-compact .image-placeholder {
+    min-height: 178px;
+  }
+
+  .shot-card.is-compact .specs-table,
+  .shot-card.is-compact .shot-time-fields {
+    font-size: 11px;
+  }
+
+  .shot-card.is-compact .specs-table th,
+  .shot-card.is-compact .shot-time-fields thead th {
+    padding: 5px 4px;
+    font-size: 10px;
+  }
+
+  .shot-card.is-compact .specs-table td,
+  .shot-card.is-compact .shot-time-fields tbody td {
+    padding: 4px 4px;
+  }
+
+  .shot-card.is-compact .notes-area,
+  .shot-card.is-compact .notes-display {
+    font-size: 11px;
+    min-height: 56px;
+    line-height: 1.55;
+  }
+
   /* DnD drag overlay */
   .drag-overlay {
     opacity: 0.85;
@@ -1966,6 +2007,31 @@
     .configure-sidebar {
       width: min(380px, calc(100vw - 12px));
     }
+
+    .pages-container {
+      width: 100%;
+      padding-inline: 0;
+    }
+
+    .page-document,
+    .scene-separator,
+    .add-scene-row {
+      max-width: none;
+    }
+
+    .page-document {
+      margin-bottom: 16px;
+      border-radius: 8px;
+    }
+
+    .scene-separator {
+      margin: 6px 0 10px;
+    }
+
+    .add-shot-btn {
+      min-height: 96px;
+      font-size: 14px;
+    }
   }
 
   @media (max-width: 767px) {
@@ -1981,6 +2047,39 @@
     .configure-sidebar {
       width: min(360px, calc(100vw - 8px));
       border-left-width: 0;
+    }
+
+    .page-document {
+      border-left: none;
+      border-right: none;
+      border-radius: 0;
+      box-shadow: none;
+      margin-bottom: 10px;
+    }
+
+    .shot-card.is-phone .shot-card-header {
+      flex-wrap: wrap;
+      row-gap: 6px;
+    }
+
+    .shot-card.is-phone .shot-card-title {
+      width: 100%;
+      order: 2;
+    }
+
+    .shot-card.is-phone .shot-card-lens-input {
+      margin-left: auto;
+      order: 3;
+      font-size: 12px;
+    }
+
+    .shot-card.is-phone .image-placeholder {
+      min-height: 210px;
+    }
+
+    .add-shot-btn {
+      min-height: 112px;
+      font-size: 15px;
     }
   }
 

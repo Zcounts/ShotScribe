@@ -283,3 +283,15 @@ Always verify after each responsive phase:
   - Added viewport-aware column count clamping so scene cards do not collapse into unreadable dense grids on tablet/phone.
 - CAST/CREW:
   - Added responsive spacing updates and explicit horizontal table wrappers for list-heavy views so data remains reachable on narrow screens.
+
+## 14) Phase 3 implementation notes (2026-04-02)
+
+- Storyboard-only responsive pass (desktop-first, no mobile-app folder changes):
+  - Forced single-column storyboard card flow at `< 1024px` while preserving desktop multi-column behavior.
+  - Updated storyboard outline/sidebar wrapper behavior to avoid persistent width consumption on smaller screens and rely on responsive sidebar access patterns.
+  - Tuned storyboard page container and page card shell spacing for tablet/phone readability.
+  - Improved shot card compact behavior:
+    - stronger visual hierarchy for image area on small screens
+    - responsive header/metadata spacing and touch targets
+    - phone-specific header reflow for camera/lens controls
+  - Increased add-shot affordance size on small screens for easier tap interactions.
