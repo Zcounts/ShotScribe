@@ -24,50 +24,41 @@ export async function resolveCanonicalCurrentUser(ctx: any) {
   const identity = await ctx.auth.getUserIdentity()
   if (!identity) return null
 
-  const tokenUsers = await ctx.db
-    .query('users')
-    .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', identity.tokenIdentifier))
-    .collect()
-
-  const normalizedEmail = normalizeEmail(identity.email)
-  const emailUsers = normalizedEmail
-    ? await ctx.db
+  // Primary: exact token match — this IS the Clerk identity, most authoritative.
+  // `.unique()` is safe here: Convex Clerk tokens are unique per real session; if
+  // multiple rows somehow share a token (shouldn't happen) we treat it as a data
+  // error and fall through to email.
+  let tokenUser: any = null
+  try {
+    tokenUser = await ctx.db
       .query('users')
-      .withIndex('by_email', (q: any) => q.eq('email', normalizedEmail))
-      .collect()
-    : []
-
-  const candidatesById = new Map<string, any>()
-  for (const user of [...tokenUsers, ...emailUsers]) {
-    candidatesById.set(String(user._id), user)
+      .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', identity.tokenIdentifier))
+      .unique()
+  } catch {
+    // Multiple rows with same tokenIdentifier (dirty data) — fall through to email
   }
 
-  const candidates = [...candidatesById.values()]
-  if (!candidates.length) return null
+  if (tokenUser) {
+    const profile = await getProfileByUserId(ctx, tokenUser._id)
+    return { user: tokenUser, profile }
+  }
 
-  const withProfiles = await Promise.all(candidates.map(async (user) => ({
-    user,
-    profile: await getProfileByUserId(ctx, user._id),
-  })))
+  // Secondary: email match — fallback for users who haven't signed in since a
+  // token corruption or issuer-domain change.  Pick most recently updated.
+  const normalizedEmail = normalizeEmail(identity.email)
+  if (!normalizedEmail) return null
 
-  withProfiles.sort((a, b) => {
-    const score = (entry: any) => {
-      let points = 0
-      const tokenMatch = entry.user.tokenIdentifier === identity.tokenIdentifier
-      const emailMatch = normalizedEmail && entry.user.email === normalizedEmail
-      if (emailMatch) points += 120
-      if (tokenMatch) points += 80
-      if (emailMatch && tokenMatch) points += 60
-      if (entry.profile) points += 20
-      if (entry.profile?.isAdmin) points += 5
-      return points
-    }
-    const scoreDiff = score(b) - score(a)
-    if (scoreDiff !== 0) return scoreDiff
-    return (b.user.updatedAt || 0) - (a.user.updatedAt || 0)
-  })
+  const emailUsers = await ctx.db
+    .query('users')
+    .withIndex('by_email', (q: any) => q.eq('email', normalizedEmail))
+    .collect()
 
-  return withProfiles[0]
+  if (!emailUsers.length) return null
+
+  emailUsers.sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  const canonicalUser = emailUsers[0]
+  const profile = await getProfileByUserId(ctx, canonicalUser._id)
+  return { user: canonicalUser, profile }
 }
 
 async function ensureAccountProfile(ctx: any, args: { userId: any, name?: string, now: number }) {
