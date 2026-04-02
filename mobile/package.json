@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@sentry/browser": "^10.47.0",
     "@shotscribe/shared": "file:../shared",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -19,7 +19,8 @@
 ### Local-first write path
 1. Edits update the in-memory working copy immediately.
 2. Local autosave/local snapshot remains first persistence layer.
-3. For cloud projects with paid write access, cloud snapshot sync is queued/debounced.
+3. Local persistence debounce is short (2.5 seconds) so "unsaved" only appears while work is truly pending local write.
+4. For cloud projects with paid write access, cloud snapshot sync is queued/debounced.
 
 ### Cloud sync queue (lightweight)
 - Debounce window: 8 seconds.
@@ -30,6 +31,14 @@
 ### Explicit sync points
 - Cloud sync context is set centrally from cloud auth/policy state.
 - Flush hooks run on lifecycle transitions (`beforeunload`, `pagehide`) when there are unsaved changes.
+
+### Unsaved-changes exit protection
+- Browser-native unload protection is enabled only while local writes are still pending (`unsaved_changes` state).
+- Guarded navigation is applied to:
+  - browser refresh / tab close (`beforeunload`)
+  - browser back/forward route transitions (`popstate`)
+  - in-app account/admin route transitions (`pushState` helpers)
+- Guards are intentionally tied to the same shared dirty-state interpretation to avoid desktop/mobile divergence and false positives.
 
 ### Save/sync state surfaced in UI
 State model now exposes human-readable statuses:
@@ -74,3 +83,15 @@ State model now exposes human-readable statuses:
 2. Make edits.
 3. Confirm toolbar indicates local save with cloud unavailable/failed sync.
 4. Reconnect network and trigger additional edit; confirm sync recovers to synced state.
+
+### 6) Unsaved-changes warnings: refresh / close / back / in-app route
+1. Open any editable app tab and make an edit.
+2. Within ~2.5 seconds (before local autosave), test each exit path:
+   - refresh browser
+   - close tab/window
+   - browser back button
+   - Account/Admin button navigation
+3. Confirm native/browser warning appears and cancel keeps user on current screen.
+4. Wait for toolbar to show locally saved state.
+5. Repeat each exit path and confirm warning no longer appears.
+6. For cloud projects, confirm status can show "Saved locally · syncing soon" without triggering unsaved warning while cloud sync is pending.
