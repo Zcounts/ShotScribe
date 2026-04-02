@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { User } from 'lucide-react'
 import useStore from '../store'
 import SaveSyncStatusControl from './SaveSyncStatusControl'
+import { navigateWithUnsavedChangesGuard } from '../utils/unsavedChangesGuard'
 
 export default function Toolbar({
   onOpenExportHub,
@@ -53,6 +55,7 @@ export default function Toolbar({
   const canEnableCloudBackup = !isCloudProject && cloudFeatureAvailable && signedInForCloud && cloudRepositoryReady
   const canSaveCloudNow = isCloudProject && cloudAccessPolicy?.canEditCloudProject
   const canDisableCloudBackup = isCloudProject
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
 
 
   useEffect(() => {
@@ -156,6 +159,14 @@ export default function Toolbar({
     if (!canDisableCloudBackup || saveActionBusy) return
     disableCloudBackupForCurrentProject()
     setSaveMenuOpen(false)
+  }
+
+  const navigateTo = (path) => {
+    navigateWithUnsavedChangesGuard({
+      path,
+      currentPath,
+      hasUnsavedChanges,
+    })
   }
 
   return (
@@ -575,7 +586,7 @@ export default function Toolbar({
         </div>
       ) : null}
 
-      {/* Right: Export */}
+      {/* Right: Export + Account */}
       <div className="flex items-center gap-2">
         <div ref={exportMenuRef} style={{ position: 'relative', display: 'flex' }}>
           <button
@@ -649,6 +660,16 @@ export default function Toolbar({
             </div>
           )}
         </div>
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => navigateTo(currentPath === '/account' ? '/' : '/account')}
+          aria-label="Account"
+          title="Account"
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 34, paddingInline: 8 }}
+        >
+          <User size={14} strokeWidth={2} aria-hidden="true" />
+        </button>
       </div>
       {cloudExportBlocked && (
         <div style={{ color: '#fbbf24', fontSize: 11, marginTop: 6, textAlign: 'right' }}>
