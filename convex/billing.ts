@@ -67,14 +67,14 @@ export async function requireCloudEntitlement(ctx: any, userId: any) {
   }
 }
 
-async function getBillingCustomerForUser(ctx: any, userId: any) {
+async function getBillingCustomerForUserDb(ctx: any, userId: any) {
   return ctx.db
     .query('billingCustomers')
     .withIndex('by_user_id', (q: any) => q.eq('userId', userId))
     .unique()
 }
 
-async function upsertBillingCustomer(ctx: any, args: { userId: any, stripeCustomerId: string, email?: string | null }) {
+async function upsertBillingCustomerDb(ctx: any, args: { userId: any, stripeCustomerId: string, email?: string | null }) {
   const now = Date.now()
   const existing = await ctx.db
     .query('billingCustomers')
@@ -91,7 +91,7 @@ async function upsertBillingCustomer(ctx: any, args: { userId: any, stripeCustom
     return existing.stripeCustomerId
   }
 
-  const byUser = await getBillingCustomerForUser(ctx, args.userId)
+  const byUser = await getBillingCustomerForUserDb(ctx, args.userId)
   if (byUser) {
     await ctx.db.patch(byUser._id, {
       stripeCustomerId: args.stripeCustomerId,
@@ -111,6 +111,20 @@ async function upsertBillingCustomer(ctx: any, args: { userId: any, stripeCustom
 
   return args.stripeCustomerId
 }
+
+export const getBillingCustomerForUser = internalQuery({
+  args: { userId: v.id('users') },
+  handler: async (ctx, args) => getBillingCustomerForUserDb(ctx, args.userId),
+})
+
+export const upsertBillingCustomer = internalMutation({
+  args: {
+    userId: v.id('users'),
+    stripeCustomerId: v.string(),
+    email: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => upsertBillingCustomerDb(ctx, args),
+})
 
 export const getMyEntitlement = query({
   args: {},
@@ -240,7 +254,7 @@ async function stripeGet(path: string) {
 }
 
 async function ensureStripeCustomer(ctx: any, user: { _id: string, email: string | null, name: string | null }) {
-  const existing = await getBillingCustomerForUser(ctx, user._id)
+  const existing = await ctx.runQuery(internal.billing.getBillingCustomerForUser, { userId: user._id })
   if (existing?.stripeCustomerId) return existing.stripeCustomerId
 
   const createBody = new URLSearchParams()
@@ -256,7 +270,7 @@ async function ensureStripeCustomer(ctx: any, user: { _id: string, email: string
   const customer = await stripeRequest('/customers', createBody)
   if (!customer?.id) throw new Error('Failed to create Stripe customer')
 
-  await upsertBillingCustomer(ctx, {
+  await ctx.runMutation(internal.billing.upsertBillingCustomer, {
     userId: user._id,
     stripeCustomerId: String(customer.id),
     email: user.email,
@@ -344,7 +358,9 @@ export const syncMyBillingState = action({
     })
     if (!user) throw new Error('User not found')
 
-    const billingCustomer = await getBillingCustomerForUser(ctx, user._id)
+    const billingCustomer = await ctx.runQuery(internal.billing.getBillingCustomerForUser, {
+      userId: user._id,
+    })
     if (!billingCustomer?.stripeCustomerId) {
       return { synced: false, reason: 'no_customer' as const }
     }
@@ -435,7 +451,7 @@ export const syncStripeSubscription = internalMutation({
     const status = normalizeSubscriptionStatus(args.status || 'incomplete')
 
     if (resolvedUserId && args.customerId) {
-      await upsertBillingCustomer(ctx, {
+      await upsertBillingCustomerDb(ctx, {
         userId: resolvedUserId,
         stripeCustomerId: args.customerId,
         email: args.customerEmail,
