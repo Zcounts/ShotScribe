@@ -177,6 +177,9 @@ npm run dev:web
 npm run build
 ```
 
+Web app favicon source:
+- Root web app entry points (`index.html` and `app/index.html`) use `/assets/icon.png`.
+
 ### Shared package
 ```bash
 cd shared
