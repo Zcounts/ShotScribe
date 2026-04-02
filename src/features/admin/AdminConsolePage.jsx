@@ -35,6 +35,12 @@ export default function AdminConsolePage() {
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [feedback, setFeedback] = useState('')
   const [opReason, setOpReason] = useState('')
+  const navigateTo = (path) => {
+    if (typeof window === 'undefined') return
+    if (window.location.pathname === path) return
+    window.history.pushState({}, '', path)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
 
   const canUseCloudAuth = runtimeConfig.appMode.cloudEnabled && isCloudAuthConfigured()
   const overview = useQuery('admin:getAdminDashboardOverview', { recentLimit: 10 })
@@ -141,7 +147,7 @@ export default function AdminConsolePage() {
         <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <h2 style={{ margin: 0 }}>Internal Admin Console</h2>
-            <button type="button" style={buttonStyle} onClick={() => window.location.assign('/')}>Back to app</button>
+            <button type="button" style={buttonStyle} onClick={() => navigateTo('/')}>Back to app</button>
           </div>
 
           {feedback ? <div style={{ ...cardStyle, borderColor: '#14532d', color: '#bbf7d0' }}>{feedback}</div> : null}
