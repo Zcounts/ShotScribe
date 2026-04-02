@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAuth, useClerk, useUser } from '@clerk/clerk-react'
-import { useConvexAuth } from 'convex/react'
+import { useConvexAuth, useMutation } from 'convex/react'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from './authConfig'
 import BillingActions from '../features/billing/BillingActions'
@@ -42,13 +42,46 @@ function CloudAuthBar() {
   const { user, isLoaded: userLoaded } = useUser()
   const { signOut, openSignIn } = useClerk()
   const { isAuthenticated: hasConvexIdentity, isLoading: convexLoading } = useConvexAuth()
+  const upsertCurrentUser = useMutation('users:upsertCurrentUser')
 
   const { isAdmin } = useAdminAccess()
+  const [bootstrapError, setBootstrapError] = useState('')
+  const bootstrapAttemptedForUser = useRef(null)
   const isLoading = !userLoaded || convexLoading
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Signed-in user'
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
   const onAccountPage = currentPath === '/account'
   const onAdminPage = currentPath === '/admin'
+
+  useEffect(() => {
+    if (!isSignedIn || !userLoaded || !hasConvexIdentity || !user?.id) {
+      return
+    }
+
+    if (bootstrapAttemptedForUser.current === user.id) {
+      return
+    }
+
+    bootstrapAttemptedForUser.current = user.id
+    setBootstrapError('')
+
+    upsertCurrentUser({
+      email: user.primaryEmailAddress?.emailAddress || undefined,
+      name: user.fullName || undefined,
+      pictureUrl: user.imageUrl || undefined,
+    }).catch((error) => {
+      bootstrapAttemptedForUser.current = null
+      setBootstrapError(error?.message || 'Unable to sync account profile.')
+      console.error('Failed to bootstrap Convex user from Clerk session', error)
+    })
+  }, [hasConvexIdentity, isSignedIn, upsertCurrentUser, user, userLoaded])
+
+  const navigateTo = (path) => {
+    if (typeof window === 'undefined') return
+    if (window.location.pathname === path) return
+    window.history.pushState({}, '', path)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
 
   return (
     <div style={barStyle}>
@@ -58,13 +91,14 @@ function CloudAuthBar() {
           : isSignedIn
             ? `Signed in as ${displayName}${isAdmin ? ' (admin)' : ''}${hasConvexIdentity ? '' : ' (syncing account…)'}`
             : 'Signed out.'}
+        {bootstrapError ? ` · Sync warning: ${bootstrapError}` : ''}
       </span>
       {isSignedIn ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
             style={buttonStyle}
-            onClick={() => window.location.assign(onAccountPage ? '/' : '/account')}
+            onClick={() => navigateTo(onAccountPage ? '/' : '/account')}
           >
             {onAccountPage ? 'Back to app' : 'Account'}
           </button>
@@ -72,7 +106,7 @@ function CloudAuthBar() {
             <button
               type="button"
               style={buttonStyle}
-              onClick={() => window.location.assign(onAdminPage ? '/' : '/admin')}
+              onClick={() => navigateTo(onAdminPage ? '/' : '/admin')}
             >
               {onAdminPage ? 'Back to app' : 'Admin'}
             </button>
