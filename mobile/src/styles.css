@@ -1328,3 +1328,23 @@ p {
     padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px calc(env(safe-area-inset-bottom, 0px) + 14px);
   }
 }
+
+.text-editor {
+  width: 100%;
+  min-height: 88px;
+  border-radius: 10px;
+  border: 1px solid #c7b9a6;
+  background: #fffdf9;
+  padding: 10px;
+  font: inherit;
+}
+
+.touch-input {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid #c7b9a6;
+  background: #fffdf9;
+  padding: 8px;
+  margin-top: 6px;
+}
