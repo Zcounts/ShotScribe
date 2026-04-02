@@ -3,7 +3,6 @@ import { useMutation, useQuery } from 'convex/react'
 import { useAuth, useClerk } from '@clerk/clerk-react'
 import { runtimeConfig } from '../../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../../auth/authConfig'
-import AdminFeatureGuard from './AdminFeatureGuard'
 
 const containerStyle = { flex: 1, overflow: 'auto', background: '#0f141b', color: '#E7ECF3', padding: '24px 20px 40px' }
 const cardStyle = { border: '1px solid #2A313D', borderRadius: 10, background: '#171C24', padding: 16 }
@@ -43,18 +42,28 @@ export default function AdminConsolePage() {
   }
 
   const canUseCloudAuth = runtimeConfig.appMode.cloudEnabled && isCloudAuthConfigured()
-  const overview = useQuery('admin:getAdminDashboardOverview', { recentLimit: 10 })
-  const opsControls = useQuery('admin:getSafeOperationalControls')
   const adminState = useQuery('admin:getMyAdminState')
+  const adminStateLoading = adminState === undefined
+  const isAdmin = Boolean(adminState?.isAdmin)
+  const canRunAdminQueries = isSignedIn && !adminStateLoading && isAdmin
+
+  const overview = useQuery(
+    'admin:getAdminDashboardOverview',
+    canRunAdminQueries ? { recentLimit: 10 } : 'skip',
+  )
+  const opsControls = useQuery(
+    'admin:getSafeOperationalControls',
+    canRunAdminQueries ? {} : 'skip',
+  )
 
   const searchedUser = useQuery(
     'admin:findUserByEmailForAdmin',
-    emailInput.trim() ? { email: emailInput.trim() } : 'skip',
+    canRunAdminQueries && emailInput.trim() ? { email: emailInput.trim() } : 'skip',
   )
 
   const userDetail = useQuery(
     'admin:getAdminUserDetail',
-    selectedUserId ? { userId: selectedUserId } : 'skip',
+    canRunAdminQueries && selectedUserId ? { userId: selectedUserId } : 'skip',
   )
 
   const setCompedAccess = useMutation('admin:setCompedAccessForUser')
@@ -62,9 +71,7 @@ export default function AdminConsolePage() {
   const setAdminRole = useMutation('admin:setAdminRole')
   const setCloudWritesEnabled = useMutation('admin:setCloudWritesEnabled')
 
-  const isAdmin = Boolean(adminState?.isAdmin)
-
-  const loading = overview === undefined || opsControls === undefined || adminState === undefined
+  const loading = adminStateLoading || (canRunAdminQueries && (overview === undefined || opsControls === undefined))
 
   const selectSearchedUser = () => {
     if (!searchedUser?.userId) return
@@ -138,13 +145,17 @@ export default function AdminConsolePage() {
     )
   }
 
+  if (loading) {
+    return <div style={containerStyle}><div style={{ maxWidth: 1080, margin: '0 auto' }}><div style={cardStyle}>Loading admin access…</div></div></div>
+  }
+
+  if (!isAdmin) {
+    return <div style={containerStyle}><div style={{ maxWidth: 1080, margin: '0 auto' }}><div style={{ ...cardStyle, borderColor: '#7f1d1d', color: '#fca5a5' }}>Forbidden: admin role required.</div></div></div>
+  }
+
   return (
-    <AdminFeatureGuard
-      loadingFallback={<div style={containerStyle}><div style={{ maxWidth: 1080, margin: '0 auto' }}><div style={cardStyle}>Loading admin access…</div></div></div>}
-      fallback={<div style={containerStyle}><div style={{ maxWidth: 1080, margin: '0 auto' }}><div style={{ ...cardStyle, borderColor: '#7f1d1d', color: '#fca5a5' }}>Forbidden: admin role required.</div></div></div>}
-    >
-      <div style={containerStyle}>
-        <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gap: 12 }}>
+    <div style={containerStyle}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <h2 style={{ margin: 0 }}>Internal Admin Console</h2>
             <button type="button" style={buttonStyle} onClick={() => navigateTo('/')}>Back to app</button>
@@ -230,8 +241,7 @@ export default function AdminConsolePage() {
           ) : null}
 
           {isAdmin ? <div style={{ fontSize: 12, color: '#9AA6BC' }}>Stripe promo/coupon creation remains in Stripe Dashboard by design.</div> : null}
-        </div>
       </div>
-    </AdminFeatureGuard>
+    </div>
   )
 }
