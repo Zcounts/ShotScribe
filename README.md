@@ -87,7 +87,7 @@ Current production process is still **artifact build + manual hosting upload**.
 High-level flow:
 1. Build web artifact at repo root.
 2. Upload built artifact to current hosting target.
-3. Deploy Convex functions/schema with production Convex deployment.
+3. Convex backend deploys automatically on pushes to `main` via `.github/workflows/convex-production-deploy.yml` (uses `CONVEX_DEPLOY_KEY` GitHub Actions secret).
 4. Ensure production env vars are set for Clerk/Stripe/admin token.
 
 Reference docs:
