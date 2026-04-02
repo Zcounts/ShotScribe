@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
+import SaveSyncStatusControl from './SaveSyncStatusControl'
 
 export default function Toolbar({
   onOpenExportHub,
@@ -9,9 +10,7 @@ export default function Toolbar({
   const projectName = useStore(s => s.projectName)
   const projectEmoji = useStore(s => s.projectEmoji)
   const projectPath = useStore(s => s.projectPath)
-  const lastSaved = useStore(s => s.lastSaved)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
-  const saveSyncState = useStore(s => s.saveSyncState)
   const autoSave = useStore(s => s.autoSave)
   const scenes = useStore(s => s.scenes)
   const activeTab = useStore(s => s.activeTab)
@@ -40,29 +39,6 @@ export default function Toolbar({
   // Extract just the filename from the full path for display
   const fileName = projectPath ? projectPath.split(/[\\/]/).pop() : null
 
-  const formatTime = (iso) => {
-    if (!iso) return ''
-    const d = new Date(iso)
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-  const syncTone = saveSyncState?.status === 'cloud_sync_failed'
-    ? '#fca5a5'
-    : saveSyncState?.status === 'syncing_to_cloud'
-      ? '#bfdbfe'
-      : saveSyncState?.status === 'synced_to_cloud'
-        ? '#86efac'
-        : '#cbd5e1'
-
-  // Dot pulses while syncing; solid otherwise
-  const syncDotStyle = {
-    display: 'inline-block',
-    width: 7,
-    height: 7,
-    borderRadius: '50%',
-    background: syncTone,
-    flexShrink: 0,
-    animation: saveSyncState?.status === 'syncing_to_cloud' ? 'pulse 1.2s ease-in-out infinite' : 'none',
-  }
 
   useEffect(() => {
     if (!exportMenuOpen) return
@@ -277,14 +253,8 @@ export default function Toolbar({
           </span>
         )}
 
-        {/* Save indicator */}
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }} title={saveSyncState?.error || ''}>
-          <span style={syncDotStyle} />
-          <span style={{ fontSize: 11, color: syncTone, fontFamily: 'Sora, sans-serif' }}>
-            {saveSyncState?.message || (hasUnsavedChanges ? 'Changes not yet saved' : 'Saved on this device')}
-            {lastSaved ? ` · ${formatTime(lastSaved)}` : ''}
-          </span>
-        </span>
+        {/* Save / Sync status */}
+        <SaveSyncStatusControl />
       </div>
 
       {/* Center: File operations */}
