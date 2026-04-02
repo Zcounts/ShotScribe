@@ -1,7 +1,7 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
@@ -9,7 +9,7 @@ import NotesArea from './NotesArea'
 import CustomDropdown from './CustomDropdown'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
-import { uploadStoryboardAssetToCloud } from '../services/assetService'
+import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 
@@ -40,14 +40,18 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
   const projectRef = useStore(s => s.projectRef)
-  const createAssetUploadUrl = useMutation('assets:createAssetUploadUrl')
-  const completeAssetUpload = useMutation('assets:completeAssetUpload')
+  const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
+  const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
+  const getAssetSignedView = useAction('assets:getAssetSignedView')
+  const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
+  const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
   const cloudAccessPolicy = useCloudAccessPolicy()
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const cloudAssetView = useQuery(
-    'assets:getAssetView',
-    (projectRef?.type === 'cloud' && shot?.imageAsset?.cloud?.assetId && !cloudAssetBlocked)
-      ? { projectId: projectRef.projectId, assetId: shot.imageAsset.cloud.assetId }
+  const [cloudAssetView, setCloudAssetView] = useState(null)
+  const libraryAssets = useQuery(
+    'assets:listProjectLibraryAssets',
+    (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+      ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
       : 'skip'
   )
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
@@ -55,6 +59,8 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [imagePickerStep, setImagePickerStep] = useState(null)
+  const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
@@ -63,6 +69,30 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     () => ['size', 'type', 'move', 'equip'].filter(key => visibleInfo[key] !== false),
     [visibleInfo]
   )
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadAssetView() {
+      if (projectRef?.type !== 'cloud' || cloudAssetBlocked || !shot?.imageAsset?.cloud?.assetId) {
+        setCloudAssetView(null)
+        return
+      }
+      try {
+        const view = await getAssetSignedView({
+          projectId: projectRef.projectId,
+          assetId: shot.imageAsset.cloud.assetId,
+        })
+        if (!cancelled) setCloudAssetView(view || null)
+      } catch (err) {
+        console.warn('Failed to load signed asset view', err)
+        if (!cancelled) setCloudAssetView(null)
+      }
+    }
+    loadAssetView()
+    return () => {
+      cancelled = true
+    }
+  }, [cloudAssetBlocked, getAssetSignedView, projectRef, shot?.imageAsset?.cloud?.assetId])
 
   const {
     attributes,
@@ -80,7 +110,59 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     opacity: isDragging ? 0.4 : 1,
   }
 
-  const handleImageClick = () => fileInputRef.current?.click()
+  const clearShotImage = useCallback(async () => {
+    if (projectRef?.type === 'cloud' && cloudAccessPolicy.canEditCloudProject && !cloudAssetBlocked) {
+      try {
+        await unassignShotLibraryAsset({
+          projectId: projectRef.projectId,
+          shotId: shot.id,
+        })
+      } catch (err) {
+        console.warn('Failed to unassign shot library asset', err)
+      }
+    }
+    updateShotImage(shot.id, {
+      image: null,
+      imageAsset: {
+        version: 1,
+        mime: 'image/webp',
+        thumb: null,
+        full: null,
+        meta: null,
+        cloud: null,
+      },
+    })
+  }, [cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, projectRef, shot.id, unassignShotLibraryAsset, updateShotImage])
+
+  const assignLibraryAssetToShot = useCallback(async (assetId) => {
+    if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    setIsAssigningFromLibrary(true)
+    try {
+      await assignShotLibraryAsset({
+        projectId: projectRef.projectId,
+        shotId: shot.id,
+        assetId,
+      })
+      const signedView = await getAssetSignedView({
+        projectId: projectRef.projectId,
+        assetId,
+      })
+      const payload = buildShotImageFromLibraryAsset(signedView)
+      if (!payload) throw new Error('Could not resolve selected library asset')
+      updateShotImage(shot.id, payload)
+      setImagePickerStep(null)
+    } finally {
+      setIsAssigningFromLibrary(false)
+    }
+  }, [assignShotLibraryAsset, cloudAssetBlocked, getAssetSignedView, projectRef, shot.id, updateShotImage])
+
+  const handleImageClick = () => {
+    if (projectRef?.type === 'cloud') {
+      setImagePickerStep('options')
+      return
+    }
+    fileInputRef.current?.click()
+  }
 
   const handleImageChange = useCallback(async (e) => {
     const file = e.target.files?.[0]
@@ -115,12 +197,26 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
         })
         const uploaded = await uploadStoryboardAssetToCloud({
           projectId: projectRef.projectId,
-          shotId: shot.id,
           processed,
-          createAssetUploadUrl,
-          completeAssetUpload,
+          createAssetUploadIntent,
+          finalizeAssetUpload,
         })
-        updateShotImage(shot.id, uploaded)
+        const uploadedAssetId = uploaded?.imageAsset?.cloud?.assetId
+        if (uploadedAssetId) {
+          await assignShotLibraryAsset({
+            projectId: projectRef.projectId,
+            shotId: shot.id,
+            assetId: uploadedAssetId,
+          })
+          const signedView = await getAssetSignedView({
+            projectId: projectRef.projectId,
+            assetId: uploadedAssetId,
+          })
+          const libraryPayload = buildShotImageFromLibraryAsset(signedView)
+          updateShotImage(shot.id, libraryPayload || uploaded)
+        } else {
+          updateShotImage(shot.id, uploaded)
+        }
       } else {
         const processed = await processStoryboardUpload(file, {
           thumbnailWidth: 480,
@@ -129,6 +225,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
         })
         updateShotImage(shot.id, processed)
       }
+      setImagePickerStep(null)
       devPerfLog('storyboard:image-upload', {
         shotId: shot.id,
         sourceBytes: file.size,
@@ -140,7 +237,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, updateShotImage, projectRef, createAssetUploadUrl, completeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked])
+  }, [shot.id, updateShotImage, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getAssetSignedView])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
@@ -278,6 +375,104 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
           onChange={handleImageChange}
         />
       </div>
+      {projectRef?.type === 'cloud' && (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+            onClick={(e) => {
+              e.stopPropagation()
+              setImagePickerStep('options')
+            }}
+          >
+            Add Image
+          </button>
+        </div>
+      )}
+      {imagePickerStep === 'options' && projectRef?.type === 'cloud' && (
+        <div className="mt-1 rounded border border-gray-700 bg-gray-900 p-2 text-xs text-gray-100">
+          <div className="mb-1 font-medium">Add Image to Shot</div>
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
+              onClick={(e) => {
+                e.stopPropagation()
+                setImagePickerStep('library')
+              }}
+            >
+              Choose from Library
+            </button>
+            <button
+              type="button"
+              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
+              onClick={(e) => {
+                e.stopPropagation()
+                fileInputRef.current?.click()
+              }}
+            >
+              Upload New
+            </button>
+            {storyboardImageSrc ? (
+              <button
+                type="button"
+                className="rounded border border-red-700 bg-red-950 px-2 py-1 text-left text-red-200 hover:bg-red-900"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  clearShotImage()
+                  setImagePickerStep(null)
+                }}
+              >
+                Remove from Shot
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
+              onClick={(e) => {
+                e.stopPropagation()
+                setImagePickerStep(null)
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {imagePickerStep === 'library' && projectRef?.type === 'cloud' && (
+        <div className="mt-2 rounded border border-gray-700 bg-gray-900 p-2 text-xs text-gray-100">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="font-medium">Project Media Library</div>
+            <button
+              type="button"
+              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 hover:bg-gray-700"
+              onClick={() => setImagePickerStep('options')}
+            >
+              Back
+            </button>
+          </div>
+          <div className="max-h-40 overflow-auto pr-1">
+            {(libraryAssets || []).length === 0 ? (
+              <div className="text-gray-400">No library images yet. Upload a new image first.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {(libraryAssets || []).map((asset) => (
+                  <button
+                    key={String(asset.assetId)}
+                    type="button"
+                    disabled={isAssigningFromLibrary}
+                    className="rounded border border-gray-700 bg-gray-800 p-2 text-left hover:bg-gray-700 disabled:opacity-60"
+                    onClick={() => assignLibraryAssetToShot(asset.assetId)}
+                  >
+                    <div className="truncate text-[11px] font-medium">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
+                    <div className="text-[10px] text-gray-400">{new Date(asset.createdAt).toLocaleDateString()}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Specs Table */}
       {visibleSpecKeys.length > 0 && (
