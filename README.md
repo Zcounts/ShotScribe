@@ -188,12 +188,37 @@ npm run build
 - Unsaved-change guardrails now cover refresh/close/back/in-app route exits while local persistence is genuinely pending.
 - Detailed implementation + QA checklist: `docs/save-sync-architecture.md`.
 
----
+## Mobile companion modes (April 2026 update)
 
-## Export workflow (public beta hardening)
+ShotScribe mobile now supports **two explicit workflows**:
 
-- Export UX is consolidated into a single in-app **Export Hub**.
-- Export actions are grouped by document type (storyboards, shotlists, schedules, callsheets, reports).
-- Unsupported export categories are kept visibly disabled rather than exposed as broken paths.
-- Mobile day/snapshot package exports remain available from the same hub.
-- Audit details + manual QA checklist: `docs/export-workflow-unification.md`.
+1. **Local File Mode** (no login required)
+   - Import `mobile-day-package` / `mobile-snapshot` JSON files.
+   - Edit on-set fields on device (shot status, notes, actual timing, script supervisor notes).
+   - Export an updated snapshot JSON from mobile after edits.
+   - Local edits stay local unless you manually move that exported file elsewhere.
+
+2. **Cloud Project Mode** (paid cloud users)
+   - Sign in with the existing Clerk + Convex auth stack.
+   - Membership/entitlement is checked via `billing:getMyEntitlement`.
+   - Browse accessible cloud projects from `projects:listProjectsForCurrentUser`.
+   - Open a cloud project, edit on-set fields, and sync updates back to the same cloud project via snapshot writes.
+   - Cloud mode is intended for on-set workflows and collaboration continuity, not full desktop feature parity.
+
+### Mobile UX behavior
+
+- The app header shows the active mode (`Local File Mode` vs `Cloud Project Mode`) at all times.
+- A new **Script Supervisor** tab is included in mobile.
+- Callsheet remains view-only on mobile.
+
+### Supported mobile edits
+
+- Shot status (`todo`, `done`, `skipped`)
+- Shot / production notes
+- Script supervisor notes
+- Actual start/end timestamps (per shot)
+
+### Sync model
+
+- Local mode: file-based + offline-friendly by default.
+- Cloud mode: writes to cloud snapshots and receives latest cloud snapshot state for continuity between mobile and web.
