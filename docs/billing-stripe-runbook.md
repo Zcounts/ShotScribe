@@ -6,6 +6,7 @@ Scope: Stable Stripe-hosted subscription billing for ShotScribe public beta.
 ## Billing model (beta)
 
 - One Clerk user maps to one ShotScribe billing owner.
+- Launch pricing is a single paid subscription plan (`STRIPE_PRICE_ID`) plus the free local-only tier.
 - Stripe-hosted Checkout is used for subscription purchase.
 - Stripe-hosted Customer Portal is used for payment-method updates/cancel/reactivate.
 - Promo/discount codes are managed in Stripe and entered in Stripe Checkout.
@@ -58,6 +59,8 @@ Also required for auth/cloud mode:
 - `checkoutAvailable`
 - `portalAvailable`
 
+`billing:syncMyBillingState` is used by `/account` after Checkout success and Portal return to quickly reconcile Stripe state even if webhook delivery is delayed.
+
 ## Manual admin overrides + Stripe coexistence
 
 Account profile override flags:
@@ -80,6 +83,7 @@ Behavior:
 - [ ] Payment failure/inactive: failed payment updates subscription status and disables paid cloud capabilities.
 - [ ] Comped/grandfathered user: with override enabled and inactive Stripe status, paid cloud access remains enabled.
 - [ ] Promo-code checkout: promo code field appears in Stripe Checkout and valid code is applied.
+- [ ] Non-launch Stripe price event does not grant entitlement (launch only price id is accepted).
 
 For launch/support operation, also run:
 - `docs/public-beta-launch-checklist.md`

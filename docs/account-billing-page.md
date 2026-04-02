@@ -12,6 +12,7 @@
 
 ## Data sources
 - Entitlement/billing state: `billing:getMyEntitlement`
+- Post-checkout/portal reconciliation: `billing:syncMyBillingState`
 - Profile basics: Clerk user identity + `users:currentUser`
 
 ## What members can do here
@@ -20,6 +21,9 @@
 - Upgrade (when eligible)
 - Open Stripe customer portal via **Manage billing**
 - Sign out
+- See explicit plan behavior messaging:
+  - Free = local-only save/export on current device/browser
+  - Paid = cloud save/sync + mobile + collaboration features where implemented
 
 ## Manual QA checklist
 1. Signed-out user opens `/account` and sees sign-in prompt.
@@ -30,3 +34,4 @@
 6. **Manage billing** opens Stripe customer portal and returns to `/account`.
 7. **Sign out** works from `/account`.
 8. **Back to app** returns to `/` and normal project tabs still function.
+9. Checkout success (`?billing=success`) shows sync notice, then transitions to paid status when Stripe/Convex state updates.

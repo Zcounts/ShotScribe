@@ -1,6 +1,26 @@
 import type { MobileDayPackage } from '@shotscribe/shared'
 
-export type MobileTabKey = 'overview' | 'schedule' | 'shotlist' | 'storyboard' | 'callsheet' | 'project'
+export type MobileMode = 'local' | 'cloud'
+
+export type MobileTabKey =
+  | 'overview'
+  | 'schedule'
+  | 'shotlist'
+  | 'storyboard'
+  | 'callsheet'
+  | 'script_supervisor'
+  | 'project'
+
+export type ShotStatus = 'todo' | 'in_progress' | 'done' | 'skipped'
+
+export interface ShotFieldEdit {
+  status?: ShotStatus
+  shotNotes?: string
+  scriptSupervisorNotes?: string
+  actualStartTime?: string
+  actualEndTime?: string
+  updatedAt: string
+}
 
 export interface StoredDayEntry {
   dayId: string
@@ -26,10 +46,11 @@ export interface StoredProjectEntry {
 export interface StoredLibrary {
   version: 1
   projects: Record<string, StoredProjectEntry>
-  shotStatusOverrides: Record<string, 'todo' | 'in_progress' | 'done' | 'skipped'>
+  shotEdits: Record<string, ShotFieldEdit>
 }
 
 export interface StoredLastOpened {
+  mode: MobileMode
   projectId: string
   dayId: string
   tab: MobileTabKey

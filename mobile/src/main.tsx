@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './App'
+import { MobileProviders } from './auth'
 import './styles.css'
 import { registerServiceWorker } from './registerServiceWorker'
 import { initializeObservability } from './observability'
@@ -14,7 +15,7 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <MobileProviders><App /></MobileProviders>
   </React.StrictMode>
 )
 
