@@ -5,6 +5,8 @@ import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from './authConfig'
 import BillingActions from '../features/billing/BillingActions'
 import { useAdminAccess } from '../features/admin/useAdminAccess'
+import useStore from '../store'
+import { hasBlockingUnsavedChanges, navigateWithUnsavedChangesGuard } from '../utils/unsavedChangesGuard'
 
 const barStyle = {
   display: 'flex',
@@ -52,6 +54,7 @@ function CloudAuthBar() {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
   const onAccountPage = currentPath === '/account'
   const onAdminPage = currentPath === '/admin'
+  const hasUnsavedChanges = useStore((state) => hasBlockingUnsavedChanges(state))
 
   useEffect(() => {
     if (!isSignedIn || !userLoaded || !hasConvexIdentity || !user?.id) {
@@ -77,10 +80,11 @@ function CloudAuthBar() {
   }, [hasConvexIdentity, isSignedIn, upsertCurrentUser, user, userLoaded])
 
   const navigateTo = (path) => {
-    if (typeof window === 'undefined') return
-    if (window.location.pathname === path) return
-    window.history.pushState({}, '', path)
-    window.dispatchEvent(new PopStateEvent('popstate'))
+    navigateWithUnsavedChangesGuard({
+      path,
+      currentPath,
+      hasUnsavedChanges,
+    })
   }
 
   return (

@@ -185,4 +185,5 @@ npm run build
 - Free/local users stay local-only.
 - Paid cloud users now use a clearer local+cloud state model with debounced cloud snapshot sync.
 - Toolbar messaging differentiates local save vs cloud sync progress/failure states.
+- Unsaved-change guardrails now cover refresh/close/back/in-app route exits while local persistence is genuinely pending.
 - Detailed implementation + QA checklist: `docs/save-sync-architecture.md`.
