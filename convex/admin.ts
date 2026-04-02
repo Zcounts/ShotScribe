@@ -118,16 +118,29 @@ async function findUserByEmail(ctx: any, email: string) {
     throw new Error('Email is required')
   }
 
-  const user = await ctx.db
+  // Use collect() instead of unique() so that duplicate email rows (possible
+  // after manual dashboard runs) don't throw.  Pick the most recently updated
+  // row — consistent with canonicalizeUserForIdentity's fallback strategy.
+  const users = await ctx.db
     .query('users')
     .withIndex('by_email', (q: any) => q.eq('email', normalizedEmail))
-    .unique()
+    .collect()
 
-  if (!user) {
+  if (!users.length) {
     throw new Error('User not found for email')
   }
 
-  return user
+  users.sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  return users[0]
+}
+
+async function findAllUsersByEmail(ctx: any, email: string) {
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) return []
+  return ctx.db
+    .query('users')
+    .withIndex('by_email', (q: any) => q.eq('email', normalizedEmail))
+    .collect()
 }
 
 export const getMyAdminState = query({
@@ -488,6 +501,70 @@ export const bootstrapFirstAdmin = mutation({
   },
 })
 
+// Repair tool for split-identity production scenarios.
+// Run this from the Convex dashboard function runner while signed in as the
+// real Clerk user ("Act as user" → select the REAL Clerk user from the list).
+// It finds the exact user record the current JWT maps to and forces isAdmin=true,
+// bypassing email lookup entirely.  Requires the OPERATIONAL_ADMIN_TOKEN env var.
+export const repairAdminForCurrentUser = mutation({
+  args: { adminToken: v.string() },
+  handler: async (ctx, args) => {
+    if (!operationalAdminTokenIsValid(args.adminToken)) {
+      throw new Error('Forbidden')
+    }
+
+    const identity = await requireIdentity(ctx)
+    const now = Date.now()
+
+    // Step 1: find canonical user — token match is the ground truth.
+    let canonicalUser: any = null
+    try {
+      canonicalUser = await ctx.db
+        .query('users')
+        .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', identity.tokenIdentifier))
+        .unique()
+    } catch {
+      // Multiple rows with same tokenIdentifier — fall through to email
+    }
+
+    // Step 2: if no token match, find by email (same fallback as resolveCanonicalCurrentUser).
+    if (!canonicalUser) {
+      const normalizedEmail = normalizeEmail(identity.email)
+      if (!normalizedEmail) {
+        throw new Error('No tokenIdentifier match and no email on identity — cannot identify canonical user')
+      }
+      const emailUsers = await ctx.db
+        .query('users')
+        .withIndex('by_email', (q: any) => q.eq('email', normalizedEmail))
+        .collect()
+      if (!emailUsers.length) {
+        throw new Error('No user found for this Clerk identity. Sign in once to bootstrap the user record, then retry.')
+      }
+      emailUsers.sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      canonicalUser = emailUsers[0]
+    }
+
+    const profile = await getProfileByUserId(ctx, canonicalUser._id)
+    if (!profile) {
+      throw new Error('No accountProfile found for this user. Run users:upsertCurrentUser first.')
+    }
+
+    const wasAlreadyAdmin = Boolean(profile.isAdmin)
+    if (!wasAlreadyAdmin) {
+      await ctx.db.patch(profile._id, { isAdmin: true, updatedAt: now })
+    }
+
+    return {
+      userId: String(canonicalUser._id),
+      email: canonicalUser.email || null,
+      tokenIdentifier: canonicalUser.tokenIdentifier,
+      isAdmin: true,
+      wasAlreadyAdmin,
+      repaired: !wasAlreadyAdmin,
+    }
+  },
+})
+
 export const setAdminRoleWithToken = mutation({
   args: {
     adminToken: v.string(),
@@ -499,22 +576,40 @@ export const setAdminRoleWithToken = mutation({
       throw new Error('Forbidden')
     }
 
-    const user = await findUserByEmail(ctx, args.email)
+    // When granting, patch ALL users with this email so the grant reaches the
+    // canonical row regardless of which one the current Clerk session resolves
+    // to.  When revoking, only revoke from the most-recently-updated one (safe
+    // default) to avoid accidentally touching unrelated duplicate rows.
+    const allUsers = await findAllUsersByEmail(ctx, args.email)
+    if (!allUsers.length) {
+      throw new Error('User not found for email')
+    }
+
+    allUsers.sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    const primaryUser = allUsers[0]
 
     if (!args.isAdmin) {
       const adminCount = await getAdminProfileCount(ctx)
-      const profile = await getProfileByUserId(ctx, user._id)
+      const profile = await getProfileByUserId(ctx, primaryUser._id)
       if (profile?.isAdmin && adminCount <= 1) {
         throw new Error('Cannot revoke the last admin')
       }
     }
 
-    await patchAdminRoleForUser(ctx, user._id, args.isAdmin)
+    const now = Date.now()
+    const usersToUpdate = args.isAdmin ? allUsers : [primaryUser]
+    for (const u of usersToUpdate) {
+      const profile = await getProfileByUserId(ctx, u._id)
+      if (profile) {
+        await ctx.db.patch(profile._id, { isAdmin: args.isAdmin, updatedAt: now })
+      }
+    }
 
     return {
-      userId: String(user._id),
-      email: user.email || null,
+      userId: String(primaryUser._id),
+      email: primaryUser.email || null,
       isAdmin: args.isAdmin,
+      rowsPatched: usersToUpdate.length,
     }
   },
 })
