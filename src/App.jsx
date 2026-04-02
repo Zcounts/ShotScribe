@@ -928,6 +928,7 @@ export default function App() {
           setExportHubEntryTab(tab ?? null)
           setExportModalOpen(true)
         }}
+        cloudAccessPolicy={cloudAccessPolicy}
         cloudExportBlocked={cloudAccessPolicy.isCloudProject && !cloudAccessPolicy.canExportCloudProject}
         cloudExportBlockedMessage={`${cloudAccessPolicy.readOnlyReason || 'Cloud project export is blocked.'} Manage billing in Account.`}
       />

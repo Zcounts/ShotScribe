@@ -4,6 +4,7 @@ import SaveSyncStatusControl from './SaveSyncStatusControl'
 
 export default function Toolbar({
   onOpenExportHub,
+  cloudAccessPolicy = {},
   cloudExportBlocked = false,
   cloudExportBlockedMessage = '',
 }) {
@@ -18,12 +19,18 @@ export default function Toolbar({
   const sceneCount = scenes.length
   const saveProject = useStore(s => s.saveProject)
   const saveProjectAs = useStore(s => s.saveProjectAs)
+  const flushCloudSync = useStore(s => s.flushCloudSync)
+  const createCloudProjectFromLocal = useStore(s => s.createCloudProjectFromLocal)
+  const disableCloudBackupForCurrentProject = useStore(s => s.disableCloudBackupForCurrentProject)
   const openProject = useStore(s => s.openProject)
   const openRecentProject = useStore(s => s.openRecentProject)
   const recentProjects = useStore(s => s.recentProjects)
   const newProject = useStore(s => s.newProject)
   const setProjectName = useStore(s => s.setProjectName)
   const setProjectEmoji = useStore(s => s.setProjectEmoji)
+  const projectRef = useStore(s => s.projectRef)
+  const cloudSyncContext = useStore(s => s.cloudSyncContext)
+  const saveSyncState = useStore(s => s.saveSyncState)
   const [editingName, setEditingName] = useState(false)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const [emojiInput, setEmojiInput] = useState('')
@@ -31,6 +38,7 @@ export default function Toolbar({
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
   const [unsavedDialog, setUnsavedDialog] = useState(null) // { action: fn }
+  const [saveActionBusy, setSaveActionBusy] = useState(false)
   const exportMenuRef = useRef(null)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
@@ -38,6 +46,12 @@ export default function Toolbar({
 
   // Extract just the filename from the full path for display
   const fileName = projectPath ? projectPath.split(/[\\/]/).pop() : null
+  const isCloudProject = projectRef?.type === 'cloud'
+  const cloudFeatureAvailable = !!cloudAccessPolicy?.paidCloudAccess
+  const signedInForCloud = !!cloudSyncContext?.currentUserId
+  const canEnableCloudBackup = !isCloudProject && cloudFeatureAvailable && signedInForCloud
+  const canSaveCloudNow = isCloudProject && cloudAccessPolicy?.canEditCloudProject
+  const canDisableCloudBackup = isCloudProject
 
 
   useEffect(() => {
@@ -103,6 +117,44 @@ export default function Toolbar({
     }
     onOpenExportHub?.(activeTab)
     setExportMenuOpen(false)
+  }
+
+  const handleEnableCloudBackup = async () => {
+    if (!canEnableCloudBackup || saveActionBusy) return
+    setSaveActionBusy(true)
+    try {
+      await createCloudProjectFromLocal({
+        ownerUserId: cloudSyncContext.currentUserId,
+        accountProfile: {
+          planTier: cloudFeatureAvailable ? 'paid' : 'free',
+        },
+      })
+      setSaveMenuOpen(false)
+    } catch (error) {
+      alert(error?.message || 'Could not enable cloud backup for this project.')
+    } finally {
+      setSaveActionBusy(false)
+    }
+  }
+
+  const handleSaveToCloudNow = async () => {
+    if (!canSaveCloudNow || saveActionBusy) return
+    setSaveActionBusy(true)
+    try {
+      const result = await flushCloudSync({ reason: 'manual' })
+      if (result?.ok === false) {
+        alert(result.error || 'Cloud backup failed.')
+      }
+      setSaveMenuOpen(false)
+    } finally {
+      setSaveActionBusy(false)
+    }
+  }
+
+  const handleWorkLocalOnly = () => {
+    if (!canDisableCloudBackup || saveActionBusy) return
+    disableCloudBackupForCurrentProject()
+    setSaveMenuOpen(false)
   }
 
   return (
@@ -254,7 +306,13 @@ export default function Toolbar({
         )}
 
         {/* Save / Sync status */}
-        <SaveSyncStatusControl />
+        <SaveSyncStatusControl
+          cloudAccessPolicy={cloudAccessPolicy}
+          onEnableCloudBackup={handleEnableCloudBackup}
+          onSaveToCloudNow={handleSaveToCloudNow}
+          onWorkLocalOnly={handleWorkLocalOnly}
+          actionBusy={saveActionBusy}
+        />
       </div>
 
       {/* Center: File operations */}
@@ -358,10 +416,10 @@ export default function Toolbar({
           <button
             className="toolbar-btn primary"
             onClick={saveProject}
-            title={projectPath ? `Save to ${fileName}` : 'Save project (choose location)'}
+            title={projectPath ? `Save local copy to ${fileName}` : 'Save local copy (choose location)'}
             style={{ borderRadius: '4px 0 0 4px', borderRight: 'none', paddingRight: 8 }}
           >
-            Save
+            Save Local
           </button>
           <button
             className="toolbar-btn primary"
@@ -391,6 +449,26 @@ export default function Toolbar({
               overflow: 'hidden',
             }}>
               <button
+                onClick={() => { setSaveMenuOpen(false); saveProject() }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  color: '#e0e0e0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Save locally now
+              </button>
+              <button
                 onClick={() => { setSaveMenuOpen(false); saveProjectAs() }}
                 style={{
                   display: 'block',
@@ -403,16 +481,96 @@ export default function Toolbar({
                   fontSize: 12,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
-                Save As…
+                Save local copy as…
               </button>
+              {isCloudProject ? (
+                <>
+                  <button
+                    onClick={handleSaveToCloudNow}
+                    disabled={!canSaveCloudNow || saveActionBusy}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '8px 14px',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      color: (!canSaveCloudNow || saveActionBusy) ? 'rgba(224,224,224,0.45)' : '#9ae6b4',
+                      fontSize: 12,
+                      cursor: (!canSaveCloudNow || saveActionBusy) ? 'not-allowed' : 'pointer',
+                      fontFamily: 'inherit',
+                      borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                    onMouseEnter={e => { if (canSaveCloudNow && !saveActionBusy) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                  >
+                    {saveActionBusy ? 'Saving to cloud…' : 'Save to cloud now'}
+                  </button>
+                  <button
+                    onClick={handleWorkLocalOnly}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '8px 14px',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      color: '#fbbf24',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                  >
+                    Work local only
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleEnableCloudBackup}
+                  disabled={!canEnableCloudBackup || saveActionBusy}
+                  title={
+                    canEnableCloudBackup
+                      ? 'Create a cloud-backed version of this current project'
+                      : !cloudAccessPolicy?.paidCloudAccess
+                        ? 'Cloud backup requires a paid account'
+                        : !signedInForCloud
+                          ? 'Sign in to enable cloud backup'
+                          : 'Cloud backup unavailable'
+                  }
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 14px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    color: (!canEnableCloudBackup || saveActionBusy) ? 'rgba(224,224,224,0.45)' : '#9ae6b4',
+                    fontSize: 12,
+                    cursor: (!canEnableCloudBackup || saveActionBusy) ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => { if (canEnableCloudBackup && !saveActionBusy) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                >
+                  {saveActionBusy ? 'Turning on cloud backup…' : 'Turn on cloud backup for this project'}
+                </button>
+              )}
             </div>
           )}
         </div>
       </div>
+      {!isCloudProject && cloudAccessPolicy?.paidCloudAccess && signedInForCloud && saveSyncState?.status !== 'cloud_sync_failed' ? (
+        <div style={{ color: '#93c5fd', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
+          This project is local-only right now. Turn on cloud backup from Save when you want syncing.
+        </div>
+      ) : null}
 
       {/* Right: Export */}
       <div className="flex items-center gap-2">

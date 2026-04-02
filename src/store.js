@@ -3124,6 +3124,32 @@ const useStore = create((set, get) => ({
     })
   },
 
+  disableCloudBackupForCurrentProject: () => {
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') return { ok: false, reason: 'not_cloud_project' }
+    if (state._cloudSyncTimeout) {
+      clearTimeout(state._cloudSyncTimeout)
+    }
+
+    set({
+      projectRef: {
+        type: 'local',
+        path: platformService.isDesktop() ? state.projectPath : null,
+        browserProjectId: state.browserProjectId || null,
+      },
+      _cloudSyncTimeout: null,
+      _cloudSyncInFlight: false,
+      saveSyncState: buildSyncState({
+        mode: 'local_only',
+        status: state.hasUnsavedChanges ? 'unsaved_changes' : 'saved_locally',
+        message: state.hasUnsavedChanges
+          ? 'Cloud backup off · local changes not yet saved'
+          : 'Cloud backup off · saving locally on this device',
+      }),
+    })
+    return { ok: true }
+  },
+
   // ── Auto-save ────────────────────────────────────────────────────────
 
   _autoSaveTimeout: null,

@@ -10,26 +10,59 @@ function formatTimestamp(iso) {
   return `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on ${date.toLocaleDateString()}`
 }
 
-function getStatusTone(status) {
+function getStatusTheme(status, isCloudProject) {
+  if (!isCloudProject) {
+    return {
+      toneLabel: 'Local only',
+      pillBg: 'rgba(51,65,85,0.32)',
+      border: 'rgba(148,163,184,0.45)',
+      text: '#D1D5DB',
+      dot: '#CBD5E1',
+    }
+  }
   if (status === 'cloud_sync_failed') {
-    return { dot: '#FCA5A5', text: '#FCA5A5', border: 'rgba(248,113,113,0.45)', bg: 'rgba(127,29,29,0.3)' }
+    return {
+      toneLabel: 'Cloud backup failed',
+      pillBg: 'rgba(127,29,29,0.34)',
+      border: 'rgba(248,113,113,0.52)',
+      text: '#FCA5A5',
+      dot: '#FCA5A5',
+    }
   }
   if (status === 'syncing_to_cloud' || status === 'unsaved_changes') {
-    return { dot: '#BFDBFE', text: '#BFDBFE', border: 'rgba(96,165,250,0.45)', bg: 'rgba(30,58,138,0.26)' }
+    return {
+      toneLabel: 'Syncing',
+      pillBg: 'rgba(30,58,138,0.32)',
+      border: 'rgba(96,165,250,0.52)',
+      text: '#BFDBFE',
+      dot: '#93C5FD',
+    }
   }
   if (status === 'synced_to_cloud') {
-    return { dot: '#86EFAC', text: '#86EFAC', border: 'rgba(74,222,128,0.45)', bg: 'rgba(20,83,45,0.28)' }
+    return {
+      toneLabel: 'Backed up',
+      pillBg: 'rgba(21,128,61,0.28)',
+      border: 'rgba(74,222,128,0.52)',
+      text: '#86EFAC',
+      dot: '#86EFAC',
+    }
   }
-  return { dot: '#CBD5E1', text: '#D0D4DC', border: 'rgba(148,163,184,0.4)', bg: 'rgba(30,41,59,0.28)' }
+  return {
+    toneLabel: 'Cloud backup ready',
+    pillBg: 'rgba(22,101,52,0.24)',
+    border: 'rgba(134,239,172,0.4)',
+    text: '#D1FAE5',
+    dot: '#A7F3D0',
+  }
 }
 
-function getCollabLabel({ projectRef, cloudSyncContext }) {
-  if (projectRef?.type !== 'cloud') return 'Collaboration off (local project)'
-  if (!cloudSyncContext?.collaborationMode) return 'Collaboration off (solo cloud mode)'
-  return 'Shared project (collaboration mode enabled)'
-}
-
-export default function SaveSyncStatusControl() {
+export default function SaveSyncStatusControl({
+  cloudAccessPolicy,
+  onEnableCloudBackup,
+  onSaveToCloudNow,
+  onWorkLocalOnly,
+  actionBusy = false,
+}) {
   const projectRef = useStore((state) => state.projectRef)
   const hasUnsavedChanges = useStore((state) => state.hasUnsavedChanges)
   const saveSyncState = useStore((state) => state.saveSyncState)
@@ -38,41 +71,55 @@ export default function SaveSyncStatusControl() {
   const [open, setOpen] = useState(false)
   const panelRef = useRef(null)
 
-  const tone = getStatusTone(saveSyncState?.status)
-
-  const modeLabel = projectRef?.type === 'cloud' ? 'Cloud project' : 'Local project'
+  const isCloudProject = projectRef?.type === 'cloud'
   const cloudEnvEnabled = runtimeConfig.appMode.cloudEnabled
   const cloudAuthConfigured = isCloudAuthConfigured()
   const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
+  const cloudAvailableButNotEnabled = cloudEnvEnabled && !isCloudProject
 
-  const cloudAvailabilityLabel = useMemo(() => {
-    if (!cloudEnvEnabled) return 'Cloud features are disabled for this environment.'
-    if (!cloudAuthConfigured) return 'Cloud features are enabled, but auth/config is incomplete.'
-    if (!signedInForCloud) return 'Cloud features are enabled, but no cloud user session is active.'
-    return 'Cloud features are enabled and your session is ready.'
-  }, [cloudAuthConfigured, cloudEnvEnabled, signedInForCloud])
+  const statusTheme = getStatusTheme(saveSyncState?.status, isCloudProject)
 
-  const saveSummary = saveSyncState?.message
-    || (hasUnsavedChanges ? 'Changes not yet saved.' : 'Saved on this device.')
+  const modeLabel = isCloudProject ? 'Cloud Backup' : 'Local Only'
+  const currentStatus = useMemo(() => {
+    if (!isCloudProject) return 'Saved locally'
+    if (saveSyncState?.status === 'syncing_to_cloud') return 'Syncing to cloud'
+    if (saveSyncState?.status === 'synced_to_cloud') return 'Backed up to cloud'
+    if (saveSyncState?.status === 'cloud_sync_failed') return 'Cloud backup failed'
+    if (saveSyncState?.status === 'saved_locally') return 'Saved locally, cloud sync pending'
+    if (saveSyncState?.status === 'unsaved_changes') return 'Changes pending sync'
+    return 'Cloud status unavailable'
+  }, [isCloudProject, saveSyncState?.status])
 
   const latestResult = useMemo(() => {
+    if (!isCloudProject) return `Saved locally at ${formatTimestamp(lastSaved)}`
     if (saveSyncState?.status === 'cloud_sync_failed') {
-      return saveSyncState?.error || 'Cloud backup failed. Changes remain on this device.'
+      return saveSyncState?.error || 'Cloud backup failed. Local copy is still safe on this device.'
     }
     if (saveSyncState?.status === 'synced_to_cloud') {
-      return `Saved to cloud at ${formatTimestamp(saveSyncState?.lastSyncedAt)}`
+      return `Cloud backup completed at ${formatTimestamp(saveSyncState?.lastSyncedAt)}`
     }
     if (saveSyncState?.status === 'syncing_to_cloud') {
       return `Sync in progress (started ${formatTimestamp(saveSyncState?.lastAttemptAt)})`
     }
-    if (saveSyncState?.status === 'saved_locally' || projectRef?.type !== 'cloud') {
-      return `Saved locally at ${formatTimestamp(lastSaved)}`
+    if (saveSyncState?.status === 'saved_locally') {
+      return `Saved locally at ${formatTimestamp(lastSaved)}${cloudAvailableButNotEnabled ? ' · cloud backup not enabled for this project' : ''}`
     }
-    if (saveSyncState?.status === 'unsaved_changes') {
-      return 'Changes are pending save.'
+    if (hasUnsavedChanges) {
+      return 'Changes are queued for local save and cloud sync (when enabled).'
     }
-    return 'Cloud status unavailable.'
-  }, [lastSaved, projectRef?.type, saveSyncState?.error, saveSyncState?.lastAttemptAt, saveSyncState?.lastSyncedAt, saveSyncState?.status])
+    return 'Status unavailable'
+  }, [cloudAvailableButNotEnabled, hasUnsavedChanges, isCloudProject, lastSaved, saveSyncState?.error, saveSyncState?.lastAttemptAt, saveSyncState?.lastSyncedAt, saveSyncState?.status])
+
+  const cloudEnvironmentLabel = useMemo(() => {
+    if (!cloudEnvEnabled) return 'Cloud features disabled in this environment.'
+    if (!cloudAuthConfigured) return 'Cloud enabled, but auth setup is incomplete.'
+    if (!signedInForCloud) return 'Cloud enabled, but you are signed out for cloud usage.'
+    if (!cloudAccessPolicy?.paidCloudAccess) return 'Signed in, but this account is local-only until upgraded.'
+    return 'Cloud available and account is cloud-capable.'
+  }, [cloudAccessPolicy?.paidCloudAccess, cloudAuthConfigured, cloudEnvEnabled, signedInForCloud])
+
+  const canEnableCloudBackup = !isCloudProject && cloudAccessPolicy?.paidCloudAccess && signedInForCloud
+  const canSaveToCloudNow = isCloudProject && cloudAccessPolicy?.canEditCloudProject
 
   useEffect(() => {
     if (!open) return
@@ -101,28 +148,28 @@ export default function SaveSyncStatusControl() {
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 6,
+          gap: 7,
           borderRadius: 999,
-          border: `1px solid ${tone.border}`,
-          background: tone.bg,
-          color: tone.text,
-          padding: '4px 10px',
+          border: `1px solid ${statusTheme.border}`,
+          background: statusTheme.pillBg,
+          color: statusTheme.text,
+          padding: '4px 11px',
           fontSize: 11,
           fontFamily: 'Sora, sans-serif',
           cursor: 'pointer',
-          maxWidth: 320,
+          maxWidth: 360,
         }}
       >
         <span style={{
-          width: 7,
-          height: 7,
+          width: 8,
+          height: 8,
           borderRadius: '50%',
-          background: tone.dot,
+          background: statusTheme.dot,
           animation: saveSyncState?.status === 'syncing_to_cloud' ? 'pulse 1.2s ease-in-out infinite' : 'none',
           flexShrink: 0,
         }} />
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {modeLabel} · {saveSummary}
+          {modeLabel} · {statusTheme.toneLabel}
         </span>
       </button>
 
@@ -132,28 +179,88 @@ export default function SaveSyncStatusControl() {
           right: 0,
           top: 'calc(100% + 8px)',
           zIndex: 600,
-          width: 340,
+          width: 356,
           borderRadius: 10,
-          border: '1px solid rgba(74,85,104,0.38)',
+          border: '1px solid rgba(74,85,104,0.36)',
           background: '#171C24',
           boxShadow: '0 14px 30px rgba(0,0,0,0.35)',
           padding: 12,
           color: '#E2E8F0',
         }}>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Save / Sync Status</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>Save / Sync Status</div>
+            <span style={{ fontSize: 10, color: statusTheme.text }}>{modeLabel}</span>
+          </div>
           <div style={{ display: 'grid', gap: 8, fontSize: 11, lineHeight: 1.45 }}>
             <div><strong>Project mode:</strong> {modeLabel}</div>
-            <div><strong>Cloud environment:</strong> {cloudAvailabilityLabel}</div>
-            <div><strong>Cloud sign-in:</strong> {signedInForCloud ? 'Signed in' : 'Signed out or unavailable'}</div>
-            <div><strong>Current status:</strong> {saveSummary}</div>
+            <div><strong>Cloud environment:</strong> {cloudEnvironmentLabel}</div>
+            <div><strong>Cloud sign-in:</strong> {signedInForCloud ? 'Signed in' : 'Signed out'}</div>
+            <div><strong>Current status:</strong> {currentStatus}</div>
             <div><strong>Latest result:</strong> {latestResult}</div>
-            <div><strong>Collaboration:</strong> {getCollabLabel({ projectRef, cloudSyncContext })}</div>
-            {cloudSyncContext?.collaborationMode ? (
+            <div><strong>Collaboration:</strong> {isCloudProject && cloudSyncContext?.collaborationMode ? 'Shared project mode' : 'Collaboration off'}</div>
+            {isCloudProject && cloudSyncContext?.collaborationMode ? (
               <div><strong>Presence / locks:</strong> Not surfaced in desktop state yet.</div>
             ) : null}
             {saveSyncState?.error ? (
               <div style={{ color: '#FCA5A5' }}><strong>Last error:</strong> {saveSyncState.error}</div>
             ) : null}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 11, flexWrap: 'wrap' }}>
+            {!isCloudProject ? (
+              <button
+                type="button"
+                onClick={onEnableCloudBackup}
+                disabled={!canEnableCloudBackup || actionBusy}
+                style={{
+                  border: '1px solid rgba(74,222,128,0.42)',
+                  background: canEnableCloudBackup && !actionBusy ? 'rgba(22,101,52,0.34)' : 'rgba(51,65,85,0.34)',
+                  color: canEnableCloudBackup && !actionBusy ? '#A7F3D0' : 'rgba(226,232,240,0.5)',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: '5px 9px',
+                  cursor: canEnableCloudBackup && !actionBusy ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {actionBusy ? 'Turning on cloud backup…' : 'Turn on cloud backup'}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onSaveToCloudNow}
+                  disabled={!canSaveToCloudNow || actionBusy}
+                  style={{
+                    border: '1px solid rgba(96,165,250,0.45)',
+                    background: canSaveToCloudNow && !actionBusy ? 'rgba(30,58,138,0.34)' : 'rgba(51,65,85,0.34)',
+                    color: canSaveToCloudNow && !actionBusy ? '#BFDBFE' : 'rgba(226,232,240,0.5)',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    padding: '5px 9px',
+                    cursor: canSaveToCloudNow && !actionBusy ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {actionBusy ? 'Saving to cloud…' : 'Save to cloud now'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onWorkLocalOnly}
+                  disabled={actionBusy}
+                  style={{
+                    border: '1px solid rgba(251,191,36,0.45)',
+                    background: 'rgba(120,53,15,0.36)',
+                    color: '#FCD34D',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    padding: '5px 9px',
+                    cursor: actionBusy ? 'not-allowed' : 'pointer',
+                    opacity: actionBusy ? 0.6 : 1,
+                  }}
+                >
+                  Work local only
+                </button>
+              </>
+            )}
           </div>
         </div>
       ) : null}
