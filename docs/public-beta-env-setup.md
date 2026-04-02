@@ -8,11 +8,17 @@ Scope: production/staging setup for app-root deployment (`app.shot-scribe.com`) 
 - `VITE_ENABLE_CLOUD_FEATURES` (`true` to enable cloud/auth paths)
 - `VITE_CONVEX_URL`
 - `VITE_CLERK_PUBLISHABLE_KEY`
+- `VITE_SENTRY_DSN` (optional; Sentry browser SDK DSN)
+- `VITE_CLARITY_PROJECT_ID` (optional; Microsoft Clarity project ID)
+- `VITE_APP_ENV` (optional; defaults to Vite mode)
+- `VITE_APP_RELEASE` (optional; release label such as git SHA)
 - `VITE_MONITORING_ENDPOINT` (optional)
 
 Notes:
 - Keep `VITE_ENABLE_CLOUD_FEATURES=false` for local-only-only environments.
 - Domain-root routing is expected (`/`, `/account`, `/admin`, `/accept-invite`).
+- Sentry + Clarity initialize only in production bundles (`import.meta.env.PROD === true`) and only when their IDs are provided.
+- The same observability env names are used by both the main app and the mobile web app build.
 
 ## Convex env vars
 
@@ -45,3 +51,13 @@ See also: `docs/billing-stripe-runbook.md`.
 3. Verify admin state before using `/admin`.
 
 See also: `docs/admin-role-runbook.md`.
+
+## Observability post-deploy verification
+
+1. Open the production main app and mobile app once so both create fresh sessions.
+2. In browser devtools network tab, verify Clarity loader request is present:
+   - `https://www.clarity.ms/tag/<VITE_CLARITY_PROJECT_ID>`
+3. Trigger a controlled frontend exception and confirm a Sentry issue appears with:
+   - expected environment (`VITE_APP_ENV` or build mode)
+   - expected release (`VITE_APP_RELEASE`, when configured)
+4. Confirm local `npm run dev` sessions do **not** initialize Sentry/Clarity by default.

@@ -3,14 +3,9 @@ import ReactDOM from 'react-dom/client'
 import { App } from './App'
 import './styles.css'
 import { registerServiceWorker } from './registerServiceWorker'
+import { initializeObservability } from './observability'
 
-window.addEventListener('error', (event) => {
-  console.error('[mobile] uncaught startup error', event.error ?? event.message)
-})
-
-window.addEventListener('unhandledrejection', (event) => {
-  console.error('[mobile] unhandled rejection', event.reason)
-})
+initializeObservability()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {
