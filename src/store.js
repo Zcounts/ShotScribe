@@ -3072,7 +3072,7 @@ const useStore = create((set, get) => ({
       saveSyncState: buildSyncState({
         mode: 'cloud_solo',
         status: 'synced_to_cloud',
-        message: 'Saved locally and synced to cloud',
+        message: 'Saved on device · backed up to cloud',
         lastSyncedAt: new Date().toISOString(),
       }),
     })
@@ -3106,7 +3106,7 @@ const useStore = create((set, get) => ({
       saveSyncState: buildSyncState({
         mode: 'cloud_solo',
         status: 'synced_to_cloud',
-        message: 'Saved locally and synced to cloud',
+        message: 'Saved on device · backed up to cloud',
         lastSyncedAt: new Date().toISOString(),
       }),
     })
@@ -3142,7 +3142,7 @@ const useStore = create((set, get) => ({
         saveSyncState: buildSyncState({
           mode: 'local_only',
           status: 'unsaved_changes',
-          message: 'Unsaved local changes',
+          message: 'Changes not yet saved',
           lastSyncedAt: state.saveSyncState.lastSyncedAt,
         }),
       })
@@ -3154,7 +3154,7 @@ const useStore = create((set, get) => ({
         saveSyncState: buildSyncState({
           mode: 'cloud_blocked',
           status: 'saved_locally',
-          message: 'Saved locally · Cloud sync unavailable',
+          message: 'Saved on device · cloud backup unavailable',
           pendingReason: reason,
           lastSyncedAt: state.saveSyncState.lastSyncedAt,
         }),
@@ -3165,7 +3165,7 @@ const useStore = create((set, get) => ({
       saveSyncState: buildSyncState({
         mode: state.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
         status: 'unsaved_changes',
-        message: 'Unsaved changes · syncing soon',
+        message: 'Not yet saved · uploading soon',
         pendingReason: reason,
         lastSyncedAt: state.saveSyncState.lastSyncedAt,
       }),
@@ -3204,7 +3204,7 @@ const useStore = create((set, get) => ({
         saveSyncState: buildSyncState({
           mode: 'cloud_blocked',
           status: 'saved_locally',
-          message: 'Saved locally · Cloud sync unavailable',
+          message: 'Saved on device · cloud backup unavailable',
           lastSyncedAt: state.saveSyncState.lastSyncedAt,
         }),
       })
@@ -3234,7 +3234,7 @@ const useStore = create((set, get) => ({
       saveSyncState: buildSyncState({
         mode: state.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
         status: 'syncing_to_cloud',
-        message: 'Syncing to cloud…',
+        message: 'Uploading to cloud…',
         pendingReason: reason,
         lastSyncedAt: state.saveSyncState.lastSyncedAt,
         lastAttemptAt: new Date().toISOString(),
@@ -3262,7 +3262,7 @@ const useStore = create((set, get) => ({
         saveSyncState: buildSyncState({
           mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
           status: 'synced_to_cloud',
-          message: 'Saved locally and synced to cloud',
+          message: 'Saved on device · backed up to cloud',
           lastSyncedAt: syncedAt,
         }),
       }))
@@ -3273,13 +3273,13 @@ const useStore = create((set, get) => ({
         saveSyncState: buildSyncState({
           mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
           status: 'cloud_sync_failed',
-          message: 'Saved locally · Cloud sync failed',
+          message: 'Saved on device · cloud backup failed',
           pendingReason: reason,
-          error: error?.message || 'Cloud sync failed',
+          error: error?.message || 'Cloud backup failed',
           lastSyncedAt: nextState.saveSyncState.lastSyncedAt,
         }),
       }))
-      return { ok: false, error: error?.message || 'Cloud sync failed' }
+      return { ok: false, error: error?.message || 'Cloud backup failed' }
     }
   },
   _scheduleAutoSave: (reason = 'edit') => {
@@ -3320,7 +3320,7 @@ const useStore = create((set, get) => ({
               saveSyncState: buildSyncState({
                 mode: 'cloud_blocked',
                 status: 'saved_locally',
-                message: 'Saved locally · Cloud sync unavailable',
+                message: 'Saved on device · cloud backup unavailable',
                 pendingReason: reason,
                 lastSyncedAt: currentState.saveSyncState.lastSyncedAt,
               }),
@@ -3332,7 +3332,7 @@ const useStore = create((set, get) => ({
             saveSyncState: buildSyncState({
               mode: currentState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
               status: 'saved_locally',
-              message: 'Saved locally · syncing soon',
+              message: 'Saved on device · uploading soon',
               pendingReason: reason,
               lastSyncedAt: currentState.saveSyncState.lastSyncedAt,
             }),

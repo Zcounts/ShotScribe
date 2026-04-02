@@ -1,97 +1,204 @@
-# Save + Sync architecture (April 2, 2026)
+# Save + Sync architecture (April 2026)
 
 ## Audit summary
 
 ### Desktop/web app (`src/`)
-- Local persistence is still the foundation:
-  - browser mode writes local snapshots through `platformService.saveBrowserProjectSnapshot` and autosave to localStorage.
-  - desktop shell mode writes `.shotlist` files through Electron APIs.
-- Cloud persistence for paid users continues to use Convex project snapshots (`projectSnapshots:createSnapshot`).
-- Previous behavior made local and cloud status hard to interpret in the UI (primarily `lastSaved` + `hasUnsavedChanges` only).
+
+- Local persistence is the primary write path:
+  - Browser mode writes to localStorage via `platformService.saveAutosave` and
+    `persistBrowserProjectState`.
+  - Desktop/Electron mode writes `.shotlist` files via the Electron IPC API.
+- Cloud persistence for paid users is layered on top via Convex project snapshots
+  (`projectSnapshots:createSnapshot`).
+- Save/sync state is exposed through a `saveSyncState` object in the Zustand store with
+  six concrete statuses (see below).
 
 ### Mobile companion (`mobile/`)
-- Mobile remains local-first and stores imported day/snapshot data in localStorage.
-- Shot status overrides are local and persist immediately on-device.
-- Shared contract now supports `skipped` status alongside `todo` / `in_progress` / `done` so status shape is consistent.
 
-## Implemented save/sync model
+- Mobile is local-first: imported day/snapshot data lives in localStorage under
+  `shotscribe.mobile.library.v1`.
+- Shot field edits (status, notes, timing) are persisted to localStorage immediately and
+  synchronously on every change — no data is ever lost to a debounce window.
+- Cloud snapshot writes are **debounced** (6 seconds) so a burst of rapid shot-status
+  changes produces only one cloud write, not one per tap.
+- The Convex snapshot write now passes `expectedLatestSnapshotId` for version awareness.
+  Because mobile always uses `last_write_wins`, conflicts are resolved by recency rather
+  than rejected — this is intentional for the on-set workflow where mobile is the
+  authoritative source during a shoot day.
 
-### Local-first write path
-1. Edits update the in-memory working copy immediately.
-2. Local autosave/local snapshot remains first persistence layer.
-3. Local persistence debounce is short (2.5 seconds) so "unsaved" only appears while work is truly pending local write.
-4. For cloud projects with paid write access, cloud snapshot sync is queued/debounced.
+---
 
-### Cloud sync queue (lightweight)
-- Debounce window: 8 seconds.
-- Queue is intentionally small and reversible (single pending timeout + in-flight guard).
-- Solo cloud sync uses conflict-aware writes (`fail_on_conflict`) to avoid silent overwrite.
-- Collaboration-capable context can still use `last_write_wins` when configured.
+## Save/sync state model
 
-### Explicit sync points
-- Cloud sync context is set centrally from cloud auth/policy state.
-- Flush hooks run on lifecycle transitions (`beforeunload`, `pagehide`) when there are unsaved changes.
+### Status values
 
-### Unsaved-changes exit protection
-- Browser-native unload protection is enabled only while local writes are still pending (`unsaved_changes` state).
-- Guarded navigation is applied to:
-  - browser refresh / tab close (`beforeunload`)
-  - browser back/forward route transitions (`popstate`)
-  - in-app account/admin route transitions (`pushState` helpers)
-- Guards are intentionally tied to the same shared dirty-state interpretation to avoid desktop/mobile divergence and false positives.
+| Status | When set | UI message |
+|--------|----------|------------|
+| `unsaved_changes` | Edit received, local save not yet flushed | "Changes not yet saved" |
+| `saved_locally` | Local write complete; cloud pending or unavailable | "Saved on device · uploading soon" / "Saved on this device" |
+| `syncing_to_cloud` | Convex snapshot mutation in-flight | "Uploading to cloud…" |
+| `synced_to_cloud` | Snapshot write confirmed | "Saved on device · backed up to cloud" |
+| `cloud_sync_failed` | Snapshot write threw or returned an error | "Saved on device · cloud backup failed" |
+| `cloud_blocked` | Paid access unavailable or cloud writes disabled | "Saved on device · cloud backup unavailable" |
 
-### Save/sync state surfaced in UI
-State model now exposes human-readable statuses:
-- Local-only: saved locally / unsaved local changes.
-- Cloud project with sync access: unsaved changes, syncing, synced.
-- Cloud blocked/read-only: saved locally + cloud sync unavailable.
-- Cloud failure: saved locally + cloud sync failed.
+### Mode values
 
-## Notes for product behavior
-- Free users remain local-only.
-- Paid users keep local working-copy editing and get cloud sync as an additional layer.
-- Cloud writes are throttled via debounce to reduce unnecessary snapshot churn during solo editing.
+| Mode | Meaning |
+|------|---------|
+| `local_only` | Free user or no cloud configured |
+| `cloud_solo` | Paid user, solo editing |
+| `cloud_collab` | Paid user, collaboration-capable context |
+| `cloud_blocked` | Cloud context present but writes disabled |
+
+---
+
+## Write paths in detail
+
+### Local-first write path (all users)
+
+1. User edits the in-memory working copy — visible immediately.
+2. `_scheduleAutoSave` debounces 2.5 s then writes to localStorage (or disk on Electron).
+3. While debounce is pending: status is `unsaved_changes`.
+4. After local write: status moves to `saved_locally`.
+
+### Cloud sync path (paid users, cloud projects)
+
+5. `_scheduleCloudSync` debounces an additional 8 s after the last edit.
+6. When the timeout fires, `flushCloudSync` writes a full project snapshot to Convex.
+7. During write: status is `syncing_to_cloud` (dot pulses in toolbar).
+8. On success: status is `synced_to_cloud`; `projectRef.snapshotId` is updated.
+9. On failure: status is `cloud_sync_failed`; the error is surfaced in the toolbar tooltip.
+    The local copy is safe — the next edit will queue another cloud attempt.
+
+**Conflict handling:**
+- Solo mode: `fail_on_conflict` — rejected if `expectedLatestSnapshotId` doesn't match.
+  The UI shows `cloud_sync_failed`; the user can reload to get the latest snapshot.
+- Collaboration mode: `last_write_wins` — always accepted; later write is authoritative.
+
+**Key debounce constants (src/store.js):**
+```js
+LOCAL_PERSIST_DEBOUNCE_MS = 2500   // local autosave
+CLOUD_SYNC_DEBOUNCE_MS    = 8000   // cloud snapshot write
+```
+
+### Mobile cloud sync path
+
+```
+Shot edit
+  │
+  ├─► localStorage write (immediate — data is safe)
+  │
+  └─► scheduleCloudSave()
+        │  debounce 6 s (MOBILE_CLOUD_SYNC_DEBOUNCE_MS)
+        └─► flushCloudSave()
+              ├─ applyEditsToCloudPayload (merge local edits onto latest snapshot payload)
+              ├─ createSnapshot({ …, expectedLatestSnapshotId, conflictStrategy: 'last_write_wins' })
+              └─ syncState → 'synced' | 'sync_failed'
+```
+
+Mobile sync state banner (shown in cloud mode only):
+- `unsaved_changes` → "Shot changes saved on device · uploading soon…"
+- `syncing` → "Uploading to cloud…"
+- `synced` → "Backed up to cloud · HH:MM"
+- `sync_failed` → "Saved on device · cloud backup failed. Changes will upload on next edit."
+
+---
+
+## Unsaved-changes exit protection
+
+Exit guards fire when `hasUnsavedChanges === true` **and** `saveSyncState.status === 'unsaved_changes'`.
+They are intentionally **not** triggered while cloud sync is pending (status `saved_locally` or
+`syncing_to_cloud`) — local data is already safe at that point.
+
+Guarded transitions:
+- `beforeunload` / `pagehide` (browser refresh / tab close)
+- `popstate` (browser back/forward)
+- In-app Account/Admin route pushes
+
+---
+
+## Free vs paid behavior
+
+| Feature | Free / local | Paid / cloud |
+|---------|-------------|--------------|
+| Local autosave | Yes | Yes |
+| Cloud snapshot sync | No | Yes (debounced, 8 s) |
+| Conflict detection | N/A | `fail_on_conflict` in solo mode |
+| Mobile cloud sync | N/A | Yes (debounced, 6 s) |
+| Collaboration mode | No | Yes (opt-in, `last_write_wins`) |
+
+---
 
 ## Manual QA checklist
 
-### 1) Free local-only save
-1. Start app with cloud disabled.
-2. Create/edit project fields.
-3. Confirm toolbar status shows local language (e.g. unsaved local changes, then saved locally after save).
-4. Reload and verify data persists from local snapshot / file.
+### 1. Free / local-only save
 
-### 2) Paid local + cloud sync
-1. Start app with cloud enabled and paid account.
-2. Open cloud project.
-3. Make several rapid edits.
-4. Confirm toolbar transitions through unsaved -> syncing -> synced.
-5. Confirm Convex snapshot history receives debounced writes (not per keystroke).
+1. Start app with cloud disabled (`VITE_ENABLE_CLOUD_FEATURES` not set or `false`).
+2. Create a new project and add a shot.
+3. Confirm toolbar status dot turns gray and shows **"Changes not yet saved"**.
+4. Wait ~2.5 s. Confirm dot stays gray and message changes to **"Saved on this device · HH:MM"**.
+5. Hard-refresh the page. Confirm the project reloads from localStorage with shot intact.
+6. Confirm no network requests to Convex are made (check DevTools Network tab).
 
-### 3) Desktop edit then mobile open
-1. On desktop cloud project, complete edits and wait for synced state.
-2. Export current mobile package/snapshot.
-3. Import into mobile app.
-4. Confirm day and shot data reflects latest desktop edits.
+---
 
-### 4) Mobile shot update then desktop reopen
-1. In mobile app, cycle a shot into `done` and `skipped` states.
-2. Confirm local mobile state persists after refresh.
-3. Re-open/export path back to desktop workflow and verify shared status shape remains valid.
+### 2. Paid local + cloud sync
 
-### 5) Offline-ish recovery behavior
-1. Open cloud project and disconnect network.
-2. Make edits.
-3. Confirm toolbar indicates local save with cloud unavailable/failed sync.
-4. Reconnect network and trigger additional edit; confirm sync recovers to synced state.
+1. Start app with cloud enabled and a paid account. Open a cloud project.
+2. Make several rapid edits (type in a shot description, change status).
+3. Confirm toolbar dot turns gray / message shows **"Changes not yet saved"** immediately.
+4. After ~2.5 s: message transitions to **"Saved on device · uploading soon"**.
+5. After ~8 s from last edit: dot turns blue and pulses; message shows **"Uploading to cloud…"**.
+6. On completion: dot turns green; message shows **"Saved on device · backed up to cloud · HH:MM"**.
+7. In Convex dashboard, verify only 1–2 snapshots were created (not one per keystroke).
+8. Refresh page. Confirm project reloads from cloud snapshot with all edits present.
 
-### 6) Unsaved-changes warnings: refresh / close / back / in-app route
-1. Open any editable app tab and make an edit.
-2. Within ~2.5 seconds (before local autosave), test each exit path:
-   - refresh browser
-   - close tab/window
-   - browser back button
-   - Account/Admin button navigation
-3. Confirm native/browser warning appears and cancel keeps user on current screen.
-4. Wait for toolbar to show locally saved state.
-5. Repeat each exit path and confirm warning no longer appears.
-6. For cloud projects, confirm status can show "Saved locally · syncing soon" without triggering unsaved warning while cloud sync is pending.
+---
+
+### 3. Desktop edit → mobile open
+
+1. On desktop cloud project, make edits and wait for the green **"backed up to cloud"** state.
+2. On mobile, switch to **Cloud Project Mode** and sign in.
+3. Open the same project.
+4. Confirm the mobile view shows the updated shot data from the desktop edits.
+   *(Mobile fetches the latest Convex snapshot on open.)*
+
+---
+
+### 4. Mobile shot update → desktop reopen
+
+1. In mobile **Cloud Project Mode**, open a project day.
+2. Cycle a shot status to **done**, then another to **skipped**.
+3. Confirm the sync state banner shows "Shot changes saved on device · uploading soon…"
+   then "Uploading to cloud…" then "Backed up to cloud · HH:MM" within ~6 s.
+4. On desktop, close and reopen the same cloud project.
+5. Confirm the shots show the updated status (done / skipped) from mobile.
+6. As a cross-check: verify the shots' `status` and `checked` fields on the Convex snapshot
+   match expectations (`done` → `checked: true`, `skipped` → `checked: false`).
+
+---
+
+### 5. Offline / cloud-unavailable recovery
+
+1. Open a paid cloud project on desktop.
+2. Disconnect the network (DevTools → Network → Offline).
+3. Make edits. Confirm toolbar shows **"Changes not yet saved"** then **"Saved on device · cloud backup unavailable"** or **"Saved on device · cloud backup failed"**.
+4. Reconnect the network.
+5. Make one more small edit. Confirm the cloud sync cycle runs to **"backed up to cloud"**.
+6. Verify data is consistent between the local snapshot and what Convex shows.
+
+---
+
+### 6. Unsaved-changes warnings
+
+1. Open any editable tab and make an edit.
+2. Within ~2.5 s (before local autosave completes), test each exit path:
+   - Refresh the browser tab.
+   - Close the tab.
+   - Click the browser back button.
+   - Click the Account or Admin toolbar button.
+3. Confirm the browser's native warning dialog appears; cancel keeps you on the page.
+4. Wait for the toolbar to show a locally-saved state (dot goes gray, time appears).
+5. Repeat each exit path — the warning should **not** appear once local save is done.
+6. For cloud projects, confirm that while status is **"uploading soon"** or **"Uploading to cloud…"**,
+   the exit warning does **not** fire (local data is already safe).

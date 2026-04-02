@@ -201,14 +201,15 @@ npm run build
 
 ---
 
-## Save/sync behavior (public beta hardening)
+## Save/sync behavior
 
-- Editing remains **local-first** across web/desktop/mobile surfaces.
-- Free/local users stay local-only.
-- Paid cloud users now use a clearer local+cloud state model with debounced cloud snapshot sync.
-- Toolbar messaging differentiates local save vs cloud sync progress/failure states.
-- Unsaved-change guardrails now cover refresh/close/back/in-app route exits while local persistence is genuinely pending.
-- Detailed implementation + QA checklist: `docs/save-sync-architecture.md`.
+- Editing is **local-first** on all surfaces (web, desktop, mobile).
+- **Free / local users** stay local-only — no cloud writes, ever.
+- **Paid cloud users** edit a local working copy first; cloud snapshot sync is layered on top via a debounced queue (8 s on desktop/web, 6 s on mobile).
+- Shot edits on mobile are persisted to localStorage immediately (safe offline), then uploaded to the same Convex project snapshot that desktop reads.
+- Toolbar shows a status dot that transitions through: not yet saved → saved on device → uploading (dot pulses) → backed up to cloud / backup failed.
+- Unsaved-change exit guards fire only while local persistence is genuinely pending; they do not block when cloud sync is merely queued.
+- Full implementation detail + manual QA checklist: `docs/save-sync-architecture.md`.
 
 ## Mobile companion modes (April 2026 update)
 
@@ -242,10 +243,9 @@ ShotScribe mobile now supports **two explicit workflows**:
 
 ### Sync model
 
-- Local mode: file-based + offline-friendly by default.
-- Cloud mode: writes to cloud snapshots and receives latest cloud snapshot state for continuity between mobile and web.
-
-### Mobile build boundary note
-
-- The `mobile/` app should not import runtime modules from root `src/` (desktop/web app store layer).
-- Mobile should use `shared/` contracts/utilities or mobile-local utilities to avoid desktop dependency leaks into mobile CI builds.
+- **Local mode:** file-based, fully offline. Shot edits written to localStorage immediately.
+- **Cloud mode:** shot edits written to localStorage first (safe), then debounced cloud snapshot
+  write fires ~6 s after the last change. The same Convex snapshot that desktop opens is updated,
+  so status changes made on mobile appear on desktop when the project is next opened.
+  A sync state banner ("uploading…" / "backed up to cloud · HH:MM" / "cloud backup failed") is
+  shown in the app header during cloud mode.
