@@ -1,6 +1,10 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 
+function normalizeEmail(email: string | undefined | null) {
+  return typeof email === 'string' ? email.trim().toLowerCase() : ''
+}
+
 async function requireIdentity(ctx: any) {
   const identity = await ctx.auth.getUserIdentity()
   if (!identity) {
@@ -14,6 +18,53 @@ async function getProfileByUserId(ctx: any, userId: any) {
     .query('accountProfiles')
     .withIndex('by_user_id', (q: any) => q.eq('userId', userId))
     .unique()
+}
+
+export async function resolveCanonicalCurrentUser(ctx: any) {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) return null
+
+  const tokenUsers = await ctx.db
+    .query('users')
+    .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', identity.tokenIdentifier))
+    .collect()
+
+  const normalizedEmail = normalizeEmail(identity.email)
+  const emailUsers = normalizedEmail
+    ? await ctx.db
+      .query('users')
+      .withIndex('by_email', (q: any) => q.eq('email', normalizedEmail))
+      .collect()
+    : []
+
+  const candidatesById = new Map<string, any>()
+  for (const user of [...tokenUsers, ...emailUsers]) {
+    candidatesById.set(String(user._id), user)
+  }
+
+  const candidates = [...candidatesById.values()]
+  if (!candidates.length) return null
+
+  const withProfiles = await Promise.all(candidates.map(async (user) => ({
+    user,
+    profile: await getProfileByUserId(ctx, user._id),
+  })))
+
+  withProfiles.sort((a, b) => {
+    const score = (entry: any) => {
+      let points = 0
+      if (entry.user.tokenIdentifier === identity.tokenIdentifier) points += 100
+      if (normalizedEmail && entry.user.email === normalizedEmail) points += 40
+      if (entry.profile) points += 20
+      if (entry.profile?.isAdmin) points += 5
+      return points
+    }
+    const scoreDiff = score(b) - score(a)
+    if (scoreDiff !== 0) return scoreDiff
+    return (b.user.updatedAt || 0) - (a.user.updatedAt || 0)
+  })
+
+  return withProfiles[0]
 }
 
 async function ensureAccountProfile(ctx: any, args: { userId: any, name?: string, now: number }) {
@@ -169,24 +220,12 @@ export const upsertCurrentUser = mutation({
 export const currentUser = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return null
-
-    const user = await ctx.db
-      .query('users')
-      .withIndex('by_token_identifier', (q) => q.eq('tokenIdentifier', identity.tokenIdentifier))
-      .unique()
-
-    if (!user) return null
-
-    const accountProfile = await ctx.db
-      .query('accountProfiles')
-      .withIndex('by_user_id', (q) => q.eq('userId', user._id))
-      .unique()
+    const resolved = await resolveCanonicalCurrentUser(ctx)
+    if (!resolved) return null
 
     return {
-      user,
-      accountProfile,
+      user: resolved.user,
+      accountProfile: resolved.profile,
     }
   },
 })
