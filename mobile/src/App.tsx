@@ -189,6 +189,7 @@ export function App() {
   const [busy, setBusy] = useState(false)
   const [importSuccess, setImportSuccess] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<string | null>(null)
 
   const hasCloudProviders = Boolean(
     mobileRuntime.cloudEnabled && mobileRuntime.clerkPublishableKey && mobileRuntime.convexUrl,
@@ -252,7 +253,6 @@ export function App() {
     const nextLibrary = removeProject(library, projectId)
     setLibrary(nextLibrary)
     saveLibrary(nextLibrary)
-
     const fallback = resolveLastOpened(nextLibrary, session)
     if (!fallback) {
       const nextSession: StoredSession = { version: 1, lastOpened: null }
@@ -278,6 +278,9 @@ export function App() {
   }
 
   const activeProject = route.name === 'project' && route.mode === 'local' ? library.projects[route.projectId] : null
+  const activeDay = activeProject && route.name === 'project' ? activeProject.days[route.dayId] : null
+
+  const activeProject = route.name === 'project' ? sourceLibrary?.projects[route.projectId] : null
   const activeDay = activeProject && route.name === 'project' ? activeProject.days[route.dayId] : null
 
   return (

@@ -65,6 +65,11 @@ import AcceptInvitePage from './features/sharing/AcceptInvitePage'
 import useCloudAccessPolicy from './features/billing/useCloudAccessPolicy'
 import { runtimeConfig } from './config/runtimeConfig'
 import CloudSyncCoordinator from './components/CloudSyncCoordinator'
+import {
+  confirmDiscardUnsavedChanges,
+  getBeforeUnloadWarningMessage,
+  hasBlockingUnsavedChanges,
+} from './utils/unsavedChangesGuard'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -407,8 +412,7 @@ export default function App() {
   // Electron does not automatically return input focus, reproducing the
   // first-click-doesn't-work bug on every launch where autosave data exists).
   const [restorePrompt, setRestorePrompt] = useState(null) // { data, timeStr, totalShots }
-  // When set, overrides activeTab in the export modal (e.g. explicit pick from toolbar dropdown).
-  const [forcedExportTab, setForcedExportTab] = useState(null)
+  const [exportHubEntryTab, setExportHubEntryTab] = useState(null)
   const [showStoryboardOutline, setShowStoryboardOutline] = useState(storyboardViewState.showOutline ?? true)
   const [storyboardConfigOpen, setStoryboardConfigOpen] = useState(false)
   const [castCrewConfigOpen, setCastCrewConfigOpen] = useState(false)
@@ -421,6 +425,7 @@ export default function App() {
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
   const [activeStoryboardShotId, setActiveStoryboardShotId] = useState(null)
   const [pathname, setPathname] = useState(() => window.location.pathname)
+  const pathnameRef = useRef(window.location.pathname)
   const storyboardScrollRef = useRef(null)
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
@@ -536,14 +541,21 @@ export default function App() {
     const persistNow = () => {
       flushBrowserPersistence()
     }
+    const handleBeforeUnload = (event) => {
+      persistNow()
+      if (!hasBlockingUnsavedChanges(useStore.getState())) return
+      event.preventDefault()
+      event.returnValue = getBeforeUnloadWarningMessage()
+      return getBeforeUnloadWarningMessage()
+    }
     const handleVisibility = () => {
       if (document.visibilityState === 'hidden') persistNow()
     }
-    window.addEventListener('beforeunload', persistNow)
+    window.addEventListener('beforeunload', handleBeforeUnload)
     window.addEventListener('pagehide', persistNow)
     document.addEventListener('visibilitychange', handleVisibility)
     return () => {
-      window.removeEventListener('beforeunload', persistNow)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('pagehide', persistNow)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
@@ -578,10 +590,27 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
-    const onPopstate = () => setPathname(window.location.pathname)
+    const onPopstate = () => {
+      const nextPath = window.location.pathname
+      if (
+        pathnameRef.current !== nextPath
+        && hasBlockingUnsavedChanges(useStore.getState())
+        && !confirmDiscardUnsavedChanges()
+      ) {
+        window.history.pushState({}, '', pathnameRef.current)
+        setPathname(pathnameRef.current)
+        return
+      }
+      pathnameRef.current = nextPath
+      setPathname(nextPath)
+    }
     window.addEventListener('popstate', onPopstate)
     return () => window.removeEventListener('popstate', onPopstate)
   }, [])
+
+  useEffect(() => {
+    pathnameRef.current = pathname
+  }, [pathname])
 
   // Compute page offset for each scene (for global page numbering)
   const scenePageOffsets = []
@@ -895,12 +924,8 @@ export default function App() {
     >
       {/* Toolbar */}
       <Toolbar
-        onExportPDF={(tab) => {
-          setForcedExportTab(tab ?? null)
-          setExportModalOpen(true)
-        }}
-        onExportPNG={() => {
-          setForcedExportTab(null)
+        onOpenExportHub={(tab) => {
+          setExportHubEntryTab(tab ?? null)
           setExportModalOpen(true)
         }}
         cloudExportBlocked={cloudAccessPolicy.isCloudProject && !cloudAccessPolicy.canExportCloudProject}
@@ -1173,6 +1198,10 @@ export default function App() {
           <CallsheetTab
             key={`callsheet-${documentSession}`}
             configureOpen={callsheetConfigOpen}
+            onOpenExportHub={(tab) => {
+              setExportHubEntryTab(tab ?? 'callsheet')
+              setExportModalOpen(true)
+            }}
           />
         </div>
       ) : activeTab === 'castcrew' ? (
@@ -1283,10 +1312,10 @@ export default function App() {
 
       <ExportModal
         isOpen={exportModalOpen}
-        onClose={() => { setExportModalOpen(false); setForcedExportTab(null) }}
+        onClose={() => { setExportModalOpen(false); setExportHubEntryTab(null) }}
         pageRefs={pageRefs}
         shotlistRef={shotlistRef}
-        activeTab={forcedExportTab ?? activeTab}
+        activeTab={exportHubEntryTab ?? activeTab}
         projectName={projectName}
       />
 
