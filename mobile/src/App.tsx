@@ -90,17 +90,17 @@ function CloudModePane({
     }
   }, [latestSnapshot, projectId])
 
-  const activeProject = route.name === 'project' && route.mode === 'cloud' ? cloudProjectLibrary?.projects[route.projectId] : null
-  const activeDay = activeProject && route.name === 'project' ? activeProject.days[route.dayId] : null
+  const cloudActiveProject = route.name === 'project' && route.mode === 'cloud' ? cloudProjectLibrary?.projects[route.projectId] : null
+  const cloudActiveDay = cloudActiveProject && route.name === 'project' ? cloudActiveProject.days[route.dayId] : null
 
   useEffect(() => {
     if (route.name !== 'project' || route.mode !== 'cloud') return
-    if (!activeProject) return
-    if (activeProject.days[route.dayId]) return
-    const fallbackDay = getPreferredDayId(activeProject)
+    if (!cloudActiveProject) return
+    if (cloudActiveProject.days[route.dayId]) return
+    const fallbackDay = getPreferredDayId(cloudActiveProject)
     if (!fallbackDay) return
-    onNavigateProject(activeProject.projectId, fallbackDay, route.tab)
-  }, [activeProject, onNavigateProject, route])
+    onNavigateProject(cloudActiveProject.projectId, fallbackDay, route.tab)
+  }, [cloudActiveProject, onNavigateProject, route])
 
   async function persistCloudEdits(projectRef: StoredProjectEntry, dayId: string, shotId: string, patch: Partial<Omit<ShotFieldEdit, 'updatedAt'>>) {
     if (!latestSnapshot?.payload || !route || route.name !== 'project') return
@@ -135,7 +135,7 @@ function CloudModePane({
       </SignedOut>
 
       <SignedIn>
-        {route.name !== 'project' || route.mode !== 'cloud' || !activeProject || !activeDay ? (
+        {route.name !== 'project' || route.mode !== 'cloud' || !cloudActiveProject || !cloudActiveDay ? (
           <article className="project-card">
             <h3>Cloud projects</h3>
             {cloudProjects === undefined ? <p className="hint-text">Loading cloud projects…</p> : null}
@@ -156,23 +156,23 @@ function CloudModePane({
           <ProjectHubScreen
             mode="cloud"
             projects={Object.values(cloudProjectLibrary?.projects ?? {})}
-            project={activeProject}
-            day={activeDay}
+            project={localActiveProject}
+            day={localActiveDay}
             selectedTab={route.tab}
             shotEdits={library.shotEdits}
-            onSelectTab={(tab) => onNavigateProject(activeProject.projectId, activeDay.dayId, tab)}
-            onSelectDay={(dayId) => onNavigateProject(activeProject.projectId, dayId, route.tab)}
+            onSelectTab={(tab) => onNavigateProject(cloudActiveProject.projectId, cloudActiveDay.dayId, tab)}
+            onSelectDay={(dayId) => onNavigateProject(cloudActiveProject.projectId, dayId, route.tab)}
             onSelectProject={onSelectCloudProject}
             onDeleteProject={() => {}}
             onImport={() => {}}
             onCycleShotStatus={(shotId) => {
-              const key = `${activeProject.projectId}::${activeDay.dayId}::${shotId}`
+              const key = `${localActiveProject.projectId}::${localActiveDay.dayId}::${shotId}`
               const current = library.shotEdits[key]?.status ?? 'todo'
               const nextStatus: ShotStatus = current === 'done' ? 'skipped' : current === 'skipped' ? 'todo' : 'done'
-              void persistCloudEdits(activeProject, activeDay.dayId, shotId, { status: nextStatus })
+              void persistCloudEdits(cloudActiveProject, cloudActiveDay.dayId, shotId, { status: nextStatus })
             }}
             onUpdateShotFields={(shotId, patch) => {
-              void persistCloudEdits(activeProject, activeDay.dayId, shotId, patch)
+              void persistCloudEdits(cloudActiveProject, cloudActiveDay.dayId, shotId, patch)
             }}
           />
         )}
@@ -277,11 +277,8 @@ export function App() {
     )
   }
 
-  const activeProject = route.name === 'project' && route.mode === 'local' ? library.projects[route.projectId] : null
-  const activeDay = activeProject && route.name === 'project' ? activeProject.days[route.dayId] : null
-
-  const activeProject = route.name === 'project' ? sourceLibrary?.projects[route.projectId] : null
-  const activeDay = activeProject && route.name === 'project' ? activeProject.days[route.dayId] : null
+  const localActiveProject = route.name === 'project' && route.mode === 'local' ? library.projects[route.projectId] : null
+  const localActiveDay = localActiveProject && route.name === 'project' ? localActiveProject.days[route.dayId] : null
 
   return (
     <section className="screen">
@@ -310,18 +307,18 @@ export function App() {
       </article>
 
       {mode === 'local' ? (
-        route.name === 'empty' || !activeProject || !activeDay ? (
+        route.name === 'empty' || !localActiveProject || !localActiveDay ? (
           <EmptyLibraryScreen onImport={() => setRoute({ name: 'import', returnTo: null })} />
         ) : (
           <ProjectHubScreen
             mode="local"
             projects={projects}
-            project={activeProject}
-            day={activeDay}
+            project={localActiveProject}
+            day={localActiveDay}
             selectedTab={route.tab}
             shotEdits={library.shotEdits}
-            onSelectTab={(tab) => goToProject('local', activeProject.projectId, activeDay.dayId, tab)}
-            onSelectDay={(dayId) => goToProject('local', activeProject.projectId, dayId, route.tab)}
+            onSelectTab={(tab) => goToProject('local', localActiveProject.projectId, localActiveDay.dayId, tab)}
+            onSelectDay={(dayId) => goToProject('local', localActiveProject.projectId, dayId, route.tab)}
             onSelectProject={(projectId) => {
               const selected = library.projects[projectId]
               const dayId = selected ? getPreferredDayId(selected) : null
@@ -330,19 +327,19 @@ export function App() {
             onDeleteProject={handleDeleteProject}
             onImport={() => setRoute({ name: 'import', returnTo: null })}
             onCycleShotStatus={(shotId) => {
-              const key = `${activeProject.projectId}::${activeDay.dayId}::${shotId}`
+              const key = `${localActiveProject.projectId}::${localActiveDay.dayId}::${shotId}`
               const current = library.shotEdits[key]?.status ?? 'todo'
               const nextStatus: ShotStatus =
                 current === 'done' ? 'skipped' : current === 'skipped' ? 'todo' : 'done'
-              applyShotEdit(activeProject.projectId, activeDay.dayId, shotId, { status: nextStatus })
+              applyShotEdit(localActiveProject.projectId, localActiveDay.dayId, shotId, { status: nextStatus })
             }}
             onUpdateShotFields={(shotId, patch) => {
-              applyShotEdit(activeProject.projectId, activeDay.dayId, shotId, patch)
+              applyShotEdit(localActiveProject.projectId, localActiveDay.dayId, shotId, patch)
             }}
             onExportCurrentProject={() => {
-              const json = exportProjectAsSnapshot(activeProject, library.shotEdits)
+              const json = exportProjectAsSnapshot(localActiveProject, library.shotEdits)
               downloadJson(
-                `${activeProject.projectName.replace(/\s+/g, '-').toLowerCase()}.mobile-updated.snapshot.json`,
+                `${localActiveProject.projectName.replace(/\s+/g, '-').toLowerCase()}.mobile-updated.snapshot.json`,
                 json,
               )
             }}
