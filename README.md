@@ -186,3 +186,13 @@ npm run build
 - Paid cloud users now use a clearer local+cloud state model with debounced cloud snapshot sync.
 - Toolbar messaging differentiates local save vs cloud sync progress/failure states.
 - Detailed implementation + QA checklist: `docs/save-sync-architecture.md`.
+
+---
+
+## Export workflow (public beta hardening)
+
+- Export UX is consolidated into a single in-app **Export Hub**.
+- Export actions are grouped by document type (storyboards, shotlists, schedules, callsheets, reports).
+- Unsupported export categories are kept visibly disabled rather than exposed as broken paths.
+- Mobile day/snapshot package exports remain available from the same hub.
+- Audit details + manual QA checklist: `docs/export-workflow-unification.md`.
