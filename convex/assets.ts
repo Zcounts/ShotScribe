@@ -1,9 +1,11 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { action, internalQuery, mutation, query } from './_generated/server'
+import { api, internal } from './_generated/api'
 import { assertCanAccessCloudAssets, assertCanEditCloudProject } from './accessPolicy'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
+import { buildStoryboardObjectKey, createPresignedReadUrl, createPresignedUploadUrl } from './storage/s3'
 
 const CLOUD_ASSET_ALLOWED_MIME_TYPES = new Set(['image/webp'])
 const CLOUD_ASSET_ALLOWED_SOURCE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -12,7 +14,7 @@ const CLOUD_ASSET_MAX_NORMALIZED_BYTES = 4 * 1024 * 1024
 const CLOUD_ASSET_NORMALIZED_WIDTH = 640
 const CLOUD_ASSET_NORMALIZED_HEIGHT = 360
 
-export const createAssetUploadUrl = mutation({
+export const getAssetUploadAuthorization = internalQuery({
   args: {
     projectId: v.id('projects'),
   },
@@ -20,20 +22,56 @@ export const createAssetUploadUrl = mutation({
     const currentUserId = await requireCurrentUserId(ctx)
     await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
-    const uploadUrl = await ctx.storage.generateUploadUrl()
-    return { uploadUrl }
+    return { currentUserId }
   },
 })
 
-export const completeAssetUpload = mutation({
+export const createAssetUploadIntent = action({
+  args: {
+    projectId: v.id('projects'),
+    kind: v.union(v.literal('storyboard_image')),
+    mime: v.string(),
+    sourceName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!CLOUD_ASSET_ALLOWED_MIME_TYPES.has(String(args.mime || '').toLowerCase())) {
+      throw new Error('Unsupported cloud asset mime type')
+    }
+
+    await ctx.runQuery(internal.assets.getAssetUploadAuthorization, {
+      projectId: args.projectId,
+    })
+
+    const objectKey = buildStoryboardObjectKey({
+      projectId: String(args.projectId),
+      sourceName: args.sourceName || 'storyboard-image',
+    })
+    const signed = await createPresignedUploadUrl({
+      objectKey,
+      mime: args.mime,
+    })
+
+    return {
+      provider: 's3' as const,
+      uploadUrl: signed.uploadUrl,
+      objectKey: signed.objectKey,
+      bucket: signed.bucket,
+    }
+  },
+})
+
+export const finalizeAssetUpload = mutation({
   args: {
     projectId: v.id('projects'),
     shotId: v.optional(v.string()),
     kind: v.union(v.literal('storyboard_image')),
     mime: v.string(),
     sourceName: v.optional(v.string()),
-    thumbStorageId: v.id('_storage'),
-    fullStorageId: v.id('_storage'),
+    provider: v.union(v.literal('convex_storage'), v.literal('s3')),
+    objectKey: v.optional(v.string()),
+    bucket: v.optional(v.string()),
+    thumbStorageId: v.optional(v.id('_storage')),
+    fullStorageId: v.optional(v.id('_storage')),
     meta: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
@@ -70,11 +108,22 @@ export const completeAssetUpload = mutation({
     }
 
     const now = Date.now()
+    const provider = args.provider || 'convex_storage'
+    if (provider === 's3' && !args.objectKey) {
+      throw new Error('Missing object key for s3 asset')
+    }
+    if (provider === 'convex_storage' && (!args.thumbStorageId || !args.fullStorageId)) {
+      throw new Error('Missing Convex storage ids for convex storage asset')
+    }
+
     const assetId = await ctx.db.insert('projectAssets', {
       projectId: args.projectId,
       uploadedByUserId: currentUserId,
       shotId: args.shotId,
       kind: args.kind,
+      provider,
+      objectKey: args.objectKey,
+      bucket: args.bucket,
       mime: args.mime,
       sourceName: args.sourceName,
       thumbStorageId: args.thumbStorageId,
@@ -84,8 +133,12 @@ export const completeAssetUpload = mutation({
       updatedAt: now,
     })
 
-    const thumbUrl = await ctx.storage.getUrl(args.thumbStorageId)
-    const fullUrl = await ctx.storage.getUrl(args.fullStorageId)
+    const thumbUrl = provider === 's3'
+      ? null
+      : await ctx.storage.getUrl(args.thumbStorageId!)
+    const fullUrl = provider === 's3'
+      ? null
+      : await ctx.storage.getUrl(args.fullStorageId!)
 
     return {
       assetId,
@@ -111,16 +164,62 @@ export const getAssetView = query({
       return null
     }
 
-    const thumbUrl = await ctx.storage.getUrl(asset.thumbStorageId)
-    const fullUrl = await ctx.storage.getUrl(asset.fullStorageId)
+    const provider = asset.provider || 'convex_storage'
+    const thumbUrl = provider === 'convex_storage' && asset.thumbStorageId
+      ? await ctx.storage.getUrl(asset.thumbStorageId)
+      : null
+    const fullUrl = provider === 'convex_storage' && asset.fullStorageId
+      ? await ctx.storage.getUrl(asset.fullStorageId)
+      : null
 
     return {
       assetId: args.assetId,
+      provider,
       thumbUrl,
       fullUrl,
       mime: asset.mime,
       meta: asset.meta || null,
       shotId: asset.shotId || null,
+    }
+  },
+})
+
+export const getAssetSignedView = action({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const asset = await ctx.runQuery(api.assets.getAssetView, args)
+    if (!asset) return null
+    if (asset.provider !== 's3') return asset
+
+    const dbAsset = await ctx.runQuery(internal.assets.getAssetRecordForSignedView, args)
+    if (!dbAsset?.objectKey) return null
+    const signed = await createPresignedReadUrl({ objectKey: dbAsset.objectKey })
+    return {
+      ...asset,
+      thumbUrl: signed.readUrl,
+      fullUrl: signed.readUrl,
+    }
+  },
+})
+
+export const getAssetRecordForSignedView = internalQuery({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
+    const asset = await ctx.db.get(args.assetId)
+    if (!asset || String(asset.projectId) !== String(args.projectId) || asset.deletedAt) {
+      return null
+    }
+    return {
+      objectKey: asset.objectKey || null,
     }
   },
 })
@@ -145,8 +244,11 @@ export const pruneOrphanedAssets = mutation({
     let removedCount = 0
     for (const asset of allAssets) {
       if (asset.deletedAt || keep.has(String(asset._id))) continue
-      await ctx.storage.delete(asset.thumbStorageId)
-      await ctx.storage.delete(asset.fullStorageId)
+      const provider = asset.provider || 'convex_storage'
+      if (provider === 'convex_storage') {
+        if (asset.thumbStorageId) await ctx.storage.delete(asset.thumbStorageId)
+        if (asset.fullStorageId) await ctx.storage.delete(asset.fullStorageId)
+      }
       await ctx.db.patch(asset._id, {
         deletedAt: now,
         updatedAt: now,

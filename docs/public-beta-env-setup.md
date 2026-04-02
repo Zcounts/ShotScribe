@@ -29,6 +29,9 @@ Notes:
 - `STRIPE_WEBHOOK_SECRET`
 - `OPERATIONAL_ADMIN_TOKEN`
 - `INVITE_URL_BASE` or `CONVEX_INVITE_URL_BASE` (optional override for invite links)
+- `S3_REGION` (required for private cloud storyboard assets)
+- `S3_BUCKET` (required for private cloud storyboard assets)
+- `S3_UPLOAD_PREFIX` (optional; defaults to `storyboard`)
 
 ## Stripe requirements
 
