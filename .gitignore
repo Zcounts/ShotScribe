@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-electron/
+dist-siteground/
 .DS_Store
 *.local
 take_screenshot.mjs

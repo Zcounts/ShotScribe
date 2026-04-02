@@ -445,6 +445,8 @@ export default function App() {
   const outlineSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   )
+  const { tier, isDesktopDown } = useResponsiveViewport()
+  const storyboardColumnCount = isDesktopDown ? 1 : columnCount
 
   const totalPages = storyboardScenes.reduce((acc, scene) => {
     const cardsPerPage = CARDS_PER_PAGE[storyboardColumnCount] || 8
@@ -869,8 +871,6 @@ export default function App() {
     },
   }
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
-  const { tier, isDesktopDown } = useResponsiveViewport()
-  const storyboardColumnCount = isDesktopDown ? 1 : columnCount
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
     const target = event.target
