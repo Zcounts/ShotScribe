@@ -134,6 +134,18 @@ export default defineSchema({
     .index('by_project_id', ['projectId'])
     .index('by_project_id_shot_id', ['projectId', 'shotId']),
 
+  shotAssetAssignments: defineTable({
+    projectId: v.id('projects'),
+    shotId: v.string(),
+    assetId: v.id('projectAssets'),
+    assignedByUserId: v.id('users'),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    removedAt: v.optional(v.number()),
+  })
+    .index('by_project_id_shot_id', ['projectId', 'shotId'])
+    .index('by_project_id_asset_id', ['projectId', 'assetId']),
+
   screenplayLocks: defineTable({
     projectId: v.id('projects'),
     sceneId: v.string(),

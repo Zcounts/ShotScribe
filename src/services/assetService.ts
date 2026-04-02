@@ -22,13 +22,11 @@ async function uploadBlobToS3(uploadUrl: string, blob: Blob) {
 
 export async function uploadStoryboardAssetToCloud({
   projectId,
-  shotId,
   processed,
   createAssetUploadIntent,
   finalizeAssetUpload,
 }: {
   projectId: string,
-  shotId: string,
   processed: StoryboardUploadResult,
   createAssetUploadIntent: (args: { projectId: string, kind: 'storyboard_image', mime: string, sourceName?: string }) => Promise<any>,
   finalizeAssetUpload: (args: any) => Promise<any>,
@@ -44,7 +42,6 @@ export async function uploadStoryboardAssetToCloud({
 
   const completed = await finalizeAssetUpload({
     projectId,
-    shotId,
     kind: 'storyboard_image',
     provider: 's3',
     objectKey: uploadIntent.objectKey,
@@ -80,4 +77,22 @@ export function collectCloudAssetIdsFromProjectData(projectData: any) {
     }
   }
   return Array.from(ids)
+}
+
+export function buildShotImageFromLibraryAsset(assetView: any) {
+  if (!assetView?.assetId) return null
+  return {
+    image: assetView?.thumbUrl || null,
+    imageAsset: {
+      version: 1,
+      mime: assetView?.mime || 'image/webp',
+      thumb: assetView?.thumbUrl || null,
+      full: assetView?.fullUrl || null,
+      meta: assetView?.meta || null,
+      cloud: {
+        assetId: String(assetView.assetId),
+        provider: assetView?.provider || 's3',
+      },
+    },
+  }
 }

@@ -8,6 +8,13 @@ Date: 2026-04-01
 - No video uploads.
 - No asset version history.
 - Storage is optimized for working/reference usage, not archival originals.
+- Storyboard shot assignment remains **single-image** per shot.
+
+## Phase 2 audit notes (single-image assumptions kept)
+
+- Shot data still stores `shot.image` and `shot.imageAsset` for rendering and snapshot compatibility.
+- Cloud assignment compatibility field remains `shot.imageAsset.cloud.assetId` so existing save/snapshot prune flow keeps working.
+- Rendering still uses a single resolved image source per shot (signed cloud URL preferred, local fallback unchanged).
 
 ## Paid/cloud access rules
 
@@ -40,11 +47,14 @@ Date: 2026-04-01
 ## Storage/reference behavior
 
 - Convex remains the metadata source of truth (`projectAssets`).
+- Project media library records are stored in `projectAssets` as project-level assets (not per-shot galleries).
+- Shot-to-asset assignment is tracked separately in `shotAssetAssignments` and mirrored in shot payload compatibility fields (`shot.imageAsset.cloud.assetId`) for existing save/snapshot flows.
 - Browser upload flow for cloud projects:
   1. Request upload intent from Convex.
   2. Convex validates auth/access + billing entitlements and returns presigned **private S3 PUT** URL.
   3. Browser uploads normalized image bytes directly to S3.
-  4. Browser finalizes asset metadata in Convex.
+  4. Browser finalizes asset metadata in Convex as a library asset.
+  5. Browser assigns the created asset to the current shot.
 - Browser read flow for cloud projects:
   1. Browser asks Convex for asset view.
   2. Convex validates access and returns short-lived **signed S3 GET** URL for S3-backed assets.
@@ -108,23 +118,34 @@ Set bucket CORS so browser PUT uploads from your app origins succeed.
 
 1. **Upload as paid owner**
    - Confirm owner with active paid entitlement can upload JPG/PNG/WEBP <= 15MB.
-   - Confirm resulting cloud image renders in storyboard shot.
+   - Confirm resulting image appears in the project media library picker.
+   - Confirm resulting cloud image renders in storyboard shot after auto-assign.
    - Confirm stored metadata reports 640x360 normalized dimensions.
 
-2. **View as paid collaborator**
+2. **Choose from library**
+   - Open shot image menu and choose **Choose from Library**.
+   - Select a previously uploaded image.
+   - Confirm no new upload occurs and selected shot image swaps to the chosen library asset.
+
+3. **Remove from shot**
+   - Use **Remove from Shot** in shot image menu.
+   - Confirm shot image clears.
+   - Confirm image remains available in project media library.
+
+4. **View as paid collaborator**
    - Confirm paid collaborator with active membership can open shared project.
    - Confirm collaborator can fetch/render cloud-hosted image assets.
 
-3. **Blocked access as inactive/read-only user**
+5. **Blocked access as inactive/read-only user**
    - Use account with inactive/read-only billing state and project membership.
    - Confirm project data can be viewed.
    - Confirm cloud image fetch is blocked by asset access policy.
 
-4. **Local-only user unaffected**
+6. **Local-only user unaffected**
    - In local-only project mode, confirm existing storyboard image upload/edit behavior still works.
    - Confirm local image workflow does not require cloud entitlement.
 
-5. **Private bucket verification**
+7. **Private bucket verification**
    - Confirm direct unsigned object URL returns access denied.
    - Confirm app-rendered images load through signed URLs only.
 

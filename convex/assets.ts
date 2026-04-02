@@ -205,6 +205,40 @@ export const getAssetSignedView = action({
   },
 })
 
+export const listProjectLibraryAssets = query({
+  args: {
+    projectId: v.id('projects'),
+    kind: v.optional(v.union(v.literal('storyboard_image'))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
+
+    const rows = await ctx.db
+      .query('projectAssets')
+      .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
+      .collect()
+
+    const kind = args.kind || 'storyboard_image'
+    const items = rows
+      .filter((row: any) => !row.deletedAt && row.kind === kind)
+      .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+      .slice(0, Math.max(1, Math.min(Number(args.limit || 80), 200)))
+
+    return items.map((asset: any) => ({
+      assetId: asset._id,
+      kind: asset.kind,
+      provider: asset.provider || 'convex_storage',
+      mime: asset.mime,
+      sourceName: asset.sourceName || null,
+      meta: asset.meta || null,
+      createdAt: asset.createdAt,
+    }))
+  },
+})
+
 export const getAssetRecordForSignedView = internalQuery({
   args: {
     projectId: v.id('projects'),
@@ -221,6 +255,82 @@ export const getAssetRecordForSignedView = internalQuery({
     return {
       objectKey: asset.objectKey || null,
     }
+  },
+})
+
+export const assignShotLibraryAsset = mutation({
+  args: {
+    projectId: v.id('projects'),
+    shotId: v.string(),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
+    await requireCloudWritesEnabled(ctx)
+
+    const asset = await ctx.db.get(args.assetId)
+    if (!asset || asset.deletedAt || String(asset.projectId) !== String(args.projectId)) {
+      throw new Error('Asset not found')
+    }
+
+    const existingRows = await ctx.db
+      .query('shotAssetAssignments')
+      .withIndex('by_project_id_shot_id', (q: any) => q.eq('projectId', args.projectId).eq('shotId', args.shotId))
+      .collect()
+    const existing = existingRows.find((row: any) => !row.removedAt) || null
+
+    const now = Date.now()
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        assetId: args.assetId,
+        assignedByUserId: currentUserId,
+        updatedAt: now,
+        removedAt: undefined,
+      })
+    } else {
+      await ctx.db.insert('shotAssetAssignments', {
+        projectId: args.projectId,
+        shotId: args.shotId,
+        assetId: args.assetId,
+        assignedByUserId: currentUserId,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+
+    return {
+      ok: true,
+      assetId: args.assetId,
+      shotId: args.shotId,
+    }
+  },
+})
+
+export const unassignShotLibraryAsset = mutation({
+  args: {
+    projectId: v.id('projects'),
+    shotId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
+    await requireCloudWritesEnabled(ctx)
+
+    const existingRows = await ctx.db
+      .query('shotAssetAssignments')
+      .withIndex('by_project_id_shot_id', (q: any) => q.eq('projectId', args.projectId).eq('shotId', args.shotId))
+      .collect()
+    const existing = existingRows.find((row: any) => !row.removedAt) || null
+
+    if (!existing) return { ok: true, removed: false }
+    const now = Date.now()
+    await ctx.db.patch(existing._id, {
+      removedAt: now,
+      updatedAt: now,
+      assignedByUserId: currentUserId,
+    })
+    return { ok: true, removed: true }
   },
 })
 
