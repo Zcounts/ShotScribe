@@ -187,3 +187,13 @@ npm run build
 - Toolbar messaging differentiates local save vs cloud sync progress/failure states.
 - Unsaved-change guardrails now cover refresh/close/back/in-app route exits while local persistence is genuinely pending.
 - Detailed implementation + QA checklist: `docs/save-sync-architecture.md`.
+
+---
+
+## Export workflow (public beta hardening)
+
+- Export UX is consolidated into a single in-app **Export Hub**.
+- Export actions are grouped by document type (storyboards, shotlists, schedules, callsheets, reports).
+- Unsupported export categories are kept visibly disabled rather than exposed as broken paths.
+- Mobile day/snapshot package exports remain available from the same hub.
+- Audit details + manual QA checklist: `docs/export-workflow-unification.md`.
