@@ -244,3 +244,8 @@ ShotScribe mobile now supports **two explicit workflows**:
 
 - Local mode: file-based + offline-friendly by default.
 - Cloud mode: writes to cloud snapshots and receives latest cloud snapshot state for continuity between mobile and web.
+
+### Mobile build boundary note
+
+- The `mobile/` app should not import runtime modules from root `src/` (desktop/web app store layer).
+- Mobile should use `shared/` contracts/utilities or mobile-local utilities to avoid desktop dependency leaks into mobile CI builds.

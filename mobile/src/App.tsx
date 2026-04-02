@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SignedIn, SignedOut } from '@clerk/clerk-react'
 import { useMutation, useQuery } from 'convex/react'
-import { createMobileSnapshotFromProject } from '../../src/services/mobile/mobileExportService.js'
+import { createMobileSnapshotFromCloudPayload } from './cloudPayloadToMobileSnapshot'
 import type { MobileTabKey, ShotStatus, StoredLastOpened, StoredLibrary, StoredSession } from './types'
 import { importDayPackagesFromFile } from './importers/mobilePackageImport'
 import {
@@ -66,7 +66,10 @@ export function App() {
   const cloudProjectLibrary = useMemo(() => {
     if (route.name !== 'project' || route.mode !== 'cloud' || !latestSnapshot?.payload) return null
     try {
-      const mobileSnapshot = createMobileSnapshotFromProject(latestSnapshot.payload)
+      const mobileSnapshot = createMobileSnapshotFromCloudPayload(latestSnapshot.payload, {
+        projectId: route.projectId,
+        projectName: typeof latestSnapshot?.projectName === 'string' ? latestSnapshot.projectName : undefined,
+      })
       const importedAt = new Date().toISOString()
       return importDayPackages({ version: 1, projects: {}, shotEdits: {} }, mobileSnapshot.dayPackages, importedAt).library
     } catch {
