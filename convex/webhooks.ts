@@ -30,16 +30,6 @@ function extractSubscriptionData(event: any) {
   const object = event?.data?.object || {}
   const type = String(event?.type || '')
 
-  if (type === 'checkout.session.completed') {
-    return {
-      customerId: object.customer || undefined,
-      subscriptionId: object.subscription || undefined,
-      status: 'active',
-      userId: object.metadata?.userId || object.client_reference_id || undefined,
-      customerEmail: object.customer_details?.email || object.customer_email || undefined,
-    }
-  }
-
   if (!type.startsWith('customer.subscription.')) {
     return null
   }
