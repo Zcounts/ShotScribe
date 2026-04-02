@@ -22,7 +22,21 @@ export function getS3Config() {
 
 function getS3Client() {
   const { region } = getS3Config()
-  return new S3Client({ region })
+  const accessKeyId = requireEnv('AWS_ACCESS_KEY_ID')
+  const secretAccessKey = requireEnv('AWS_SECRET_ACCESS_KEY')
+  console.log(
+    '[s3] S3Client init:',
+    'region=' + region,
+    'accessKeyId.length=' + accessKeyId.length,
+    'secretAccessKey.present=' + (secretAccessKey.length > 0),
+  )
+  return new S3Client({
+    region,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  })
 }
 
 function sanitizeObjectKeyPart(value: string) {
