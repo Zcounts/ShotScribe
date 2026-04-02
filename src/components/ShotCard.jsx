@@ -67,6 +67,10 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [cloudAssetView, setCloudAssetView] = useState(null)
+  const [imagePickerStep, setImagePickerStep] = useState(null)
+  const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
+  const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
   const { isDesktopDown, isPhone } = useResponsiveViewport()
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
@@ -306,7 +310,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
 
   const storyboardImageSrc = cloudAssetBlocked
     ? null
-    : (prefetchedCloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
+    : (prefetchedCloudAssetView?.thumbUrl || cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
 
   return (
     <div
