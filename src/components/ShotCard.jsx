@@ -68,9 +68,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const [imagePickerStep, setImagePickerStep] = useState(null)
-  const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
-  const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
