@@ -49,6 +49,28 @@
     --ss-breakpoint-phone: 600px;
     --ss-breakpoint-tablet: 768px;
     --ss-breakpoint-desktop: 1024px;
+
+    --background: var(--ss-paper);
+    --foreground: var(--ss-ink);
+    --card: var(--ss-paper-elevated);
+    --card-foreground: var(--ss-ink);
+    --popover: var(--ss-paper-elevated);
+    --popover-foreground: var(--ss-ink);
+    --primary: var(--ss-ink);
+    --primary-foreground: var(--ss-paper);
+    --secondary: var(--ss-surface-slate);
+    --secondary-foreground: var(--ss-ink);
+    --muted: var(--ss-surface-slate);
+    --muted-foreground: var(--ss-slate);
+    --accent: var(--ss-surface-blue);
+    --accent-foreground: var(--ss-ink);
+    --destructive: var(--ss-cherry-red);
+    --destructive-foreground: var(--ss-paper);
+    --border: var(--ss-border-subtle);
+    --input: var(--ss-input-border);
+    --ring: var(--ss-royal-blue);
+    --radius: 0.5rem;
+
   }
 
   * {
