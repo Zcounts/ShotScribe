@@ -81,8 +81,8 @@ function openJsonFilePicker() {
 
 /**
  * Single platform abstraction layer used by the renderer.
- * - Electron delegates to preload bridge APIs.
- * - Browser fallbacks keep flows non-crashing for web adaptation.
+ * - Optional desktop bridges delegate via `window.electronAPI` when present.
+ * - Browser fallbacks keep flows non-crashing for web deployments.
  */
 export const platformService = {
   isDesktop: () => !!getElectronApi(),

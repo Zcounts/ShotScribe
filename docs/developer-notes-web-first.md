@@ -22,12 +22,12 @@ Related package builds:
 - Shared package: `cd shared && npm run build`
 - Mobile app: `cd mobile && npm run build`
 
-## Electron status
+## Desktop shell status
 
-Electron remains in `electron/` as a legacy fallback/archive path.
+Electron packaging files were removed from the active repo in the April 2026 cleanup pass after confirming no CI/release workflow invoked desktop builds. Browser-first local file workflows remain the supported path.
 
-- Do not remove Electron packaging files unless a replacement is fully proven.
-- Keep Electron scripts available for historical builds.
+- `platformService` still safely guards optional `window.electronAPI` access at runtime.
+- If desktop packaging is reintroduced later, do so as an explicit, scoped task with dedicated docs and CI wiring.
 - Prioritize web-safe implementations for new changes.
 
 ## Data compatibility
