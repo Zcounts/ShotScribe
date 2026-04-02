@@ -3,6 +3,8 @@ import { useMutation, useQuery } from 'convex/react'
 import { useAuth, useClerk } from '@clerk/clerk-react'
 import { runtimeConfig } from '../../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../../auth/authConfig'
+import useStore from '../../store'
+import { hasBlockingUnsavedChanges, navigateWithUnsavedChangesGuard } from '../../utils/unsavedChangesGuard'
 
 const containerStyle = { flex: 1, overflow: 'auto', background: '#0f141b', color: '#E7ECF3', padding: '24px 20px 40px' }
 const cardStyle = { border: '1px solid #2A313D', borderRadius: 10, background: '#171C24', padding: 16 }
@@ -34,11 +36,12 @@ export default function AdminConsolePage() {
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [feedback, setFeedback] = useState('')
   const [opReason, setOpReason] = useState('')
+  const hasUnsavedChanges = useStore((state) => hasBlockingUnsavedChanges(state))
   const navigateTo = (path) => {
-    if (typeof window === 'undefined') return
-    if (window.location.pathname === path) return
-    window.history.pushState({}, '', path)
-    window.dispatchEvent(new PopStateEvent('popstate'))
+    navigateWithUnsavedChangesGuard({
+      path,
+      hasUnsavedChanges,
+    })
   }
 
   const canUseCloudAuth = runtimeConfig.appMode.cloudEnabled && isCloudAuthConfigured()

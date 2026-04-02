@@ -552,6 +552,7 @@ function persistBrowserProjectState(get, set, {
 }
 
 const CLOUD_SYNC_DEBOUNCE_MS = 8000
+const LOCAL_PERSIST_DEBOUNCE_MS = 2500
 
 function buildSyncState({
   mode = 'local_only',
@@ -3296,13 +3297,54 @@ const useStore = create((set, get) => ({
         if (!platformService.isDesktop()) {
           persistBrowserProjectState(get, set, { data })
         }
+        const persistedAt = new Date().toISOString()
+        set((currentState) => {
+          if (!currentState.hasUnsavedChanges) return {}
+          if (currentState.projectRef?.type !== 'cloud') {
+            return {
+              hasUnsavedChanges: false,
+              lastSaved: persistedAt,
+              saveSyncState: buildSyncState({
+                mode: 'local_only',
+                status: 'saved_locally',
+                message: 'Saved locally on this device',
+                lastSyncedAt: currentState.saveSyncState.lastSyncedAt,
+              }),
+            }
+          }
+          const canCloudSync = Boolean(currentState.cloudSyncContext?.canSync && currentState.cloudSyncContext?.cloudWritesEnabled)
+          if (!canCloudSync) {
+            return {
+              hasUnsavedChanges: false,
+              lastSaved: persistedAt,
+              saveSyncState: buildSyncState({
+                mode: 'cloud_blocked',
+                status: 'saved_locally',
+                message: 'Saved locally · Cloud sync unavailable',
+                pendingReason: reason,
+                lastSyncedAt: currentState.saveSyncState.lastSyncedAt,
+              }),
+            }
+          }
+          return {
+            hasUnsavedChanges: false,
+            lastSaved: persistedAt,
+            saveSyncState: buildSyncState({
+              mode: currentState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+              status: 'saved_locally',
+              message: 'Saved locally · syncing soon',
+              pendingReason: reason,
+              lastSyncedAt: currentState.saveSyncState.lastSyncedAt,
+            }),
+          }
+        })
         devPerfLog('store:autosave-timeout', {
           ms: Math.round((performance.now() - startedAt) * 100) / 100,
         })
       } catch {
         // Silently skip — the user will see an error on the next manual save.
       }
-    }, 60000)
+    }, LOCAL_PERSIST_DEBOUNCE_MS)
     set({ _autoSaveTimeout: timeout })
   },
 
