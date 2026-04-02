@@ -23,7 +23,7 @@ import { devPerfLog } from './utils/devPerf'
 import { platformService } from './services/platformService'
 import { runtimeConfig } from './config/runtimeConfig'
 import { logTelemetry } from './utils/telemetry'
-import { createProjectRepository } from './data/repository'
+import { createCloudProjectAdapter, createProjectRepository } from './data/repository'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -574,7 +574,7 @@ function buildSyncState({
   }
 }
 
-const projectRepository = createProjectRepository()
+let projectRepository = createProjectRepository()
 
 const useStore = create((set, get) => ({
   // Project metadata
@@ -599,6 +599,7 @@ const useStore = create((set, get) => ({
   },
   _cloudSyncTimeout: null,
   _cloudSyncInFlight: false,
+  cloudRepositoryReady: false,
   documentSession: 0,
   appMode: runtimeConfig.appMode,
 
@@ -3079,6 +3080,12 @@ const useStore = create((set, get) => ({
     return { project: cloudProject, snapshot }
   },
 
+  setCloudRepositoryAdapter: ({ runMutation = null, runQuery = null } = {}) => {
+    const cloudRepository = createCloudProjectAdapter({ runMutation, runQuery })
+    projectRepository = createProjectRepository({ cloud: cloudRepository })
+    set({ cloudRepositoryReady: !!cloudRepository })
+  },
+
   openCloudProject: async ({ cloudRepository = projectRepository.cloud, projectId }) => {
     if (!cloudRepository) {
       throw new Error('Cloud repository is not configured')
@@ -3122,6 +3129,32 @@ const useStore = create((set, get) => ({
         },
       }
     })
+  },
+
+  disableCloudBackupForCurrentProject: () => {
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') return { ok: false, reason: 'not_cloud_project' }
+    if (state._cloudSyncTimeout) {
+      clearTimeout(state._cloudSyncTimeout)
+    }
+
+    set({
+      projectRef: {
+        type: 'local',
+        path: platformService.isDesktop() ? state.projectPath : null,
+        browserProjectId: state.browserProjectId || null,
+      },
+      _cloudSyncTimeout: null,
+      _cloudSyncInFlight: false,
+      saveSyncState: buildSyncState({
+        mode: 'local_only',
+        status: state.hasUnsavedChanges ? 'unsaved_changes' : 'saved_locally',
+        message: state.hasUnsavedChanges
+          ? 'Cloud backup off · local changes not yet saved'
+          : 'Cloud backup off · saving locally on this device',
+      }),
+    })
+    return { ok: true }
   },
 
   // ── Auto-save ────────────────────────────────────────────────────────
