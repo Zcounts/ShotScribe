@@ -7,7 +7,6 @@ This monorepo currently contains:
 - Convex backend (`convex/`)
 - mobile companion web app (`mobile/`)
 - shared cross-app contracts/utilities (`shared/`)
-- legacy Electron shell retained for fallback packaging (`electron/`)
 
 ---
 

@@ -1,4 +1,4 @@
-# Platform service layer (web-first with desktop fallback)
+# Platform service layer (web-first with optional desktop bridge)
 
 `src/services/platformService.js` is the single renderer-side platform boundary.
 
@@ -6,13 +6,13 @@
 
 UI/state code should not call `window.electronAPI` directly.
 
-`platformService` centralizes environment differences so browser behavior stays stable while preserving legacy desktop support.
+`platformService` centralizes environment differences so browser behavior stays stable while still tolerating optional desktop bridge APIs when present.
 
 ## Current priority
 
 - Primary target: static browser deployment.
 - Persistence target: local browser storage + import/export files.
-- Desktop path: preserved as fallback/archive behavior.
+- Desktop bridge path: optional compatibility only (`window.electronAPI` if injected).
 
 ## Current capabilities
 
@@ -36,9 +36,9 @@ Browser-safe fallbacks are implemented for key flows:
 - Copy text → `navigator.clipboard.writeText` when available.
 - Autosave/recent project metadata → localStorage.
 
-## Desktop behavior
+## Optional desktop bridge behavior
 
-When `window.electronAPI` is present, methods delegate to preload bridge APIs so legacy desktop behavior remains available.
+When `window.electronAPI` is present, methods delegate to bridge APIs. If absent, browser-safe behavior remains the default.
 
 ## Out of scope for this phase
 

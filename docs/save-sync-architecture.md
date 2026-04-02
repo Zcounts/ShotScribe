@@ -7,7 +7,7 @@
 - Local persistence is the primary write path:
   - Browser mode writes to localStorage via `platformService.saveAutosave` and
     `persistBrowserProjectState`.
-  - Desktop/Electron mode writes `.shotlist` files via the Electron IPC API.
+  - Optional desktop-bridge mode writes `.shotlist` files via `window.electronAPI` when present.
 - Cloud persistence for paid users is layered on top via Convex project snapshots
   (`projectSnapshots:createSnapshot`).
 - Save/sync state is exposed through a `saveSyncState` object in the Zustand store with
@@ -57,7 +57,7 @@
 ### Local-first write path (all users)
 
 1. User edits the in-memory working copy — visible immediately.
-2. `_scheduleAutoSave` debounces 2.5 s then writes to localStorage (or disk on Electron).
+2. `_scheduleAutoSave` debounces 2.5 s then writes to localStorage (or to a desktop bridge when present).
 3. While debounce is pending: status is `unsaved_changes`.
 4. After local write: status moves to `saved_locally`.
 

@@ -20,9 +20,7 @@ export default defineConfig(({ mode }) => {
           index: resolve(__dirname, 'index.html'),
         },
         // pdfreader and its dependencies use Node.js APIs (fs, events, stream).
-        // In Electron's renderer process these are available at runtime via
-        // Node integration, so we mark them as external to keep the browser
-        // bundle clean.
+        // We keep these external to avoid bundling server-only modules into the web client.
         external: ['pdfreader', 'pdf2json', 'events', 'fs', 'stream', 'util', 'path', 'buffer'],
       },
     },
@@ -32,10 +30,9 @@ export default defineConfig(({ mode }) => {
       },
     },
     optimizeDeps: {
-      // Limit dependency crawling to the desktop entrypoint.
-      // Without this, Vite scans /mobile/index.html too, which imports the
-      // local @shotscribe/shared package and can crash desktop dev startup
-      // before Electron loads the renderer.
+      // Limit dependency crawling to the main web entrypoint.
+      // Without this, Vite also scans /mobile/index.html, which can pull in
+      // mobile-only dependency graphs during web dev startup.
       entries: ['index.html', 'src/main.jsx'],
       exclude: ['pdfreader'],
     },

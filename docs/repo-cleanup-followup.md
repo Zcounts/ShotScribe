@@ -1,130 +1,127 @@
-# Repo Cleanup Follow-up (Conservative Pass)
+# Repo Cleanup Follow-up (Execution Pass)
 
 _Date: 2026-04-02_
 
 ## Executive summary
 
-This pass was intentionally conservative and stability-first. I performed a repository-wide audit focused on clearly safe housekeeping only, with strict protection on previously flagged questionable items (`reference_image`, `shotscribe-home.html`, `site/index.html`, `src/authLandingMain.jsx`, `electron/`, electron scripts, and overlapping beta/migration/runbook docs).
+This pass executed the cleanup task list from the prior audit with evidence-based delete/archive decisions.
 
-Result:
-- No speculative deletions were made.
-- No architecture/routing/auth/billing/mobile/deployment files were modified.
-- The two previously identified placeholder `tmp.txt` files are already absent.
-- Validation builds for both standard and SiteGround targets pass after dependency install.
+High-level outcomes:
+- Removed dead alternate landing entrypoints and their unused React mount/components.
+- Removed active Electron packaging scripts/config/dependencies and archived related historical context in docs.
+- Archived legacy static artifacts and migration-phase docs out of active paths.
+- Added one canonical support checklist doc to fix existing runbook link gaps.
+- Kept runtime behavior focused on the current browser/SiteGround flow.
 
-## Audit scope and method
+## Usage tracing performed before changes
 
-Commands used for tracing and verification:
+Commands and checks used:
 
-- `rg --files -g 'AGENTS.md'`
-- `rg --files | head -n 200`
-- `rg --files | rg 'tmp|\.tmp|~$|\.bak$|\.old$|reference_image|shotscribe-home\.html|site/index\.html|authLandingMain\.jsx|electron/'`
-- `test -e 'landing/tmp.txt' && echo ...`
-- `test -e 'assets/script icons/tmp.txt' && echo ...`
-- `rg -n "authLandingMain|shotscribe-home|site/index|reference_image|electron|preload\.cjs|main\.cjs" ...`
-- `sed -n` checks on `src/authLandingMain.jsx`, `site/index.html`, and `shotscribe-home.html`
+- `rg -n "shotscribe-home|site/index|authLandingMain|reference_image|electron|build:desktop|electron:|dist-electron" ...`
+- `rg --files .github/workflows` and review of each workflow for build/deploy usage.
+- `sed -n` review of:
+  - `vite.config.js`
+  - `index.html`
+  - `site/index.html`
+  - `src/authLandingMain.jsx`
+  - `src/auth/AuthLanding.jsx`
+  - `package.json`
+- `rg -n "AuthLanding" src`
+- `rg -n "docs/migration/" README.md docs src .github`
+- `python` binary signature check for `reference_image` (confirmed PNG blob in repo root).
 
-## What was safely removed
+## What was deleted
 
-No files were removed in this pass.
+### Removed dead code/paths
 
-Reason: all reviewed items were either already gone, clearly used, or not provably safe to remove under the zero-risk criteria.
+1. `site/index.html`
+   - Not part of Vite build input (`vite.config.js` only builds `index.html`).
+   - Not referenced by CI workflows or deploy packaging.
+   - No active route/entrypoint integration.
 
-## What was intentionally left alone
+2. `src/authLandingMain.jsx`
+   - Only referenced by deleted `site/index.html`.
 
-### Protected items (explicitly retained)
+3. `src/auth/AuthLanding.jsx`
+   - Only referenced by deleted `src/authLandingMain.jsx`.
 
-1. `reference_image`
-   - Binary PNG-like artifact with no clear guaranteed-unused proof.
-   - No deletion made due possible manual design/reference use.
+4. Electron runtime files:
+   - `electron/main.cjs`
+   - `electron/preload.cjs`
 
-2. `shotscribe-home.html`
-   - Explicitly referenced in migration planning docs as part of static landing considerations.
-   - Retained as potentially relevant to fallback/static hosting workflows.
+### Removed active script/config surface for unused desktop packaging
 
-3. `site/index.html`
-   - Directly loads `/src/authLandingMain.jsx` and appears to be a static/auth landing entrypoint.
-   - Retained.
+`package.json` cleanup:
+- Removed `main: "electron/main.cjs"`.
+- Removed scripts:
+  - `electron:dev`
+  - `build:desktop`
+  - `electron:build`
+  - `electron:build:win`
+  - `electron:build:mac`
+- Removed Electron-only build config block (`build` for electron-builder).
+- Removed desktop-packaging dev dependencies:
+  - `electron`
+  - `electron-builder`
+  - `concurrently`
+  - `cross-env`
+  - `wait-on`
 
-4. `src/authLandingMain.jsx`
-   - Entry module used by `site/index.html`.
-   - Retained.
+## What was archived/moved
 
-5. `electron/` and Electron scripts
-   - Root `package.json` uses `electron/main.cjs` as `main` and includes multiple electron build/dev scripts.
-   - Electron files are included in desktop build config.
-   - README and developer notes describe Electron as legacy fallback packaging.
-   - Retained.
+1. Root mystery asset:
+- `reference_image` -> `docs/archive/assets/reference-image.png`
 
-6. Overlapping docs (`docs/public-beta-*`, `docs/migration/*`, launch/readiness docs)
-   - Retained because overlap alone is insufficient proof of obsolescence.
-   - These likely serve runbook/history/incident readiness purposes.
+2. Legacy static landing HTML:
+- `shotscribe-home.html` -> `docs/archive/legacy-static/shotscribe-home.html`
 
-## Questionable/manual-review items
+3. Migration docs moved out of active docs root:
+- `docs/migration/*.md` -> `docs/archive/migration/*.md`
 
-No protected item met the “strong evidence safe-to-delete” bar in this pass.
+4. Added archive index:
+- `docs/archive/README.md`
 
-Manual-review candidates for a future explicit pass (no changes made now):
-- `reference_image`: determine ownership and intended operational/design usage.
-- Overlapping beta/migration/runbook docs: map canonical runbooks vs archival references and add explicit status tags.
-- `shotscribe-home.html` vs `site/index.html`: verify current production routing/deployment usage and fallback expectations.
+## Docs consolidation changes
 
-## Unused code/assets/docs found but not removed
+1. Added canonical support runbook:
+- `docs/public-beta-support-checklist.md`
 
-- No additional files were confidently proven unused across imports + scripts + workflow/build/deployment references.
-- The previously identified placeholders:
-  - `landing/tmp.txt`
-  - `assets/script icons/tmp.txt`
-  are already missing, so no action required.
+2. Updated docs mentioning removed active Electron packaging:
+- `docs/developer-notes-web-first.md`
+- `docs/save-sync-architecture.md`
+- `docs/platform-service-layer.md`
 
-## README/doc touch-ups
+3. Updated `README.md` to remove stale claim that active repo includes Electron shell packaging.
 
-One minimal README edit was made:
-- Added a pointer in the stabilization guardrails section to this follow-up cleanup report (`docs/repo-cleanup-followup.md`).
+## What was intentionally kept
 
-Rationale:
-- This creates a single discoverable handoff note for conservative cleanup outcomes without changing product or operational behavior.
-- No broader README rewrite was performed.
+1. `src/services/platformService.js`
+   - Kept optional `window.electronAPI` detection/fallback guard logic to avoid runtime breakage if a desktop bridge is injected externally.
+   - Browser-first flows remain unchanged.
+
+2. Archived migration docs (not deleted)
+   - Retained for historical traceability while removing them from active operational doc paths.
+
+## Evidence summary for key decisions
+
+- `site/index.html` + `src/authLandingMain.jsx` + `src/auth/AuthLanding.jsx` formed an isolated chain with no active build/deploy references.
+- Electron packaging had references only in root `package.json` and historical docs; no CI workflow invoked Electron builds.
+- Root `reference_image` had no code/workflow references and was an unnamed binary PNG; archived with explicit name/location.
+- `shotscribe-home.html` was not part of active build/deploy inputs and was referenced as historical in migration docs; archived.
 
 ## Validation
 
-Executed:
+Executed after cleanup:
 
 1. `npm install`
-   - Completed successfully.
-
 2. `npm run build`
-   - Initial attempt failed before install due unresolved dependency (`sonner`) in local environment state.
-   - Re-ran after install; build passed.
-
 3. `npm run build:web`
-   - Passed.
 
-Notes:
-- Vite emitted chunk-size warnings only (non-failing informational output).
-- npm printed an environment warning about unknown `http-proxy` config.
+Results:
+- All three commands passed.
+- Vite emitted non-fatal chunk-size warnings.
 
-## Risks and rationale for each non-removal
+## Remaining unresolved items (genuine)
 
-- **Routing/entrypoint risk**: `site/index.html` + `src/authLandingMain.jsx` may be active static auth landing path; removal could break auth entry flow.
-- **Deployment/fallback risk**: `shotscribe-home.html` may be used in manual/static hosting workflows and migration runbooks.
-- **Desktop packaging risk**: removing `electron/` or electron scripts conflicts with current package config and fallback packaging path.
-- **Operational history risk**: migration/checklist/runbook docs may be required for incident response and rollout rollback support.
-- **Reference artifact risk**: `reference_image` may be intentionally kept as design or ops reference despite no code import.
-
-## Recommended next cleanup pass (separate task)
-
-1. **Doc canonization pass (non-destructive)**
-   - Build a doc index with status labels: `canonical`, `supporting`, `archived`.
-   - Add cross-links and “use this first” headers.
-   - Avoid deletion until owners approve.
-
-2. **Static entrypoint provenance check**
-   - Confirm exactly which static files are deployed to SiteGround and which are legacy/fallback.
-   - Record authoritative deploy map in one runbook.
-
-3. **Reference asset inventory**
-   - Track unimported top-level artifacts (e.g., `reference_image`) with owner + purpose metadata.
-
-4. **Optional lint-style dead-code sweep**
-   - Run a dedicated unused import/symbol analysis pass with explicit allowlist for dynamic and runtime-injected paths.
+- None blocking for this pass.
+- If desktop packaging is required again, it should return as an explicit feature with dedicated scripts/workflow/docs rather than passive legacy residue.
