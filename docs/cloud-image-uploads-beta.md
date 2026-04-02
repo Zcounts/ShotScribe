@@ -135,6 +135,34 @@ Date: 2026-04-01
 - Recurring Convex cron (`convex/crons.ts`) runs hourly and calls reconciliation action to retry due deletions.
 - Reconciliation catches missed scheduler runs and transient failures by reprocessing due `soft_deleted` assets.
 
+## Media library read performance optimization (Phase 5)
+
+### What changed
+
+- Storyboard shot rendering now uses a batched signed-view read path:
+  - `assets:getAssetSignedViewsBatch` accepts a set of asset IDs for a grid/page,
+  - returns signed/private URLs for those assets in one server roundtrip.
+- `ShotGrid` now prefetches signed views once per visible shot set and passes them to each `ShotCard`.
+- `ShotCard` no longer performs a per-shot signed-view fetch on mount/update.
+
+### Why this is more efficient
+
+- Reduces per-shot/per-image query fan-out for large storyboards.
+- Keeps signed/private delivery semantics unchanged.
+- Maintains simple browser loading:
+  - Convex returns URL references,
+  - browser only fetches image bytes for images actually rendered by `<img>`.
+
+### QA for large project libraries
+
+1. Open a storyboard scene with many shots that have cloud image assignments.
+2. Verify image rendering remains correct and no auth regressions occur.
+3. Compare network behavior before/after:
+   - fewer Convex function calls for signed view resolution,
+   - no per-shot signed-view waterfall.
+4. Scroll and paginate storyboard pages; verify newly visible shots resolve correctly.
+5. Confirm signed URL behavior still works after refresh and does not expose public bucket URLs.
+
 ## Convex environment variables required for private S3
 
 - `S3_REGION` (example: `us-east-1`)

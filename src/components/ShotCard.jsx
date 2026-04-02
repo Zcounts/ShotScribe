@@ -37,7 +37,7 @@ function sanitizeNumericInput(value) {
   return `${integerPart}${decimalPart}`
 }
 
-function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig }) {
+function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig, prefetchedCloudAssetView = null }) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
   const projectRef = useStore(s => s.projectRef)
@@ -50,7 +50,6 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const undoSoftDeleteLibraryAsset = useMutation('assets:undoSoftDeleteLibraryAsset')
   const cloudAccessPolicy = useCloudAccessPolicy()
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const [cloudAssetView, setCloudAssetView] = useState(null)
   const libraryAssets = useQuery(
     'assets:listProjectLibraryAssets',
     (projectRef?.type === 'cloud' && !cloudAssetBlocked)
@@ -68,7 +67,9 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const { isDesktopDown, isPhone } = useResponsiveViewport()
+  const [imagePickerStep, setImagePickerStep] = useState(null)
+  const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
+  const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
@@ -307,7 +308,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
 
   const storyboardImageSrc = cloudAssetBlocked
     ? null
-    : (cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
+    : (prefetchedCloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
 
   return (
     <div

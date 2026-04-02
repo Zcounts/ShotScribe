@@ -296,6 +296,82 @@ export const getAssetRecordForSignedView = internalQuery({
   },
 })
 
+export const getAssetReadAuthorization = internalQuery({
+  args: {
+    projectId: v.id('projects'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
+    return { ok: true }
+  },
+})
+
+export const getAssetSignedViewsBatch = action({
+  args: {
+    projectId: v.id('projects'),
+    assetIds: v.array(v.id('projectAssets')),
+  },
+  handler: async (ctx, args) => {
+    await ctx.runQuery(internal.assets.getAssetReadAuthorization, {
+      projectId: args.projectId,
+    })
+
+    const requested = new Set(args.assetIds.map((id: any) => String(id)))
+    if (requested.size === 0) return {}
+
+    const rows = await ctx.runQuery(internal.assets.getProjectAssetRowsForBatchRead, {
+      projectId: args.projectId,
+    })
+    const matched = rows.filter((row: any) => requested.has(String(row.assetId)))
+
+    const results: Record<string, any> = {}
+    for (const row of matched) {
+      if (row.provider === 's3' && row.objectKey) {
+        const signed = await createPresignedReadUrl({ objectKey: row.objectKey })
+        results[String(row.assetId)] = {
+          assetId: row.assetId,
+          provider: row.provider,
+          thumbUrl: signed.readUrl,
+          fullUrl: signed.readUrl,
+          mime: row.mime,
+          meta: row.meta || null,
+        }
+      } else {
+        const legacy = await ctx.runQuery(api.assets.getAssetView, {
+          projectId: args.projectId,
+          assetId: row.assetId,
+        })
+        if (legacy) results[String(row.assetId)] = legacy
+      }
+    }
+
+    return results
+  },
+})
+
+export const getProjectAssetRowsForBatchRead = internalQuery({
+  args: {
+    projectId: v.id('projects'),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query('projectAssets')
+      .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
+      .collect()
+    return rows
+      .filter((row: any) => !row.deletedAt)
+      .map((row: any) => ({
+        assetId: row._id,
+        provider: row.provider || 'convex_storage',
+        objectKey: row.objectKey || null,
+        mime: row.mime,
+        meta: row.meta || null,
+      }))
+  },
+})
+
 export const assignShotLibraryAsset = mutation({
   args: {
     projectId: v.id('projects'),
