@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, query } from './_generated/server'
-import { api, internal } from './_generated/api'
+import { internal } from './_generated/api'
 import { getPrimaryStripePriceId, getStripeBillingConfig, getStripeSecretKey } from './stripeConfig'
 import { resolveCanonicalCurrentUser } from './users'
 import {
@@ -291,7 +291,7 @@ export const createCheckoutSession = action({
     const { priceId } = getStripeBillingConfig()
     if (!priceId) throw new Error('Missing STRIPE_PRICE_ID')
 
-    const user = await ctx.runQuery(api.billing.getUserForBillingToken, {
+    const user = await ctx.runQuery(internal.billing.getUserForBillingToken, {
       tokenIdentifier: identity.tokenIdentifier,
     })
     if (!user) throw new Error('User not found')
@@ -330,7 +330,7 @@ export const createPortalSession = action({
     const { portalAvailable } = getStripeBillingConfig()
     if (!portalAvailable) throw new Error('Stripe portal is not configured')
 
-    const user = await ctx.runQuery(api.billing.getUserForBillingToken, {
+    const user = await ctx.runQuery(internal.billing.getUserForBillingToken, {
       tokenIdentifier: identity.tokenIdentifier,
     })
     if (!user) throw new Error('User not found')
@@ -353,7 +353,7 @@ export const syncMyBillingState = action({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
 
-    const user = await ctx.runQuery(api.billing.getUserForBillingToken, {
+    const user = await ctx.runQuery(internal.billing.getUserForBillingToken, {
       tokenIdentifier: identity.tokenIdentifier,
     })
     if (!user) throw new Error('User not found')
