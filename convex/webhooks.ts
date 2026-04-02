@@ -29,6 +29,11 @@ async function computeHmacSha256(secret: string, payload: string) {
 function extractSubscriptionData(event: any) {
   const object = event?.data?.object || {}
   const type = String(event?.type || '')
+  // Keep Stripe webhook destination subscribed to:
+  // - checkout.session.completed
+  // - customer.subscription.created
+  // - customer.subscription.updated
+  // - customer.subscription.deleted
 
   if (type === 'checkout.session.completed') {
     return {

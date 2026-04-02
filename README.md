@@ -74,6 +74,7 @@ Implemented now:
 
 Operational reality:
 - billing behavior depends on correct Convex + Stripe env configuration
+- Convex `action` billing flows must read/write via `ctx.runQuery`/`ctx.runMutation` (internal functions), not direct `ctx.db` access
 - Stripe dashboard remains source of truth for promo/coupon operations
 - this repo intentionally keeps billing logic conservative and ops-friendly
 
