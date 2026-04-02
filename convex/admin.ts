@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { hasPaidCloudAccess, isGrandfatheredOrComped } from '../shared/src/policies/accessPolicy'
+import { resolveCanonicalCurrentUser } from './users'
 
 function normalizeEmail(email: string | undefined | null) {
   return String(email || '').trim().toLowerCase()
@@ -26,11 +27,10 @@ async function requireIdentity(ctx: any) {
 }
 
 async function getCurrentUser(ctx: any) {
-  const identity = await requireIdentity(ctx)
-  return ctx.db
-    .query('users')
-    .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', identity.tokenIdentifier))
-    .unique()
+  await requireIdentity(ctx)
+  const resolved = await resolveCanonicalCurrentUser(ctx)
+  if (!resolved) return null
+  return resolved.user
 }
 
 async function getProfileByUserId(ctx: any, userId: any) {

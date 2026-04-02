@@ -38,6 +38,12 @@ export default function AccountPage() {
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false)
   const [isPortalLoading, setIsPortalLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
+  const navigateTo = (path) => {
+    if (typeof window === 'undefined') return
+    if (window.location.pathname === path) return
+    window.history.pushState({}, '', path)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
 
   const canUseCloudAuth = runtimeConfig.appMode.cloudEnabled && isCloudAuthConfigured()
   const profileName = user?.fullName || cloudUser?.user?.name || cloudUser?.user?.email || 'Member'
@@ -50,8 +56,8 @@ export default function AccountPage() {
 
   const planName = entitlement?.canUseCloudFeatures ? 'ShotScribe Pro' : 'ShotScribe Free'
   const renewalLabel = entitlement?.cancelAtPeriodEnd
-    ? `Cancels at period end (${formatDate(entitlement.currentPeriodEnd)})`
-    : `Renews on ${formatDate(entitlement.currentPeriodEnd)}`
+    ? `Cancels at period end (${formatDate(entitlement?.currentPeriodEnd)})`
+    : `Renews on ${formatDate(entitlement?.currentPeriodEnd)}`
 
   const openCheckout = async () => {
     setBillingError('')
@@ -101,7 +107,7 @@ export default function AccountPage() {
       <div style={{ maxWidth: 860, margin: '0 auto', display: 'grid', gap: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <h2 style={{ margin: 0 }}>Account & Billing</h2>
-          <button type="button" style={buttonStyle} onClick={() => window.location.assign('/')}>Back to app</button>
+          <button type="button" style={buttonStyle} onClick={() => navigateTo('/')}>Back to app</button>
         </div>
         <div style={{ ...cardStyle, display: 'grid', gap: 10 }}><div style={labelStyle}>Status summary</div><div>{summarizeState(entitlement)}</div></div>
         <div style={{ ...cardStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
