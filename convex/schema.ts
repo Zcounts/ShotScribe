@@ -119,10 +119,13 @@ export default defineSchema({
     uploadedByUserId: v.id('users'),
     shotId: v.optional(v.string()),
     kind: v.union(v.literal('storyboard_image')),
+    provider: v.optional(v.union(v.literal('convex_storage'), v.literal('s3'))),
+    bucket: v.optional(v.string()),
+    objectKey: v.optional(v.string()),
     mime: v.string(),
     sourceName: v.optional(v.string()),
-    thumbStorageId: v.id('_storage'),
-    fullStorageId: v.id('_storage'),
+    thumbStorageId: v.optional(v.id('_storage')),
+    fullStorageId: v.optional(v.id('_storage')),
     meta: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -130,6 +133,18 @@ export default defineSchema({
   })
     .index('by_project_id', ['projectId'])
     .index('by_project_id_shot_id', ['projectId', 'shotId']),
+
+  shotAssetAssignments: defineTable({
+    projectId: v.id('projects'),
+    shotId: v.string(),
+    assetId: v.id('projectAssets'),
+    assignedByUserId: v.id('users'),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    removedAt: v.optional(v.number()),
+  })
+    .index('by_project_id_shot_id', ['projectId', 'shotId'])
+    .index('by_project_id_asset_id', ['projectId', 'assetId']),
 
   screenplayLocks: defineTable({
     projectId: v.id('projects'),
