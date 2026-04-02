@@ -119,17 +119,41 @@ export default defineSchema({
     uploadedByUserId: v.id('users'),
     shotId: v.optional(v.string()),
     kind: v.union(v.literal('storyboard_image')),
+    provider: v.optional(v.union(v.literal('convex_storage'), v.literal('s3'))),
+    bucket: v.optional(v.string()),
+    objectKey: v.optional(v.string()),
     mime: v.string(),
     sourceName: v.optional(v.string()),
-    thumbStorageId: v.id('_storage'),
-    fullStorageId: v.id('_storage'),
+    thumbStorageId: v.optional(v.id('_storage')),
+    fullStorageId: v.optional(v.id('_storage')),
     meta: v.optional(v.any()),
+    deleteStatus: v.optional(v.union(
+      v.literal('active'),
+      v.literal('soft_deleted'),
+      v.literal('blocked_referenced'),
+      v.literal('hard_deleted'),
+      v.literal('delete_failed'),
+    )),
+    hardDeleteAfter: v.optional(v.number()),
+    deleteError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
   })
     .index('by_project_id', ['projectId'])
     .index('by_project_id_shot_id', ['projectId', 'shotId']),
+
+  shotAssetAssignments: defineTable({
+    projectId: v.id('projects'),
+    shotId: v.string(),
+    assetId: v.id('projectAssets'),
+    assignedByUserId: v.id('users'),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    removedAt: v.optional(v.number()),
+  })
+    .index('by_project_id_shot_id', ['projectId', 'shotId'])
+    .index('by_project_id_asset_id', ['projectId', 'assetId']),
 
   screenplayLocks: defineTable({
     projectId: v.id('projects'),

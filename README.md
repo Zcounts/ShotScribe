@@ -134,6 +134,8 @@ Convex env (production as needed):
 - `STRIPE_WEBHOOK_SECRET`
 - `OPERATIONAL_ADMIN_TOKEN`
 - optional invite URL base (`INVITE_URL_BASE` or `CONVEX_INVITE_URL_BASE`)
+- `S3_REGION` + `S3_BUCKET` (required for private storyboard cloud image upload/read signing)
+- optional `S3_UPLOAD_PREFIX` (defaults to `storyboard`)
 
 ---
 
