@@ -271,6 +271,8 @@ export function App() {
       setRoute({ name: 'empty' })
       return
     }
+    goToProject(fallback.mode, fallback.projectId, fallback.dayId, fallback.tab)
+  }
 
   async function flushCloudSave() {
     if (route.name !== 'project' || route.mode !== 'cloud' || !latestSnapshot?.payload) return
