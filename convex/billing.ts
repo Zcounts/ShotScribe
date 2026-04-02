@@ -448,6 +448,14 @@ export const syncStripeSubscription = internalMutation({
       }
     }
 
+    if (!resolvedUserId && args.customerId) {
+      const billingCustomer = await ctx.db
+        .query('billingCustomers')
+        .withIndex('by_stripe_customer_id', (q: any) => q.eq('stripeCustomerId', args.customerId))
+        .unique()
+      resolvedUserId = billingCustomer?.userId
+    }
+
     const status = normalizeSubscriptionStatus(args.status || 'incomplete')
 
     if (resolvedUserId && args.customerId) {
