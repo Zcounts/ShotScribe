@@ -95,6 +95,7 @@ Reference docs:
 - `docs/public-beta-env-setup.md`
 - `docs/billing-stripe-runbook.md`
 - `docs/admin-role-runbook.md`
+- `docs/shadcn-migration-foundation.md` (web-only phased shadcn/ui migration baseline)
 
 ---
 

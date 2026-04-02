@@ -3,6 +3,31 @@ import { User } from 'lucide-react'
 import useStore from '../store'
 import SaveSyncStatusControl from './SaveSyncStatusControl'
 import { navigateWithUnsavedChangesGuard } from '../utils/unsavedChangesGuard'
+import { notifyError, notifyInfo, notifyLocalOnlySyncHint, notifySuccess, notifyWarning } from '../lib/toast'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from './ui/context-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog'
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from './ui/command'
+import { Alert, AlertDescription } from './ui/alert'
 
 export default function Toolbar({
   onOpenExportHub,
@@ -37,15 +62,15 @@ export default function Toolbar({
   const [editingName, setEditingName] = useState(false)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const [emojiInput, setEmojiInput] = useState('')
-  const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
   const [unsavedDialog, setUnsavedDialog] = useState(null) // { action: fn }
   const [saveActionBusy, setSaveActionBusy] = useState(false)
-  const exportMenuRef = useRef(null)
+  const [commandOpen, setCommandOpen] = useState(false)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
   const emojiPickerRef = useRef(null)
+  const hasShownLocalOnlyHintRef = useRef(false)
 
   // Extract just the filename from the full path for display
   const fileName = projectPath ? projectPath.split(/[\\/]/).pop() : null
@@ -57,17 +82,6 @@ export default function Toolbar({
   const canDisableCloudBackup = isCloudProject
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
 
-
-  useEffect(() => {
-    if (!exportMenuOpen) return
-    const handler = (e) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
-        setExportMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [exportMenuOpen])
 
   // Close Save menu when clicking outside it
   useEffect(() => {
@@ -104,6 +118,32 @@ export default function Toolbar({
     return () => document.removeEventListener('mousedown', handler)
   }, [emojiPickerOpen])
 
+  useEffect(() => {
+    const shouldShowLocalOnlyHint = !isCloudProject
+      && cloudAccessPolicy?.paidCloudAccess
+      && signedInForCloud
+      && saveSyncState?.status !== 'cloud_sync_failed'
+
+    if (!shouldShowLocalOnlyHint) {
+      hasShownLocalOnlyHintRef.current = false
+      return
+    }
+    if (hasShownLocalOnlyHintRef.current) return
+    hasShownLocalOnlyHintRef.current = true
+    notifyLocalOnlySyncHint()
+  }, [isCloudProject, cloudAccessPolicy?.paidCloudAccess, signedInForCloud, saveSyncState?.status])
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setCommandOpen((prev) => !prev)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   // Guard that shows unsaved-changes dialog before running an action
   const guardUnsaved = (action) => {
     if (hasUnsavedChanges) {
@@ -116,11 +156,10 @@ export default function Toolbar({
   const emojiChoices = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
   const openExportHub = () => {
     if (cloudExportBlocked) {
-      alert(cloudExportBlockedMessage || 'Cloud project export is unavailable while billing is inactive. Local-only projects can still be exported.')
+      notifyWarning(cloudExportBlockedMessage || 'Cloud project export is unavailable while billing is inactive. Local-only projects can still be exported.')
       return
     }
     onOpenExportHub?.(activeTab)
-    setExportMenuOpen(false)
   }
 
   const handleEnableCloudBackup = async () => {
@@ -134,8 +173,9 @@ export default function Toolbar({
         },
       })
       setSaveMenuOpen(false)
+      notifySuccess('Cloud backup is now enabled for this project.')
     } catch (error) {
-      alert(error?.message || 'Could not enable cloud backup for this project.')
+      notifyError(error?.message || 'Could not enable cloud backup for this project.')
     } finally {
       setSaveActionBusy(false)
     }
@@ -147,7 +187,11 @@ export default function Toolbar({
     try {
       const result = await flushCloudSync({ reason: 'manual' })
       if (result?.ok === false) {
-        alert(result.error || 'Cloud backup failed.')
+        notifyError(result.error || 'Cloud backup failed.')
+      } else if (result?.ok) {
+        notifySuccess('Cloud backup completed.')
+      } else if (result?.skipped) {
+        notifyInfo('Cloud backup skipped. No upload was needed yet.')
       }
       setSaveMenuOpen(false)
     } finally {
@@ -159,6 +203,7 @@ export default function Toolbar({
     if (!canDisableCloudBackup || saveActionBusy) return
     disableCloudBackupForCurrentProject()
     setSaveMenuOpen(false)
+    notifyInfo('Cloud backup turned off. This project is now local-only on this device.')
   }
 
   const navigateTo = (path) => {
@@ -170,7 +215,8 @@ export default function Toolbar({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+    <TooltipProvider delayDuration={180}>
+      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       <div className="toolbar">
       {/* Left: Project name */}
       <div className="toolbar-section toolbar-section-left flex items-center gap-3 flex-1 min-w-0">
@@ -284,25 +330,39 @@ export default function Toolbar({
             autoFocus
           />
         ) : (
-          <button
-            onClick={() => setEditingName(true)}
-            style={{
-              fontSize: 13,
-              fontFamily: 'Sora, sans-serif',
-              fontWeight: 800,
-              color: '#FAF8F4',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              letterSpacing: '0.01em',
-              transition: 'color 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = '#EDE9E1' }}
-            onMouseLeave={e => { e.currentTarget.style.color = '#FAF8F4' }}
-          >
-            {projectName}
-          </button>
+          <ContextMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ContextMenuTrigger asChild>
+                  <button
+                    onClick={() => setEditingName(true)}
+                    style={{
+                      fontSize: 13,
+                      fontFamily: 'Sora, sans-serif',
+                      fontWeight: 800,
+                      color: '#FAF8F4',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: 0,
+                      letterSpacing: '0.01em',
+                      transition: 'color 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#EDE9E1' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#FAF8F4' }}
+                  >
+                    {projectName}
+                  </button>
+                </ContextMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Click to rename · Right-click for quick actions</TooltipContent>
+            </Tooltip>
+            <ContextMenuContent>
+              <ContextMenuItem onSelect={() => setEditingName(true)}>Rename project</ContextMenuItem>
+              <ContextMenuItem onSelect={() => saveProject()}>Save locally now</ContextMenuItem>
+              <ContextMenuItem onSelect={() => guardUnsaved(openProject)}>Open project…</ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         )}
 
         {/* Shot / scene count */}
@@ -318,13 +378,36 @@ export default function Toolbar({
         )}
 
         {/* Save / Sync status */}
-        <SaveSyncStatusControl
-          cloudAccessPolicy={cloudAccessPolicy}
-          onEnableCloudBackup={handleEnableCloudBackup}
-          onSaveToCloudNow={handleSaveToCloudNow}
-          onWorkLocalOnly={handleWorkLocalOnly}
-          actionBusy={saveActionBusy}
-        />
+        <HoverCard openDelay={280} closeDelay={140}>
+          <HoverCardTrigger asChild>
+            <div>
+              <SaveSyncStatusControl
+                cloudAccessPolicy={cloudAccessPolicy}
+                onEnableCloudBackup={handleEnableCloudBackup}
+                onSaveToCloudNow={handleSaveToCloudNow}
+                onWorkLocalOnly={handleWorkLocalOnly}
+                actionBusy={saveActionBusy}
+              />
+            </div>
+          </HoverCardTrigger>
+          <HoverCardContent>
+            Save/Sync status stays visible in the pill. Short-lived guidance now appears as toast notifications.
+          </HoverCardContent>
+        </HoverCard>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              style={{ border: '1px solid rgba(74,85,104,0.35)', borderRadius: 999, width: 20, height: 20, fontSize: 11, background: 'rgba(255,255,255,0.04)', color: '#cbd5e1', cursor: 'pointer' }}
+              aria-label="Save and sync quick help"
+            >
+              ?
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80">
+            Local save remains the source of truth. Enable cloud backup from <strong>Save</strong> when you want sync across devices.
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Center: File operations */}
@@ -580,15 +663,18 @@ export default function Toolbar({
           )}
         </div>
       </div>
-      {!isCloudProject && cloudAccessPolicy?.paidCloudAccess && signedInForCloud && saveSyncState?.status !== 'cloud_sync_failed' ? (
-        <div style={{ color: '#93c5fd', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
-          This project is local-only right now. Turn on cloud backup from Save when you want syncing.
-        </div>
-      ) : null}
-
       {/* Right: Export + Account */}
       <div className="toolbar-section toolbar-section-right flex items-center gap-2">
-        <div ref={exportMenuRef} style={{ position: 'relative', display: 'flex' }}>
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => setCommandOpen(true)}
+          title="Quick actions (Ctrl/Cmd+K)"
+          style={{ fontSize: 11, paddingInline: 8 }}
+        >
+          Quick
+        </button>
+        <div style={{ position: 'relative', display: 'flex' }}>
           <button
             className="toolbar-btn"
             onClick={openExportHub}
@@ -604,61 +690,26 @@ export default function Toolbar({
           >
             EXPORT
           </button>
-          <button
-            className="toolbar-btn"
-            onClick={() => {
-              if (cloudExportBlocked) {
-                alert(cloudExportBlockedMessage || 'Cloud project export is unavailable while billing is inactive. Local-only projects can still be exported.')
-                return
-              }
-              setExportMenuOpen(o => !o)
-            }}
-            title={cloudExportBlocked ? (cloudExportBlockedMessage || 'Cloud exports are blocked while billing is inactive') : 'Choose export type'}
-            disabled={cloudExportBlocked}
-            style={{
-              borderRadius: '0 4px 4px 0',
-              borderLeft: '1px solid rgba(255,255,255,0.15)',
-              padding: '4px 6px',
-              fontSize: 9,
-            }}
-          >
-            ▾
-          </button>
-
-          {exportMenuOpen && (
-            <div style={{
-              position: 'absolute',
-              top: 'calc(100% + 4px)',
-              right: 0,
-              zIndex: 500,
-              background: '#2a2a2a',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 4,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-              minWidth: 180,
-              overflow: 'hidden',
-            }}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild disabled={cloudExportBlocked}>
               <button
-                onClick={openExportHub}
+                className="toolbar-btn"
+                title={cloudExportBlocked ? (cloudExportBlockedMessage || 'Cloud exports are blocked while billing is inactive') : 'Choose export type'}
+                disabled={cloudExportBlocked}
                 style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 14px',
-                  textAlign: 'left',
-                  background: 'none',
-                  border: 'none',
-                  color: '#e0e0e0',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
+                  borderRadius: '0 4px 4px 0',
+                  borderLeft: '1px solid rgba(255,255,255,0.15)',
+                  padding: '4px 6px',
+                  fontSize: 9,
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
-                Open Export Hub
+                ▾
               </button>
-            </div>
-          )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={openExportHub}>Open Export Hub</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <button
           type="button"
@@ -671,88 +722,72 @@ export default function Toolbar({
           <User size={14} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
+      </div>
       {cloudExportBlocked && (
-        <div style={{ color: '#fbbf24', fontSize: 11, marginTop: 6, textAlign: 'right' }}>
-          Cloud project export is disabled while billing is inactive. Local-only export still works.
-        </div>
+        <Alert variant="warning" className="mt-1 py-1.5 text-right">
+          <AlertDescription>Cloud project export is disabled while billing is inactive. Local-only export still works.</AlertDescription>
+        </Alert>
       )}
 
-      {unsavedDialog && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.55)',
-            zIndex: 9000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          onClick={() => setUnsavedDialog(null)}
-        >
-          <div
-            style={{
-              background: '#1e1e1e',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 8,
-              padding: '24px 28px',
-              maxWidth: 360,
-              width: '100%',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <p style={{ fontSize: 14, fontWeight: 600, color: '#e0e0e0', margin: '0 0 6px', fontFamily: 'inherit' }}>
-              Unsaved Changes
-            </p>
-            <p style={{ fontSize: 12, color: '#aaa', margin: '0 0 20px', fontFamily: 'inherit', lineHeight: 1.5 }}>
+      <AlertDialog open={!!unsavedDialog} onOpenChange={(nextOpen) => { if (!nextOpen) setUnsavedDialog(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            <AlertDialogDescription>
               You have unsaved changes. Do you want to save before continuing?
-            </p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setUnsavedDialog(null)}
-                style={{
-                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
-                  background: 'none', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 4, color: '#aaa', cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const action = unsavedDialog.action
-                  setUnsavedDialog(null)
-                  action()
-                }}
-                style={{
-                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
-                  background: 'none', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 4, color: '#f87171', cursor: 'pointer',
-                }}
-              >
-                Discard Changes
-              </button>
-              <button
-                onClick={async () => {
-                  const action = unsavedDialog.action
-                  setUnsavedDialog(null)
-                  await saveProject()
-                  action()
-                }}
-                style={{
-                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
-                  background: '#E84040', border: 'none',
-                  borderRadius: 4, color: '#fff', cursor: 'pointer', fontWeight: 600,
-                }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-    </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel
+              className="text-[#f87171]"
+              onClick={() => {
+                const action = unsavedDialog?.action
+                setUnsavedDialog(null)
+                action?.()
+              }}
+            >
+              Discard Changes
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                const action = unsavedDialog?.action
+                setUnsavedDialog(null)
+                await saveProject()
+                action?.()
+              }}
+            >
+              Save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+        <CommandInput placeholder="Search actions…" />
+        <CommandList>
+          <CommandEmpty>No matching actions.</CommandEmpty>
+          <CommandGroup heading="Project">
+            <CommandItem onSelect={() => { setCommandOpen(false); guardUnsaved(newProject) }}>New project</CommandItem>
+            <CommandItem onSelect={() => { setCommandOpen(false); guardUnsaved(openProject) }}>Open project</CommandItem>
+            <CommandItem onSelect={() => { setCommandOpen(false); saveProject() }}>Save local project</CommandItem>
+          </CommandGroup>
+          <CommandGroup heading="Cloud / Export">
+            <CommandItem onSelect={() => { setCommandOpen(false); openExportHub() }}>Open export hub</CommandItem>
+            {isCloudProject ? (
+              <CommandItem onSelect={() => { setCommandOpen(false); handleSaveToCloudNow() }}>Save to cloud now</CommandItem>
+            ) : (
+              <CommandItem onSelect={() => { setCommandOpen(false); handleEnableCloudBackup() }}>Turn on cloud backup</CommandItem>
+            )}
+          </CommandGroup>
+          <CommandGroup heading="Navigation">
+            <CommandItem onSelect={() => { setCommandOpen(false); navigateTo(currentPath === '/account' ? '/' : '/account') }}>
+              {currentPath === '/account' ? 'Go to app' : 'Go to account'}
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
+      </div>
+    </TooltipProvider>
   )
 }
