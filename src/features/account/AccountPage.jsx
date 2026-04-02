@@ -56,8 +56,8 @@ export default function AccountPage() {
 
   const planName = entitlement?.canUseCloudFeatures ? 'ShotScribe Pro' : 'ShotScribe Free'
   const renewalLabel = entitlement?.cancelAtPeriodEnd
-    ? `Cancels at period end (${formatDate(entitlement.currentPeriodEnd)})`
-    : `Renews on ${formatDate(entitlement.currentPeriodEnd)}`
+    ? `Cancels at period end (${formatDate(entitlement?.currentPeriodEnd)})`
+    : `Renews on ${formatDate(entitlement?.currentPeriodEnd)}`
 
   const openCheckout = async () => {
     setBillingError('')

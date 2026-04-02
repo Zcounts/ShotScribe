@@ -53,8 +53,11 @@ export async function resolveCanonicalCurrentUser(ctx: any) {
   withProfiles.sort((a, b) => {
     const score = (entry: any) => {
       let points = 0
-      if (entry.user.tokenIdentifier === identity.tokenIdentifier) points += 100
-      if (normalizedEmail && entry.user.email === normalizedEmail) points += 40
+      const tokenMatch = entry.user.tokenIdentifier === identity.tokenIdentifier
+      const emailMatch = normalizedEmail && entry.user.email === normalizedEmail
+      if (emailMatch) points += 120
+      if (tokenMatch) points += 80
+      if (emailMatch && tokenMatch) points += 60
       if (entry.profile) points += 20
       if (entry.profile?.isAdmin) points += 5
       return points
