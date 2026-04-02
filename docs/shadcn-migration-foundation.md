@@ -96,3 +96,29 @@ Still deferred for later passes:
 - Full replacement of date inputs in Callsheet and scheduling flows (needs focused UX/validation pass).
 - Broad replacement of all legacy selects/checkboxes across large workflow surfaces (Shotlist/Schedule/Script/Callsheet main tables).
 - Wider adoption of Drawer/Combobox/Slider/Switch beyond foundation-level introduction in this phase.
+
+## Phase 3 implementation update (2026-04-02)
+
+Shared presentation foundations added:
+
+- Added `avatar`, `segmented-control`, `chart`, `carousel`, and `sidebar-panel` shared components in `src/components/ui/`.
+- Added presentation dependencies for chart/carousel support (`recharts`, `embla-carousel-react`) and avatar primitive (`@radix-ui/react-avatar`).
+
+Selective low-risk adoption completed:
+
+- Added avatars to account identity and cloud-collaboration member rows.
+- Adopted shared card wrapper for account status summary while preserving existing card styling.
+- Adopted segmented control for admin cloud-write ON/OFF operational toggle.
+- Added a lightweight admin overview chart (bar chart) for existing totals to validate chart foundation in a real view.
+- Introduced a safe sidebar wrapper (`SidebarPanel`) and applied it to `ConfigureSidebarShell` only.
+
+Sidebar decision (main app shell):
+
+- **Main storyboard/navigation sidebars remain custom for now.**
+- Reason: they are tightly coupled to production workflows, keyboard behavior, drag/drop surfaces, and responsive constraints.
+- Phase 3 only introduces a compatible wrapper for secondary/config sidebars, so future migration can proceed panel-by-panel without destabilizing the main shell.
+
+Deferred intentionally:
+
+- Broad adoption of carousel (no strong production-use case yet beyond foundation).
+- Replacing primary storyboard shell sidebars with shadcn sidebar patterns.

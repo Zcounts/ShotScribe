@@ -4,6 +4,7 @@ import useStore from '../store'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Avatar, AvatarFallback } from './ui/avatar'
 
 function formatTimestamp(iso) {
   if (!iso) return 'Not recorded yet'
@@ -26,6 +27,13 @@ function getStatusTheme(status, isCloudProject) {
     return { toneLabel: 'Backed up', pillBg: 'rgba(21,128,61,0.28)', border: 'rgba(74,222,128,0.52)', text: '#86EFAC', dot: '#86EFAC' }
   }
   return { toneLabel: 'Cloud backup ready', pillBg: 'rgba(22,101,52,0.24)', border: 'rgba(134,239,172,0.4)', text: '#D1FAE5', dot: '#A7F3D0' }
+}
+
+function memberInitials(member) {
+  const source = member?.name || member?.email || member?.userId || ''
+  const parts = String(source).trim().split(/\s+/).slice(0, 2)
+  const initials = parts.map(part => part[0]?.toUpperCase() || '').join('')
+  return initials || 'U'
 }
 
 export default function SaveSyncStatusControl({
@@ -270,9 +278,14 @@ export default function SaveSyncStatusControl({
               <div style={{ display: 'grid', gap: 6, maxHeight: 150, overflowY: 'auto' }}>
                 {members.map((member) => (
                   <div key={member.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                    <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <Avatar className="h-6 w-6 border-[rgba(148,163,184,0.35)]">
+                        <AvatarFallback className="text-[9px]">{memberInitials(member)}</AvatarFallback>
+                      </Avatar>
+                      <div>
                       <div>{member.name || member.email || member.userId}</div>
                       <div style={{ color: '#94A3B8' }}>{member.role}</div>
+                      </div>
                     </div>
                     {canManageMembers && member.role !== 'owner' ? (
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

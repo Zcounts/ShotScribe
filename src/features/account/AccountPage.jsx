@@ -5,6 +5,8 @@ import { runtimeConfig } from '../../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../../auth/authConfig'
 import useStore from '../../store'
 import { hasBlockingUnsavedChanges, navigateWithUnsavedChangesGuard } from '../../utils/unsavedChangesGuard'
+import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar'
+import { Card, CardContent } from '../../components/ui/card'
 
 const containerStyle = { flex: 1, overflow: 'auto', background: '#111318', color: '#E7ECF3', padding: '24px 20px 32px' }
 const cardStyle = { border: '1px solid #2A313D', borderRadius: 10, background: '#171C24', padding: 16 }
@@ -28,6 +30,13 @@ function summarizeState(entitlement) {
   if (entitlement.canUseCloudFeatures) return 'Paid account: cloud access is active.'
   if (!entitlement.subscriptionStatus) return 'Free/local-only account: use local workflows now, or upgrade for cloud projects and collaboration.'
   return 'Read-only cloud access: billing is inactive. You can view, but cloud writes stay blocked until billing is restored.'
+}
+
+function initialsForName(name = '') {
+  const compact = String(name).trim()
+  if (!compact) return 'SS'
+  const parts = compact.split(/\s+/).slice(0, 2)
+  return parts.map((part) => part[0]?.toUpperCase() || '').join('') || 'SS'
 }
 
 export default function AccountPage() {
@@ -143,10 +152,25 @@ export default function AccountPage() {
           <h2 style={{ margin: 0 }}>Account & Billing</h2>
           <button type="button" style={buttonStyle} onClick={() => navigateTo('/')}>Back to app</button>
         </div>
-        <div style={{ ...cardStyle, display: 'grid', gap: 10 }}><div style={labelStyle}>Status summary</div><div>{summarizeState(entitlement)}</div></div>
+        <Card style={{ ...cardStyle, display: 'grid', gap: 10 }}>
+          <CardContent style={{ padding: 0 }}>
+            <div style={labelStyle}>Status summary</div>
+            <div>{summarizeState(entitlement)}</div>
+          </CardContent>
+        </Card>
         {billingNotice ? <div style={{ ...cardStyle, borderColor: '#314158', color: '#CFE2FF' }}>{billingNotice}</div> : null}
         {isSyncingBilling ? <div style={{ ...cardStyle, borderColor: '#314158', color: '#CFE2FF' }}>Syncing latest Stripe status…</div> : null}
         <div style={{ ...cardStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={user?.imageUrl || ''} alt={profileName} />
+              <AvatarFallback>{initialsForName(profileName)}</AvatarFallback>
+            </Avatar>
+            <div>
+              <div style={labelStyle}>Member</div>
+              <div style={valueStyle}>{profileName}</div>
+            </div>
+          </div>
           <div><div style={labelStyle}>Profile</div><div style={valueStyle}>{profileName}</div></div>
           <div><div style={labelStyle}>Email</div><div style={valueStyle}>{accountEmail}</div></div>
           <div><div style={labelStyle}>Plan</div><div style={valueStyle}>{planName}</div></div>

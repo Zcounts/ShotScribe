@@ -1,4 +1,5 @@
 import React from 'react'
+import { SidebarPanel } from './ui/sidebar-panel'
 
 export default function ConfigureSidebarShell({
   open,
@@ -10,11 +11,9 @@ export default function ConfigureSidebarShell({
   children,
 }) {
   return (
-    <aside
-      role="dialog"
-      aria-label={ariaLabel}
-      aria-hidden={!open}
-      className={`configure-sidebar ${open ? 'is-open' : ''}`}
+    <SidebarPanel
+      ariaLabel={ariaLabel}
+      open={open}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
@@ -39,6 +38,6 @@ export default function ConfigureSidebarShell({
       <div className="configure-sidebar-content">
         {children}
       </div>
-    </aside>
+    </SidebarPanel>
   )
 }
