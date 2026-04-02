@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, query } from './_generated/server'
 import { api } from './_generated/api'
 import { getStripeBillingConfig, getStripeSecretKey } from './stripeConfig'
+import { resolveCanonicalCurrentUser } from './users'
 import {
   hasPaidCloudAccess,
   isGrandfatheredOrComped,
@@ -110,8 +111,8 @@ async function upsertBillingCustomer(ctx: any, args: { userId: any, stripeCustom
 export const getMyEntitlement = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
+    const resolved = await resolveCanonicalCurrentUser(ctx)
+    if (!resolved) {
       return {
         canUseCloudFeatures: false,
         checkoutAvailable: false,
@@ -119,29 +120,12 @@ export const getMyEntitlement = query({
       }
     }
 
-    const user = await ctx.db
-      .query('users')
-      .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', identity.tokenIdentifier))
-      .unique()
+    const { user, profile } = resolved
 
-    if (!user) {
-      return {
-        canUseCloudFeatures: false,
-        checkoutAvailable: false,
-        subscriptionStatus: null,
-      }
-    }
-
-    const [subscription, profile] = await Promise.all([
-      ctx.db
+    const subscription = await ctx.db
       .query('billingSubscriptions')
       .withIndex('by_user_id', (q: any) => q.eq('userId', user._id))
-      .unique(),
-      ctx.db
-        .query('accountProfiles')
-        .withIndex('by_user_id', (q: any) => q.eq('userId', user._id))
-        .unique(),
-    ])
+      .unique()
 
     const subscriptionStatus = subscription?.status || null
     const grandfatheredOrComped = isGrandfatheredOrComped({
