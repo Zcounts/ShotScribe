@@ -211,6 +211,7 @@ npm run build
 - Prefer small, reversible changes.
 - Avoid broad routing/auth rewrites during hardening passes.
 - If cleanup is risky, defer and document instead of forcing it.
+- Most recent conservative housekeeping audit: `docs/repo-cleanup-followup.md`.
 
 ---
 
