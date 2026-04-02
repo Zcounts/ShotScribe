@@ -168,10 +168,24 @@ export const getMyEntitlement = query({
 export const getUserForBillingToken = internalQuery({
   args: { tokenIdentifier: v.string() },
   handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query('users')
-      .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', args.tokenIdentifier))
-      .unique()
+    let user = null
+
+    // Fast path: single row for tokenIdentifier.
+    // Fallback: if dirty duplicate rows exist (from prior manual/debug activity),
+    // pick most recently updated row deterministically instead of throwing.
+    try {
+      user = await ctx.db
+        .query('users')
+        .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', args.tokenIdentifier))
+        .unique()
+    } catch {
+      const tokenUsers = await ctx.db
+        .query('users')
+        .withIndex('by_token_identifier', (q: any) => q.eq('tokenIdentifier', args.tokenIdentifier))
+        .collect()
+      tokenUsers.sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      user = tokenUsers[0] || null
+    }
 
     return user
       ? {

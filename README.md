@@ -3,50 +3,22 @@
 ShotScribe is in **public beta** with a **web-first** product direction.
 
 This repository currently contains:
-- the main web application (filmmaking workflow tabs)
-- an auth landing experience
-- Convex backend functions/schema
-- a mobile web companion app (`/mobile`)
-- shared cross-app contracts/utilities (`/shared`)
-- legacy Electron desktop scaffolding kept as fallback/archive
+- main web app (`src/`)
+- Convex backend (`convex/`)
+- mobile companion web app (`mobile/`)
+- shared cross-app contracts/utilities (`shared/`)
+- legacy Electron shell kept for fallback/archive (`electron/`)
 
 ---
 
-## Current product status (repo reality)
+## Current confirmed working state (April 2026)
 
-### Working now
-- Main web app with Script, Scenes, Storyboard, Shotlist, Cast/Crew, Schedule, and Callsheet flows.
-- Convex backend schema and functions for users, projects, snapshots, sharing, presence, screenplay locks, assets, ops flags, and Stripe webhook ingestion.
-- Clerk + Convex auth wiring in the frontend when cloud mode/env vars are enabled.
-- Account page (`/account`) with entitlement status, Checkout launch, and Stripe customer portal launch.
-- Admin console (`/admin`) behind admin role checks with lightweight operational analytics and safe kill-switch controls.
-- Invite accept flow at `/accept-invite?token=...` for shared cloud projects.
-- Local-only mode fallback when cloud env is not configured.
-- Google sign-in is expected to work through Clerk production configuration (provider settings are managed in Clerk dashboard, not in this repo).
-
-### Partially working / in-progress
-- Cloud project workflows exist in code, but production rollout still relies on feature flags/env setup and operational controls.
-- Stripe billing integration exists in Convex (`billingSubscriptions` + webhook handler), but depends on production Stripe + Convex environment configuration.
-- Shared project invites and collaboration controls exist, but still require routine smoke-test discipline before each deploy.
-
-### Not the priority for beta
-- Desktop installer workflows are not the primary release path for public beta.
-- Electron scripts/config remain in place for compatibility and fallback only.
-
----
-
-## Domain and routing model
-
-### Current production intent
-- Marketing site: `https://shot-scribe.com`
-- App: `https://app.shot-scribe.com`
-
-### Current repository behavior
-The app is configured for **domain-root behavior** (for example `https://app.shot-scribe.com/`):
-- main app entrypoint at `index.html`
-- auth redirect URLs pointed to `/`
-- SPA fallback rewrite to `index.html`
-- legacy `/app` routes redirected to `/`
+- `/account` works in production and shows account + billing status.
+- `/admin` works in production and loads the internal admin console for admins.
+- Real signed-in production admin identity resolves correctly again.
+- One-time admin repair flow exists for split/synthetic identity recovery.
+- Local-only mode remains supported when cloud auth/env is not configured.
+- Current auth/account/admin behavior is intentionally preserved.
 
 ---
 
@@ -54,22 +26,83 @@ The app is configured for **domain-root behavior** (for example `https://app.sho
 
 - **Frontend:** React + Vite
 - **Backend/data:** Convex
-- **Auth:** Clerk (integrated with Convex via `convex/react-clerk`)
-- **Billing backend wiring:** Stripe webhook handling in Convex
-- **Current production hosting process:** SiteGround manual upload
-- **CI build packaging:** GitHub Actions artifact workflows
+- **Auth:** Clerk + Convex (`convex/react-clerk` on frontend, Convex auth identity on backend)
+- **Billing:** Stripe-backed subscription wiring in Convex (checkout/portal session creation + webhook sync)
+- **Mobile companion:** React + Vite app in `/mobile`
+- **Shared contracts:** TypeScript package in `/shared`
 
 ---
 
-## Environment configuration
+## Auth and account/admin model
 
-Main frontend runtime flags:
-- `VITE_ENABLE_CLOUD_FEATURES` (`true`/`false`)
+### Cloud-enabled mode
+When `VITE_ENABLE_CLOUD_FEATURES=true` and Clerk/Convex env vars are present:
+- frontend wraps app in Clerk + Convex auth providers
+- signed-out users are redirected to sign-in for protected cloud routes
+- account page (`/account`) reads:
+  - Clerk session state
+  - canonical Convex current user
+  - billing entitlement summary
+- admin UI (`/admin`) is gated by `accountProfiles.isAdmin` (not by paid status)
+
+### Local-only mode
+When cloud mode/env is absent:
+- app still runs in local-only workflows
+- `/account` and `/admin` render safe “not configured” states rather than crashing
+- no Clerk sign-in requirement is enforced for local workflows
+
+---
+
+## Convex + Clerk integration (current behavior)
+
+- User identity resolution is **canonicalized** server-side.
+- Primary match is `tokenIdentifier`; fallback is normalized email when needed.
+- Duplicate/split rows are handled conservatively by selecting the most recently updated matching row and preserving profile/admin flags onto canonical profile where applicable.
+- Entitlement query (`billing:getMyEntitlement`) is the frontend source for cloud access + admin flag display state.
+
+---
+
+## Billing/Stripe state (realistic)
+
+Implemented now:
+- Stripe Checkout session creation
+- Stripe Billing Portal session creation
+- webhook-driven subscription sync into Convex billing tables
+- entitlement computation (paid/trialing/manual override/local-only)
+
+Operational reality:
+- billing behavior depends on correct Convex + Stripe env configuration
+- Stripe dashboard remains source of truth for promo/coupon operations
+- this repo intentionally keeps billing logic conservative and ops-friendly
+
+---
+
+## Production deployment model (high level)
+
+Current production process is still **artifact build + manual hosting upload**.
+
+High-level flow:
+1. Build web artifact at repo root.
+2. Upload built artifact to current hosting target.
+3. Deploy Convex functions/schema with production Convex deployment.
+4. Ensure production env vars are set for Clerk/Stripe/admin token.
+
+Reference docs:
+- `docs/public-beta-env-setup.md`
+- `docs/billing-stripe-runbook.md`
+- `docs/admin-role-runbook.md`
+
+---
+
+## Environment notes (current)
+
+Frontend env (root app):
+- `VITE_ENABLE_CLOUD_FEATURES`
 - `VITE_CONVEX_URL`
 - `VITE_CLERK_PUBLISHABLE_KEY`
 - `VITE_MONITORING_ENDPOINT` (optional)
 
-Convex/backend env requirements (as used by current code/docs):
+Convex env (production as needed):
 - `AUTH_ISSUER_URL`
 - `AUTH_AUDIENCE`
 - `STRIPE_SECRET_KEY`
@@ -78,16 +111,37 @@ Convex/backend env requirements (as used by current code/docs):
 - `OPERATIONAL_ADMIN_TOKEN`
 - optional invite URL base (`INVITE_URL_BASE` or `CONVEX_INVITE_URL_BASE`)
 
-Billing setup runbook:
-- `docs/billing-stripe-runbook.md`
+---
 
-Operational/admin setup:
-- `docs/admin-role-runbook.md`
-- `docs/public-beta-env-setup.md`
+## Internal admin recovery mini-runbook
+
+### 1) First admin bootstrap (one-time)
+Use when there are zero admins:
+
+```bash
+npx convex run admin:bootstrapFirstAdmin '{"adminToken":"<OPERATIONAL_ADMIN_TOKEN>","email":"<admin-email>"}'
+```
+
+### 2) Repair admin for the currently signed-in real Clerk user
+Use when split identity/synthetic rows caused admin mismatch:
+
+```bash
+npx convex run admin:repairAdminForCurrentUser '{"adminToken":"<OPERATIONAL_ADMIN_TOKEN>"}'
+```
+
+Notes:
+- run as the **real Clerk user** session in Convex dashboard function runner (“Act as user”)
+- this path is intentionally retained for production safety
+
+### 3) About synthetic/duplicate/no-email rows from prior debugging
+- historical manual/debug activity can leave duplicate or synthetic user rows (sometimes no-email)
+- treat those rows as **non-canonical noise** unless they are actively mapped to the current Clerk token
+- immediate guidance: ignore unless they cause a live auth/admin incident
+- if cleanup is needed, perform as a separate explicit maintenance task (not in normal feature work)
 
 ---
 
-## Local development
+## Local development / build
 
 ### Main web app (root)
 ```bash
@@ -95,15 +149,9 @@ npm install
 npm run dev:web
 ```
 
-### Production web build artifact (SiteGround mode)
+### Production web build artifact
 ```bash
-npm run build:web
-```
-Output: `dist-siteground/`
-
-### Preview SiteGround-mode build
-```bash
-npm run preview:web
+npm run build
 ```
 
 ### Shared package
@@ -113,7 +161,7 @@ npm install
 npm run build
 ```
 
-### Mobile web companion
+### Mobile app
 ```bash
 cd mobile
 npm install
@@ -122,78 +170,9 @@ npm run build
 
 ---
 
-## Deployment (current reality)
+## Guardrails for stabilization work
 
-### What is automated
-GitHub Actions builds production artifacts.
-
-### What is manual
-Deployment to current production hosting is still manual (SiteGround upload of built artifact).
-
-### Workflow: production web artifact
-Workflow file:
-- `.github/workflows/siteground-static-package.yml`
-
-Behavior:
-1. Runs on push to `main` (and manual dispatch).
-2. Installs dependencies.
-3. Runs `npm run build:web` (SiteGround mode).
-4. Verifies `dist-siteground/index.html`.
-5. Creates `shot-scribe-siteground-package.zip` from `dist-siteground`.
-6. Uploads artifact `shot-scribe-siteground-package`.
-
-Use that zip for manual SiteGround upload.
-
-### Workflow: mobile web artifact
-Workflow file:
-- `.github/workflows/mobile-web-build.yml`
-
-Behavior:
-1. Builds shared + mobile packages.
-2. Uploads `mobile/dist` as artifact `mobile-web-dist`.
-
----
-
-## Known mismatches to clean up next
-
-1. **Legacy `/app` compatibility debt**
-   - Legacy `app/` entry artifacts still exist in the repo and can be removed after rollout confidence is high.
-2. **Docs drift**
-   - Some docs still describe older static/local-only posture and/or Cloudflare-target plans that are not the active production deployment process.
-3. **Legacy desktop messaging**
-   - Desktop scripts remain, but README and supporting docs should continue clarifying they are fallback, not beta priority.
-4. **Auth provider status clarity**
-   - Google auth is confirmed as working in production Clerk setup; GitHub provider status should be explicitly verified and documented from dashboard state.
-5. **Deployment runbook consolidation**
-   - Keep one canonical “how production deploy works today” document aligned with SiteGround manual upload + GitHub artifact flow.
-
----
-
-## Repository structure
-
-- `src/` — main web app frontend
-- `convex/` — backend schema/functions
-- `mobile/` — mobile web companion app
-- `shared/` — shared contracts/types/utilities
-- `site/` / `landing/` — landing/static assets and supporting files
-- `electron/` — legacy desktop shell
-- `docs/` — migration, runbooks, and specs
-
----
-
-## Public beta focus
-
-Current priority is stable public beta operation of the web app with:
-- practical production workflows
-- cloud-backed capabilities where enabled
-- manual but reliable production deployment
-- clear operational controls (including cloud-write kill switch)
-
-Keep changes incremental and documentation synchronized with actual shipped behavior.
-
-## Public beta operations checklists
-
-- Launch checklist: `docs/public-beta-launch-checklist.md`
-- Rollback checklist: `docs/public-beta-rollback-checklist.md`
-- Support/operator checklist: `docs/public-beta-support-checklist.md`
-- Deferred-after-beta items: `docs/public-beta-deferred-items.md`
+- Keep auth/admin/account behavior stable.
+- Prefer small, reversible changes.
+- Avoid broad routing/auth rewrites during hardening passes.
+- If cleanup is risky, defer and document instead of forcing it.
