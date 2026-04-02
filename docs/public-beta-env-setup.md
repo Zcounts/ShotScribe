@@ -32,6 +32,7 @@ Notes:
 - `S3_REGION` (required for private cloud storyboard assets)
 - `S3_BUCKET` (required for private cloud storyboard assets)
 - `S3_UPLOAD_PREFIX` (optional; defaults to `storyboard`)
+- `ASSET_DELETE_GRACE_HOURS` (optional; defaults to `24` for delayed hard delete)
 
 ## Stripe requirements
 

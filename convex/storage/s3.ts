@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 const DEFAULT_PRESIGN_UPLOAD_TTL_SECONDS = 5 * 60
@@ -81,4 +81,15 @@ export async function createPresignedReadUrl({
   })
   const readUrl = await getSignedUrl(s3, command, { expiresIn: expiresInSeconds })
   return { readUrl, bucket, objectKey }
+}
+
+export async function deleteObjectFromS3({ objectKey }: { objectKey: string }) {
+  const { bucket } = getS3Config()
+  const s3 = getS3Client()
+  const command = new DeleteObjectCommand({
+    Bucket: bucket,
+    Key: objectKey,
+  })
+  await s3.send(command)
+  return { bucket, objectKey }
 }

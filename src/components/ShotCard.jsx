@@ -46,6 +46,8 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const getAssetSignedView = useAction('assets:getAssetSignedView')
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
   const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
+  const softDeleteLibraryAsset = useMutation('assets:softDeleteLibraryAsset')
+  const undoSoftDeleteLibraryAsset = useMutation('assets:undoSoftDeleteLibraryAsset')
   const cloudAccessPolicy = useCloudAccessPolicy()
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
   const [cloudAssetView, setCloudAssetView] = useState(null)
@@ -55,12 +57,20 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
       ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
       : 'skip'
   )
+  const recentlyDeletedAssets = useQuery(
+    'assets:getRecentlyDeletedLibraryAssets',
+    (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+      ? { projectId: projectRef.projectId, limit: 10 }
+      : 'skip'
+  )
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
   const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const { isDesktopDown, isPhone } = useResponsiveViewport()
+  const [imagePickerStep, setImagePickerStep] = useState(null)
+  const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
+  const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
@@ -163,6 +173,30 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     }
     fileInputRef.current?.click()
   }
+
+  const handleSoftDeleteLibraryAsset = useCallback(async (assetId) => {
+    if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    setIsDeletingLibraryAsset(true)
+    try {
+      const result = await softDeleteLibraryAsset({
+        projectId: projectRef.projectId,
+        assetId,
+      })
+      if (!result?.ok && result?.reason === 'blocked_referenced') {
+        alert('This image is still referenced by a shot and cannot be deleted from the library yet.')
+      }
+    } finally {
+      setIsDeletingLibraryAsset(false)
+    }
+  }, [cloudAssetBlocked, projectRef, softDeleteLibraryAsset])
+
+  const handleUndoDelete = useCallback(async (assetId) => {
+    if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    await undoSoftDeleteLibraryAsset({
+      projectId: projectRef.projectId,
+      assetId,
+    })
+  }, [cloudAssetBlocked, projectRef, undoSoftDeleteLibraryAsset])
 
   const handleImageChange = useCallback(async (e) => {
     const file = e.target.files?.[0]
@@ -457,20 +491,51 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {(libraryAssets || []).map((asset) => (
-                  <button
+                  <div
                     key={String(asset.assetId)}
-                    type="button"
-                    disabled={isAssigningFromLibrary}
-                    className="rounded border border-gray-700 bg-gray-800 p-2 text-left hover:bg-gray-700 disabled:opacity-60"
-                    onClick={() => assignLibraryAssetToShot(asset.assetId)}
+                    className="rounded border border-gray-700 bg-gray-800 p-2"
                   >
-                    <div className="truncate text-[11px] font-medium">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
-                    <div className="text-[10px] text-gray-400">{new Date(asset.createdAt).toLocaleDateString()}</div>
-                  </button>
+                    <button
+                      type="button"
+                      disabled={isAssigningFromLibrary}
+                      className="w-full text-left hover:opacity-90 disabled:opacity-60"
+                      onClick={() => assignLibraryAssetToShot(asset.assetId)}
+                    >
+                      <div className="truncate text-[11px] font-medium">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
+                      <div className="text-[10px] text-gray-400">{new Date(asset.createdAt).toLocaleDateString()}</div>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeletingLibraryAsset}
+                      className="mt-1 rounded border border-red-700 bg-red-950 px-2 py-1 text-[10px] text-red-200 hover:bg-red-900 disabled:opacity-60"
+                      onClick={() => handleSoftDeleteLibraryAsset(asset.assetId)}
+                    >
+                      Delete from Library
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
           </div>
+          {(recentlyDeletedAssets || []).length > 0 ? (
+            <div className="mt-2 border-t border-gray-700 pt-2">
+              <div className="mb-1 text-[10px] uppercase tracking-wide text-gray-400">Recently deleted</div>
+              <div className="space-y-1">
+                {(recentlyDeletedAssets || []).slice(0, 3).map((asset) => (
+                  <div key={`deleted-${String(asset.assetId)}`} className="flex items-center justify-between rounded border border-gray-700 bg-gray-800 px-2 py-1">
+                    <div className="truncate pr-2 text-[10px] text-gray-300">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
+                    <button
+                      type="button"
+                      className="rounded border border-gray-600 bg-gray-700 px-2 py-0.5 text-[10px] text-white hover:bg-gray-600"
+                      onClick={() => handleUndoDelete(asset.assetId)}
+                    >
+                      Undo
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 

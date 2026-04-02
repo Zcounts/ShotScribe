@@ -96,6 +96,45 @@ Date: 2026-04-01
   - selected cloud asset resolves through `assets:getAssetSignedView`,
   - local `shot.image` / `shot.imageAsset` fallback behavior remains intact.
 
+## Library delete lifecycle (Phase 4)
+
+### Distinction between unassign and delete
+
+- **Remove from Shot** only unassigns that shot (`assets:unassignShotLibraryAsset`); asset remains in library.
+- **Delete from Library** performs conservative soft-delete lifecycle and does not immediately hard-delete S3 bytes.
+
+### Soft delete behavior
+
+1. `assets:softDeleteLibraryAsset` checks whether asset is still referenced.
+2. Safe rule for Phase 4: **block library deletion while referenced** (`blocked_referenced`) to avoid accidental media loss.
+3. If unreferenced:
+   - asset is marked `soft_deleted`,
+   - hidden from normal library query,
+   - `hardDeleteAfter` is set (`now + ASSET_DELETE_GRACE_HOURS`, default 24h),
+   - delayed worker is scheduled via Convex scheduler.
+
+### Undo behavior
+
+- `assets:undoSoftDeleteLibraryAsset` restores a soft-deleted asset during the grace window by clearing `deletedAt`, `hardDeleteAfter`, and status back to `active`.
+
+### Delayed hard delete behavior
+
+1. Scheduled worker (`hardDeleteAssetWorker`) runs at/after due time.
+2. Before hard delete it verifies:
+   - asset is still `soft_deleted`,
+   - retention window has elapsed,
+   - no active references remain.
+3. If still safe:
+   - delete backing object (`DeleteObject` for S3 or Convex storage delete for legacy provider),
+   - mark asset `hard_deleted`.
+4. If unsafe/referenced: mark `blocked_referenced`.
+5. If delete fails: mark `delete_failed` with error metadata.
+
+### Failure/retry safety net
+
+- Recurring Convex cron (`convex/crons.ts`) runs hourly and calls reconciliation action to retry due deletions.
+- Reconciliation catches missed scheduler runs and transient failures by reprocessing due `soft_deleted` assets.
+
 ## Convex environment variables required for private S3
 
 - `S3_REGION` (example: `us-east-1`)
@@ -163,20 +202,29 @@ Set bucket CORS so browser PUT uploads from your app origins succeed.
    - Confirm shot image clears.
    - Confirm image remains available in project media library.
 
-4. **View as paid collaborator**
+4. **Delete from library + undo**
+   - Delete an unreferenced image from library.
+   - Confirm it is hidden from normal library list immediately.
+   - Confirm it appears under recently deleted and Undo restores it.
+
+5. **Delete blocked for referenced assets**
+   - Try deleting an asset currently assigned to a shot.
+   - Confirm delete is blocked with safe messaging and asset remains available.
+
+6. **View as paid collaborator**
    - Confirm paid collaborator with active membership can open shared project.
    - Confirm collaborator can fetch/render cloud-hosted image assets.
 
-5. **Blocked access as inactive/read-only user**
+7. **Blocked access as inactive/read-only user**
    - Use account with inactive/read-only billing state and project membership.
    - Confirm project data can be viewed.
    - Confirm cloud image fetch is blocked by asset access policy.
 
-6. **Local-only user unaffected**
+8. **Local-only user unaffected**
    - In local-only project mode, confirm existing storyboard image upload/edit behavior still works.
    - Confirm local image workflow does not require cloud entitlement.
 
-7. **Private bucket verification**
+9. **Private bucket verification**
    - Confirm direct unsigned object URL returns access denied.
    - Confirm app-rendered images load through signed URLs only.
 

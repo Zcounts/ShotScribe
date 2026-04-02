@@ -1,11 +1,11 @@
 import { v } from 'convex/values'
-import { action, internalQuery, mutation, query } from './_generated/server'
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { api, internal } from './_generated/api'
 import { assertCanAccessCloudAssets, assertCanEditCloudProject } from './accessPolicy'
 import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
-import { buildStoryboardObjectKey, createPresignedReadUrl, createPresignedUploadUrl } from './storage/s3'
+import { buildStoryboardObjectKey, createPresignedReadUrl, createPresignedUploadUrl, deleteObjectFromS3 } from './storage/s3'
 
 const CLOUD_ASSET_ALLOWED_MIME_TYPES = new Set(['image/webp'])
 const CLOUD_ASSET_ALLOWED_SOURCE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -13,6 +13,43 @@ const CLOUD_ASSET_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const CLOUD_ASSET_MAX_NORMALIZED_BYTES = 4 * 1024 * 1024
 const CLOUD_ASSET_NORMALIZED_WIDTH = 640
 const CLOUD_ASSET_NORMALIZED_HEIGHT = 360
+const DEFAULT_ASSET_DELETE_GRACE_HOURS = 24
+
+function getDeleteGraceWindowMs() {
+  const raw = Number(process.env.ASSET_DELETE_GRACE_HOURS || DEFAULT_ASSET_DELETE_GRACE_HOURS)
+  const hours = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_ASSET_DELETE_GRACE_HOURS
+  return Math.round(hours * 60 * 60 * 1000)
+}
+
+async function hasActiveShotAssignmentReference(ctx: any, projectId: any, assetId: any) {
+  const rows = await ctx.db
+    .query('shotAssetAssignments')
+    .withIndex('by_project_id_asset_id', (q: any) => q.eq('projectId', projectId).eq('assetId', assetId))
+    .collect()
+  return rows.some((row: any) => !row.removedAt)
+}
+
+async function hasLatestSnapshotReference(ctx: any, projectId: any, assetId: any) {
+  const project = await ctx.db.get(projectId)
+  if (!project?.latestSnapshotId) return false
+  const snapshot = await ctx.db.get(project.latestSnapshotId)
+  const scenes = snapshot?.payload?.scenes || []
+  for (const scene of scenes) {
+    for (const shot of (scene?.shots || [])) {
+      const shotAssetId = shot?.imageAsset?.cloud?.assetId
+      if (shotAssetId && String(shotAssetId) === String(assetId)) return true
+    }
+  }
+  return false
+}
+
+async function hasAnyActiveReference(ctx: any, projectId: any, assetId: any) {
+  const [assignmentRef, snapshotRef] = await Promise.all([
+    hasActiveShotAssignmentReference(ctx, projectId, assetId),
+    hasLatestSnapshotReference(ctx, projectId, assetId),
+  ])
+  return assignmentRef || snapshotRef
+}
 
 export const getAssetUploadAuthorization = internalQuery({
   args: {
@@ -129,6 +166,7 @@ export const finalizeAssetUpload = mutation({
       thumbStorageId: args.thumbStorageId,
       fullStorageId: args.fullStorageId,
       meta: args.meta,
+      deleteStatus: 'active',
       createdAt: now,
       updatedAt: now,
     })
@@ -331,6 +369,268 @@ export const unassignShotLibraryAsset = mutation({
       assignedByUserId: currentUserId,
     })
     return { ok: true, removed: true }
+  },
+})
+
+export const softDeleteLibraryAsset = mutation({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
+    await requireCloudWritesEnabled(ctx)
+
+    const asset = await ctx.db.get(args.assetId)
+    if (!asset || String(asset.projectId) !== String(args.projectId)) {
+      throw new Error('Asset not found')
+    }
+    if (asset.deleteStatus === 'hard_deleted') {
+      return { ok: false, reason: 'already_hard_deleted' as const }
+    }
+    if (asset.deletedAt && asset.deleteStatus === 'soft_deleted') {
+      return { ok: true, softDeleted: true, alreadyDeleted: true }
+    }
+
+    const hasReferences = await hasAnyActiveReference(ctx, args.projectId, args.assetId)
+    if (hasReferences) {
+      const now = Date.now()
+      await ctx.db.patch(args.assetId, {
+        deleteStatus: 'blocked_referenced',
+        updatedAt: now,
+      })
+      return { ok: false, reason: 'blocked_referenced' as const }
+    }
+
+    const now = Date.now()
+    const hardDeleteAfter = now + getDeleteGraceWindowMs()
+    await ctx.db.patch(args.assetId, {
+      deletedAt: now,
+      hardDeleteAfter,
+      deleteStatus: 'soft_deleted',
+      deleteError: undefined,
+      updatedAt: now,
+    })
+
+    await ctx.scheduler.runAfter(
+      hardDeleteAfter - now,
+      internal.assets.hardDeleteAssetWorker,
+      { projectId: args.projectId, assetId: args.assetId },
+    )
+
+    return {
+      ok: true,
+      softDeleted: true,
+      hardDeleteAfter,
+    }
+  },
+})
+
+export const undoSoftDeleteLibraryAsset = mutation({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
+    await requireCloudWritesEnabled(ctx)
+
+    const asset = await ctx.db.get(args.assetId)
+    if (!asset || String(asset.projectId) !== String(args.projectId)) {
+      throw new Error('Asset not found')
+    }
+    if (!asset.deletedAt || asset.deleteStatus !== 'soft_deleted') {
+      return { ok: false, restored: false, reason: 'not_soft_deleted' as const }
+    }
+
+    const now = Date.now()
+    await ctx.db.patch(args.assetId, {
+      deletedAt: undefined,
+      hardDeleteAfter: undefined,
+      deleteStatus: 'active',
+      deleteError: undefined,
+      updatedAt: now,
+    })
+    return { ok: true, restored: true }
+  },
+})
+
+export const getRecentlyDeletedLibraryAssets = query({
+  args: {
+    projectId: v.id('projects'),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
+
+    const rows = await ctx.db
+      .query('projectAssets')
+      .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
+      .collect()
+
+    return rows
+      .filter((row: any) => row.deleteStatus === 'soft_deleted' && !!row.deletedAt)
+      .sort((a: any, b: any) => Number(b.deletedAt || 0) - Number(a.deletedAt || 0))
+      .slice(0, Math.max(1, Math.min(Number(args.limit || 20), 100)))
+      .map((asset: any) => ({
+        assetId: asset._id,
+        sourceName: asset.sourceName || null,
+        deletedAt: asset.deletedAt,
+        hardDeleteAfter: asset.hardDeleteAfter || null,
+      }))
+  },
+})
+
+export const prepareAssetHardDelete = internalMutation({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get(args.assetId)
+    if (!asset || String(asset.projectId) !== String(args.projectId)) {
+      return { ok: false, reason: 'not_found' as const }
+    }
+    if (asset.deleteStatus !== 'soft_deleted' || !asset.deletedAt || !asset.hardDeleteAfter) {
+      return { ok: false, reason: 'not_due' as const }
+    }
+    if (Date.now() < Number(asset.hardDeleteAfter)) {
+      return { ok: false, reason: 'retention_not_elapsed' as const }
+    }
+
+    const hasReferences = await hasAnyActiveReference(ctx, args.projectId, args.assetId)
+    if (hasReferences) {
+      await ctx.db.patch(args.assetId, {
+        deleteStatus: 'blocked_referenced',
+        updatedAt: Date.now(),
+      })
+      return { ok: false, reason: 'blocked_referenced' as const }
+    }
+
+    return {
+      ok: true,
+      provider: asset.provider || 'convex_storage',
+      thumbStorageId: asset.thumbStorageId || null,
+      fullStorageId: asset.fullStorageId || null,
+      objectKey: asset.objectKey || null,
+    }
+  },
+})
+
+export const finalizeAssetHardDelete = internalMutation({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+    status: v.union(v.literal('hard_deleted'), v.literal('delete_failed')),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get(args.assetId)
+    if (!asset || String(asset.projectId) !== String(args.projectId)) {
+      return { ok: false }
+    }
+    const now = Date.now()
+    await ctx.db.patch(args.assetId, {
+      deleteStatus: args.status,
+      deleteError: args.error,
+      updatedAt: now,
+      ...(args.status === 'hard_deleted'
+        ? { deletedAt: now, hardDeleteAfter: undefined }
+        : {}),
+    })
+    return { ok: true }
+  },
+})
+
+export const hardDeleteAssetWorker = internalAction({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const prepared = await ctx.runMutation(internal.assets.prepareAssetHardDelete, args)
+    if (!prepared?.ok) return prepared
+
+    try {
+      if (prepared.provider === 'convex_storage') {
+        await ctx.runMutation(internal.assets.hardDeleteConvexStorageAsset, {
+          projectId: args.projectId,
+          assetId: args.assetId,
+          thumbStorageId: prepared.thumbStorageId,
+          fullStorageId: prepared.fullStorageId,
+        })
+      } else if (prepared.objectKey) {
+        await deleteObjectFromS3({ objectKey: prepared.objectKey })
+      }
+
+      await ctx.runMutation(internal.assets.finalizeAssetHardDelete, {
+        projectId: args.projectId,
+        assetId: args.assetId,
+        status: 'hard_deleted',
+      })
+      return { ok: true, deleted: true }
+    } catch (err: any) {
+      await ctx.runMutation(internal.assets.finalizeAssetHardDelete, {
+        projectId: args.projectId,
+        assetId: args.assetId,
+        status: 'delete_failed',
+        error: String(err?.message || err || 'unknown_delete_failure'),
+      })
+      return { ok: false, deleted: false, reason: 'delete_failed' as const }
+    }
+  },
+})
+
+export const hardDeleteConvexStorageAsset = internalMutation({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+    thumbStorageId: v.optional(v.id('_storage')),
+    fullStorageId: v.optional(v.id('_storage')),
+  },
+  handler: async (ctx, args) => {
+    if (args.thumbStorageId) await ctx.storage.delete(args.thumbStorageId)
+    if (args.fullStorageId) await ctx.storage.delete(args.fullStorageId)
+    return { ok: true }
+  },
+})
+
+export const listDueAssetDeletes = internalQuery({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const rows = await ctx.db.query('projectAssets').collect()
+    return rows
+      .filter((row: any) => row.deleteStatus === 'soft_deleted' && Number(row.hardDeleteAfter || 0) <= now)
+      .sort((a: any, b: any) => Number(a.hardDeleteAfter || 0) - Number(b.hardDeleteAfter || 0))
+      .slice(0, Math.max(1, Math.min(Number(args.limit || 50), 200)))
+      .map((row: any) => ({
+        projectId: row.projectId,
+        assetId: row._id,
+      }))
+  },
+})
+
+export const runAssetDeleteReconciliation = internalAction({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const due = await ctx.runQuery(internal.assets.listDueAssetDeletes, {
+      limit: args.limit || 50,
+    })
+    let processed = 0
+    for (const item of due) {
+      await ctx.runAction(internal.assets.hardDeleteAssetWorker, item)
+      processed += 1
+    }
+    return { ok: true, processed }
   },
 })
 
