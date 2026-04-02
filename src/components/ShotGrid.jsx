@@ -89,7 +89,7 @@ function ShotGrid({
   }
 
   return (
-    <div style={gridStyle}>
+    <div className="storyboard-shot-grid" style={gridStyle}>
       {shots.map(shot => (
         <ShotCard
           key={shot.id}

@@ -19,6 +19,7 @@ import { DayTabBar } from './DayTabBar'
 import ScenePropertiesPanel from './ScenePropertiesPanel'
 import { estimateScreenplayPagination } from '../utils/screenplay'
 import LeftSidebarResources from './LeftSidebarResources'
+import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 // ── Dropdown options (matching SpecsTable.jsx) ───────────────────────────────
 const SIZE_OPTIONS  = ['WIDE SHOT', 'MEDIUM', 'CLOSE UP', 'OTS', 'ECU', 'INSERT', 'ESTABLISHING']
@@ -1121,6 +1122,7 @@ export default function ShotlistTab({
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
   const shotlistViewState = useStore(s => s.tabViewState?.shotlist || {})
   const setTabViewState = useStore(s => s.setTabViewState)
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
   const isDark = false
 
   const [selectedDayId, setSelectedDayId] = useState(shotlistViewState.selectedDayId || null)
@@ -1301,6 +1303,7 @@ export default function ShotlistTab({
   }
 
   const rowHeight = DENSITY_ROW_HEIGHT[viewSettings.density] || DENSITY_ROW_HEIGHT.compact
+  const showSidebar = viewSettings.showSidebar && !isDesktopDown
 
   const sortShots = useCallback((rawShots) => {
     const shots = [...rawShots]
@@ -1563,7 +1566,7 @@ export default function ShotlistTab({
       {/* ── Table ── */}
       {schedule.length > 0 && activeDay && filteredScenes.length > 0 && (
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', borderTop: `1px solid ${c.border}` }}>
-        {viewSettings.showSidebar && (
+        {showSidebar && (
           <aside className="ss-left-sidebar">
             <div className="ss-left-sidebar-scroll">
               <div className="ss-left-sidebar-section-label">Day scenes</div>
@@ -1596,7 +1599,28 @@ export default function ShotlistTab({
           </aside>
         )}
 
-        <div ref={mainPanelRef} style={{ flex: 1, overflow: 'auto', padding: '8px 14px 18px' }}>
+        <div ref={mainPanelRef} style={{ flex: 1, overflow: 'auto', padding: isPhone ? '8px 8px 16px' : '8px 14px 18px' }}>
+          {!showSidebar && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
+              {filteredScenes.map(scene => (
+                <button
+                  key={`chip-${scene.id}`}
+                  onClick={() => jumpToScene(scene.id)}
+                  style={{
+                    border: `1px solid ${c.border}`,
+                    borderRadius: 999,
+                    background: activeNavSceneId === scene.id ? '#E2E8F0' : '#fff',
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {formatSceneNumber(scene._canonical?.sceneNumber || scene.sceneLabel)}
+                </button>
+              ))}
+            </div>
+          )}
           {filteredScenes.map((scene) => {
             const shots = sortShots(scene._filteredShots)
             const showDetails = viewSettings.showSceneDetails || !!expandedSceneDetails[scene.id]
@@ -1619,7 +1643,7 @@ export default function ShotlistTab({
                 }}
               >
                 <div data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('storyboard', scene.id)} style={{ padding: '8px 12px 7px', borderLeft: `4px solid ${scene._canonical?.color || scene.color || '#F2C250'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: isPhone ? 'flex-start' : 'center', justifyContent: 'space-between', gap: 10, flexWrap: isPhone ? 'wrap' : 'nowrap' }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                         <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: 11 }}>{formatSceneNumber(scene._canonical?.sceneNumber || scene.sceneLabel)}</span>
@@ -1640,7 +1664,7 @@ export default function ShotlistTab({
                         <span title={sceneCharacters.join(', ')}>Cast: {formatCharacterSummary(sceneCharacters, 2)}</span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, width: isPhone ? '100%' : 'auto', justifyContent: isPhone ? 'flex-end' : 'flex-start' }}>
                       <button
                         onClick={() => setExpandedSceneDetails(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
                         style={{ border: `1px solid ${c.border}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 10, padding: '3px 7px' }}
@@ -1670,8 +1694,8 @@ export default function ShotlistTab({
                   </div>
                 )}
 
-                <div style={{ position: 'relative', overflowX: 'auto', borderTop: `1px solid ${c.border}` }}>
-                  <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: Math.max(totalTableWidth, 980), minWidth: '100%', backgroundColor: c.tableBg, fontSize: 11, fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif' }}>
+                <div className="production-table-scroll" style={{ position: 'relative', overflowX: 'auto', borderTop: `1px solid ${c.border}` }}>
+                  <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: Math.max(totalTableWidth, isDesktopDown ? 720 : 980), minWidth: '100%', backgroundColor: c.tableBg, fontSize: 11, fontFamily: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif' }}>
                     <colgroup>
                       <col style={{ width: DRAG_COL_WIDTH }} />
                       {visibleColumns.map(col => <col key={col.key} style={{ width: col.width }} />)}
