@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, query } from './_generated/server'
-import { api } from './_generated/api'
-import { getStripeBillingConfig, getStripeSecretKey } from './stripeConfig'
+import { api, internal } from './_generated/api'
+import { getPrimaryStripePriceId, getStripeBillingConfig, getStripeSecretKey } from './stripeConfig'
 import { resolveCanonicalCurrentUser } from './users'
 import {
   hasPaidCloudAccess,
@@ -10,6 +10,10 @@ import {
 
 function normalizeEmail(email: string | undefined | null) {
   return typeof email === 'string' ? email.trim().toLowerCase() : ''
+}
+
+function normalizeSubscriptionStatus(status: string | undefined | null) {
+  return String(status || '').trim().toLowerCase()
 }
 
 export function subscriptionStatusAllowsCloudFeatures(status: string | undefined | null) {
@@ -217,6 +221,24 @@ async function stripeRequest(path: string, body: URLSearchParams) {
   return payload
 }
 
+async function stripeGet(path: string) {
+  const secretKey = getStripeSecretKey()
+  if (!secretKey) throw new Error('Missing STRIPE_SECRET_KEY')
+
+  const response = await fetch(`https://api.stripe.com/v1${path}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+    },
+  })
+
+  const payload = await response.json()
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || 'Stripe request failed')
+  }
+  return payload
+}
+
 async function ensureStripeCustomer(ctx: any, user: { _id: string, email: string | null, name: string | null }) {
   const existing = await getBillingCustomerForUser(ctx, user._id)
   if (existing?.stripeCustomerId) return existing.stripeCustomerId
@@ -272,11 +294,7 @@ export const createCheckoutSession = action({
     body.set('customer', stripeCustomerId)
     body.set('client_reference_id', String(user._id))
     body.set('metadata[userId]', String(user._id))
-
-    const email = normalizeEmail(user.email)
-    if (email) {
-      body.set('customer_email', email)
-    }
+    body.set('metadata[plan]', 'shotscribe_launch_paid')
 
     const session = await stripeRequest('/checkout/sessions', body)
 
@@ -315,6 +333,52 @@ export const createPortalSession = action({
   },
 })
 
+export const syncMyBillingState = action({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+
+    const user = await ctx.runQuery(api.billing.getUserForBillingToken, {
+      tokenIdentifier: identity.tokenIdentifier,
+    })
+    if (!user) throw new Error('User not found')
+
+    const billingCustomer = await getBillingCustomerForUser(ctx, user._id)
+    if (!billingCustomer?.stripeCustomerId) {
+      return { synced: false, reason: 'no_customer' as const }
+    }
+
+    const subscriptions = await stripeGet(`/customers/${billingCustomer.stripeCustomerId}/subscriptions?status=all&limit=5`)
+    const rows = Array.isArray(subscriptions?.data) ? subscriptions.data : []
+    rows.sort((a: any, b: any) => Number(b?.created || 0) - Number(a?.created || 0))
+
+    const latest = rows[0]
+    if (!latest?.id) {
+      return { synced: false, reason: 'no_subscription' as const }
+    }
+
+    const priceId = latest?.items?.data?.[0]?.price?.id
+    const status = normalizeSubscriptionStatus(latest?.status)
+    const currentPeriodEnd = latest?.current_period_end ? Number(latest.current_period_end) * 1000 : undefined
+    const cancelAtPeriodEnd = Boolean(latest?.cancel_at_period_end)
+
+    await ctx.runMutation(internal.billing.syncStripeSubscription, {
+      eventId: `manual_sync_${Date.now()}`,
+      customerId: String(latest.customer || billingCustomer.stripeCustomerId),
+      subscriptionId: String(latest.id),
+      status,
+      priceId: priceId ? String(priceId) : undefined,
+      currentPeriodEnd,
+      cancelAtPeriodEnd,
+      userId: user._id,
+      customerEmail: user.email || undefined,
+    })
+
+    return { synced: true, status }
+  },
+})
+
 export const syncStripeSubscription = internalMutation({
   args: {
     eventId: v.string(),
@@ -329,6 +393,12 @@ export const syncStripeSubscription = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now()
+    const configuredPriceId = getPrimaryStripePriceId()
+    const eventPriceId = args.priceId ? String(args.priceId) : ''
+
+    if (configuredPriceId && eventPriceId && configuredPriceId !== eventPriceId) {
+      return { ok: true, ignored: true, reason: 'price_mismatch' as const }
+    }
 
     let record = null
     if (args.subscriptionId) {
@@ -358,7 +428,7 @@ export const syncStripeSubscription = internalMutation({
       }
     }
 
-    const status = args.status || 'incomplete'
+    const status = normalizeSubscriptionStatus(args.status || 'incomplete')
 
     if (resolvedUserId && args.customerId) {
       await upsertBillingCustomer(ctx, {
