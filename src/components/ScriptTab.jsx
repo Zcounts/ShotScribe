@@ -28,6 +28,7 @@ import visualizeIcon from '../../assets/script icons/visualize.svg'
 import LeftSidebarResources from './LeftSidebarResources'
 import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
+import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -378,6 +379,9 @@ export default function ScriptTab() {
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
   const [showImportModal, setShowImportModal] = useState(false)
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false)
+  const [mobileRightOpen, setMobileRightOpen] = useState(false)
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const [collabNotice, setCollabNotice] = useState('')
   const [isSavingSnapshot, setIsSavingSnapshot] = useState(false)
@@ -1085,7 +1089,7 @@ export default function ScriptTab() {
     return (
       <>
         <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
-          <div className="app-surface-card" style={{ width: 420, padding: 20, textAlign: 'center' }}>
+          <div className="app-surface-card" style={{ width: 'min(420px, calc(100vw - 28px))', padding: 20, textAlign: 'center' }}>
             <h2 style={{ marginTop: 0, fontSize: 22 }}>Start your script</h2>
             <p style={{ color: '#475569', marginBottom: 16 }}>The Script tab is document-first. Write directly on paginated pages.</p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
@@ -1101,12 +1105,52 @@ export default function ScriptTab() {
 
   const { viewHeight, sceneHeight } = resolveStackHeights()
 
+  useEffect(() => {
+    if (!isDesktopDown) {
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+  }, [isDesktopDown])
+
+  useEffect(() => {
+    if (!isDesktopDown) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDesktopDown])
+
   return (
     <>
-      <div style={{ display: 'flex', height: '100%' }}>
-        <div className="script-sidebar script-sidebar-left">
+      <div className="script-tab-shell" data-compact={isDesktopDown ? 'true' : 'false'} style={{ display: 'flex', height: '100%', position: 'relative' }}>
+        {isDesktopDown && (
+          <div className="script-compact-controls">
+            <button className="ss-btn outline" onClick={() => setMobileLeftOpen(true)} style={{ minHeight: 34 }}>Script Panel</button>
+            <button className="ss-btn outline" onClick={() => setMobileRightOpen(true)} style={{ minHeight: 34 }}>Inspector</button>
+          </div>
+        )}
+        {isDesktopDown && (mobileLeftOpen || mobileRightOpen) ? (
+          <div
+            className="script-sidebar-mobile-scrim"
+            onClick={() => {
+              setMobileLeftOpen(false)
+              setMobileRightOpen(false)
+            }}
+          />
+        ) : null}
+        <div className={`script-sidebar script-sidebar-left ${isDesktopDown ? 'script-sidebar-mobile-left' : ''} ${mobileLeftOpen ? 'is-mobile-open' : ''}`}>
           <div className="script-sidebar-top">
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#b6c5dd', marginBottom: 8 }}>SCRIPT</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#b6c5dd' }}>SCRIPT</div>
+              {isDesktopDown ? (
+                <button className="toolbar-btn" onClick={() => setMobileLeftOpen(false)} style={{ minHeight: 28, padding: '2px 8px' }}>
+                  Close
+                </button>
+              ) : null}
+            </div>
             <div style={{ display: 'flex', gap: 6 }}>
               {VIEW_OPTIONS.map(option => (
                 <button
@@ -1276,11 +1320,23 @@ export default function ScriptTab() {
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 12px' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Script Document</span>
-              {cloudProjectId && (
-                <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot || !cloudAccessPolicy.canEditCloudProject}>
-                  {isSavingSnapshot ? 'Saving…' : 'Save Snapshot'}
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {isDesktopDown && (
+                  <>
+                    <button className="toolbar-btn" onClick={() => setMobileLeftOpen(true)} style={{ minHeight: isPhone ? 34 : undefined }}>
+                      Panel
+                    </button>
+                    <button className="toolbar-btn" onClick={() => setMobileRightOpen(true)} style={{ minHeight: isPhone ? 34 : undefined }}>
+                      Inspector
+                    </button>
+                  </>
+                )}
+                {cloudProjectId && (
+                  <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot || !cloudAccessPolicy.canEditCloudProject}>
+                    {isSavingSnapshot ? 'Saving…' : 'Save Snapshot'}
+                  </button>
+                )}
+              </div>
             </div>
             {cloudProjectId && (
               <div style={{ padding: '6px 12px', borderBottom: '1px solid rgba(148,163,184,0.2)', background: (isWriteBlockedByLock || !cloudAccessPolicy.canEditCloudProject) ? '#fff7ed' : '#f8fafc', fontSize: 12, color: '#475569', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -1297,7 +1353,7 @@ export default function ScriptTab() {
               </div>
             )}
 
-            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
+            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
               <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
                 <div>
                   <div
@@ -1458,7 +1514,15 @@ export default function ScriptTab() {
             </div>
           </div>
 
-          <div className="script-sidebar script-sidebar-right">
+          <div className={`script-sidebar script-sidebar-right ${isDesktopDown ? 'script-sidebar-mobile-right' : ''} ${mobileRightOpen ? 'is-mobile-open' : ''}`}>
+            {isDesktopDown ? (
+              <div className="script-sidebar-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Inspector</div>
+                <button className="toolbar-btn" onClick={() => setMobileRightOpen(false)} style={{ minHeight: 28, padding: '2px 8px' }}>
+                  Close
+                </button>
+              </div>
+            ) : null}
             {[
               { id: 'scriptEstimation', title: 'Script & Estimation' },
               { id: 'scenePagination', title: 'Scene Pagination' },

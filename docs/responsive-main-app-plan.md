@@ -270,3 +270,16 @@ Always verify after each responsive phase:
   - `< 1024px`: toggle button + off-canvas left drawer + scrim + escape-to-close.
 - Tuned toolbar and configure drawer responsiveness in `src/index.css` with desktop-preserving defaults and narrow-screen adjustments.
 - Added Home-specific footer/grid safeguards for narrow widths to avoid fixed-offset footer overlap.
+
+## 13) Phase 2 implementation notes (2026-04-02)
+
+- Continued responsive work for lighter/core tabs only (HOME, SCRIPT, SCENES, CAST/CREW) while leaving Storyboard/Shotlist/Schedule/Callsheet untouched for deeper adaptation.
+- HOME:
+  - Improved tablet/phone card and stats reflow for clearer dashboard hierarchy.
+- SCRIPT:
+  - Added compact-mode panel controls and off-canvas behavior for script-side and inspector-side panels at `< 1024px`.
+  - Added controlled horizontal overflow for the page canvas area on smaller screens to avoid clipped writing surfaces.
+- SCENES:
+  - Added viewport-aware column count clamping so scene cards do not collapse into unreadable dense grids on tablet/phone.
+- CAST/CREW:
+  - Added responsive spacing updates and explicit horizontal table wrappers for list-heavy views so data remains reachable on narrow screens.
