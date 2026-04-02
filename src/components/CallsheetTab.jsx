@@ -10,6 +10,7 @@ import {
 } from '../utils/callsheetSelectors'
 import { exportSingleDayCallsheetPDF } from './ExportModal'
 import { platformService } from '../services/platformService'
+import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 function formatDate(isoDate) {
   if (!isoDate) return 'TBD'
@@ -329,6 +330,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
   const openPersonDialog = useStore(s => s.openPersonDialog)
   const callsheetViewState = useStore(s => s.tabViewState?.callsheet || {})
   const setTabViewState = useStore(s => s.setTabViewState)
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
 
   const [selectedDayId, setSelectedDayId] = useState(callsheetViewState.selectedDayId || null)
   const [emailPreflightOpen, setEmailPreflightOpen] = useState(false)
@@ -667,6 +669,10 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
   }
 
   const dayTabs = availableDays.map((day, idx) => ({ id: day.id, label: `Day ${idx + 1}${day.date ? ` — ${formatDate(day.date)}` : ''}` }))
+  const contentPadding = isPhone ? '10px 8px 14px' : (isDesktopDown ? '12px 12px 16px' : '16px 20px')
+  const heroGridTemplate = isPhone ? '1fr' : (isDesktopDown ? 'repeat(2, minmax(150px, 1fr))' : 'repeat(4, minmax(180px, 1fr))')
+  const twoColumnTemplate = isDesktopDown ? '1fr' : 'repeat(2, minmax(0, 1fr))'
+  const callsheetTableStyle = { width: 'max-content', minWidth: '100%', borderCollapse: 'collapse', fontSize: 12 }
 
   return (
     <div className="canvas-texture" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -687,7 +693,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
         />
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: contentPadding }}>
           <div style={{ maxWidth: 1280, margin: '0 auto', display: 'grid', gap: 14 }}>
             <header style={{ background: callsheet.headerBgColor || '#0B1220', color: '#F8FAFC', borderRadius: 10, padding: 16, display: 'grid', gap: 14, boxShadow: 'var(--app-panel-shadow)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
@@ -700,7 +706,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                   <div style={{ fontSize: 30, fontWeight: 900 }}>Day {activeDayIdx + 1}</div>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(180px, 1fr))', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: heroGridTemplate, gap: 10 }}>
                 <HeroEditablePill label="Date" value={activeDay.date || ''} onChange={(value) => onScheduleDayUpdate({ date: value })} type="date" emphasize />
                 <div data-callsheet-target="generalCall" style={{ borderRadius: 8, background: highlightTargetKey === 'generalCall' ? '#DBEAFE' : 'transparent' }}>
                   <HeroEditablePill label="General Call" value={activeDay.startTime || ''} onChange={(value) => onScheduleDayUpdate({ startTime: value })} type="time" emphasize />
@@ -715,7 +721,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
             {visibleSections.includes('generalInfo') && (
               <div data-callsheet-target="generalInfo" style={{ borderRadius: 10, outline: highlightTargetKey === 'generalInfo' ? '2px solid #2563EB' : 'none', outlineOffset: 2 }}>
               <Card title="Day logistics and emergency" subtitle="Linked profile contacts update globally; notes below are day-specific.">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: twoColumnTemplate, gap: 10 }}>
                   <div style={{ display: 'grid', gap: 7, alignContent: 'start' }}>
                     <div data-callsheet-target="keyContacts" style={{ borderRadius: 8, background: highlightTargetKey === 'keyContacts' ? '#DBEAFE' : 'transparent' }}>
                       <div style={{ border: '1px solid #CBD5E1', borderRadius: 6, padding: 8, background: '#F8FAFC', display: 'grid', gap: 7 }}>
@@ -724,7 +730,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700 }}>Key production contacts</div>
                             <div style={{ fontSize: 11, color: '#64748B' }}>Linked crew profiles · live phone/email</div>
                           </div>
-                          <div style={{ display: 'flex', gap: 6 }}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                             <CompactIconButton label="Add existing crew contact" icon="+ Crew" onClick={() => setShowKeyContactPicker(prev => !prev)} />
                             <CompactIconButton label="Create crew profile" icon="＋New" onClick={() => openPersonDialog('crew', null)} />
                           </div>
@@ -745,7 +751,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                         {keyContactRows.linkedRows.length > 0 ? (
                           <div style={{ display: 'grid', gap: 6 }}>
                             {keyContactRows.linkedRows.map(entry => (
-                              <div key={entry.id} style={{ border: '1px solid #E2E8F0', borderRadius: 6, background: '#fff', padding: '6px 8px', display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(120px, 1fr) auto', gap: 8, alignItems: 'center' }}>
+                              <div key={entry.id} style={{ border: '1px solid #E2E8F0', borderRadius: 6, background: '#fff', padding: '6px 8px', display: 'grid', gridTemplateColumns: isDesktopDown ? '1fr' : 'minmax(160px, 1fr) minmax(120px, 1fr) auto', gap: 8, alignItems: 'center' }}>
                                 <div data-person-type="crew" data-person-id={entry.id} style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>{entry.name || 'Unnamed crew'}</div>
                                 <div style={{ fontSize: 12, color: '#334155' }}>{[entry.department, entry.role].filter(Boolean).join(' · ') || '—'}</div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -769,7 +775,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                   <div style={{ display: 'grid', gap: 7, alignContent: 'start' }}>
                     <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', padding: 8, display: 'grid', gap: 5 }}>
                       <div data-callsheet-target="weather" style={{ borderRadius: 8, background: highlightTargetKey === 'weather' ? '#DBEAFE' : 'transparent' }}><EditableField label="Weather" value={callsheet.weather} onChange={(value) => onDayUpdate({ weather: value })} placeholder="Cloudy, 62°F" /></div>
-                      <div data-callsheet-target="sunriseSunset" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, borderRadius: 8, background: highlightTargetKey === 'sunriseSunset' ? '#DBEAFE' : 'transparent' }}>
+                      <div data-callsheet-target="sunriseSunset" style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: 6, borderRadius: 8, background: highlightTargetKey === 'sunriseSunset' ? '#DBEAFE' : 'transparent' }}>
                         <EditableField label="Sunrise" value={callsheet.sunrise} onChange={(value) => onDayUpdate({ sunrise: value })} placeholder="6:42 AM" />
                         <EditableField label="Sunset" value={callsheet.sunset} onChange={(value) => onDayUpdate({ sunset: value })} placeholder="7:31 PM" />
                       </div>
@@ -797,7 +803,8 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                   />
                 )}
               >
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <div className="callsheet-table-scroll">
+                <table style={callsheetTableStyle}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
                       {isColumnVisible('advancedSchedule', 'sceneNumber') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scene #</th> : null}
@@ -837,6 +844,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                     ))}
                   </tbody>
                 </table>
+                </div>
                 {scheduleRows.events.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: '1px dashed #CBD5E1', paddingTop: 10 }}>
                     <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700, marginBottom: 6 }}>Major day events</div>
@@ -872,7 +880,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                 }
               >
                 {showCastPicker ? (
-                  <div style={{ marginBottom: 8, display: 'flex', gap: 6 }}>
+                  <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <select defaultValue="" onChange={(e) => addCastToDay(e.target.value)} style={{ width: 320, maxWidth: '100%', border: '1px solid #CBD5E1', borderRadius: 5, padding: '5px 6px', fontSize: 12, background: '#fff' }}>
                       <option value="">Select existing cast…</option>
                       {castRoster.filter(entry => entry.name?.trim()).map(entry => (
@@ -882,7 +890,8 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                     <button type="button" onClick={() => setShowCastPicker(false)} style={{ border: '1px solid #CBD5E1', borderRadius: 5, background: '#fff', fontSize: 11, padding: '0 8px', cursor: 'pointer' }}>Close</button>
                   </div>
                 ) : null}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <div className="callsheet-table-scroll">
+                <table style={callsheetTableStyle}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
                       {isColumnVisible('castList', 'actor') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Actor ↗</th> : null}
@@ -924,6 +933,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                     ))}
                   </tbody>
                 </table>
+                </div>
               </Card>
               </div>
             )}
@@ -949,7 +959,7 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                 }
               >
                 {showCrewPicker ? (
-                  <div style={{ marginBottom: 8, display: 'flex', gap: 6 }}>
+                  <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <select defaultValue="" onChange={(e) => addCrewToDay(e.target.value)} style={{ width: 320, maxWidth: '100%', border: '1px solid #CBD5E1', borderRadius: 5, padding: '5px 6px', fontSize: 12, background: '#fff' }}>
                       <option value="">Select existing crew…</option>
                       {crewRoster.filter(entry => entry.name?.trim()).map(entry => (
@@ -959,7 +969,8 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                     <button type="button" onClick={() => setShowCrewPicker(false)} style={{ border: '1px solid #CBD5E1', borderRadius: 5, background: '#fff', fontSize: 11, padding: '0 8px', cursor: 'pointer' }}>Close</button>
                   </div>
                 ) : null}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <div className="callsheet-table-scroll">
+                <table style={callsheetTableStyle}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
                       {isColumnVisible('crewList', 'name') ? <th style={{ textAlign: 'left', padding: '7px 6px', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Name ↗</th> : null}
@@ -999,13 +1010,14 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
                     ))}
                   </tbody>
                 </table>
+                </div>
               </Card>
               </div>
             )}
 
             {visibleSections.includes('locationDetails') && (
               <Card title="Location details">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: 10 }}>
                   <EditableField label="Location address" value={callsheet.locationAddress} onChange={(value) => onDayUpdate({ locationAddress: value })} placeholder="Full address for unit parking or set" multiline />
                 </div>
               </Card>

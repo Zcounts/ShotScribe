@@ -295,3 +295,28 @@ Always verify after each responsive phase:
     - responsive header/metadata spacing and touch targets
     - phone-specific header reflow for camera/lens controls
   - Increased add-shot affordance size on small screens for easier tap interactions.
+
+## 15) Phase 5 final polish notes (2026-04-02)
+
+- Desktop-protection cleanup:
+  - Consolidated primary tab-button responsive styling into shared CSS (`.tab-nav-button`) to reduce inline style drift and keep desktop visual hierarchy stable.
+  - Kept active-state affordance unchanged (red underline + high-contrast label), with tighter sub-desktop spacing only.
+- Left drawer consistency hardening:
+  - `SidebarPane` now locks body scrolling while the mobile drawer is open to prevent background scroll jitter and accidental context shifts.
+  - Existing close behavior (scrim + Escape) remains unchanged.
+- Callsheet responsive polish:
+  - Added viewport-aware spacing and section grid behavior to prevent cramped tablet/phone states while preserving desktop density.
+  - Added horizontal scroll wrappers for data-heavy callsheet tables so columns remain reachable without clipping.
+  - Improved small-viewport action-row wrapping in key picker/config controls.
+
+### Phase 5 regression checklist (quick)
+
+- Desktop (≥1024px):
+  - Tab bar spacing/active styling matches established desktop feel.
+  - Callsheet layout still appears two-column where expected and does not feel “mobile-first”.
+- Tablet landscape/portrait:
+  - Left sidebars open/close without background page scroll drift.
+  - Callsheet hero cards and logistics sections remain readable and actionable.
+- Phone:
+  - Callsheet tables can be horizontally scrolled without clipping critical columns.
+  - No blocked primary action paths (configure, export/email preflight, day switching).

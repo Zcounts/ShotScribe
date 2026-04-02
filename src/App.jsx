@@ -982,22 +982,11 @@ export default function App() {
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
+              className={`tab-nav-button ${activeTab === id ? 'is-active' : ''}`}
               onClick={() => setActiveTab(id)}
               style={{
-                padding: '8px 16px',
-                fontFamily: 'Sora, sans-serif',
-                fontSize: '12px',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
                 border: 'none',
-                borderBottom: activeTab === id
-                  ? '2px solid #E84040'
-                  : '2px solid transparent',
-                background: 'none',
-                color: activeTab === id ? '#FAF8F4' : '#718096',
                 cursor: 'pointer',
-                transition: 'color 0.15s, border-color 0.15s',
                 marginBottom: '-1px',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1005,8 +994,6 @@ export default function App() {
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}
-              onMouseEnter={e => { if (activeTab !== id) e.currentTarget.style.color = 'rgba(250,248,244,0.8)' }}
-              onMouseLeave={e => { if (activeTab !== id) e.currentTarget.style.color = '#718096' }}
             >
               <Icon size={14} strokeWidth={1.5} />
               {label}

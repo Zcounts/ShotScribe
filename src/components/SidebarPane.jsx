@@ -33,6 +33,15 @@ export default function SidebarPane({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [mobileOpen])
 
+  useEffect(() => {
+    if (!mobileOpen) return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [mobileOpen])
+
   const sidebarStyle = useMemo(() => {
     if (width == null) return undefined
     return { width, minWidth: width }
