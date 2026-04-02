@@ -68,6 +68,8 @@ Implemented now:
 - Stripe Checkout session creation
 - Stripe Billing Portal session creation
 - webhook-driven subscription sync into Convex billing tables
+- launch-plan guardrails (entitlement granted only for configured launch `STRIPE_PRICE_ID`)
+- account-page reconciliation action after checkout/portal return (`billing:syncMyBillingState`)
 - entitlement computation (paid/trialing/manual override/local-only)
 
 Operational reality:
