@@ -52,6 +52,7 @@ import useStore from '../store'
 import { DayTabBar } from './DayTabBar'
 import SidebarPane from './SidebarPane'
 import ConfigureSidebarShell from './ConfigureSidebarShell'
+import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 class ScheduleSubviewBoundary extends React.Component {
   constructor(props) {
@@ -490,7 +491,7 @@ function ProjectedTimeBadge({ totalMins, isDark }) {
 //   isCollapsed / onToggleCollapse — Feature 2: per-block collapse
 //   shotData.shootTime / shotData.setupTime — Feature 1: synced via shot store
 
-function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, isCollapsed, onToggleCollapse, onCtrlToggleAll, pageCountByScene }) {
+function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandleProps, projectedTime, isCollapsed, onToggleCollapse, onCtrlToggleAll, pageCountByScene, listGridTemplate = LIST_GRID_TEMPLATE }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const setActiveTab = useStore(s => s.setActiveTab)
 
@@ -539,7 +540,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
   if (!shotData) {
     return (
       <div style={{
-        display: 'grid', gridTemplateColumns: LIST_GRID_TEMPLATE, alignItems: 'center',
+        display: 'grid', gridTemplateColumns: listGridTemplate, alignItems: 'center',
         gap: 8, minHeight: 34, padding: '4px 10px', borderBottom: `1px solid ${borderColor}`,
         background: '#fff5f5',
       }}>
@@ -554,7 +555,7 @@ function ShotBlockContent({ block, shotData, dayId, isDark, isOverlay, dragHandl
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'grid',
-        gridTemplateColumns: LIST_GRID_TEMPLATE,
+        gridTemplateColumns: listGridTemplate,
         alignItems: 'center',
         columnGap: 10,
         minHeight: 44,
@@ -821,7 +822,7 @@ function RemoveConfirmDialog({ displayId, isDark, onConfirm, onCancel }) {
 
 // ── SortableShotBlock ─────────────────────────────────────────────────────────
 
-function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, isCollapsed, onToggleCollapse, onCtrlToggleAll, pageCountByScene }) {
+function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, isCollapsed, onToggleCollapse, onCtrlToggleAll, pageCountByScene, listGridTemplate = LIST_GRID_TEMPLATE }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
     data: { type: 'block', dayId },
@@ -848,6 +849,7 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, isCo
           dayId={dayId}
           isDark={isDark}
           projectedTime={projectedTime}
+          listGridTemplate={listGridTemplate}
           dragHandleProps={{ ...attributes, ...listeners }}
         />
       ) : (
@@ -862,6 +864,7 @@ function SortableShotBlock({ block, shotData, dayId, isDark, projectedTime, isCo
           onToggleCollapse={onToggleCollapse}
           onCtrlToggleAll={onCtrlToggleAll}
           pageCountByScene={pageCountByScene}
+          listGridTemplate={listGridTemplate}
         />
       )}
     </div>
@@ -1310,7 +1313,7 @@ function ShotPickerPanel({ dayId, existingShotIds, isDark, onClose, anchorEl }) 
 
 // ── BreakBlockContent ─────────────────────────────────────────────────────────
 
-function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, projectedTime }) {
+function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, projectedTime, listGridTemplate = LIST_GRID_TEMPLATE }) {
   const removeShotBlock = useStore(s => s.removeShotBlock)
   const updateShotBlock = useStore(s => s.updateShotBlock)
 
@@ -1334,7 +1337,7 @@ function BreakBlockContent({ block, dayId, isDark, isOverlay, dragHandleProps, p
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: LIST_GRID_TEMPLATE,
+      gridTemplateColumns: listGridTemplate,
       alignItems: 'center',
       columnGap: 10,
       minHeight: 42,
@@ -1667,7 +1670,7 @@ function AddShotFooter({ dayId, existingShotIds, isDark }) {
   )
 }
 
-function ScheduleListColumnHeader() {
+function ScheduleListColumnHeader({ listGridTemplate = LIST_GRID_TEMPLATE }) {
   return (
     <div style={{
       position: 'sticky',
@@ -1681,7 +1684,7 @@ function ScheduleListColumnHeader() {
     }}>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: LIST_GRID_TEMPLATE,
+        gridTemplateColumns: listGridTemplate,
         alignItems: 'center',
         columnGap: 10,
         padding: '8px 10px',
@@ -1710,7 +1713,7 @@ function ScheduleListColumnHeader() {
 
 // ── SortableShootingDay ───────────────────────────────────────────────────────
 
-function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, totalDays, pageCountByScene }) {
+function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, totalDays, pageCountByScene, listGridTemplate = LIST_GRID_TEMPLATE }) {
   const removeShootingDay = useStore(s => s.removeShootingDay)
   const updateShootingDay = useStore(s => s.updateShootingDay)
   const setDayCollapsed = useStore(s => s.setDayCollapsed)
@@ -1851,6 +1854,7 @@ function SortableShootingDay({ day, dayIndex, blocks, enrichedBlockMap, isDark, 
                     onToggleCollapse={() => toggleBlockCollapse(block.id)}
                     onCtrlToggleAll={handleCtrlToggleAllBlocks}
                     pageCountByScene={pageCountByScene}
+                    listGridTemplate={listGridTemplate}
                   />
                 ))}
                 <DayEndDropZone dayId={day.id} />
@@ -2432,7 +2436,7 @@ function StripboardColumnDropZone({ dayId, isDark }) {
 
 // ── SortableStripboardColumn ──────────────────────────────────────────────────
 
-function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, shotColorMap, isDark, height, onStripClick, pageCountByScene }) {
+function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, shotColorMap, isDark, height, onStripClick, pageCountByScene, stripColumnMinWidth = STRIP_COLUMN_MIN_WIDTH }) {
   const updateShootingDay = useStore(s => s.updateShootingDay)
   const [editingDate, setEditingDate] = useState(false)
   const dateInputRef = useRef(null)
@@ -2474,7 +2478,7 @@ function SortableStripboardColumn({ day, dayIndex, blocks, enrichedBlockMap, sho
         transition,
         opacity: isDragging ? 0.4 : 1,
         width: '100%',
-        minWidth: STRIP_COLUMN_MIN_WIDTH,
+        minWidth: stripColumnMinWidth,
         border: `1px solid ${borderColor}`,
         borderRadius: 5,
         overflow: 'hidden',
@@ -3361,6 +3365,7 @@ export default function ScheduleTab({
   const scheduleViewState = useStore(s => s.tabViewState?.schedule || {})
   const setTabViewState = useStore(s => s.setTabViewState)
   const scheduleCollapseState = useStore(s => s.scheduleCollapseState)
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
 
   const schedule = useMemo(() => {
     const src = Array.isArray(scheduleRaw) ? scheduleRaw : []
@@ -3376,6 +3381,12 @@ export default function ScheduleTab({
   const safeGetScheduleWithShots = typeof getScheduleWithShots === 'function' ? getScheduleWithShots : () => []
   const safeColumnConfig = Array.isArray(scheduleColumnConfig) ? scheduleColumnConfig : []
   const isDark = false
+  const listGridTemplate = isPhone
+    ? '78px minmax(220px,2fr) 92px 108px minmax(132px,1fr) 76px 92px 92px 30px 30px'
+    : isDesktopDown
+      ? '86px minmax(260px,2.2fr) 98px 118px minmax(140px,1fr) 82px 104px 108px 30px 30px'
+      : LIST_GRID_TEMPLATE
+  const stripColumnMinWidth = isPhone ? 190 : (isDesktopDown ? 220 : STRIP_COLUMN_MIN_WIDTH)
 
   // ── Sub-view state ───────────────────────────────────────────────────────────
   const [scheduleView, setScheduleView] = useState(scheduleViewState.scheduleView || 'list') // 'list' | 'stripboard' | 'calendar'
@@ -3750,7 +3761,7 @@ export default function ScheduleTab({
                   enableDayContextMenu
                 />
               </div>
-              <ScheduleListColumnHeader />
+              <ScheduleListColumnHeader listGridTemplate={listGridTemplate} />
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -3770,6 +3781,7 @@ export default function ScheduleTab({
                       isDark={isDark}
                       totalDays={schedule.length}
                       pageCountByScene={pageCountByScene}
+                      listGridTemplate={listGridTemplate}
                     />
                   ))}
                 </SortableContext>
@@ -3788,6 +3800,7 @@ export default function ScheduleTab({
                         dayId={null}
                         isDark={isDark}
                         isOverlay
+                        listGridTemplate={listGridTemplate}
                       />
                     ) : (
                       <ShotBlockContent
@@ -3798,6 +3811,7 @@ export default function ScheduleTab({
                         isOverlay
                         isCollapsed={scheduleCollapseState?.blocks?.[activeDrag.id] ?? true}
                         pageCountByScene={pageCountByScene}
+                        listGridTemplate={listGridTemplate}
                       />
                     )
                   ) : null}
@@ -3843,7 +3857,7 @@ export default function ScheduleTab({
           <SortableContext items={dayIds} strategy={rectSortingStrategy}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(auto-fit, minmax(${STRIP_COLUMN_MIN_WIDTH}px, 1fr))`,
+              gridTemplateColumns: `repeat(auto-fit, minmax(${stripColumnMinWidth}px, 1fr))`,
               gap: 12,
               overflowX: 'hidden',
               overflowY: 'auto',
@@ -3867,6 +3881,7 @@ export default function ScheduleTab({
                   height={stripHeight}
                   onStripClick={handleStripClick}
                   pageCountByScene={pageCountByScene}
+                  stripColumnMinWidth={stripColumnMinWidth}
                 />
               ))}
             </div>
@@ -3878,7 +3893,7 @@ export default function ScheduleTab({
                   const isShotBlock = !!block.shotId
                   return (
                     <div style={{
-                      width: STRIP_COLUMN_MIN_WIDTH,
+                      width: stripColumnMinWidth,
                       borderRadius: 3,
                       overflow: 'hidden',
                       boxShadow: '0 4px 16px rgba(0,0,0,0.3)',

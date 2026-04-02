@@ -12,6 +12,7 @@ import { processStoryboardUpload, processStoryboardUploadForCloud } from '../uti
 import { uploadStoryboardAssetToCloud } from '../services/assetService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
+import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
@@ -55,6 +56,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
@@ -187,7 +189,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
       id={`storyboard-shot-${shot.id}`}
       data-entity-type="shot"
       data-entity-id={shot.id}
-      className={`shot-card ${isDragging ? 'is-dragging' : ''}`}
+      className={`shot-card ${isDragging ? 'is-dragging' : ''} ${isDesktopDown ? 'is-compact' : ''} ${isPhone ? 'is-phone' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -195,7 +197,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
       <div
         {...attributes}
         {...listeners}
-        className="flex items-center gap-1 px-2 py-1 cursor-grab active:cursor-grabbing select-none"
+        className="shot-card-header flex items-center gap-1 px-2 py-1 cursor-grab active:cursor-grabbing select-none"
         style={{ paddingLeft: 8, display: 'flex', alignItems: 'center' }}
         title="Drag to reorder"
       >
@@ -217,7 +219,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
         </div>
 
         {/* Shot ID + Camera name */}
-        <div className="flex-1 flex items-center gap-1 min-w-0" style={{ alignItems: 'center' }}>
+        <div className="shot-card-title flex-1 flex items-center gap-1 min-w-0" style={{ alignItems: 'center' }}>
           <span className="font-bold text-xs whitespace-nowrap" style={{ verticalAlign: 'middle', lineHeight: 1 }}>{displayId} -</span>
           {visibleInfo.camera !== false && (
             <input
@@ -225,8 +227,8 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
               value={shot.cameraName}
               onChange={handleCameraNameChange}
               onPointerDown={e => e.stopPropagation()}
-              className="text-xs bg-transparent border-none outline-none p-0 min-w-0 flex-1"
-              style={{ maxWidth: 80 }}
+              className="shot-card-camera-input text-xs bg-transparent border-none outline-none p-0 min-w-0 flex-1"
+              style={{ maxWidth: isDesktopDown ? 120 : 80 }}
               placeholder="Camera 1"
             />
           )}
@@ -239,8 +241,8 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
             value={shot.focalLength}
             onChange={handleFocalLengthChange}
             onPointerDown={e => e.stopPropagation()}
-            className="text-xs bg-transparent border-none outline-none text-right p-0 flex-shrink-0"
-            style={{ width: 46 }}
+            className="shot-card-lens-input text-xs bg-transparent border-none outline-none text-right p-0 flex-shrink-0"
+            style={{ width: isDesktopDown ? 64 : 46 }}
             placeholder="85mm"
           />
         )}
