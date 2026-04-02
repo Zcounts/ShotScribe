@@ -8,6 +8,7 @@ import SidebarPane from './SidebarPane'
 import compactIcon from '../../assets/script icons/compct.svg'
 import visualIcon from '../../assets/script icons/visual.svg'
 import listIcon from '../../assets/script icons/list.svg'
+import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 const VIEW_MODES = [
   { value: 'compactGrid', label: 'Compact', icon: compactIcon },
@@ -218,6 +219,7 @@ export default function ScenesTab({
   }, [selectedSceneIds, visibleScenes])
 
   const [combineForm, setCombineForm] = useState(null)
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
   useEffect(() => { if (combineOpen && combineInit) setCombineForm(combineInit) }, [combineOpen, combineInit])
 
   useEffect(() => {
@@ -268,6 +270,13 @@ export default function ScenesTab({
     setCombineOpen(false)
   }
 
+  const effectiveColumnCount = useMemo(() => {
+    if (viewMode === 'productionList') return 1
+    if (isPhone) return 1
+    if (isDesktopDown) return Math.min(columnCount, 2)
+    return columnCount
+  }, [columnCount, isDesktopDown, isPhone, viewMode])
+
   if (scriptScenes.length === 0) {
     return (
         <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
@@ -287,6 +296,7 @@ export default function ScenesTab({
   return (
     <div style={{ display: 'flex', height: '100%' }} onClick={() => { onConfigureOpenChange(false) }}>
       <SidebarPane
+        responsiveLabel="Open Scenes panel"
                 title={null}
         footer={null}
       >
@@ -379,7 +389,7 @@ export default function ScenesTab({
           groupedVisibleScenes.map(group => (
             <div key={group.key} style={{ marginBottom: 14 }}>
               {group.label ? <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, marginBottom: 8 }}>{group.label}</div> : null}
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${effectiveColumnCount}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
                 {group.scenes.map(scene => {
           const linkedShots = linkedShotsMap[scene.id] || []
           const storyboardImages = linkedShots.filter(shot => !!shot.image)

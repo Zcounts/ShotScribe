@@ -4,6 +4,7 @@ import { SubTabNav } from './SubTabNav'
 import SidebarPane from './SidebarPane'
 import visualIcon from '../../assets/script icons/visual.svg'
 import listIcon from '../../assets/script icons/list.svg'
+import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 function isNightShot(shotData) {
   const dayNight = String(shotData?.dayNight || '').toUpperCase()
@@ -46,6 +47,7 @@ export default function CastCrewTab() {
   const setTabViewState = useStore(s => s.setTabViewState)
   const openPersonDialog = useStore(s => s.openPersonDialog)
   const [activeSubTab, setActiveSubTab] = useState(castCrewViewState.activeSubTab || 'Visual')
+  const { isDesktopDown, isPhone } = useResponsiveViewport()
   const scrollRef = useRef(null)
 
   const openProfile = (type, id) => openPersonDialog(type, id || null)
@@ -125,7 +127,8 @@ export default function CastCrewTab() {
     >
       <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, minWidth: 0, height: '100%' }}>
         <SidebarPane
-                    title="Cast/Crew"
+          title="Cast/Crew"
+          responsiveLabel="Open Cast/Crew panel"
           controls={(
             <div style={{ display: 'grid', gap: 8 }}>
               <SubTabNav
@@ -147,7 +150,7 @@ export default function CastCrewTab() {
             </div>
           )}
         />
-        <div style={{ flex: 1, minWidth: 0, padding: '16px 18px 20px 10px' }} className="space-y-4">
+        <div style={{ flex: 1, minWidth: 0, padding: isPhone ? '10px 10px 16px 8px' : (isDesktopDown ? '12px 12px 18px 8px' : '16px 18px 20px 10px') }} className="space-y-4">
           {activeSubTab === 'Visual' ? (
             <>
               <SectionShell title="Cast" subtitle="Fast day-by-day availability matrix for on-set lookup.">
@@ -194,51 +197,55 @@ export default function CastCrewTab() {
           ) : (
             <>
               <SectionShell title="Cast" subtitle="Actual performer profiles linked to characters.">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="text-xs uppercase tracking-[0.08em] text-slate border-b border-slate/15">
-                      <th className="text-left p-2">Name</th>
-                      <th className="text-left p-2">Character Played</th>
-                      <th className="text-right p-2">Scenes</th>
-                      <th className="text-right p-2">Pages</th>
-                      <th className="text-right p-2">Shots</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {castListRows.map(row => (
-                      <tr key={row.id} className="border-b border-slate/10 cursor-pointer">
-                        <td className="p-2 font-medium text-ink" data-person-type="cast" data-person-id={row.id}>{row.name}</td>
-                        <td className="p-2 text-slate">{row.characterDisplay}</td>
-                        <td className="p-2 text-right text-slate">{row.scriptSceneCount}</td>
-                        <td className="p-2 text-right text-slate">{row.scriptPageCount.toFixed(2)}</td>
-                        <td className="p-2 text-right text-slate">{row.shotCount}</td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse min-w-[640px]">
+                    <thead>
+                      <tr className="text-xs uppercase tracking-[0.08em] text-slate border-b border-slate/15">
+                        <th className="text-left p-2">Name</th>
+                        <th className="text-left p-2">Character Played</th>
+                        <th className="text-right p-2">Scenes</th>
+                        <th className="text-right p-2">Pages</th>
+                        <th className="text-right p-2">Shots</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {castListRows.map(row => (
+                        <tr key={row.id} className="border-b border-slate/10 cursor-pointer">
+                          <td className="p-2 font-medium text-ink" data-person-type="cast" data-person-id={row.id}>{row.name}</td>
+                          <td className="p-2 text-slate">{row.characterDisplay}</td>
+                          <td className="p-2 text-right text-slate">{row.scriptSceneCount}</td>
+                          <td className="p-2 text-right text-slate">{row.scriptPageCount.toFixed(2)}</td>
+                          <td className="p-2 text-right text-slate">{row.shotCount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </SectionShell>
 
               <SectionShell title="Crew" subtitle="Only real assigned crew profiles.">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="text-xs uppercase tracking-[0.08em] text-slate border-b border-slate/15">
-                      <th className="text-left p-2">Name</th>
-                      <th className="text-left p-2">Department</th>
-                      <th className="text-left p-2">Role</th>
-                      <th className="text-right p-2">Days</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {crewRows.map(row => (
-                      <tr key={row.id} className="border-b border-slate/10 cursor-pointer">
-                        <td className="p-2 font-medium text-ink" data-person-type="crew" data-person-id={row.id}>{row.name}</td>
-                        <td className="p-2 text-slate">{row.department || '—'}</td>
-                        <td className="p-2 text-slate">{row.role || '—'}</td>
-                        <td className="p-2 text-right text-slate">{row.daysBooked}</td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse min-w-[560px]">
+                    <thead>
+                      <tr className="text-xs uppercase tracking-[0.08em] text-slate border-b border-slate/15">
+                        <th className="text-left p-2">Name</th>
+                        <th className="text-left p-2">Department</th>
+                        <th className="text-left p-2">Role</th>
+                        <th className="text-right p-2">Days</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {crewRows.map(row => (
+                        <tr key={row.id} className="border-b border-slate/10 cursor-pointer">
+                          <td className="p-2 font-medium text-ink" data-person-type="crew" data-person-id={row.id}>{row.name}</td>
+                          <td className="p-2 text-slate">{row.department || '—'}</td>
+                          <td className="p-2 text-slate">{row.role || '—'}</td>
+                          <td className="p-2 text-right text-slate">{row.daysBooked}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </SectionShell>
             </>
           )}

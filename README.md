@@ -19,6 +19,7 @@ This repository currently contains:
 - One-time admin repair flow exists for split/synthetic identity recovery.
 - Local-only mode remains supported when cloud auth/env is not configured.
 - Current auth/account/admin behavior is intentionally preserved.
+- Shotlist and Schedule desktop views now collapse secondary side panels and tighten table/stripboard layouts at smaller viewport widths to improve laptop usability without changing core workflows.
 
 ---
 

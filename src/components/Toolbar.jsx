@@ -173,7 +173,7 @@ export default function Toolbar({
     <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       <div className="toolbar">
       {/* Left: Project name */}
-      <div className="flex items-center gap-3 flex-1 min-w-0">
+      <div className="toolbar-section toolbar-section-left flex items-center gap-3 flex-1 min-w-0">
         <div ref={emojiPickerRef} style={{ position: 'relative', flexShrink: 0 }}>
           <button
             onClick={() => {
@@ -306,13 +306,13 @@ export default function Toolbar({
         )}
 
         {/* Shot / scene count */}
-        <span style={{ fontSize: 11, color: '#718096', flexShrink: 0, fontFamily: 'Sora, sans-serif' }}>
+        <span className="toolbar-meta" style={{ fontSize: 11, color: '#718096', flexShrink: 0, fontFamily: 'Sora, sans-serif' }}>
           {shotCount} shot{shotCount !== 1 ? 's' : ''} · {sceneCount} scene{sceneCount !== 1 ? 's' : ''}
         </span>
 
         {/* Current file name */}
         {fileName && (
-          <span style={{ fontSize: 11, color: '#4A5568', flexShrink: 0, fontFamily: 'monospace' }} title={projectPath}>
+          <span className="toolbar-file-name" style={{ fontSize: 11, color: '#4A5568', flexShrink: 0, fontFamily: 'monospace' }} title={projectPath}>
             {fileName}
           </span>
         )}
@@ -328,7 +328,7 @@ export default function Toolbar({
       </div>
 
       {/* Center: File operations */}
-      <div className="flex items-center gap-2">
+      <div className="toolbar-section toolbar-section-center flex items-center gap-2">
         <button className="toolbar-btn" onClick={() => guardUnsaved(newProject)} title="New project">
           New
         </button>
@@ -587,7 +587,7 @@ export default function Toolbar({
       ) : null}
 
       {/* Right: Export + Account */}
-      <div className="flex items-center gap-2">
+      <div className="toolbar-section toolbar-section-right flex items-center gap-2">
         <div ref={exportMenuRef} style={{ position: 'relative', display: 'flex' }}>
           <button
             className="toolbar-btn"
