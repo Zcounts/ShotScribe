@@ -6,9 +6,9 @@ export type StoryboardUploadResult = {
   thumbDataUrl?: string | null,
 }
 
-async function uploadBlobToConvex(uploadUrl: string, blob: Blob) {
+async function uploadBlobToS3(uploadUrl: string, blob: Blob) {
   const response = await fetch(uploadUrl, {
-    method: 'POST',
+    method: 'PUT',
     headers: {
       'Content-Type': blob.type || 'application/octet-stream',
     },
@@ -18,40 +18,39 @@ async function uploadBlobToConvex(uploadUrl: string, blob: Blob) {
   if (!response.ok) {
     throw new Error(`Asset upload failed (${response.status})`)
   }
-
-  const json = await response.json()
-  if (!json?.storageId) {
-    throw new Error('Asset upload did not return a storage id')
-  }
-  return json.storageId as string
 }
 
 export async function uploadStoryboardAssetToCloud({
   projectId,
   shotId,
   processed,
-  createAssetUploadUrl,
-  completeAssetUpload,
+  createAssetUploadIntent,
+  finalizeAssetUpload,
 }: {
   projectId: string,
   shotId: string,
   processed: StoryboardUploadResult,
-  createAssetUploadUrl: (args: { projectId: string }) => Promise<{ uploadUrl: string }>,
-  completeAssetUpload: (args: any) => Promise<any>,
+  createAssetUploadIntent: (args: { projectId: string, kind: 'storyboard_image', mime: string, sourceName?: string }) => Promise<any>,
+  finalizeAssetUpload: (args: any) => Promise<any>,
 }) {
-  const thumbTarget = await createAssetUploadUrl({ projectId })
+  const uploadIntent = await createAssetUploadIntent({
+    projectId,
+    kind: 'storyboard_image',
+    mime: processed.mime,
+    sourceName: String(processed?.meta?.sourceName || 'storyboard-image'),
+  })
 
-  const thumbStorageId = await uploadBlobToConvex(thumbTarget.uploadUrl, processed.thumbBlob)
-  const fullStorageId = thumbStorageId
+  await uploadBlobToS3(uploadIntent.uploadUrl, processed.thumbBlob)
 
-  const completed = await completeAssetUpload({
+  const completed = await finalizeAssetUpload({
     projectId,
     shotId,
     kind: 'storyboard_image',
+    provider: 's3',
+    objectKey: uploadIntent.objectKey,
+    bucket: uploadIntent.bucket,
     mime: processed.mime,
     sourceName: processed?.meta?.sourceName || '',
-    thumbStorageId,
-    fullStorageId,
     meta: processed.meta || null,
   })
 
@@ -65,8 +64,8 @@ export async function uploadStoryboardAssetToCloud({
       meta: processed.meta || null,
       cloud: {
         assetId: completed?.assetId ? String(completed.assetId) : null,
-        thumbStorageId,
-        fullStorageId,
+        provider: 's3',
+        objectKey: uploadIntent.objectKey || null,
       },
     },
   }

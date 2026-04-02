@@ -39,11 +39,70 @@ Date: 2026-04-01
 
 ## Storage/reference behavior
 
+- Convex remains the metadata source of truth (`projectAssets`).
+- Browser upload flow for cloud projects:
+  1. Request upload intent from Convex.
+  2. Convex validates auth/access + billing entitlements and returns presigned **private S3 PUT** URL.
+  3. Browser uploads normalized image bytes directly to S3.
+  4. Browser finalizes asset metadata in Convex.
+- Browser read flow for cloud projects:
+  1. Browser asks Convex for asset view.
+  2. Convex validates access and returns short-lived **signed S3 GET** URL for S3-backed assets.
+- No public bucket/object URLs are used for cloud storyboard images.
+
 - Upload pipeline normalizes incoming cloud images to 640x360 WEBP before completion metadata is accepted.
 - Asset references are stored on project shot image asset records using project-scoped cloud asset ids.
 - Asset fetch path requires both:
   - project membership authorization, and
   - paid cloud entitlement for the requesting user.
+
+## Convex environment variables required for private S3
+
+- `S3_REGION` (example: `us-east-1`)
+- `S3_BUCKET` (private bucket name)
+- `S3_UPLOAD_PREFIX` (optional; defaults to `storyboard`)
+
+## Required AWS IAM policy (example baseline)
+
+Use least privilege and scope `Resource` to the exact bucket/prefix.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ShotScribeStoryboardAssets",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::YOUR_PRIVATE_BUCKET/storyboard/*"
+    }
+  ]
+}
+```
+
+## Required S3 CORS JSON (example)
+
+Set bucket CORS so browser PUT uploads from your app origins succeed.
+
+```json
+[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedOrigins": [
+      "https://shot-scribe.com",
+      "https://app.shot-scribe.com",
+      "http://localhost:5173"
+    ],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]
+```
 
 ## Manual QA checklist
 
@@ -64,6 +123,10 @@ Date: 2026-04-01
 4. **Local-only user unaffected**
    - In local-only project mode, confirm existing storyboard image upload/edit behavior still works.
    - Confirm local image workflow does not require cloud entitlement.
+
+5. **Private bucket verification**
+   - Confirm direct unsigned object URL returns access denied.
+   - Confirm app-rendered images load through signed URLs only.
 
 For rollout sequencing and incident response, also use:
 - `docs/public-beta-launch-checklist.md`
