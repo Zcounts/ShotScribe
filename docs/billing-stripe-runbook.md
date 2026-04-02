@@ -36,7 +36,6 @@ Also required for auth/cloud mode:
 4. Configure webhook endpoint pointing to Convex HTTP route:
    - `https://<your-convex-deployment>/stripe/webhook`
 5. Subscribe endpoint to events:
-   - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
@@ -60,6 +59,8 @@ Also required for auth/cloud mode:
 - `portalAvailable`
 
 `billing:syncMyBillingState` is used by `/account` after Checkout success and Portal return to quickly reconcile Stripe state even if webhook delivery is delayed.
+
+Webhook entitlement state is sourced from `customer.subscription.*` events only so subscription price checks are always applied before granting access.
 
 ## Manual admin overrides + Stripe coexistence
 

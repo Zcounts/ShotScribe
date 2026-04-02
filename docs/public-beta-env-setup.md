@@ -37,7 +37,6 @@ Notes:
 - Webhook endpoint set to:
   - `https://<convex-deployment>/stripe/webhook`
 - Required webhook events:
-  - `checkout.session.completed`
   - `customer.subscription.created`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`

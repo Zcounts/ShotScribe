@@ -363,7 +363,7 @@ export const syncMyBillingState = action({
     const currentPeriodEnd = latest?.current_period_end ? Number(latest.current_period_end) * 1000 : undefined
     const cancelAtPeriodEnd = Boolean(latest?.cancel_at_period_end)
 
-    await ctx.runMutation(internal.billing.syncStripeSubscription, {
+    const syncResult = await ctx.runMutation(internal.billing.syncStripeSubscription, {
       eventId: `manual_sync_${Date.now()}`,
       customerId: String(latest.customer || billingCustomer.stripeCustomerId),
       subscriptionId: String(latest.id),
@@ -374,6 +374,10 @@ export const syncMyBillingState = action({
       userId: user._id,
       customerEmail: user.email || undefined,
     })
+
+    if (syncResult?.ignored) {
+      return { synced: false, reason: syncResult.reason as 'price_mismatch' }
+    }
 
     return { synced: true, status }
   },
