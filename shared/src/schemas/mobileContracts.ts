@@ -33,7 +33,7 @@ export const mobileScheduleItemSchema = z.object({
   plannedEndTime: optionalIsoDateTimeString,
   actualStartTime: optionalIsoDateTimeString,
   actualEndTime: optionalIsoDateTimeString,
-  status: z.enum(['todo', 'in_progress', 'done']).optional(),
+  status: z.enum(['todo', 'in_progress', 'done', 'skipped']).optional(),
   sortOrder: z.number().int().nonnegative(),
 })
 
@@ -145,7 +145,7 @@ export const limitedMobileUpdateItemSchema = z.object({
   dayId: z.string().min(1),
   scheduleItemId: z.string().min(1).optional(),
   shotId: z.string().min(1).optional(),
-  status: z.enum(['todo', 'in_progress', 'done']).optional(),
+  status: z.enum(['todo', 'in_progress', 'done', 'skipped']).optional(),
   actualStartTime: optionalIsoDateTimeString,
   actualEndTime: optionalIsoDateTimeString,
   quickNotes: z.string().max(5000).optional(),

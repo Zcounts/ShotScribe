@@ -21,6 +21,7 @@ export default function Toolbar({
   const projectPath = useStore(s => s.projectPath)
   const lastSaved = useStore(s => s.lastSaved)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
+  const saveSyncState = useStore(s => s.saveSyncState)
   const autoSave = useStore(s => s.autoSave)
   const scenes = useStore(s => s.scenes)
   const activeTab = useStore(s => s.activeTab)
@@ -63,6 +64,13 @@ export default function Toolbar({
     const d = new Date(iso)
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
+  const syncTone = saveSyncState?.status === 'cloud_sync_failed'
+    ? '#fca5a5'
+    : saveSyncState?.status === 'syncing_to_cloud'
+      ? '#bfdbfe'
+      : saveSyncState?.status === 'synced_to_cloud'
+        ? '#86efac'
+        : '#cbd5e1'
 
   // Close PDF menu when clicking outside it
   useEffect(() => {
@@ -324,11 +332,10 @@ export default function Toolbar({
         )}
 
         {/* Save indicator */}
-        {lastSaved && (
-          <span style={{ fontSize: 11, color: '#4A5568', flexShrink: 0, fontFamily: 'Sora, sans-serif' }}>
-            Saved {formatTime(lastSaved)}
-          </span>
-        )}
+        <span style={{ fontSize: 11, color: syncTone, flexShrink: 0, fontFamily: 'Sora, sans-serif' }} title={saveSyncState?.error || ''}>
+          {saveSyncState?.message || (hasUnsavedChanges ? 'Unsaved changes' : 'Saved locally')}
+          {lastSaved ? ` · ${formatTime(lastSaved)}` : ''}
+        </span>
       </div>
 
       {/* Center: File operations */}

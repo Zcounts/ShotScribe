@@ -78,7 +78,9 @@ function buildScheduleItems(day, shotLookup) {
         shotColor: shot?.color || undefined,
         sceneId: linked?.scene?.id,
         title: linked ? `${linked.displayId} ${linked.scene.sceneLabel}` : 'Shot',
-        status: linked?.shot?.checked ? 'done' : 'todo',
+        status: linked?.shot?.status === 'skipped'
+          ? 'skipped'
+          : (linked?.shot?.checked ? 'done' : 'todo'),
         sortOrder: index,
       }
     }

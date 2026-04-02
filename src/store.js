@@ -535,11 +535,42 @@ function persistBrowserProjectState(get, set, {
     browserProjectId,
   }))
   if (markSaved) {
-    set({ lastSaved: new Date().toISOString(), hasUnsavedChanges: false, browserProjectId })
+    set({
+      lastSaved: new Date().toISOString(),
+      hasUnsavedChanges: false,
+      browserProjectId,
+      saveSyncState: buildSyncState({
+        mode: 'local_only',
+        status: 'saved_locally',
+        message: 'Saved locally on this device',
+      }),
+    })
   } else if (browserProjectId !== get().browserProjectId) {
     set({ browserProjectId })
   }
   return browserProjectId
+}
+
+const CLOUD_SYNC_DEBOUNCE_MS = 8000
+
+function buildSyncState({
+  mode = 'local_only',
+  status = 'saved_locally',
+  message = 'Saved locally',
+  pendingReason = null,
+  lastSyncedAt = null,
+  error = null,
+  lastAttemptAt = null,
+} = {}) {
+  return {
+    mode,
+    status,
+    message,
+    pendingReason,
+    lastSyncedAt,
+    error,
+    lastAttemptAt,
+  }
 }
 
 const projectRepository = createProjectRepository()
@@ -553,6 +584,20 @@ const useStore = create((set, get) => ({
   projectEmoji: '🎬',
   lastSaved: null,
   hasUnsavedChanges: false,
+  saveSyncState: buildSyncState({
+    mode: 'local_only',
+    status: 'saved_locally',
+    message: 'Saved locally on this device',
+  }),
+  cloudSyncContext: {
+    canSync: false,
+    cloudWritesEnabled: false,
+    runSnapshotMutation: null,
+    currentUserId: null,
+    collaborationMode: false,
+  },
+  _cloudSyncTimeout: null,
+  _cloudSyncInFlight: false,
   documentSession: 0,
   appMode: runtimeConfig.appMode,
 
@@ -1935,7 +1980,10 @@ const useStore = create((set, get) => ({
   setTheme: (theme) => set({ theme }),
   setAutoSave: (enabled) => set({ autoSave: enabled }),
   setUseDropdowns: (val) => set({ useDropdowns: val }),
-  setProjectName: (name) => set({ projectName: name }),
+  setProjectName: (name) => {
+    set({ projectName: name })
+    get()._scheduleAutoSave('project_name')
+  },
   setProjectEmoji: (emoji) => {
     set({ projectEmoji: emoji || '🎬' })
     get()._scheduleAutoSave()
@@ -2397,6 +2445,11 @@ const useStore = create((set, get) => ({
             projectPath: result.filePath,
             hasUnsavedChanges: false,
             projectRef: { type: 'local', path: result.filePath, browserProjectId: null },
+            saveSyncState: buildSyncState({
+              mode: 'local_only',
+              status: 'saved_locally',
+              message: 'Saved locally on this device',
+            }),
           })
           logTelemetry('project_export_result', { success: true, mode: 'save', platform: 'desktop', hasPath: !!result.filePath })
         } else if (result.error) {
@@ -2414,6 +2467,11 @@ const useStore = create((set, get) => ({
         const browserProjectId = persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
         set({
           projectRef: { type: 'local', path: null, browserProjectId: browserProjectId || get().browserProjectId || null },
+          saveSyncState: buildSyncState({
+            mode: 'local_only',
+            status: 'saved_locally',
+            message: 'Saved locally on this device',
+          }),
         })
         logTelemetry('project_export_result', { success: true, mode: 'save', platform: 'browser' })
       } catch (err) {
@@ -2456,6 +2514,11 @@ const useStore = create((set, get) => ({
             projectPath: result.filePath,
             hasUnsavedChanges: false,
             projectRef: { type: 'local', path: result.filePath, browserProjectId: null },
+            saveSyncState: buildSyncState({
+              mode: 'local_only',
+              status: 'saved_locally',
+              message: 'Saved locally on this device',
+            }),
           })
           logTelemetry('project_export_result', { success: true, mode: 'save_as', platform: 'desktop', hasPath: !!result.filePath })
         } else if (result.error) {
@@ -2472,6 +2535,11 @@ const useStore = create((set, get) => ({
         const browserProjectId = persistBrowserProjectState(get, set, { data, name: defaultName, markSaved: true })
         set({
           projectRef: { type: 'local', path: null, browserProjectId: browserProjectId || get().browserProjectId || null },
+          saveSyncState: buildSyncState({
+            mode: 'local_only',
+            status: 'saved_locally',
+            message: 'Saved locally on this device',
+          }),
         })
         logTelemetry('project_export_result', { success: true, mode: 'save_as', platform: 'browser' })
       } catch (err) {
@@ -2757,6 +2825,11 @@ const useStore = create((set, get) => ({
       shortcutBindings: getActiveBindings(data.shortcutBindings || loadShortcutBindings() || SHORTCUT_DEFAULTS),
       lastSaved: new Date().toISOString(),
       hasUnsavedChanges: false,
+      saveSyncState: buildSyncState({
+        mode: 'local_only',
+        status: 'saved_locally',
+        message: 'Saved locally on this device',
+      }),
       browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
       projectRef: {
         type: 'local',
@@ -2929,6 +3002,12 @@ const useStore = create((set, get) => ({
       browserProjectId,
       projectRef: { type: 'local', path: null, browserProjectId },
       lastSaved: null,
+      hasUnsavedChanges: false,
+      saveSyncState: buildSyncState({
+        mode: 'local_only',
+        status: 'saved_locally',
+        message: 'Saved locally on this device',
+      }),
       activeTab: 'script',
       contextMenu: null,
       personDialog: null,
@@ -2989,6 +3068,12 @@ const useStore = create((set, get) => ({
         projectId: cloudProject.id,
         snapshotId: snapshot.id,
       },
+      saveSyncState: buildSyncState({
+        mode: 'cloud_solo',
+        status: 'synced_to_cloud',
+        message: 'Saved locally and synced to cloud',
+        lastSyncedAt: new Date().toISOString(),
+      }),
     })
     return { project: cloudProject, snapshot }
   },
@@ -3015,6 +3100,14 @@ const useStore = create((set, get) => ({
         projectId,
         snapshotId: snapshot.id,
       },
+      hasUnsavedChanges: false,
+      lastSaved: new Date().toISOString(),
+      saveSyncState: buildSyncState({
+        mode: 'cloud_solo',
+        status: 'synced_to_cloud',
+        message: 'Saved locally and synced to cloud',
+        lastSyncedAt: new Date().toISOString(),
+      }),
     })
   },
 
@@ -3041,8 +3134,157 @@ const useStore = create((set, get) => ({
       return null
     }
   },
-  _scheduleAutoSave: () => {
+  _updateSaveSyncStateForChange: (reason = 'edit') => {
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') {
+      set({
+        saveSyncState: buildSyncState({
+          mode: 'local_only',
+          status: 'unsaved_changes',
+          message: 'Unsaved local changes',
+          lastSyncedAt: state.saveSyncState.lastSyncedAt,
+        }),
+      })
+      return
+    }
+    const canCloudSync = Boolean(state.cloudSyncContext?.canSync && state.cloudSyncContext?.cloudWritesEnabled)
+    if (!canCloudSync) {
+      set({
+        saveSyncState: buildSyncState({
+          mode: 'cloud_blocked',
+          status: 'saved_locally',
+          message: 'Saved locally · Cloud sync unavailable',
+          pendingReason: reason,
+          lastSyncedAt: state.saveSyncState.lastSyncedAt,
+        }),
+      })
+      return
+    }
+    set({
+      saveSyncState: buildSyncState({
+        mode: state.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+        status: 'unsaved_changes',
+        message: 'Unsaved changes · syncing soon',
+        pendingReason: reason,
+        lastSyncedAt: state.saveSyncState.lastSyncedAt,
+      }),
+    })
+  },
+  _scheduleCloudSync: (reason = 'edit') => {
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') return
+    if (!state.cloudSyncContext?.canSync || !state.cloudSyncContext?.cloudWritesEnabled) return
+    if (state._cloudSyncTimeout) clearTimeout(state._cloudSyncTimeout)
+    const timeout = setTimeout(() => {
+      get().flushCloudSync({ reason })
+    }, CLOUD_SYNC_DEBOUNCE_MS)
+    set({ _cloudSyncTimeout: timeout })
+  },
+  setCloudSyncContext: ({
+    canSync = false,
+    cloudWritesEnabled = false,
+    runSnapshotMutation = null,
+    currentUserId = null,
+    collaborationMode = false,
+  } = {}) => {
+    set({
+      cloudSyncContext: {
+        canSync: !!canSync,
+        cloudWritesEnabled: !!cloudWritesEnabled,
+        runSnapshotMutation: runSnapshotMutation || null,
+        currentUserId: currentUserId ? String(currentUserId) : null,
+        collaborationMode: !!collaborationMode,
+      },
+    })
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') return
+    if (!state.cloudSyncContext.canSync || !state.cloudSyncContext.cloudWritesEnabled) {
+      set({
+        saveSyncState: buildSyncState({
+          mode: 'cloud_blocked',
+          status: 'saved_locally',
+          message: 'Saved locally · Cloud sync unavailable',
+          lastSyncedAt: state.saveSyncState.lastSyncedAt,
+        }),
+      })
+      return
+    }
+    get()._scheduleCloudSync('context_updated')
+  },
+  flushCloudSync: async ({ reason = 'manual' } = {}) => {
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') return { skipped: true, reason: 'not_cloud_project' }
+    if (!state.cloudSyncContext?.canSync || !state.cloudSyncContext?.cloudWritesEnabled) {
+      return { skipped: true, reason: 'sync_blocked' }
+    }
+    if (state._cloudSyncInFlight) return { skipped: true, reason: 'sync_in_flight' }
+    const runSnapshotMutation = state.cloudSyncContext?.runSnapshotMutation
+    const currentUserId = state.cloudSyncContext?.currentUserId
+    if (!currentUserId || typeof runSnapshotMutation !== 'function') {
+      return { skipped: true, reason: 'missing_sync_context' }
+    }
+    if (state._cloudSyncTimeout) {
+      clearTimeout(state._cloudSyncTimeout)
+      set({ _cloudSyncTimeout: null })
+    }
+
+    set({
+      _cloudSyncInFlight: true,
+      saveSyncState: buildSyncState({
+        mode: state.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+        status: 'syncing_to_cloud',
+        message: 'Syncing to cloud…',
+        pendingReason: reason,
+        lastSyncedAt: state.saveSyncState.lastSyncedAt,
+        lastAttemptAt: new Date().toISOString(),
+      }),
+    })
+    try {
+      const latest = get()
+      const result = await runSnapshotMutation({
+        projectId: latest.projectRef.projectId,
+        createdByUserId: currentUserId,
+        source: reason === 'manual' ? 'manual_save' : 'autosave',
+        payload: latest.getProjectData(),
+        expectedLatestSnapshotId: latest.projectRef.snapshotId || undefined,
+        conflictStrategy: latest.cloudSyncContext.collaborationMode ? 'last_write_wins' : 'fail_on_conflict',
+      })
+      if (!result?.ok) throw new Error(result?.reason || 'sync_failed')
+      const syncedAt = new Date().toISOString()
+      set((nextState) => ({
+        _cloudSyncInFlight: false,
+        hasUnsavedChanges: false,
+        lastSaved: syncedAt,
+        projectRef: nextState.projectRef?.type === 'cloud'
+          ? { ...nextState.projectRef, snapshotId: String(result.snapshotId) }
+          : nextState.projectRef,
+        saveSyncState: buildSyncState({
+          mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'synced_to_cloud',
+          message: 'Saved locally and synced to cloud',
+          lastSyncedAt: syncedAt,
+        }),
+      }))
+      return { ok: true, snapshotId: result.snapshotId }
+    } catch (error) {
+      set((nextState) => ({
+        _cloudSyncInFlight: false,
+        saveSyncState: buildSyncState({
+          mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'cloud_sync_failed',
+          message: 'Saved locally · Cloud sync failed',
+          pendingReason: reason,
+          error: error?.message || 'Cloud sync failed',
+          lastSyncedAt: nextState.saveSyncState.lastSyncedAt,
+        }),
+      }))
+      return { ok: false, error: error?.message || 'Cloud sync failed' }
+    }
+  },
+  _scheduleAutoSave: (reason = 'edit') => {
     set({ hasUnsavedChanges: true })
+    get()._updateSaveSyncStateForChange(reason)
+    get()._scheduleCloudSync(reason)
     const state = get()
     if (!state.autoSave) return
     if (state._autoSaveTimeout) clearTimeout(state._autoSaveTimeout)

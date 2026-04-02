@@ -63,6 +63,8 @@ import AccountPage from './features/account/AccountPage'
 import AdminConsolePage from './features/admin/AdminConsolePage'
 import AcceptInvitePage from './features/sharing/AcceptInvitePage'
 import useCloudAccessPolicy from './features/billing/useCloudAccessPolicy'
+import { runtimeConfig } from './config/runtimeConfig'
+import CloudSyncCoordinator from './components/CloudSyncCoordinator'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -904,6 +906,7 @@ export default function App() {
         cloudExportBlocked={cloudAccessPolicy.isCloudProject && !cloudAccessPolicy.canExportCloudProject}
         cloudExportBlockedMessage={`${cloudAccessPolicy.readOnlyReason || 'Cloud project export is blocked.'} Manage billing in Account.`}
       />
+      {runtimeConfig.appMode.cloudEnabled && runtimeConfig.convexUrl ? <CloudSyncCoordinator /> : null}
 
       <AuthSessionBar />
 
