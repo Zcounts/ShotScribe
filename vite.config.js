@@ -26,6 +26,11 @@ export default defineConfig(({ mode }) => {
         external: ['pdfreader', 'pdf2json', 'events', 'fs', 'stream', 'util', 'path', 'buffer'],
       },
     },
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, 'src'),
+      },
+    },
     optimizeDeps: {
       // Limit dependency crawling to the desktop entrypoint.
       // Without this, Vite scans /mobile/index.html too, which imports the
