@@ -401,3 +401,39 @@
   color: #6b7280;
   font-size: 11px;
 }
+
+@media (max-width: 1023px) {
+  .home-footer {
+    left: 0;
+  }
+
+  .home-workflow-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .home-workflow-grid,
+  .home-quick-grid,
+  .home-stat-strip {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .home-hero {
+    flex-direction: column;
+  }
+
+  .home-hero-title {
+    font-size: 4.2em;
+  }
+
+  .home-footer {
+    position: static;
+    margin-top: 10px;
+    padding-inline: 14px;
+  }
+
+  .home-main {
+    padding-bottom: 14px;
+  }
+}
