@@ -111,6 +111,34 @@ function getOutlineItemStyle(color, isActive = false) {
   }
 }
 
+class RouteErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, message: '' }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: error?.message || 'Unknown error' }
+  }
+
+  componentDidCatch(error) {
+    console.error('Route render failure', error)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ flex: 1, overflow: 'auto', padding: '24px 20px', background: '#111318', color: '#E7ECF3' }}>
+          <div style={{ maxWidth: 860, margin: '0 auto', border: '1px solid #7F1D1D', borderRadius: 10, background: '#171C24', padding: 16, color: '#FCA5A5' }}>
+            Unable to load this page. Please refresh and try again. ({this.state.message})
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 function SortableStoryboardSceneNavItem({
   item,
   isActive,
@@ -880,9 +908,13 @@ export default function App() {
       <AuthSessionBar />
 
       {pathname === '/account' ? (
-        <AccountPage />
+        <RouteErrorBoundary>
+          <AccountPage />
+        </RouteErrorBoundary>
       ) : pathname === '/admin' ? (
-        <AdminConsolePage />
+        <RouteErrorBoundary>
+          <AdminConsolePage />
+        </RouteErrorBoundary>
       ) : pathname === '/accept-invite' ? (
         <AcceptInvitePage />
       ) : (
