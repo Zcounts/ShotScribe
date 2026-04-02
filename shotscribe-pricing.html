@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShotScribe Pricing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Poppins:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0c0c0d;
+      --bg-card:     #131316;
+      --bg-card-hi:  #181820;
+      --border:      rgba(255,255,255,0.07);
+      --border-hi:   rgba(255,255,255,0.13);
+      --accent:      #4A6CF7;
+      --accent-dim:  rgba(74,108,247,0.12);
+      --accent-glow: rgba(74,108,247,0.25);
+      --text:        #f0f0f0;
+      --text-muted:  #8a8a9a;
+      --text-dim:    #5a5a6a;
+      --gold:        #c9a84c;
+      --gold-dim:    rgba(201,168,76,0.12);
+      --green:       #3ecf8e;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Poppins', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── BETA BANNER ─────────────────────────────── */
+    .beta-banner {
+      background: linear-gradient(90deg, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0.14) 50%, rgba(201,168,76,0.08) 100%);
+      border-top: 1px solid rgba(201,168,76,0.25);
+      border-bottom: 1px solid rgba(201,168,76,0.25);
+      padding: 14px 24px;
+      text-align: center;
+    }
+
+    .beta-banner-inner {
+      max-width: 860px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .beta-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: var(--gold-dim);
+      border: 1px solid rgba(201,168,76,0.3);
+      padding: 3px 9px;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+
+    .beta-banner p {
+      font-size: 13px;
+      font-weight: 400;
+      color: #c8b97a;
+      line-height: 1.5;
+    }
+
+    .beta-banner strong {
+      font-weight: 600;
+      color: var(--gold);
+    }
+
+    /* ── PRICING SECTION ─────────────────────────── */
+    .pricing-section {
+      padding: 96px 24px 112px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+
+    .section-heading {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(42px, 6vw, 62px);
+      letter-spacing: 0.02em;
+      line-height: 1;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .section-sub {
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--text-muted);
+      max-width: 480px;
+      line-height: 1.7;
+      margin-bottom: 56px;
+    }
+
+    /* ── GRID ────────────────────────────────────── */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+    }
+
+    /* ── CARD ────────────────────────────────────── */
+    .pricing-card {
+      background: var(--bg-card);
+      padding: 40px 36px 44px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.2s ease;
+    }
+
+    .pricing-card:hover {
+      background: var(--bg-card-hi);
+    }
+
+    .pricing-card.featured {
+      background: #14141e;
+    }
+
+    .pricing-card.featured:hover {
+      background: #17172a;
+    }
+
+    /* featured accent bar */
+    .pricing-card.featured::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+
+    .card-tier {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .popular-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(74,108,247,0.25);
+      padding: 2px 7px;
+      border-radius: 2px;
+    }
+
+    .card-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 32px;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .card-price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+
+    .price-amount {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 52px;
+      letter-spacing: -0.01em;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .price-currency {
+      font-family: 'Poppins', sans-serif;
+      font-size: 20px;
+      font-weight: 300;
+      color: var(--text-muted);
+      align-self: flex-start;
+      padding-top: 10px;
+    }
+
+    .price-period {
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--text-dim);
+    }
+
+    .price-note {
+      font-size: 11px;
+      font-weight: 300;
+      color: var(--text-dim);
+      margin-bottom: 28px;
+      min-height: 16px;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--text-muted);
+      line-height: 1.65;
+      margin-bottom: 32px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── FEATURE LIST ────────────────────────────── */
+    .feature-list {
+      list-style: none;
+      flex: 1;
+      margin-bottom: 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+
+    .feature-list li {
+      font-size: 12.5px;
+      font-weight: 300;
+      color: var(--text-muted);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      line-height: 1.5;
+    }
+
+    .feature-list li .check {
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      margin-top: 1px;
+      color: var(--green);
+      opacity: 0.8;
+    }
+
+    .feature-list li .dash {
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      margin-top: 1px;
+      color: var(--text-dim);
+    }
+
+    .feature-section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+      margin-top: 8px;
+      display: block;
+    }
+
+    /* ── BUTTONS ─────────────────────────────────── */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 20px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-align: center;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border-hi);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text);
+      border-color: rgba(255,255,255,0.22);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary:hover {
+      background: #5d7dff;
+      box-shadow: 0 0 24px var(--accent-glow);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid rgba(74,108,247,0.4);
+    }
+
+    .btn-outline:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+    }
+
+    /* ── FOOTNOTE ────────────────────────────────── */
+    .pricing-footnote {
+      margin-top: 28px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .pricing-footnote span {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .footnote-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--green);
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+
+    /* ── RESPONSIVE ──────────────────────────────── */
+    @media (max-width: 860px) {
+      .pricing-grid {
+        grid-template-columns: 1fr;
+        background: none;
+        border: none;
+        gap: 12px;
+      }
+      .pricing-card {
+        border: 1px solid var(--border);
+      }
+      .pricing-card.featured {
+        border-color: rgba(74,108,247,0.3);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BETA LOCK-IN BANNER -->
+  <div class="beta-banner">
+    <div class="beta-banner-inner">
+      <span class="beta-badge">Beta Pricing</span>
+      <p>
+        <strong>Lock in beta pricing — forever.</strong>
+        Join during the public beta and these rates are yours permanently, even when prices increase at launch.
+      </p>
+    </div>
+  </div>
+
+  <!-- PRICING SECTION -->
+  <section class="pricing-section">
+
+    <p class="section-label">PLANS</p>
+    <h2 class="section-heading">SIMPLE, HONEST PRICING.</h2>
+    <p class="section-sub">
+      One tool for the whole production. Free for solo work. Paid plans unlock cloud sync, mobile access, and team collaboration.
+    </p>
+
+    <div class="pricing-grid">
+
+      <!-- ── BASIC (FREE) ── -->
+      <div class="pricing-card">
+        <p class="card-tier">01 · Basic</p>
+        <h3 class="card-name">Free</h3>
+        <div class="card-price-row">
+          <span class="price-amount">$0</span>
+        </div>
+        <p class="price-note">No credit card. No expiration.</p>
+        <p class="card-desc">
+          Every module. Every planning tool. Fully functional — stored locally on your machine. No account required to get started.
+        </p>
+
+        <ul class="feature-list">
+          <span class="feature-section-label">Included modules</span>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Script editor &amp; screenplay import
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Scene breakdown &amp; planning
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Storyboard &amp; shotlist
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Schedule &amp; stripboard
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Callsheet builder
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Cast &amp; crew management
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            PDF export
+          </li>
+          <span class="feature-section-label" style="margin-top:12px;">Not included</span>
+          <li style="opacity:0.45;">
+            <svg class="dash" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Cloud save &amp; sync
+          </li>
+          <li style="opacity:0.45;">
+            <svg class="dash" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Team collaboration
+          </li>
+          <li style="opacity:0.45;">
+            <svg class="dash" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Mobile on-set access
+          </li>
+        </ul>
+
+        <a href="https://app.shot-scribe.com/" class="btn btn-ghost">Open the App — Free</a>
+      </div>
+
+      <!-- ── PRO ── -->
+      <div class="pricing-card featured">
+        <p class="card-tier">02 · Pro <span class="popular-tag">Most Popular</span></p>
+        <h3 class="card-name">Pro</h3>
+        <div class="card-price-row">
+          <span class="price-currency">$</span>
+          <span class="price-amount">10</span>
+          <span class="price-period">/month</span>
+        </div>
+        <p class="price-note">Single seat · billed monthly</p>
+        <p class="card-desc">
+          Everything in Basic, plus cloud-backed projects so your work is safe, synced, and accessible from anywhere — including on set.
+        </p>
+
+        <ul class="feature-list">
+          <span class="feature-section-label">Everything in Basic, plus</span>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Cloud-backed project storage
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Live sync across all your devices
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Mobile on-set access
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Shareable callsheet links for crew
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Cloud asset storage
+          </li>
+        </ul>
+
+        <a href="https://buy.stripe.com/placeholder" class="btn btn-primary">Get Pro · $10/mo</a>
+      </div>
+
+      <!-- ── TEAM ── -->
+      <div class="pricing-card">
+        <p class="card-tier">03 · Team</p>
+        <h3 class="card-name">Team</h3>
+        <div class="card-price-row">
+          <span class="price-currency">$</span>
+          <span class="price-amount">10</span>
+          <span class="price-period">/mo</span>
+        </div>
+        <p class="price-note">First seat · +$5/mo per additional seat</p>
+        <p class="card-desc">
+          One Pro account that brings your key collaborators in. Director, AD, DP, producer — everyone working from the same live project.
+        </p>
+
+        <ul class="feature-list">
+          <span class="feature-section-label">Everything in Pro, plus</span>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Shared cloud projects across your team
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Live sync across all connected seats
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Add seats for $5/mo each
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Team callsheet distribution
+          </li>
+          <li>
+            <svg class="check" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Scale to any crew size
+          </li>
+        </ul>
+
+        <a href="https://buy.stripe.com/placeholder" class="btn btn-outline">Get Team · From $10/mo</a>
+      </div>
+
+    </div><!-- /grid -->
+
+    <div class="pricing-footnote">
+      <span><span class="footnote-dot"></span> All plans include all 8 production modules</span>
+      <span><span class="footnote-dot"></span> Cancel anytime · no contracts</span>
+      <span><span class="footnote-dot"></span> Beta pricing locked in for early members</span>
+    </div>
+
+  </section>
+
+</body>
+</html>
