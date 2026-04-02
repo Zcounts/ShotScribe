@@ -51,3 +51,27 @@ Scope: root web app only (`src/`, root `vite`/Tailwind config). Mobile app in `m
 - Keep existing route structure and feature behavior unchanged.
 - Prefer wrapper components that adapt old props to new primitives.
 - Only remove legacy UI pieces after feature-level parity QA.
+
+## Phase 1 implementation update (2026-04-02)
+
+Implemented in web app shell and toolbar (no mobile changes):
+
+- Added global Sonner mount in `src/main.jsx`.
+- Added shared toast helper (`src/lib/toast.js`) for consistent status messaging.
+- Migrated the ephemeral local-only sync guidance from persistent inline toolbar copy to a toast shown when relevant.
+- Added shared Radix-based primitives:
+  - `src/components/ui/tooltip.jsx`
+  - `src/components/ui/dropdown-menu.jsx`
+  - `src/components/ui/popover.jsx`
+  - `src/components/ui/hover-card.jsx`
+  - `src/components/ui/context-menu.jsx`
+- Applied low-risk usage in `Toolbar`:
+  - export split-button menu now uses shared dropdown primitive
+  - project name now supports keyboard-friendly context menu quick actions
+  - save/sync control is wrapped with a hover card helper
+  - added a lightweight save/sync help popover trigger
+  - action/result feedback (cloud enable/save failures/success) now uses toasts instead of blocking alerts in these paths
+
+Still intentionally deferred:
+- Replacing dense workflow UIs (Shotlist/Schedule/Script) and existing custom per-entity context menu system.
+- Any mobile implementation under `mobile/`.
