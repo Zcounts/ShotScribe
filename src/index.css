@@ -957,6 +957,9 @@
   }
 
   .tab-nav-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 9px 16px;
     min-height: 36px;
     font-family: 'Sora', sans-serif;
@@ -966,6 +969,7 @@
     letter-spacing: 0.08em;
     background: none;
     color: #718096;
+    border: none;
     border-bottom: 2px solid transparent;
     transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
   }
@@ -2010,6 +2014,7 @@
       padding: 8px 12px;
       min-height: 34px;
       letter-spacing: 0.07em;
+      gap: 5px;
     }
 
     .toolbar {

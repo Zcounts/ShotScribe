@@ -984,13 +984,10 @@ export default function App() {
               key={id}
               className={`tab-nav-button ${activeTab === id ? 'is-active' : ''}`}
               onClick={() => setActiveTab(id)}
+              aria-current={activeTab === id ? 'page' : undefined}
               style={{
-                border: 'none',
                 cursor: 'pointer',
                 marginBottom: '-1px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}
