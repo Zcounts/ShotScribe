@@ -53,6 +53,17 @@ export default function Toolbar({
         ? '#86efac'
         : '#cbd5e1'
 
+  // Dot pulses while syncing; solid otherwise
+  const syncDotStyle = {
+    display: 'inline-block',
+    width: 7,
+    height: 7,
+    borderRadius: '50%',
+    background: syncTone,
+    flexShrink: 0,
+    animation: saveSyncState?.status === 'syncing_to_cloud' ? 'pulse 1.2s ease-in-out infinite' : 'none',
+  }
+
   useEffect(() => {
     if (!exportMenuOpen) return
     const handler = (e) => {
@@ -267,9 +278,12 @@ export default function Toolbar({
         )}
 
         {/* Save indicator */}
-        <span style={{ fontSize: 11, color: syncTone, flexShrink: 0, fontFamily: 'Sora, sans-serif' }} title={saveSyncState?.error || ''}>
-          {saveSyncState?.message || (hasUnsavedChanges ? 'Unsaved changes' : 'Saved locally')}
-          {lastSaved ? ` · ${formatTime(lastSaved)}` : ''}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }} title={saveSyncState?.error || ''}>
+          <span style={syncDotStyle} />
+          <span style={{ fontSize: 11, color: syncTone, fontFamily: 'Sora, sans-serif' }}>
+            {saveSyncState?.message || (hasUnsavedChanges ? 'Changes not yet saved' : 'Saved on this device')}
+            {lastSaved ? ` · ${formatTime(lastSaved)}` : ''}
+          </span>
         </span>
       </div>
 

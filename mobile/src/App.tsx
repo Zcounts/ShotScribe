@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SignedIn, SignedOut } from '@clerk/clerk-react'
 import { useMutation, useQuery } from 'convex/react'
 import { createMobileSnapshotFromProject } from '../../src/services/mobile/mobileExportService.js'
@@ -22,6 +22,15 @@ import { CloudAuthPanel, mobileRuntime } from './auth'
 import { applyEditsToCloudPayload, exportProjectAsSnapshot } from './mobileEdits'
 
 type MobileMode = 'local' | 'cloud'
+
+type MobileSyncState =
+  | { status: 'idle' }
+  | { status: 'unsaved_changes' }
+  | { status: 'syncing' }
+  | { status: 'synced'; at: string }
+  | { status: 'sync_failed'; error: string }
+
+const MOBILE_CLOUD_SYNC_DEBOUNCE_MS = 6000
 
 type AppRoute =
   | { name: 'empty' }
@@ -54,7 +63,8 @@ export function App() {
   const [busy, setBusy] = useState(false)
   const [importSuccess, setImportSuccess] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
-  const [saveState, setSaveState] = useState<string | null>(null)
+  const [syncState, setSyncState] = useState<MobileSyncState>({ status: 'idle' })
+  const cloudSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const projects = useMemo(() => Object.values(library.projects).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')), [library])
 
@@ -131,29 +141,46 @@ export function App() {
     goToProject('local', fallback.projectId, fallback.dayId, fallback.tab)
   }
 
-  async function handleCloudSave() {
+  async function flushCloudSave() {
     if (route.name !== 'project' || route.mode !== 'cloud' || !latestSnapshot?.payload) return
+    setSyncState({ status: 'syncing' })
     try {
       const payload = applyEditsToCloudPayload(latestSnapshot.payload, route.projectId, library.shotEdits)
       await createSnapshot({
         projectId: route.projectId,
         createdByUserId: latestSnapshot.createdByUserId,
-        source: 'manual_save',
+        source: 'autosave',
         payload,
+        expectedLatestSnapshotId: latestSnapshot._id,
         conflictStrategy: 'last_write_wins',
       })
-      setSaveState('Cloud sync complete.')
-    } catch {
-      setSaveState('Cloud sync failed. Try again.')
+      setSyncState({ status: 'synced', at: new Date().toISOString() })
+    } catch (err) {
+      setSyncState({ status: 'sync_failed', error: err instanceof Error ? err.message : 'Upload failed' })
     }
   }
+
+  function scheduleCloudSave() {
+    setSyncState({ status: 'unsaved_changes' })
+    if (cloudSyncTimerRef.current) clearTimeout(cloudSyncTimerRef.current)
+    cloudSyncTimerRef.current = setTimeout(() => {
+      void flushCloudSave()
+    }, MOBILE_CLOUD_SYNC_DEBOUNCE_MS)
+  }
+
+  // Clear any pending cloud sync timer on unmount
+  useEffect(() => {
+    return () => {
+      if (cloudSyncTimerRef.current) clearTimeout(cloudSyncTimerRef.current)
+    }
+  }, [])
 
   function handleUpdateShotFields(projectId: string, dayId: string, shotId: string, patch: any) {
     const nextLibrary = upsertShotEdit(library, projectId, dayId, shotId, patch)
     setLibrary(nextLibrary)
     saveLibrary(nextLibrary)
     if (mode === 'cloud') {
-      void handleCloudSave()
+      scheduleCloudSave()
     }
   }
 
@@ -190,7 +217,14 @@ export function App() {
       </article>
 
       {mode === 'cloud' && mobileRuntime.clerkPublishableKey ? <CloudAuthPanel /> : null}
-      {saveState ? <p className="notice success">{saveState}</p> : null}
+      {mode === 'cloud' && syncState.status !== 'idle' && (
+        <p className={`notice ${syncState.status === 'sync_failed' ? 'error' : syncState.status === 'synced' ? 'success' : ''}`}>
+          {syncState.status === 'unsaved_changes' && 'Shot changes saved on device · uploading soon…'}
+          {syncState.status === 'syncing' && 'Uploading to cloud…'}
+          {syncState.status === 'synced' && `Backed up to cloud · ${new Date(syncState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+          {syncState.status === 'sync_failed' && 'Saved on device · cloud backup failed. Changes will upload on next edit.'}
+        </p>
+      )}
 
       {mode === 'local' ? (
         route.name === 'empty' || !activeProject || !activeDay ? (
