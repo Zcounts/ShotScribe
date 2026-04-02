@@ -1,5 +1,8 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useAction } from 'convex/react'
 import ShotCard from './ShotCard'
+import useStore from '../store'
+import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 
 function AddShotButton({ onClick }) {
   return (
@@ -34,6 +37,50 @@ function ShotGrid({
   showAddBtn = false,
   onAddShot,
 }) {
+  const projectRef = useStore(s => s.projectRef)
+  const cloudAccessPolicy = useCloudAccessPolicy()
+  const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
+  const [prefetchedAssetViews, setPrefetchedAssetViews] = useState({})
+
+  const cloudAssetIds = useMemo(() => {
+    if (projectRef?.type !== 'cloud') return []
+    const ids = []
+    for (const shot of (shots || [])) {
+      const assetId = shot?.imageAsset?.cloud?.assetId
+      if (assetId) ids.push(assetId)
+    }
+    return Array.from(new Set(ids.map(String)))
+  }, [projectRef?.type, shots])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadPrefetchedViews() {
+      if (
+        projectRef?.type !== 'cloud'
+        || !projectRef?.projectId
+        || !cloudAccessPolicy.canAccessCloudAssets
+        || cloudAssetIds.length === 0
+      ) {
+        setPrefetchedAssetViews({})
+        return
+      }
+      try {
+        const batch = await getAssetSignedViewsBatch({
+          projectId: projectRef.projectId,
+          assetIds: cloudAssetIds,
+        })
+        if (!cancelled) setPrefetchedAssetViews(batch || {})
+      } catch (err) {
+        console.warn('Failed to prefetch cloud asset views', err)
+        if (!cancelled) setPrefetchedAssetViews({})
+      }
+    }
+    loadPrefetchedViews()
+    return () => {
+      cancelled = true
+    }
+  }, [cloudAccessPolicy.canAccessCloudAssets, cloudAssetIds, getAssetSignedViewsBatch, projectRef])
+
   const gridStyle = {
     display: 'grid',
     gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
@@ -51,6 +98,7 @@ function ShotGrid({
           useDropdowns={useDropdowns}
           storyboardDisplayConfig={storyboardDisplayConfig}
           sceneId={sceneId}
+          prefetchedCloudAssetView={prefetchedAssetViews[String(shot?.imageAsset?.cloud?.assetId || '')] || null}
         />
       ))}
       {showAddBtn && <AddShotButton onClick={onAddShot} />}
