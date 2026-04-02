@@ -70,6 +70,7 @@ import {
   getBeforeUnloadWarningMessage,
   hasBlockingUnsavedChanges,
 } from './utils/unsavedChangesGuard'
+import useResponsiveViewport from './hooks/useResponsiveViewport'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -868,6 +869,7 @@ export default function App() {
     },
   }
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
+  const { tier, isDesktopDown } = useResponsiveViewport()
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
     const target = event.target
@@ -916,7 +918,9 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col"
+      className="flex flex-col app-shell"
+      data-viewport-tier={tier}
+      data-desktop-down={isDesktopDown ? 'true' : 'false'}
       style={{ height: '100vh', overflow: 'hidden', backgroundColor: 'var(--app-workspace-bg-base)' }}
       onClick={() => hideContextMenu()}
       onContextMenuCapture={handleEntityContextMenuCapture}
@@ -960,50 +964,55 @@ export default function App() {
         alignItems: 'center',
         borderBottom: '1px solid #3A3A3C',
         backgroundColor: '#1C1C1E',
-        paddingLeft: '16px',
-        paddingRight: '16px',
+        paddingLeft: '10px',
+        paddingRight: '10px',
+        gap: 8,
       }}>
-        {[
-          { id: 'home',       label: 'Home', icon: Home },
-          { id: 'script',     label: 'Script', icon: FileText },
-          { id: 'scenes',     label: 'Scenes', icon: LayoutGrid },
-          { id: 'storyboard', label: 'Storyboard', icon: Monitor },
-          { id: 'castcrew',   label: 'Cast/Crew', icon: Users },
-          { id: 'shotlist',   label: 'Shotlist', icon: List },
-          { id: 'schedule',   label: 'Schedule', icon: Calendar },
-          { id: 'callsheet',  label: 'Callsheet', icon: FilePlus },
-        ].map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            style={{
-              padding: '8px 20px',
-              fontFamily: 'Sora, sans-serif',
-              fontSize: '12px',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              border: 'none',
-              borderBottom: activeTab === id
-                ? '2px solid #E84040'
-                : '2px solid transparent',
-              background: 'none',
-              color: activeTab === id ? '#FAF8F4' : '#718096',
-              cursor: 'pointer',
-              transition: 'color 0.15s, border-color 0.15s',
-              marginBottom: '-1px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-            onMouseEnter={e => { if (activeTab !== id) e.currentTarget.style.color = 'rgba(250,248,244,0.8)' }}
-            onMouseLeave={e => { if (activeTab !== id) e.currentTarget.style.color = '#718096' }}
-          >
-            <Icon size={14} strokeWidth={1.5} />
-            {label}
-          </button>
-        ))}
-        <div style={{ marginLeft: 'auto', position: 'relative' }}>
+        <div className="tab-nav-scroll" style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
+          {[
+            { id: 'home',       label: 'Home', icon: Home },
+            { id: 'script',     label: 'Script', icon: FileText },
+            { id: 'scenes',     label: 'Scenes', icon: LayoutGrid },
+            { id: 'storyboard', label: 'Storyboard', icon: Monitor },
+            { id: 'castcrew',   label: 'Cast/Crew', icon: Users },
+            { id: 'shotlist',   label: 'Shotlist', icon: List },
+            { id: 'schedule',   label: 'Schedule', icon: Calendar },
+            { id: 'callsheet',  label: 'Callsheet', icon: FilePlus },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              style={{
+                padding: '8px 16px',
+                fontFamily: 'Sora, sans-serif',
+                fontSize: '12px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                border: 'none',
+                borderBottom: activeTab === id
+                  ? '2px solid #E84040'
+                  : '2px solid transparent',
+                background: 'none',
+                color: activeTab === id ? '#FAF8F4' : '#718096',
+                cursor: 'pointer',
+                transition: 'color 0.15s, border-color 0.15s',
+                marginBottom: '-1px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => { if (activeTab !== id) e.currentTarget.style.color = 'rgba(250,248,244,0.8)' }}
+              onMouseLeave={e => { if (activeTab !== id) e.currentTarget.style.color = '#718096' }}
+            >
+              <Icon size={14} strokeWidth={1.5} />
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={{ marginLeft: 'auto', position: 'relative', flexShrink: 0 }}>
           <ConfigureButton onClick={activeConfigure.onToggle} active={activeConfigure.isActive} />
         </div>
       </div>
