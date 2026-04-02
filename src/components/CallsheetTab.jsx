@@ -244,7 +244,7 @@ function CallsheetSidebar({
   collapseState,
   setCollapseState,
   onWarningJump,
-  onExportPdf,
+  onOpenExportHub,
   onOpenEmailPreflight,
   recipientsReadyCount,
   missingEmailCount,
@@ -263,8 +263,8 @@ function CallsheetSidebar({
               <span>{missingEmailCount} missing emails</span>
               <span style={{ color: '#0F172A' }}>Status: <strong>{readinessLabel}</strong></span>
             </div>
-            <button type="button" onClick={onExportPdf} style={{ border: '1px solid #CBD5E1', borderRadius: 7, padding: '8px 10px', background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
-              Export Callsheet PDF
+            <button type="button" onClick={onOpenExportHub} style={{ border: '1px solid #CBD5E1', borderRadius: 7, padding: '8px 10px', background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+              Open Export Hub
             </button>
             <button type="button" onClick={onOpenEmailPreflight} style={{ border: '1px solid #1D4ED8', borderRadius: 7, padding: '8px 10px', background: '#EFF6FF', color: '#1E3A8A', fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
               Email Callsheet
@@ -312,7 +312,7 @@ function CallsheetEmptyState({ title, message, actionLabel, onAction }) {
   )
 }
 
-export default function CallsheetTab({ configureOpen = true }) {
+export default function CallsheetTab({ configureOpen = true, onOpenExportHub = null }) {
   const schedule = useStore(s => s.schedule)
   const projectName = useStore(s => s.projectName)
   const callsheetSectionConfig = useStore(s => s.callsheetSectionConfig)
@@ -678,7 +678,7 @@ export default function CallsheetTab({ configureOpen = true }) {
           collapseState={collapseState}
           setCollapseState={setCollapseState}
           onWarningJump={handleWarningJump}
-          onExportPdf={exportCurrentDayPDF}
+          onOpenExportHub={() => onOpenExportHub?.('callsheet')}
           onOpenEmailPreflight={() => setEmailPreflightOpen(true)}
           recipientsReadyCount={recipientSummary.ready.length}
           missingEmailCount={recipientSummary.missing.length}

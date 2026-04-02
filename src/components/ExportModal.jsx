@@ -1,10 +1,19 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
 import { platformService } from '../services/platformService'
+
+let mobileExportServicePromise = null
+
+async function getMobileExportService() {
+  if (!mobileExportServicePromise) {
+    mobileExportServicePromise = import('../services/mobile/mobileExportService.js')
+  }
+  return mobileExportServicePromise
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -2780,18 +2789,27 @@ function ExportBtn({ label, sub, onClick, disabled, primary }) {
 
 export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, activeTab, projectName }) {
   const schedule = useStore(s => s.schedule)
+  const getProjectData = useStore(s => s.getProjectData)
   const [exporting, setExporting] = useState(false)
   const [exportingKey, setExportingKey] = useState(null)
-  // Per-day checkbox state: { [dayIdx]: { shotlist, schedule, callsheet } }
-  const [dayOptions, setDayOptions] = useState({})
+  const [selectedMobileDayId, setSelectedMobileDayId] = useState('')
+  const [snapshotDayIds, setSnapshotDayIds] = useState([])
+
+  useEffect(() => {
+    if (!schedule.length) {
+      setSelectedMobileDayId('')
+      setSnapshotDayIds([])
+      return
+    }
+    if (!selectedMobileDayId || !schedule.some(day => day.id === selectedMobileDayId)) {
+      setSelectedMobileDayId(schedule[0].id)
+    }
+    if (!snapshotDayIds.length) {
+      setSnapshotDayIds(schedule.slice(0, 3).map(day => day.id))
+    }
+  }, [schedule, selectedMobileDayId, snapshotDayIds])
 
   if (!isOpen) return null
-
-  const getDayOpts = (idx) => dayOptions[idx] || { shotlist: true, schedule: true, callsheet: true }
-  const setDayOpt = (idx, key, val) => setDayOptions(prev => ({
-    ...prev,
-    [idx]: { ...getDayOpts(idx), [key]: val },
-  }))
 
   const run = async (key, fn) => {
     setExporting(true)
@@ -2808,6 +2826,13 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   }
 
   const busy = (key) => exporting && exportingKey === key
+  const activeTabLabel = activeTab === 'shotlist'
+    ? 'Shotlist'
+    : activeTab === 'schedule'
+      ? 'Schedule'
+      : activeTab === 'callsheet'
+        ? 'Callsheet'
+        : 'Storyboard'
 
   const overlayStyle = {
     position: 'fixed', inset: 0, zIndex: 1000,
@@ -2838,8 +2863,10 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>Export</div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>Choose what to export as PDF</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>Export Hub</div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>
+              Unified exports for storyboards, shotlists, schedules, callsheets, and reports.
+            </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 4 }}>
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2850,48 +2877,11 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
 
         <div style={scrollStyle}>
 
-          {/* ── EXPORT SCHEDULE AS (shown when Schedule tab is active) ── */}
-          {activeTab === 'schedule' && (
-            <div style={{ marginTop: 16 }}>
-              <SectionLabel>Export Schedule As…</SectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 4 }}>
-                {[
-                  {
-                    key: 'exp-schedule',
-                    label: busy('exp-schedule') ? 'Exporting…' : 'Expanded Schedule',
-                    sub: 'Day-by-day with call time, wrap time, all shot details',
-                    fn: () => exportExpandedSchedulePDF(projectName),
-                    primary: true,
-                  },
-                  {
-                    key: 'exp-stripboard',
-                    label: busy('exp-stripboard') ? 'Exporting…' : 'Stripboard',
-                    sub: 'Landscape · one column per day · color-coded strips',
-                    fn: () => exportStripboardPDF(projectName),
-                  },
-                  {
-                    key: 'exp-calendar',
-                    label: busy('exp-calendar') ? 'Exporting…' : 'Calendar',
-                    sub: 'Month view · shoot days marked with day number, shots, call time',
-                    fn: () => exportCalendarPDF(projectName),
-                  },
-                ].map(({ key, label, sub, fn, primary }) => (
-                  <ExportBtn
-                    key={key}
-                    label={label}
-                    sub={sub}
-                    primary={!!primary}
-                    disabled={exporting}
-                    onClick={() => run(key, fn)}
-                  />
-                ))}
-              </div>
-              <div style={{ height: 1, background: '#e5e7eb', margin: '12px 0' }} />
-            </div>
-          )}
+          <div style={{ marginTop: 16, marginBottom: 12, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f8fafc', fontSize: 12, color: '#475569' }}>
+            Current focus: <strong>{activeTabLabel}</strong>. All exports are available below from this single hub.
+          </div>
 
-          {/* ── EXPORT ALL ── */}
-          <div style={{ marginTop: activeTab === 'schedule' ? 0 : 16 }}>
+          <div style={{ marginTop: 0 }}>
             <SectionLabel>Export All</SectionLabel>
             <ExportBtn
               label={busy('all-combined') ? 'Exporting…' : 'Everything — One Combined PDF'}
@@ -2908,125 +2898,177 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
             />
           </div>
 
-          {/* ── BY DOCUMENT TYPE ── */}
           <div style={{ marginTop: 20 }}>
-            <SectionLabel>By Document Type — All Days</SectionLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {[
-                { key: 'storyboard', label: 'All Storyboards', sub: 'Card grid, one page per scene', fn: () => exportStoryboardPDF(pageRefs, projectName) },
-                { key: 'shotlist',   label: 'All Shotlists',   sub: 'Full table, grouped by day',   fn: () => exportShotlistPDF(shotlistRef, projectName) },
-                { key: 'schedule',   label: 'All Schedules',   sub: 'Day-by-day timeline layout',    fn: () => exportSchedulePDF(projectName) },
-                { key: 'callsheet',  label: 'All Callsheets',  sub: 'One page per shoot day',        fn: () => exportCallsheetPDF(projectName) },
-              ].map(({ key, label, sub, fn }) => (
-                <button
-                  key={key}
-                  disabled={exporting}
-                  onClick={() => run(key, fn)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    borderRadius: 6,
-                    border: '1px solid #e5e7eb',
-                    background: busy(key) ? '#eff6ff' : '#f9fafb',
-                    color: '#111',
-                    cursor: exporting ? 'not-allowed' : 'pointer',
-                    opacity: exporting && !busy(key) ? 0.5 : 1,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { if (!exporting) e.currentTarget.style.background = '#eff6ff' }}
-                  onMouseLeave={e => { if (!exporting) e.currentTarget.style.background = '#f9fafb' }}
-                >
-                  {busy(key) ? 'Exporting…' : label}
-                  <div style={{ fontSize: 10, fontWeight: 400, color: '#888', marginTop: 2 }}>{sub}</div>
-                </button>
-              ))}
-            </div>
+            <SectionLabel>Storyboards</SectionLabel>
+            <ExportBtn
+              label={busy('storyboard-pdf') ? 'Exporting…' : 'Storyboard PDF'}
+              sub="Produces all storyboard pages in a print-ready PDF."
+              disabled={exporting}
+              onClick={() => run('storyboard-pdf', () => exportStoryboardPDF(pageRefs, projectName))}
+            />
+            <ExportBtn
+              label={busy('storyboard-png') ? 'Exporting…' : 'Storyboard PNG'}
+              sub="Produces PNG images for storyboard pages."
+              disabled={exporting}
+              onClick={() => run('storyboard-png', () => exportToPNG(pageRefs))}
+            />
           </div>
 
-          {/* ── BY DAY ── */}
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>Shotlists</SectionLabel>
+            <ExportBtn
+              label={busy('shotlist') ? 'Exporting…' : 'Shotlist PDF'}
+              sub="Produces a full shotlist table grouped by day."
+              disabled={exporting}
+              onClick={() => run('shotlist', () => exportShotlistPDF(shotlistRef, projectName))}
+            />
+          </div>
+
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>Schedules</SectionLabel>
+            <ExportBtn
+              label={busy('schedule') ? 'Exporting…' : 'Schedule PDF'}
+              sub="Produces the standard day-by-day schedule layout."
+              disabled={exporting}
+              onClick={() => run('schedule', () => exportSchedulePDF(projectName))}
+            />
+            <ExportBtn
+              label={busy('exp-schedule') ? 'Exporting…' : 'Expanded Schedule PDF'}
+              sub="Produces an expanded schedule with call/wrap and detailed shot rows."
+              disabled={exporting}
+              onClick={() => run('exp-schedule', () => exportExpandedSchedulePDF(projectName))}
+            />
+            <ExportBtn
+              label={busy('exp-stripboard') ? 'Exporting…' : 'Stripboard PDF'}
+              sub="Produces a stripboard view with one column per day."
+              disabled={exporting}
+              onClick={() => run('exp-stripboard', () => exportStripboardPDF(projectName))}
+            />
+            <ExportBtn
+              label={busy('exp-calendar') ? 'Exporting…' : 'Calendar PDF'}
+              sub="Produces a monthly calendar with shoot-day highlights."
+              disabled={exporting}
+              onClick={() => run('exp-calendar', () => exportCalendarPDF(projectName))}
+            />
+          </div>
+
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>Callsheets</SectionLabel>
+            <ExportBtn
+              label={busy('callsheet') ? 'Exporting…' : 'Callsheet PDF'}
+              sub="Produces one callsheet page per shoot day."
+              disabled={exporting}
+              onClick={() => run('callsheet', () => exportCallsheetPDF(projectName))}
+            />
+          </div>
+
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>Reports</SectionLabel>
+            <button
+              disabled
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                padding: '9px 12px',
+                borderRadius: 6,
+                border: '1px solid #e5e7eb',
+                background: '#f9fafb',
+                color: '#64748b',
+                cursor: 'not-allowed',
+                opacity: 0.75,
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Reports Export (Not Yet Supported)
+              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.9, marginTop: 1 }}>
+                Hidden from workflows for now to avoid broken launch paths.
+              </div>
+            </button>
+          </div>
+
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>Mobile On-set Packages</SectionLabel>
+            <ExportBtn
+              label={busy('mobile-day') ? 'Exporting…' : 'Mobile Day Package (JSON)'}
+              sub="Produces one mobile-day-package JSON for a single shoot day."
+              disabled={exporting || !schedule.length}
+              onClick={() => run('mobile-day', async () => {
+                if (!selectedMobileDayId) throw new Error('Please select a shoot day to export.')
+                const { exportMobilePackageFromProject } = await getMobileExportService()
+                await exportMobilePackageFromProject(getProjectData(), {
+                  mode: 'day',
+                  dayId: selectedMobileDayId,
+                })
+              })}
+            />
+            <select
+              value={selectedMobileDayId}
+              onChange={e => setSelectedMobileDayId(e.target.value)}
+              disabled={exporting || !schedule.length}
+              style={{ width: '100%', marginBottom: 12, padding: 8, borderRadius: 6, background: '#fff', color: '#111', border: '1px solid #d1d5db' }}
+            >
+              {schedule.length === 0 ? (
+                <option value="">Add a shoot day in Schedule first</option>
+              ) : schedule.map((day, idx) => (
+                <option key={day.id} value={day.id}>
+                  Day {idx + 1} · {day.date || 'No date'}
+                </option>
+              ))}
+            </select>
+            <ExportBtn
+              label={busy('mobile-snapshot') ? 'Exporting…' : 'Mobile Snapshot (JSON)'}
+              sub="Produces one mobile-snapshot JSON for selected shoot days."
+              disabled={exporting || !schedule.length}
+              onClick={() => run('mobile-snapshot', async () => {
+                if (!snapshotDayIds.length) throw new Error('Select at least one shoot day for snapshot export.')
+                const { exportMobilePackageFromProject } = await getMobileExportService()
+                await exportMobilePackageFromProject(getProjectData(), {
+                  mode: 'snapshot',
+                  dayIds: snapshotDayIds,
+                })
+              })}
+            />
+            {schedule.length > 0 ? (
+              <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 6, padding: 8 }}>
+                {schedule.map((day, idx) => (
+                  <label key={day.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, color: '#334155', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={snapshotDayIds.includes(day.id)}
+                      onChange={e => {
+                        setSnapshotDayIds(prev => e.target.checked
+                          ? [...new Set([...prev, day.id])]
+                          : prev.filter(id => id !== day.id))
+                      }}
+                    />
+                    Day {idx + 1} · {day.date || 'No date'}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: '#64748b' }}>
+                Add at least one shoot day in the Schedule tab to enable mobile exports.
+              </div>
+            )}
+          </div>
+
           {schedule.length > 0 && (
             <div style={{ marginTop: 20 }}>
-              <SectionLabel>By Shoot Day</SectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {schedule.map((day, idx) => {
-                  const label = `Day ${idx + 1}${day.date ? ` — ${day.date.split('-').slice(1).join('/')}` : ''}`
-                  const opts = getDayOpts(idx)
-                  const key = `day-${idx}`
-                  return (
-                    <div key={day.id} style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 12px', background: '#fafafa' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#333' }}>{label}</span>
-                        <button
-                          disabled={exporting || (!opts.shotlist && !opts.schedule && !opts.callsheet)}
-                          onClick={() => run(key, () => exportDayPDF(idx, opts, projectName))}
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            padding: '4px 10px',
-                            borderRadius: 4,
-                            border: '1px solid #2563eb',
-                            background: busy(key) ? '#dbeafe' : '#2563eb',
-                            color: busy(key) ? '#2563eb' : '#fff',
-                            cursor: (exporting || (!opts.shotlist && !opts.schedule && !opts.callsheet)) ? 'not-allowed' : 'pointer',
-                            opacity: (!opts.shotlist && !opts.schedule && !opts.callsheet) ? 0.4 : exporting && !busy(key) ? 0.5 : 1,
-                            transition: 'background 0.1s',
-                          }}
-                        >
-                          {busy(key) ? 'Exporting…' : 'Export Day →'}
-                        </button>
-                      </div>
-                      <div style={{ display: 'flex', gap: 14 }}>
-                        {[
-                          { key: 'shotlist', label: 'Shotlist' },
-                          { key: 'schedule', label: 'Schedule' },
-                          { key: 'callsheet', label: 'Callsheet' },
-                        ].map(({ key: ck, label: cl }) => (
-                          <label key={ck} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={opts[ck]}
-                              onChange={e => setDayOpt(idx, ck, e.target.checked)}
-                              style={{ margin: 0 }}
-                            />
-                            {cl}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
+              <SectionLabel>Per-Day PDF Bundle</SectionLabel>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {schedule.map((day, idx) => (
+                  <ExportBtn
+                    key={day.id}
+                    label={busy(`day-${idx}`) ? 'Exporting…' : `Day ${idx + 1} Bundle PDF`}
+                    sub={`Produces shotlist + schedule + callsheet for Day ${idx + 1}${day.date ? ` (${day.date})` : ''}.`}
+                    disabled={exporting}
+                    onClick={() => run(`day-${idx}`, () => exportDayPDF(idx, { shotlist: true, schedule: true, callsheet: true }, projectName))}
+                  />
+                ))}
               </div>
             </div>
           )}
-
-          {/* ── QUICK EXPORTS ── */}
-          <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #f0f0f0' }}>
-            <SectionLabel>Quick Exports</SectionLabel>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              <button disabled={exporting} onClick={() => run('storyboard-png', () => exportToPNG(pageRefs))}
-                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
-                Storyboard PNG
-              </button>
-              <button disabled={exporting} onClick={() => run('storyboard-pdf', () => exportStoryboardPDF(pageRefs, projectName))}
-                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
-                Storyboard PDF
-              </button>
-              <button disabled={exporting} onClick={() => run('shotlist-quick', () => exportShotlistPDF(shotlistRef, projectName))}
-                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
-                Shotlist PDF
-              </button>
-              <button disabled={exporting} onClick={() => run('schedule-quick', () => exportSchedulePDF(projectName))}
-                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
-                Schedule PDF
-              </button>
-              <button disabled={exporting} onClick={() => run('callsheet-quick', () => exportCallsheetPDF(projectName))}
-                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.5 : 1 }}>
-                Callsheet PDF
-              </button>
-            </div>
-          </div>
 
         </div>
       </div>

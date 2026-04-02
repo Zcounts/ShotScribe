@@ -68,6 +68,8 @@ Implemented now:
 - Stripe Checkout session creation
 - Stripe Billing Portal session creation
 - webhook-driven subscription sync into Convex billing tables
+- launch-plan guardrails (entitlement granted only for configured launch `STRIPE_PRICE_ID`)
+- account-page reconciliation action after checkout/portal return (`billing:syncMyBillingState`)
 - entitlement computation (paid/trialing/manual override/local-only)
 
 Operational reality:
@@ -100,7 +102,27 @@ Frontend env (root app):
 - `VITE_ENABLE_CLOUD_FEATURES`
 - `VITE_CONVEX_URL`
 - `VITE_CLERK_PUBLISHABLE_KEY`
+- `VITE_SENTRY_DSN` (optional; enables Sentry in production builds only)
+- `VITE_CLARITY_PROJECT_ID` (optional; enables Microsoft Clarity in production builds only)
+- `VITE_APP_ENV` (optional; sent to Sentry as `environment`, for example `production`/`staging`)
+- `VITE_APP_RELEASE` (optional; sent to Sentry as `release`, for example git SHA)
 - `VITE_MONITORING_ENDPOINT` (optional)
+
+Mobile frontend env (`mobile/` app):
+- `VITE_SENTRY_DSN` (optional; production builds only)
+- `VITE_CLARITY_PROJECT_ID` (optional; production builds only)
+- `VITE_APP_ENV` (optional)
+- `VITE_APP_RELEASE` (optional)
+
+Observability initialization behavior:
+- Sentry initializes only when `import.meta.env.PROD === true` and `VITE_SENTRY_DSN` is provided.
+- Clarity initializes only when `import.meta.env.PROD === true` and `VITE_CLARITY_PROJECT_ID` is provided.
+- Development builds skip both tools to avoid noisy local diagnostics.
+
+Post-deploy verification (web + mobile):
+1. Open the deployed app and confirm a Clarity session appears in the Clarity dashboard.
+2. Trigger a controlled client error in browser devtools and verify it appears in Sentry with the expected `environment` and `release`.
+3. Confirm no Clarity script requests and no Sentry startup traffic occur in local `npm run dev` sessions unless explicitly configured and built as production.
 
 Convex env (production as needed):
 - `AUTH_ISSUER_URL`
@@ -185,6 +207,7 @@ npm run build
 - Free/local users stay local-only.
 - Paid cloud users now use a clearer local+cloud state model with debounced cloud snapshot sync.
 - Toolbar messaging differentiates local save vs cloud sync progress/failure states.
+- Unsaved-change guardrails now cover refresh/close/back/in-app route exits while local persistence is genuinely pending.
 - Detailed implementation + QA checklist: `docs/save-sync-architecture.md`.
 
 ## Mobile companion modes (April 2026 update)
