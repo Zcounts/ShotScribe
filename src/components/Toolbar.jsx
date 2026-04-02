@@ -31,6 +31,7 @@ export default function Toolbar({
   const projectRef = useStore(s => s.projectRef)
   const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const saveSyncState = useStore(s => s.saveSyncState)
+  const cloudRepositoryReady = useStore(s => s.cloudRepositoryReady)
   const [editingName, setEditingName] = useState(false)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const [emojiInput, setEmojiInput] = useState('')
@@ -49,7 +50,7 @@ export default function Toolbar({
   const isCloudProject = projectRef?.type === 'cloud'
   const cloudFeatureAvailable = !!cloudAccessPolicy?.paidCloudAccess
   const signedInForCloud = !!cloudSyncContext?.currentUserId
-  const canEnableCloudBackup = !isCloudProject && cloudFeatureAvailable && signedInForCloud
+  const canEnableCloudBackup = !isCloudProject && cloudFeatureAvailable && signedInForCloud && cloudRepositoryReady
   const canSaveCloudNow = isCloudProject && cloudAccessPolicy?.canEditCloudProject
   const canDisableCloudBackup = isCloudProject
 
@@ -542,6 +543,8 @@ export default function Toolbar({
                         ? 'Cloud backup requires a paid account'
                         : !signedInForCloud
                           ? 'Sign in to enable cloud backup'
+                          : !cloudRepositoryReady
+                            ? 'Cloud connection is still initializing'
                           : 'Cloud backup unavailable'
                   }
                   style={{
