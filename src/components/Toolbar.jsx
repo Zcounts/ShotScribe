@@ -9,6 +9,25 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from './ui/context-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog'
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from './ui/command'
+import { Alert, AlertDescription } from './ui/alert'
 
 export default function Toolbar({
   onOpenExportHub,
@@ -47,6 +66,7 @@ export default function Toolbar({
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
   const [unsavedDialog, setUnsavedDialog] = useState(null) // { action: fn }
   const [saveActionBusy, setSaveActionBusy] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
   const emojiPickerRef = useRef(null)
@@ -112,6 +132,17 @@ export default function Toolbar({
     hasShownLocalOnlyHintRef.current = true
     notifyLocalOnlySyncHint()
   }, [isCloudProject, cloudAccessPolicy?.paidCloudAccess, signedInForCloud, saveSyncState?.status])
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setCommandOpen((prev) => !prev)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   // Guard that shows unsaved-changes dialog before running an action
   const guardUnsaved = (action) => {
@@ -634,6 +665,15 @@ export default function Toolbar({
       </div>
       {/* Right: Export + Account */}
       <div className="toolbar-section toolbar-section-right flex items-center gap-2">
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => setCommandOpen(true)}
+          title="Quick actions (Ctrl/Cmd+K)"
+          style={{ fontSize: 11, paddingInline: 8 }}
+        >
+          Quick
+        </button>
         <div style={{ position: 'relative', display: 'flex' }}>
           <button
             className="toolbar-btn"
@@ -684,86 +724,69 @@ export default function Toolbar({
       </div>
       </div>
       {cloudExportBlocked && (
-        <div style={{ color: '#fbbf24', fontSize: 11, marginTop: 6, textAlign: 'right' }}>
-          Cloud project export is disabled while billing is inactive. Local-only export still works.
-        </div>
+        <Alert variant="warning" className="mt-1 py-1.5 text-right">
+          <AlertDescription>Cloud project export is disabled while billing is inactive. Local-only export still works.</AlertDescription>
+        </Alert>
       )}
 
-      {unsavedDialog && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.55)',
-            zIndex: 9000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          onClick={() => setUnsavedDialog(null)}
-        >
-          <div
-            style={{
-              background: '#1e1e1e',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 8,
-              padding: '24px 28px',
-              maxWidth: 360,
-              width: '100%',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <p style={{ fontSize: 14, fontWeight: 600, color: '#e0e0e0', margin: '0 0 6px', fontFamily: 'inherit' }}>
-              Unsaved Changes
-            </p>
-            <p style={{ fontSize: 12, color: '#aaa', margin: '0 0 20px', fontFamily: 'inherit', lineHeight: 1.5 }}>
+      <AlertDialog open={!!unsavedDialog} onOpenChange={(nextOpen) => { if (!nextOpen) setUnsavedDialog(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            <AlertDialogDescription>
               You have unsaved changes. Do you want to save before continuing?
-            </p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setUnsavedDialog(null)}
-                style={{
-                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
-                  background: 'none', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 4, color: '#aaa', cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const action = unsavedDialog.action
-                  setUnsavedDialog(null)
-                  action()
-                }}
-                style={{
-                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
-                  background: 'none', border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 4, color: '#f87171', cursor: 'pointer',
-                }}
-              >
-                Discard Changes
-              </button>
-              <button
-                onClick={async () => {
-                  const action = unsavedDialog.action
-                  setUnsavedDialog(null)
-                  await saveProject()
-                  action()
-                }}
-                style={{
-                  padding: '7px 14px', fontSize: 12, fontFamily: 'inherit',
-                  background: '#E84040', border: 'none',
-                  borderRadius: 4, color: '#fff', cursor: 'pointer', fontWeight: 600,
-                }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel
+              className="text-[#f87171]"
+              onClick={() => {
+                const action = unsavedDialog?.action
+                setUnsavedDialog(null)
+                action?.()
+              }}
+            >
+              Discard Changes
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                const action = unsavedDialog?.action
+                setUnsavedDialog(null)
+                await saveProject()
+                action?.()
+              }}
+            >
+              Save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+        <CommandInput placeholder="Search actions…" />
+        <CommandList>
+          <CommandEmpty>No matching actions.</CommandEmpty>
+          <CommandGroup heading="Project">
+            <CommandItem onSelect={() => { setCommandOpen(false); guardUnsaved(newProject) }}>New project</CommandItem>
+            <CommandItem onSelect={() => { setCommandOpen(false); guardUnsaved(openProject) }}>Open project</CommandItem>
+            <CommandItem onSelect={() => { setCommandOpen(false); saveProject() }}>Save local project</CommandItem>
+          </CommandGroup>
+          <CommandGroup heading="Cloud / Export">
+            <CommandItem onSelect={() => { setCommandOpen(false); openExportHub() }}>Open export hub</CommandItem>
+            {isCloudProject ? (
+              <CommandItem onSelect={() => { setCommandOpen(false); handleSaveToCloudNow() }}>Save to cloud now</CommandItem>
+            ) : (
+              <CommandItem onSelect={() => { setCommandOpen(false); handleEnableCloudBackup() }}>Turn on cloud backup</CommandItem>
+            )}
+          </CommandGroup>
+          <CommandGroup heading="Navigation">
+            <CommandItem onSelect={() => { setCommandOpen(false); navigateTo(currentPath === '/account' ? '/' : '/account') }}>
+              {currentPath === '/account' ? 'Go to app' : 'Go to account'}
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
       </div>
     </TooltipProvider>
   )

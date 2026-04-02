@@ -75,3 +75,24 @@ Implemented in web app shell and toolbar (no mobile changes):
 Still intentionally deferred:
 - Replacing dense workflow UIs (Shotlist/Schedule/Script) and existing custom per-entity context menu system.
 - Any mobile implementation under `mobile/`.
+
+## Phase 2 implementation update (2026-04-02)
+
+Shared controls and overlay primitives added (web app only):
+
+- `alert`, `alert-dialog`, `drawer`, `checkbox`, `combobox`, `command`, `select`, `slider`, `switch`, `calendar`, and `date-picker` were added under `src/components/ui/`.
+- Added required library dependencies (`@radix-ui/react-alert-dialog`, `@radix-ui/react-checkbox`, `@radix-ui/react-dialog`, `@radix-ui/react-select`, `@radix-ui/react-slider`, `@radix-ui/react-switch`, `cmdk`, `react-day-picker`, `vaul`).
+
+Selective low-risk migrations completed:
+
+- Toolbar unsaved-changes confirmation moved from custom modal markup to shared `AlertDialog`.
+- Toolbar now includes a reusable command box foundation (`CommandDialog`) with keyboard shortcut (`Ctrl/Cmd+K`) and safe action entries.
+- Callsheet configure section visibility toggles now use shared `Checkbox` primitive.
+- Save/Sync collaboration role selectors now use shared `Select` primitive.
+- Toolbar export-blocked notice now uses shared `Alert` primitive.
+
+Still deferred for later passes:
+
+- Full replacement of date inputs in Callsheet and scheduling flows (needs focused UX/validation pass).
+- Broad replacement of all legacy selects/checkboxes across large workflow surfaces (Shotlist/Schedule/Script/Callsheet main tables).
+- Wider adoption of Drawer/Combobox/Slider/Switch beyond foundation-level introduction in this phase.

@@ -3,6 +3,7 @@ import { useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 
 function formatTimestamp(iso) {
   if (!iso) return 'Not recorded yet'
@@ -247,10 +248,15 @@ export default function SaveSyncStatusControl({
                 <div style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="collaborator@email.com" style={{ flex: 1, background: 'rgba(15,23,42,0.5)', color: '#E2E8F0', border: '1px solid rgba(148,163,184,0.35)', borderRadius: 6, fontSize: 11, padding: '5px 7px', outline: 'none' }} />
-                    <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)} style={{ background: 'rgba(15,23,42,0.5)', color: '#E2E8F0', border: '1px solid rgba(148,163,184,0.35)', borderRadius: 6, fontSize: 11, padding: '5px 7px' }}>
-                      <option value="viewer">Viewer</option>
-                      <option value="editor">Editor</option>
-                    </select>
+                    <Select value={inviteRole} onValueChange={setInviteRole}>
+                      <SelectTrigger className="h-[30px] w-[96px] border-[rgba(148,163,184,0.35)] bg-[rgba(15,23,42,0.5)] text-[11px] text-[#E2E8F0]">
+                        <SelectValue placeholder="Role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="viewer">Viewer</SelectItem>
+                        <SelectItem value="editor">Editor</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <button type="button" onClick={handleInvite} disabled={shareBusy} style={{ border: '1px solid rgba(74,222,128,0.45)', background: 'rgba(22,101,52,0.32)', color: '#A7F3D0', borderRadius: 6, fontSize: 11, padding: '5px 8px', cursor: shareBusy ? 'not-allowed' : 'pointer', opacity: shareBusy ? 0.6 : 1 }}>
                       Invite
                     </button>
@@ -270,10 +276,15 @@ export default function SaveSyncStatusControl({
                     </div>
                     {canManageMembers && member.role !== 'owner' ? (
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <select value={member.role} onChange={(event) => handleRoleUpdate(member.userId, event.target.value)} style={{ background: 'rgba(15,23,42,0.5)', color: '#E2E8F0', border: '1px solid rgba(148,163,184,0.35)', borderRadius: 6, fontSize: 10, padding: '3px 5px' }}>
-                          <option value="viewer">viewer</option>
-                          <option value="editor">editor</option>
-                        </select>
+                        <Select value={member.role} onValueChange={(value) => handleRoleUpdate(member.userId, value)}>
+                          <SelectTrigger className="h-[24px] w-[84px] border-[rgba(148,163,184,0.35)] bg-[rgba(15,23,42,0.5)] px-1.5 text-[10px] text-[#E2E8F0]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="viewer">viewer</SelectItem>
+                            <SelectItem value="editor">editor</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <button type="button" onClick={() => handleRevokeMember(member.userId)} style={{ border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(127,29,29,0.32)', color: '#FCA5A5', borderRadius: 6, fontSize: 10, padding: '3px 6px', cursor: 'pointer' }}>
                           Revoke
                         </button>

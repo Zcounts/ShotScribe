@@ -1,6 +1,7 @@
 import ConfigureSidebarShell from './ConfigureSidebarShell'
 import React, { useMemo, useState } from 'react'
 import { DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
+import { Checkbox } from './ui/checkbox'
 
 function Section({ title, meta, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -62,10 +63,9 @@ export default function CallsheetConfigureSidebar({
             {(sectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(section => (
               <label key={section.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 9px', border: '1px solid #CBD5E1', borderRadius: 7, fontSize: 12, background: '#fff' }}>
                 <span>{section.label}</span>
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={section.visible}
-                  onChange={(e) => onSectionConfigChange((sectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(item => item.key === section.key ? { ...item, visible: e.target.checked } : item))}
+                  onCheckedChange={(checked) => onSectionConfigChange((sectionConfig || DEFAULT_CALLSHEET_SECTION_CONFIG).map(item => item.key === section.key ? { ...item, visible: !!checked } : item))}
                 />
               </label>
             ))}
