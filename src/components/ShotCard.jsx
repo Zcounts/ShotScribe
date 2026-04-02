@@ -59,8 +59,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const deleteShot = useStore(s => s.deleteShot)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const [showAddImageMenu, setShowAddImageMenu] = useState(false)
-  const [showLibraryPicker, setShowLibraryPicker] = useState(false)
+  const [imagePickerStep, setImagePickerStep] = useState(null)
   const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
   const fileInputRef = useRef(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
@@ -151,8 +150,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
       const payload = buildShotImageFromLibraryAsset(signedView)
       if (!payload) throw new Error('Could not resolve selected library asset')
       updateShotImage(shot.id, payload)
-      setShowLibraryPicker(false)
-      setShowAddImageMenu(false)
+      setImagePickerStep(null)
     } finally {
       setIsAssigningFromLibrary(false)
     }
@@ -160,7 +158,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
 
   const handleImageClick = () => {
     if (projectRef?.type === 'cloud') {
-      setShowAddImageMenu(prev => !prev)
+      setImagePickerStep('options')
       return
     }
     fileInputRef.current?.click()
@@ -227,7 +225,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
         })
         updateShotImage(shot.id, processed)
       }
-      setShowAddImageMenu(false)
+      setImagePickerStep(null)
       devPerfLog('storyboard:image-upload', {
         shotId: shot.id,
         sourceBytes: file.size,
@@ -377,16 +375,30 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
           onChange={handleImageChange}
         />
       </div>
-      {showAddImageMenu && projectRef?.type === 'cloud' && (
+      {projectRef?.type === 'cloud' && (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+            onClick={(e) => {
+              e.stopPropagation()
+              setImagePickerStep('options')
+            }}
+          >
+            Add Image
+          </button>
+        </div>
+      )}
+      {imagePickerStep === 'options' && projectRef?.type === 'cloud' && (
         <div className="mt-1 rounded border border-gray-700 bg-gray-900 p-2 text-xs text-gray-100">
-          <div className="mb-1 font-medium">Add Image</div>
+          <div className="mb-1 font-medium">Add Image to Shot</div>
           <div className="flex flex-col gap-1">
             <button
               type="button"
               className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
               onClick={(e) => {
                 e.stopPropagation()
-                setShowLibraryPicker(true)
+                setImagePickerStep('library')
               }}
             >
               Choose from Library
@@ -408,25 +420,35 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
                 onClick={(e) => {
                   e.stopPropagation()
                   clearShotImage()
-                  setShowAddImageMenu(false)
+                  setImagePickerStep(null)
                 }}
               >
                 Remove from Shot
               </button>
             ) : null}
+            <button
+              type="button"
+              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
+              onClick={(e) => {
+                e.stopPropagation()
+                setImagePickerStep(null)
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
-      {showLibraryPicker && projectRef?.type === 'cloud' && (
+      {imagePickerStep === 'library' && projectRef?.type === 'cloud' && (
         <div className="mt-2 rounded border border-gray-700 bg-gray-900 p-2 text-xs text-gray-100">
           <div className="mb-2 flex items-center justify-between">
             <div className="font-medium">Project Media Library</div>
             <button
               type="button"
               className="rounded border border-gray-700 bg-gray-800 px-2 py-1 hover:bg-gray-700"
-              onClick={() => setShowLibraryPicker(false)}
+              onClick={() => setImagePickerStep('options')}
             >
-              Close
+              Back
             </button>
           </div>
           <div className="max-h-40 overflow-auto pr-1">

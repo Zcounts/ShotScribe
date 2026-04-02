@@ -66,6 +66,36 @@ Date: 2026-04-01
   - project membership authorization, and
   - paid cloud entitlement for the requesting user.
 
+## Storyboard Add Image picker flow (Phase 3)
+
+### User flow
+
+1. User clicks **Add Image** on a storyboard shot card (cloud projects).
+2. Picker opens with two options:
+   - **Upload New**
+   - **Choose from Library**
+3. Upload New path:
+   - user selects source file,
+   - app normalizes to 640x360 WEBP,
+   - uploads via private S3 presigned PUT,
+   - finalizes in Convex as project library asset,
+   - assigns that asset to the current shot.
+4. Choose from Library path:
+   - app shows project media library items,
+   - user selects one item,
+   - selected asset is assigned to the current shot.
+5. Local-only projects keep the existing direct local upload behavior.
+
+### Technical flow
+
+- Upload New:
+  - `assets:createAssetUploadIntent` -> browser PUT to S3 -> `assets:finalizeAssetUpload` -> `assets:assignShotLibraryAsset`.
+- Choose from Library:
+  - `assets:listProjectLibraryAssets` -> `assets:assignShotLibraryAsset`.
+- Rendering remains stable:
+  - selected cloud asset resolves through `assets:getAssetSignedView`,
+  - local `shot.image` / `shot.imageAsset` fallback behavior remains intact.
+
 ## Convex environment variables required for private S3
 
 - `S3_REGION` (example: `us-east-1`)
@@ -117,6 +147,7 @@ Set bucket CORS so browser PUT uploads from your app origins succeed.
 ## Manual QA checklist
 
 1. **Upload as paid owner**
+   - Click **Add Image** and verify picker shows **Upload New** and **Choose from Library**.
    - Confirm owner with active paid entitlement can upload JPG/PNG/WEBP <= 15MB.
    - Confirm resulting image appears in the project media library picker.
    - Confirm resulting cloud image renders in storyboard shot after auto-assign.
