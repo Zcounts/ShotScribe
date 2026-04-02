@@ -176,3 +176,13 @@ npm run build
 - Prefer small, reversible changes.
 - Avoid broad routing/auth rewrites during hardening passes.
 - If cleanup is risky, defer and document instead of forcing it.
+
+---
+
+## Save/sync behavior (public beta hardening)
+
+- Editing remains **local-first** across web/desktop/mobile surfaces.
+- Free/local users stay local-only.
+- Paid cloud users now use a clearer local+cloud state model with debounced cloud snapshot sync.
+- Toolbar messaging differentiates local save vs cloud sync progress/failure states.
+- Detailed implementation + QA checklist: `docs/save-sync-architecture.md`.

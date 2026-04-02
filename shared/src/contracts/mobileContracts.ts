@@ -30,7 +30,7 @@ export interface MobileScheduleItem {
   plannedEndTime?: string
   actualStartTime?: string
   actualEndTime?: string
-  status?: 'todo' | 'in_progress' | 'done'
+  status?: 'todo' | 'in_progress' | 'done' | 'skipped'
   sortOrder: number
 }
 
@@ -142,7 +142,7 @@ export interface LimitedMobileUpdateItem {
   dayId: string
   scheduleItemId?: string
   shotId?: string
-  status?: 'todo' | 'in_progress' | 'done'
+  status?: 'todo' | 'in_progress' | 'done' | 'skipped'
   actualStartTime?: string
   actualEndTime?: string
   quickNotes?: string
