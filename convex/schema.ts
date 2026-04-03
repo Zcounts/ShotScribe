@@ -60,6 +60,8 @@ export default defineSchema({
     emoji: v.string(),
     latestSnapshotId: v.optional(v.id('projectSnapshots')),
     archivedAt: v.optional(v.number()),
+    pendingDeleteAt: v.optional(v.number()),
+    deleteAfter: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
