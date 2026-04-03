@@ -47,6 +47,7 @@ import {
   List,
   Calendar,
   FilePlus,
+  Menu,
 } from 'lucide-react'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
 import { getShotLetter } from './store'
@@ -874,6 +875,7 @@ export default function App() {
     },
   }
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
+  const showHomeCompactHeaderRows = activeTab === 'home' && isDesktopDown
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
     const target = event.target
@@ -925,6 +927,7 @@ export default function App() {
       className="flex flex-col app-shell"
       data-viewport-tier={tier}
       data-desktop-down={isDesktopDown ? 'true' : 'false'}
+      data-active-tab={activeTab}
       style={{ height: '100vh', overflow: 'hidden', backgroundColor: 'var(--app-workspace-bg-base)' }}
       onClick={() => hideContextMenu()}
       onContextMenuCapture={handleEntityContextMenuCapture}
@@ -964,14 +967,30 @@ export default function App() {
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
       <div className="tab-nav" style={{
         display: 'flex',
+        flexDirection: 'column',
         flexShrink: 0,
-        alignItems: 'center',
         borderBottom: '1px solid #3A3A3C',
         backgroundColor: '#1C1C1E',
         paddingLeft: '10px',
         paddingRight: '10px',
-        gap: 8,
+        gap: showHomeCompactHeaderRows ? 0 : 8,
       }}>
+        {showHomeCompactHeaderRows ? (
+          <div className="tab-nav-home-controls">
+            <button
+              type="button"
+              className="tab-nav-home-menu-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent('shotscribe:open-left-sidebar'))}
+              aria-label="Open left menu"
+              title="Open left menu"
+            >
+              <Menu size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+            <div style={{ marginLeft: 'auto', position: 'relative', flexShrink: 0 }}>
+              <ConfigureButton onClick={activeConfigure.onToggle} active={activeConfigure.isActive} />
+            </div>
+          </div>
+        ) : null}
         <div className="tab-nav-scroll" style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
           {[
             { id: 'home',       label: 'Home', icon: Home },
@@ -1000,9 +1019,11 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div style={{ marginLeft: 'auto', position: 'relative', flexShrink: 0 }}>
-          <ConfigureButton onClick={activeConfigure.onToggle} active={activeConfigure.isActive} />
-        </div>
+        {!showHomeCompactHeaderRows ? (
+          <div style={{ marginLeft: 'auto', position: 'relative', flexShrink: 0 }}>
+            <ConfigureButton onClick={activeConfigure.onToggle} active={activeConfigure.isActive} />
+          </div>
+        ) : null}
       </div>
 
       {/* Main content */}
