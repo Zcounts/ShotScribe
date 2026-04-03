@@ -222,6 +222,9 @@ npm run build
 - Shot edits on mobile are persisted to localStorage immediately (safe offline), then uploaded to the same Convex project snapshot that desktop reads.
 - Toolbar shows a status dot that transitions through: not yet saved → saved on device → uploading (dot pulses) → backed up to cloud / backup failed.
 - Unsaved-change exit guards fire only while local persistence is genuinely pending; they do not block when cloud sync is merely queued.
+- Home sidebar (web app) switches from local recents to a cloud project list for signed-in paid users, sorted by latest project update.
+- Cloud project deletion is a 24-hour reversible pending state first (`pendingDeleteAt`/`deleteAfter`), then hard-deleted by scheduled Convex reconciliation along with linked cloud project records/assets.
+- Cloud snapshot payloads are normalized before Convex writes (undefined/non-serializable values stripped and duplicate thumbnail fields de-duplicated) to keep local→cloud backup enablement reliable for populated projects.
 - Full implementation detail + manual QA checklist: `docs/save-sync-architecture.md`.
 
 ## Mobile companion modes (April 2026 update)

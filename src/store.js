@@ -3057,12 +3057,32 @@ const useStore = create((set, get) => ({
       name: payload.projectName || get().projectName || 'Untitled Shotlist',
       emoji: payload.projectEmoji || get().projectEmoji || '🎬',
     })
-    const snapshot = await cloudRepository.createSnapshot({
-      projectId: cloudProject.id,
-      createdByUserId: ownerUserId,
-      source: 'local_conversion',
-      payload,
-    })
+
+    let snapshot
+    try {
+      snapshot = await cloudRepository.createSnapshot({
+        projectId: cloudProject.id,
+        createdByUserId: ownerUserId,
+        source: 'local_conversion',
+        payload,
+      })
+    } catch (error) {
+      if (cloudRepository?.deleteProjectIfSnapshotless) {
+        try {
+          await cloudRepository.deleteProjectIfSnapshotless(cloudProject.id)
+        } catch (cleanupError) {
+          if (import.meta.env.DEV) {
+            console.error('[cloud-backup] failed to cleanup snapshotless cloud project', cleanupError)
+          }
+        }
+      }
+      if (import.meta.env.DEV) {
+        console.error('[cloud-backup] create snapshot failed during local conversion', error)
+      }
+      throw new Error(
+        'Cloud backup couldn’t be enabled for this project yet. We cleaned up the failed cloud draft. Please try again.'
+      )
+    }
 
     set({
       projectRef: {
