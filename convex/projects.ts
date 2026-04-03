@@ -100,9 +100,25 @@ export const listProjectsForCurrentUser = query({
       deduped.set(String(project._id), project)
     }
 
-    return Array.from(deduped.values())
+    const candidates = Array.from(deduped.values())
       .filter((project: any) => !project.pendingDeleteAt && !project.deleteAfter)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
+
+    const usableProjects = await Promise.all(candidates.map(async (project: any) => {
+      if (project.latestSnapshotId) {
+        const latestSnapshot = await ctx.db.get(project.latestSnapshotId)
+        if (latestSnapshot?.payload) return project
+      }
+      const fallbackSnapshots = await ctx.db
+        .query('projectSnapshots')
+        .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', project._id))
+        .order('desc')
+        .take(1)
+      return fallbackSnapshots[0]?.payload ? project : null
+    }))
+
+    return usableProjects
+      .filter(Boolean)
+      .sort((a: any, b: any) => b.updatedAt - a.updatedAt)
   },
 })
 
@@ -215,6 +231,29 @@ export const restorePendingDeletionProject = mutation({
       },
     })
     return { ok: true, restored: true }
+  },
+})
+
+export const deleteProjectIfSnapshotless = mutation({
+  args: {
+    projectId: v.id('projects'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
+    if (!project) return { ok: false, reason: 'not_found' as const }
+
+    const snapshots = await ctx.db
+      .query('projectSnapshots')
+      .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', args.projectId))
+      .take(1)
+
+    if (snapshots.length > 0 || project.latestSnapshotId) {
+      return { ok: false, reason: 'has_snapshots' as const }
+    }
+
+    await ctx.db.delete(args.projectId)
+    return { ok: true }
   },
 })
 

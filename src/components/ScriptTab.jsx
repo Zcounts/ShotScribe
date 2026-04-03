@@ -27,6 +27,7 @@ import breakdownIcon from '../../assets/script icons/breakdown.svg'
 import visualizeIcon from '../../assets/script icons/visualize.svg'
 import LeftSidebarResources from './LeftSidebarResources'
 import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
+import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
@@ -848,11 +849,12 @@ export default function ScriptTab() {
     setIsSavingSnapshot(true)
     try {
       const payload = getProjectData()
+      const safePayload = buildConvexSafeSnapshotPayload(payload)
       const result = await createSnapshot({
         projectId: cloudProjectId,
         createdByUserId: currentUserId,
         source: 'manual_save',
-        payload,
+        payload: safePayload,
         conflictStrategy: 'last_write_wins',
         ...(currentSnapshotId ? { expectedLatestSnapshotId: currentSnapshotId } : {}),
       })
