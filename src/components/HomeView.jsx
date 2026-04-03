@@ -329,7 +329,7 @@ export default function HomeView() {
 
   return (
     <div className="home-view">
-      <SidebarPane bodyClassName="home-sidebar-content">
+      <SidebarPane bodyClassName="home-sidebar-content" hideMobileToggle>
         <div className="home-section-label">{cloudListEnabled ? 'Cloud Projects' : 'Recent Projects'}</div>
         <div className="home-recent-list">
           {cloudListEnabled ? (

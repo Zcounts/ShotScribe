@@ -1101,6 +1101,30 @@
     border-radius: 999px;
   }
 
+  .tab-nav-home-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+
+  .tab-nav-home-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    min-height: 30px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: #2C2C2E;
+    color: #EDE9E1;
+    cursor: pointer;
+  }
+
+  .tab-nav-home-menu-btn:hover {
+    background: #3A3A3C;
+  }
+
   .tab-nav-button {
     display: inline-flex;
     align-items: center;
@@ -2194,6 +2218,52 @@
       margin-left: auto;
     }
 
+    .app-shell[data-active-tab="home"] .toolbar {
+      row-gap: 6px;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar-section-left {
+      order: 1;
+      flex-basis: 100%;
+      width: 100%;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar-help-btn {
+      display: none;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar-section-center,
+    .app-shell[data-active-tab="home"] .toolbar-section-right {
+      order: 2;
+      width: auto;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar-section-center {
+      margin-right: 0;
+      overflow-x: auto;
+      flex: 1 1 auto;
+      min-width: 0;
+      padding-bottom: 0;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar-section-right {
+      margin-left: 0;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .app-shell[data-active-tab="home"] .tab-nav {
+      padding-top: 6px;
+      padding-bottom: 4px;
+    }
+
+    .app-shell[data-active-tab="home"] .tab-nav-home-controls {
+      width: 100%;
+      border-bottom: 1px solid #3A3A3C;
+      padding-bottom: 6px;
+      margin-bottom: 4px;
+    }
+
     .toolbar-meta,
     .toolbar-file-name {
       display: none;
@@ -2249,6 +2319,26 @@
     .configure-sidebar {
       width: min(360px, calc(100vw - 8px));
       border-left-width: 0;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar {
+      padding: 8px 8px;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar-section-right {
+      width: auto;
+      justify-content: flex-start;
+    }
+
+    .app-shell[data-active-tab="home"] .toolbar-section-center .toolbar-btn,
+    .app-shell[data-active-tab="home"] .toolbar-section-right .toolbar-btn {
+      font-size: 11px;
+      padding-inline: 10px;
+    }
+
+    .app-shell[data-active-tab="home"] .tab-nav-button {
+      min-height: 32px;
+      padding: 8px 9px;
     }
 
     .page-document {
