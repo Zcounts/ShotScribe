@@ -396,11 +396,10 @@ export default function ScriptTab() {
   const [breakdownDraft, setBreakdownDraft] = useState({ name: '', quantity: 1, category: BREAKDOWN_CATEGORIES[1], tagAllMentions: false })
   const [overlayFragmentsByBlock, setOverlayFragmentsByBlock] = useState({})
   const [inspectorSections, setInspectorSections] = useState(() => readStoredObject(SIDEBAR_STORAGE_KEYS.inspectorSections, {
-    scriptEstimation: true,
-    paginationMode: true,
-    writeOptions: true,
+    scriptControls: true,
     formatInspector: true,
   }))
+  const [scriptInspectorMode, setScriptInspectorMode] = useState('estimation')
   const [formatInspectorMode, setFormatInspectorMode] = useState('all')
 
   const documentScrollerRef = useRef(null)
@@ -1517,9 +1516,7 @@ export default function ScriptTab() {
               </div>
             ) : null}
             {[
-              { id: 'scriptEstimation', title: 'Script & Estimation' },
-              { id: 'paginationMode', title: 'Pagination Mode' },
-              { id: 'writeOptions', title: 'Write panel options' },
+              { id: 'scriptControls', title: 'Script Controls' },
               { id: 'formatInspector', title: 'Page & Styles' },
             ].map(section => (
               <section key={section.id} className="ss-module script-inspector-section">
@@ -1532,50 +1529,77 @@ export default function ScriptTab() {
                 </button>
                 {inspectorSections[section.id] && (
                   <div style={{ padding: 10 }}>
-                    {section.id === 'scriptEstimation' && (
-                      <>
-                        <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <input
-                            type="range"
-                            min={3}
-                            max={10}
-                            step={0.5}
-                            value={scriptSettings?.baseMinutesPerPage ?? 5}
-                            onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
-                            style={{ flex: 1, accentColor: '#2563eb' }}
-                          />
-                          <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
-                            {scriptSettings?.baseMinutesPerPage ?? 5}
-                          </span>
+                    {section.id === 'scriptControls' && (
+                      <div className="script-format-inspector">
+                        <div className="script-format-mode-switch" role="tablist" aria-label="Script controls modes">
+                          {[
+                            { id: 'estimation', label: 'Estimation' },
+                            { id: 'pagination', label: 'Pagination' },
+                            { id: 'write', label: 'Write' },
+                          ].map((mode) => {
+                            const isActive = scriptInspectorMode === mode.id
+                            return (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                className={`script-format-mode-btn ${isActive ? 'is-active' : ''}`}
+                                onClick={() => setScriptInspectorMode(mode.id)}
+                                title={mode.label}
+                              >
+                                <span>{mode.label}</span>
+                              </button>
+                            )
+                          })}
                         </div>
-                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
-                          1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
-                        </div>
-                      </>
-                    )}
-                    {section.id === 'paginationMode' && (
-                      <select
-                        className="ss-input"
-                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
-                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
-                      >
-                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
-                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
-                      </select>
-                    )}
-                    {section.id === 'writeOptions' && (
-                      <>
-                        <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
-                          <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
-                          Bold Slugline
-                        </label>
-                        <label className="script-checkbox-row">
-                          <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
-                          Bold Character
-                        </label>
-                      </>
+
+                        {scriptInspectorMode === 'estimation' && (
+                          <>
+                            <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <input
+                                type="range"
+                                min={3}
+                                max={10}
+                                step={0.5}
+                                value={scriptSettings?.baseMinutesPerPage ?? 5}
+                                onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
+                                style={{ flex: 1, accentColor: '#2563eb' }}
+                              />
+                              <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
+                                {scriptSettings?.baseMinutesPerPage ?? 5}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                              1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
+                            </div>
+                          </>
+                        )}
+                        {scriptInspectorMode === 'pagination' && (
+                          <select
+                            className="ss-input"
+                            value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                            onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                            style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
+                          >
+                            <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                            <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                          </select>
+                        )}
+                        {scriptInspectorMode === 'write' && (
+                          <>
+                            <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
+                              <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
+                              Bold Slugline
+                            </label>
+                            <label className="script-checkbox-row">
+                              <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
+                              Bold Character
+                            </label>
+                          </>
+                        )}
+                      </div>
                     )}
                     {section.id === 'formatInspector' && (
                       <div className="script-format-inspector">
