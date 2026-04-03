@@ -19,14 +19,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog'
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from './ui/command'
 import { Alert, AlertDescription } from './ui/alert'
 
 export default function Toolbar({
@@ -66,7 +58,6 @@ export default function Toolbar({
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
   const [unsavedDialog, setUnsavedDialog] = useState(null) // { action: fn }
   const [saveActionBusy, setSaveActionBusy] = useState(false)
-  const [commandOpen, setCommandOpen] = useState(false)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
   const emojiPickerRef = useRef(null)
@@ -132,17 +123,6 @@ export default function Toolbar({
     hasShownLocalOnlyHintRef.current = true
     notifyLocalOnlySyncHint()
   }, [isCloudProject, cloudAccessPolicy?.paidCloudAccess, signedInForCloud, saveSyncState?.status])
-
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setCommandOpen((prev) => !prev)
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [])
 
   // Guard that shows unsaved-changes dialog before running an action
   const guardUnsaved = (action) => {
@@ -217,7 +197,7 @@ export default function Toolbar({
   return (
     <TooltipProvider delayDuration={180}>
       <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      <div className="toolbar">
+      <div className={`toolbar ${activeTab === 'home' ? 'toolbar-home-active' : ''}`}>
       {/* Left: Project name */}
       <div className="toolbar-section toolbar-section-left flex items-center gap-3 flex-1 min-w-0">
         <div ref={emojiPickerRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -398,6 +378,7 @@ export default function Toolbar({
           <PopoverTrigger asChild>
             <button
               type="button"
+              className="toolbar-help-btn"
               style={{ border: '1px solid rgba(74,85,104,0.35)', borderRadius: 999, width: 20, height: 20, fontSize: 11, background: 'rgba(255,255,255,0.04)', color: '#cbd5e1', cursor: 'pointer' }}
               aria-label="Save and sync quick help"
             >
@@ -665,15 +646,6 @@ export default function Toolbar({
       </div>
       {/* Right: Export + Account */}
       <div className="toolbar-section toolbar-section-right flex items-center gap-2">
-        <button
-          type="button"
-          className="toolbar-btn"
-          onClick={() => setCommandOpen(true)}
-          title="Quick actions (Ctrl/Cmd+K)"
-          style={{ fontSize: 11, paddingInline: 8 }}
-        >
-          Quick
-        </button>
         <div style={{ position: 'relative', display: 'flex' }}>
           <button
             className="toolbar-btn"
@@ -763,30 +735,6 @@ export default function Toolbar({
         </AlertDialogContent>
       </AlertDialog>
 
-      <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
-        <CommandInput placeholder="Search actions…" />
-        <CommandList>
-          <CommandEmpty>No matching actions.</CommandEmpty>
-          <CommandGroup heading="Project">
-            <CommandItem onSelect={() => { setCommandOpen(false); guardUnsaved(newProject) }}>New project</CommandItem>
-            <CommandItem onSelect={() => { setCommandOpen(false); guardUnsaved(openProject) }}>Open project</CommandItem>
-            <CommandItem onSelect={() => { setCommandOpen(false); saveProject() }}>Save local project</CommandItem>
-          </CommandGroup>
-          <CommandGroup heading="Cloud / Export">
-            <CommandItem onSelect={() => { setCommandOpen(false); openExportHub() }}>Open export hub</CommandItem>
-            {isCloudProject ? (
-              <CommandItem onSelect={() => { setCommandOpen(false); handleSaveToCloudNow() }}>Save to cloud now</CommandItem>
-            ) : (
-              <CommandItem onSelect={() => { setCommandOpen(false); handleEnableCloudBackup() }}>Turn on cloud backup</CommandItem>
-            )}
-          </CommandGroup>
-          <CommandGroup heading="Navigation">
-            <CommandItem onSelect={() => { setCommandOpen(false); navigateTo(currentPath === '/account' ? '/' : '/account') }}>
-              {currentPath === '/account' ? 'Go to app' : 'Go to account'}
-            </CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
       </div>
     </TooltipProvider>
   )

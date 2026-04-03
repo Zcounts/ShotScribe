@@ -12,6 +12,7 @@ export default function SidebarPane({
   bodyClassName = '',
   showResources = true,
   responsiveLabel = 'Open sidebar',
+  hideMobileToggle = false,
 }) {
   const { isDesktopDown } = useResponsiveViewport()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -32,6 +33,13 @@ export default function SidebarPane({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [mobileOpen])
+
+  useEffect(() => {
+    if (!isDesktopDown) return undefined
+    const onOpenEvent = () => setMobileOpen(true)
+    window.addEventListener('shotscribe:open-left-sidebar', onOpenEvent)
+    return () => window.removeEventListener('shotscribe:open-left-sidebar', onOpenEvent)
+  }, [isDesktopDown])
 
   useEffect(() => {
     if (!mobileOpen) return undefined
@@ -86,18 +94,20 @@ export default function SidebarPane({
 
   return (
     <>
-      <div className="ss-left-sidebar-toggle-slot">
-        <button
-          type="button"
-          className="ss-left-sidebar-toggle-btn"
-          onClick={() => setMobileOpen(true)}
-          aria-label={effectiveResponsiveLabel}
-          title={effectiveResponsiveLabel}
-          aria-expanded={mobileOpen}
-        >
-          <span aria-hidden="true">☰</span>
-        </button>
-      </div>
+      {!hideMobileToggle ? (
+        <div className="ss-left-sidebar-toggle-slot">
+          <button
+            type="button"
+            className="ss-left-sidebar-toggle-btn"
+            onClick={() => setMobileOpen(true)}
+            aria-label={effectiveResponsiveLabel}
+            title={effectiveResponsiveLabel}
+            aria-expanded={mobileOpen}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+        </div>
+      ) : null}
 
       <div
         className={`ss-left-sidebar-mobile-scrim ${mobileOpen ? 'is-open' : ''}`}
