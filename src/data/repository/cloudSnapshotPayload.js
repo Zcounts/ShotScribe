@@ -1,8 +1,44 @@
 const MAX_CLOUD_SNAPSHOT_BYTES = 900_000
 
+function isUnsafeInlineImage(value) {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  return (
+    trimmed.startsWith('data:')
+    || trimmed.startsWith('blob:')
+    || trimmed.startsWith('file:')
+  )
+}
+
+function sanitizeImageAsset(asset) {
+  if (!asset || typeof asset !== 'object') return null
+  const hasCloudAsset = typeof asset?.cloud?.assetId === 'string' && asset.cloud.assetId.trim().length > 0
+  const safeThumb = isUnsafeInlineImage(asset.thumb) ? null : (asset.thumb || null)
+  return {
+    version: asset.version || 1,
+    mime: asset.mime || 'image/webp',
+    thumb: hasCloudAsset ? null : safeThumb,
+    full: null,
+    meta: asset.meta || null,
+    cloud: hasCloudAsset ? asset.cloud : null,
+  }
+}
+
+function sanitizeImageNode(node) {
+  if (!node || typeof node !== 'object') return node
+  const imageAsset = sanitizeImageAsset(node.imageAsset)
+  const safeImage = isUnsafeInlineImage(node.image) ? null : (node.image || null)
+  return {
+    ...node,
+    image: imageAsset?.cloud?.assetId ? null : safeImage,
+    imageAsset,
+  }
+}
+
 function stripDuplicatedShotThumb(shot) {
   if (!shot || typeof shot !== 'object') return shot
-  const nextShot = { ...shot }
+  const nextShot = sanitizeImageNode(shot)
   if (typeof nextShot.image === 'string' && typeof nextShot.imageAsset?.thumb === 'string' && nextShot.image === nextShot.imageAsset.thumb) {
     // Cloud snapshots only need one copy of the thumbnail value.
     nextShot.image = null
@@ -15,6 +51,7 @@ function normalizeForCloudSnapshot(payload) {
   if (!Array.isArray(payload.scenes)) return payload
   return {
     ...payload,
+    projectHeroImage: sanitizeImageNode(payload.projectHeroImage),
     scenes: payload.scenes.map((scene) => ({
       ...scene,
       shots: Array.isArray(scene?.shots) ? scene.shots.map(stripDuplicatedShotThumb) : [],
