@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
+import { Pilcrow, Ruler, Settings2 } from 'lucide-react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
@@ -153,10 +154,13 @@ function readStoredObject(key, fallback) {
   }
 }
 
-function InlineInchField({ label, valuePx, onChangePx, min = 0, max = null }) {
+function CompactInchField({ icon, label, valuePx, onChangePx, min = 0, max = null }) {
   return (
-    <label style={{ display: 'grid', gridTemplateColumns: '1fr 74px', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
-      <span>{label}</span>
+    <label className="script-compact-inch-field">
+      <span className="script-compact-inch-label">
+        <span className="script-compact-inch-icon" aria-hidden="true">{icon}</span>
+        {label}
+      </span>
       <input
         className="ss-input"
         type="number"
@@ -165,7 +169,6 @@ function InlineInchField({ label, valuePx, onChangePx, min = 0, max = null }) {
         max={max != null ? pxToInches(max) : undefined}
         value={pxToInches(valuePx)}
         onChange={(event) => onChangePx(inchesToPx(event.target.value))}
-        style={{ width: '100%', padding: '4px 6px', fontSize: 12 }}
       />
     </label>
   )
@@ -392,7 +395,6 @@ export default function ScriptTab() {
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const projectRef = useStore(s => s.projectRef)
   const getProjectData = useStore(s => s.getProjectData)
-  const loadProject = useStore(s => s.loadProject)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
@@ -400,7 +402,6 @@ export default function ScriptTab() {
   const cloudUser = useQuery('users:currentUser')
   const presenceRows = useQuery('presence:listProjectPresence', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
   const locks = useQuery('screenplayLocks:listProjectLocks', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
-  const snapshotHistory = useQuery('projectSnapshots:listSnapshotsForProject', cloudProjectId ? { projectId: cloudProjectId, limit: 8 } : 'skip')
   const heartbeatPresence = useMutation('presence:heartbeat')
   const acquireSceneLock = useMutation('screenplayLocks:acquireSceneLock')
   const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
@@ -435,6 +436,8 @@ export default function ScriptTab() {
     pageStyles: true,
     pageStylesTab: 'page',
   }))
+  const [scriptInspectorMode, setScriptInspectorMode] = useState('estimation')
+  const [formatInspectorMode, setFormatInspectorMode] = useState('all')
 
   const documentScrollerRef = useRef(null)
   const pageCanvasRef = useRef(null)
@@ -909,15 +912,6 @@ export default function ScriptTab() {
       setIsSavingSnapshot(false)
     }
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
-
-  const handleRestoreSnapshot = useCallback((snapshot) => {
-    if (!snapshot?.payload) return
-    loadProject(snapshot.payload)
-    if (projectRef?.type === 'cloud') {
-      setCloudSnapshotId(String(snapshot._id))
-    }
-    setCollabNotice(`Restored snapshot from ${new Date(snapshot.createdAt).toLocaleString()}.`)
-  }, [loadProject, projectRef?.type, setCloudSnapshotId])
 
   const resolveStackHeights = useCallback(() => {
     const stackHeight = sidebarStackRef.current?.clientHeight || 0
@@ -1589,50 +1583,76 @@ export default function ScriptTab() {
                 </button>
                 {inspectorSections[section.id] && (
                   <div style={{ padding: 10 }}>
-                    {section.id === 'scriptEstimation' && (
-                      <>
-                        <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <input
-                            type="range"
-                            min={3}
-                            max={10}
-                            step={0.5}
-                            value={scriptSettings?.baseMinutesPerPage ?? 5}
-                            onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
-                            style={{ flex: 1, accentColor: '#2563eb' }}
-                          />
-                          <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
-                            {scriptSettings?.baseMinutesPerPage ?? 5}
-                          </span>
+                    {section.id === 'scriptControls' && (
+                      <div className="script-format-inspector">
+                        <div className="script-format-mode-switch" role="tablist" aria-label="Script controls modes">
+                          {[
+                            { id: 'estimation', label: 'Estimation' },
+                            { id: 'pagination', label: 'Pagination' },
+                            { id: 'write', label: 'Write' },
+                          ].map((mode) => {
+                            const isActive = scriptInspectorMode === mode.id
+                            return (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                className={`script-format-mode-btn ${isActive ? 'is-active' : ''}`}
+                                onClick={() => setScriptInspectorMode(mode.id)}
+                                title={mode.label}
+                              >
+                                <span>{mode.label}</span>
+                              </button>
+                            )
+                          })}
                         </div>
-                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
-                          1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
-                        </div>
-                      </>
-                    )}
-                    {section.id === 'scenePagination' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <button
-                          onClick={() => setScriptSettings({ scenePaginationMode: SCENE_PAGINATION_MODES.CONTINUE })}
-                          className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
-                            (scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE) === SCENE_PAGINATION_MODES.CONTINUE
-                              ? 'bg-blue-600/20 border-blue-400 text-slate-700'
-                              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                          }`}
-                        >
-                          Continue naturally <span style={{ fontSize: 11, color: '#64748b' }}>· Standard screenplay flow</span>
-                        </button>
-                        <button
-                          onClick={() => setScriptSettings({ scenePaginationMode: SCENE_PAGINATION_MODES.NEW_PAGE })}
-                          className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
-                            (scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE) === SCENE_PAGINATION_MODES.NEW_PAGE
-                              ? 'bg-blue-600/20 border-blue-400 text-slate-700'
-                              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                          }`}
-                        >
-                          Start each scene on a new page <span style={{ fontSize: 11, color: '#64748b' }}>· Planning view mode</span>
-                        </button>
+
+                        {scriptInspectorMode === 'estimation' && (
+                          <>
+                            <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <input
+                                type="range"
+                                min={3}
+                                max={10}
+                                step={0.5}
+                                value={scriptSettings?.baseMinutesPerPage ?? 5}
+                                onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
+                                style={{ flex: 1, accentColor: '#2563eb' }}
+                              />
+                              <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
+                                {scriptSettings?.baseMinutesPerPage ?? 5}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                              1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
+                            </div>
+                          </>
+                        )}
+                        {scriptInspectorMode === 'pagination' && (
+                          <select
+                            className="ss-input"
+                            value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                            onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                            style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
+                          >
+                            <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                            <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                          </select>
+                        )}
+                        {scriptInspectorMode === 'write' && (
+                          <>
+                            <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
+                              <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
+                              Bold Slugline
+                            </label>
+                            <label className="script-checkbox-row">
+                              <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
+                              Bold Character
+                            </label>
+                          </>
+                        )}
                       </div>
                     )}
                     {section.id === 'paginationMode' && (
@@ -1732,34 +1752,6 @@ export default function ScriptTab() {
                 <button className="ss-btn secondary" onClick={() => setShowImportModal(true)} style={{ width: '100%', marginTop: 8 }}>+ Import Script</button>
               </div>
             </section>
-            {cloudProjectId && (
-              <section className="ss-module script-inspector-section">
-                <div className="ss-module-header script-inspector-header" style={{ width: '100%', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
-                  Presence & Snapshot History
-                </div>
-                <div style={{ padding: 10 }}>
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-                    Active collaborators: {activePresence.length}
-                  </div>
-                  {(activePresence || []).slice(0, 5).map((row) => (
-                    <div key={row._id} style={{ fontSize: 11, color: '#334155', marginBottom: 4 }}>
-                      {(row.userName || row.userEmail || 'Collaborator')} · {row.mode}{row.sceneId ? ` · ${row.sceneId}` : ''}
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', marginBottom: 4 }}>Recent snapshots</div>
-                  {(snapshotHistory || []).map((snapshot) => (
-                    <button
-                      key={snapshot._id}
-                      className="toolbar-btn"
-                      onClick={() => handleRestoreSnapshot(snapshot)}
-                      style={{ width: '100%', marginBottom: 6, textAlign: 'left' }}
-                    >
-                      {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.source}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
         </div>
       </div>

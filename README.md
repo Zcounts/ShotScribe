@@ -20,6 +20,7 @@ This monorepo currently contains:
 - Current auth/account/admin behavior is intentionally preserved.
 - Shotlist and Schedule desktop views collapse secondary side panels at smaller viewports to preserve laptop usability without changing core workflows.
 - Home tab hero now stays visible for loaded projects and can be edited via Project Properties (title/icon/logline + hero background image + hero overlay color) with local/cloud persistence parity; default no-project headline/subhead are admin-editable with safe fallbacks.
+- Home tab responsive header now uses clearer row stacking at narrower widths (project identity row, actions row, menu/configure row, then tabs) and removes the legacy Quick actions launcher from the main toolbar.
 
 ---
 
@@ -268,3 +269,8 @@ ShotScribe mobile now supports **two explicit workflows**:
   so status changes made on mobile appear on desktop when the project is next opened.
   A sync state banner ("uploading…" / "backed up to cloud · HH:MM" / "cloud backup failed") is
   shown in the app header during cloud mode.
+
+## Script tab inspector (April 2026 update)
+
+- On the Script tab right sidebar, **Script Controls** now groups Estimation, Pagination, and Write options into a single tabbed panel.
+- The controls and behavior are unchanged; this is a UI consolidation to reduce inspector clutter while keeping the existing Page & Styles panel untouched.
