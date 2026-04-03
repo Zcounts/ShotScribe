@@ -236,6 +236,10 @@
     padding: 0 10px 10px;
   }
 
+  .ss-left-sidebar:not(.ss-left-sidebar-mobile).storyboard-outline-sidebar .ss-left-sidebar-controls {
+    padding-top: 10px;
+  }
+
   .ss-left-sidebar-footer {
     margin-top: auto;
     padding-bottom: 12px;
