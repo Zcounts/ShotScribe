@@ -57,6 +57,7 @@ export default function ScenesTab({
   const importScriptScenes = useStore(s => s.importScriptScenes)
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const openScenePropertiesDialog = useStore(s => s.openScenePropertiesDialog)
+  const showContextMenu = useStore(s => s.showContextMenu)
   const scenesViewState = useStore(s => s.tabViewState?.scenes || {})
   const setTabViewState = useStore(s => s.setTabViewState)
   const setActiveTab = useStore(s => s.setActiveTab)
@@ -384,6 +385,7 @@ export default function ScenesTab({
             sortDirection={sortDirection}
             setSortBy={setSortBy}
             setSortDirection={setSortDirection}
+            showContextMenu={showContextMenu}
           />
         ) : (
           groupedVisibleScenes.map(group => (
@@ -400,7 +402,19 @@ export default function ScenesTab({
           const castCount = (scene.characters || []).length
           const scheduledDays = scheduledDayCountByScene[scene.id] || 0
           return (
-            <div className="app-surface-card" key={scene.id} data-entity-type="scene" data-entity-id={scene.id} onDoubleClick={() => openScenePropertiesDialog('script', scene.id)} style={{ borderRadius: 6, background: colorWithAlpha(scene.color, 0.12) }}>
+            <div
+              className="app-surface-card"
+              key={scene.id}
+              data-entity-type="scene"
+              data-entity-id={scene.id}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                showContextMenu('scene', scene.id, event.clientX, event.clientY)
+              }}
+              onDoubleClick={() => openScenePropertiesDialog('script', scene.id)}
+              style={{ borderRadius: 6, background: colorWithAlpha(scene.color, 0.12) }}
+            >
               {viewMode === 'visualGrid' && metadataVisibility.showStoryboardThumb && (
                 <div style={{ padding: '8px 12px 0' }}>
                   <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(74,85,104,0.16)', background: '#f8fafc', aspectRatio: '16 / 9', position: 'relative' }}>
@@ -577,6 +591,7 @@ function ProductionList({
   sortDirection,
   setSortBy,
   setSortDirection,
+  showContextMenu,
 }) {
   const handleSort = (column) => {
     if (sortBy === column) setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
@@ -616,7 +631,17 @@ function ProductionList({
             const hero = linkedShots.find(shot => !!shot.image)?.image || null
             const selected = selectedSceneIds.includes(scene.id)
             return (
-              <tr key={scene.id} style={{ borderTop: '1px solid rgba(148,163,184,0.25)', background: colorWithAlpha(scene.color, 0.12) }}>
+              <tr
+                key={scene.id}
+                data-entity-type="scene"
+                data-entity-id={scene.id}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  showContextMenu('scene', scene.id, event.clientX, event.clientY)
+                }}
+                style={{ borderTop: '1px solid rgba(148,163,184,0.25)', background: colorWithAlpha(scene.color, 0.12) }}
+              >
                 <td style={tdStyle}><input type="checkbox" checked={selected} onChange={(e) => setSelectedSceneIds(prev => e.target.checked ? [...new Set([...prev, scene.id])] : prev.filter(id => id !== scene.id))} /></td>
                 {metadataVisibility.showStoryboardThumb && <td style={tdStyle}>{hero ? <img src={hero} alt="" style={{ width: 28, height: 18, objectFit: 'cover', borderRadius: 3 }} /> : <span style={{ color: '#94a3b8' }}>—</span>}</td>}
                 <td style={tdStyle}>SC {scene.sceneNumber || '—'}</td>
