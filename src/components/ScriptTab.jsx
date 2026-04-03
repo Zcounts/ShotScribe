@@ -26,6 +26,7 @@ import centeredIcon from '../../assets/script icons/align-center.svg'
 import writeIcon from '../../assets/script icons/write.svg'
 import breakdownIcon from '../../assets/script icons/breakdown.svg'
 import visualizeIcon from '../../assets/script icons/visualize.svg'
+import { Car, Clapperboard, MapPin, Mic2, NotebookPen, Package, Shirt, UserRound } from 'lucide-react'
 import LeftSidebarResources from './LeftSidebarResources'
 import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
@@ -48,6 +49,28 @@ const BREAKDOWN_CATEGORIES = [
   'Locations',
   'Notes',
 ]
+
+const BREAKDOWN_CATEGORY_COLORS = {
+  Cast: '#0ea5e9',
+  Props: '#f97316',
+  'Costumes/Wardrobe': '#8b5cf6',
+  Makeup: '#ec4899',
+  Vehicles: '#22c55e',
+  Music: '#eab308',
+  Locations: '#14b8a6',
+  Notes: '#94a3b8',
+}
+
+const BREAKDOWN_CATEGORY_ICONS = {
+  Cast: UserRound,
+  Props: Package,
+  'Costumes/Wardrobe': Shirt,
+  Makeup: Clapperboard,
+  Vehicles: Car,
+  Music: Mic2,
+  Locations: MapPin,
+  Notes: NotebookPen,
+}
 
 const PX_PER_INCH = 96
 const PAGE_GAP_PX = 24
@@ -199,6 +222,15 @@ function classifyLinkType(view, link) {
   if (view === 'breakdown') return 'breakdown'
   if (link.type === 'breakdown') return 'breakdown'
   return 'visualize'
+}
+
+function withAlpha(hexColor, alpha) {
+  const hex = String(hexColor || '').replace('#', '')
+  if (!/^[0-9A-Fa-f]{6}$/.test(hex)) return `rgba(245, 158, 11, ${alpha})`
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 function getSelectionOffsetsFromBlock(blockElement) {
@@ -394,13 +426,17 @@ export default function ScriptTab() {
 
   const [selectionDraft, setSelectionDraft] = useState(null)
   const [breakdownDraft, setBreakdownDraft] = useState({ name: '', quantity: 1, category: BREAKDOWN_CATEGORIES[1], tagAllMentions: false })
+  const [activeBreakdownCategory, setActiveBreakdownCategory] = useState(null)
   const [overlayFragmentsByBlock, setOverlayFragmentsByBlock] = useState({})
   const [inspectorSections, setInspectorSections] = useState(() => readStoredObject(SIDEBAR_STORAGE_KEYS.inspectorSections, {
     scriptEstimation: true,
+    scenePagination: true,
     paginationMode: true,
     writeOptions: true,
-    formatInspector: true,
+    pageStyles: true,
+    pageStylesTab: 'page',
   }))
+  const [scriptInspectorMode, setScriptInspectorMode] = useState('estimation')
   const [formatInspectorMode, setFormatInspectorMode] = useState('all')
 
   const documentScrollerRef = useRef(null)
@@ -469,6 +505,24 @@ export default function ScriptTab() {
     return () => window.clearInterval(timer)
   }, [activeSceneId, cloudProjectId, heartbeatPresence, view])
 
+  useEffect(() => {
+    if (!isDesktopDown) {
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+  }, [isDesktopDown])
+
+  useEffect(() => {
+    if (!isDesktopDown) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDesktopDown])
+
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
@@ -517,7 +571,13 @@ export default function ScriptTab() {
     breakdownTags.forEach(tag => {
       if (!tag.sceneId || !Number.isFinite(tag.start) || !Number.isFinite(tag.end) || tag.end <= tag.start) return
       if (!result[tag.sceneId]) result[tag.sceneId] = []
-      result[tag.sceneId].push({ ...tag, type: 'breakdown' })
+      const category = tag.category || 'Notes'
+      result[tag.sceneId].push({
+        ...tag,
+        category,
+        color: BREAKDOWN_CATEGORY_COLORS[category] || BREAKDOWN_CATEGORY_COLORS.Notes,
+        type: 'breakdown',
+      })
     })
     Object.keys(result).forEach(sceneId => {
       result[sceneId] = result[sceneId].sort((a, b) => a.start - b.start)
@@ -1041,7 +1101,11 @@ export default function ScriptTab() {
         const blockElement = container.querySelector(`[data-scene-id="${block.sceneId}"][data-block-id="${block.blockId}"]`)
         if (!blockElement) return
         const blockRect = blockElement.getBoundingClientRect()
-        const blockLinks = (linksByScene[block.sceneId] || []).filter(link => link.end > block.sceneCharStart && link.start < block.sceneCharEnd)
+        const blockLinks = (linksByScene[block.sceneId] || []).filter((link) => {
+          if (!(link.end > block.sceneCharStart && link.start < block.sceneCharEnd)) return false
+          if (view !== 'breakdown' || !activeBreakdownCategory) return true
+          return (link.category || 'Notes') === activeBreakdownCategory
+        })
         if (!blockLinks.length) return
 
         blockLinks.forEach((link) => {
@@ -1076,7 +1140,7 @@ export default function ScriptTab() {
     return () => {
       window.removeEventListener('resize', computeOverlays)
     }
-  }, [breakdownByScene, documentModel.blocks, shotLinksByScene, view])
+  }, [activeBreakdownCategory, breakdownByScene, documentModel.blocks, shotLinksByScene, view])
 
   if (orderedScenes.length === 0) {
     return (
@@ -1097,24 +1161,6 @@ export default function ScriptTab() {
   }
 
   const { viewHeight, sceneHeight } = resolveStackHeights()
-
-  useEffect(() => {
-    if (!isDesktopDown) {
-      setMobileLeftOpen(false)
-      setMobileRightOpen(false)
-    }
-  }, [isDesktopDown])
-
-  useEffect(() => {
-    if (!isDesktopDown) return undefined
-    const handleKeyDown = (event) => {
-      if (event.key !== 'Escape') return
-      setMobileLeftOpen(false)
-      setMobileRightOpen(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isDesktopDown])
 
   return (
     <>
@@ -1197,23 +1243,37 @@ export default function ScriptTab() {
 
                   {view === 'breakdown' && (
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Pagination mode</label>
-                      <select
-                        className="ss-input"
-                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
-                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
-                      >
-                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
-                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
-                      </select>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#dbe5f5', marginBottom: 8 }}>Breakdown Categories</div>
-                      {BREAKDOWN_CATEGORIES.map(category => (
-                        <div key={category} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0' }}>
-                          <span>{category}</span>
-                          <span style={{ color: '#a7b5cf' }}>{breakdownCountByCategory[category] || 0}</span>
-                        </div>
-                      ))}
+                      <button
+                        type="button"
+                        className={`script-breakdown-category-row ${activeBreakdownCategory == null ? 'is-active' : ''}`}
+                        onClick={() => setActiveBreakdownCategory(null)}
+                        style={{ marginBottom: 4 }}
+                      >
+                        <span className="script-breakdown-category-label">
+                          <span className="script-breakdown-category-dot" style={{ background: '#cbd5e1' }} />
+                          All categories
+                        </span>
+                        <span style={{ color: '#a7b5cf' }}>{breakdownTags.length}</span>
+                      </button>
+                      {BREAKDOWN_CATEGORIES.map((category) => {
+                        const CategoryIcon = BREAKDOWN_CATEGORY_ICONS[category]
+                        return (
+                          <button
+                            key={category}
+                            type="button"
+                            className={`script-breakdown-category-row ${activeBreakdownCategory === category ? 'is-active' : ''}`}
+                            onClick={() => setActiveBreakdownCategory(category)}
+                          >
+                            <span className="script-breakdown-category-label">
+                              <CategoryIcon size={13} strokeWidth={1.8} />
+                              <span className="script-breakdown-category-dot" style={{ background: BREAKDOWN_CATEGORY_COLORS[category] }} />
+                              {category}
+                            </span>
+                            <span style={{ color: '#a7b5cf' }}>{breakdownCountByCategory[category] || 0}</span>
+                          </button>
+                        )
+                      })}
                       <div style={{ marginTop: 10, fontSize: 11, color: '#9fb0d1' }}>
                         Select script text to create a category tag.
                       </div>
@@ -1222,16 +1282,6 @@ export default function ScriptTab() {
 
                   {view === 'visualize' && (
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, color: '#9fb0d1', marginBottom: 4 }}>Pagination mode</label>
-                      <select
-                        className="ss-input"
-                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
-                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', padding: '5px 6px', fontSize: 12, marginBottom: 10 }}
-                      >
-                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
-                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
-                      </select>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#dbe5f5', marginBottom: 8 }}>Scene-linked shots</div>
                       {currentSceneShots.length === 0 && <div style={{ fontSize: 12, color: '#9fb0d1' }}>No shots linked to this scene.</div>}
                       {currentSceneShots.map(shot => (
@@ -1282,6 +1332,8 @@ export default function ScriptTab() {
                       <button
                         key={scene.id}
                         onClick={() => jumpToScene(scene.id)}
+                        data-entity-type="scene"
+                        data-entity-id={scene.id}
                         style={{
                           width: '100%',
                           textAlign: 'left',
@@ -1488,8 +1540,8 @@ export default function ScriptTab() {
                                       height: fragment.height,
                                       borderRadius: 2,
                                       pointerEvents: 'none',
-                                      background: fragment.type === 'breakdown' ? 'rgba(245, 158, 11, 0.2)' : `${fragment.color}2E`,
-                                      boxShadow: fragment.type === 'breakdown' ? 'inset 0 -1px rgba(217, 119, 6, 0.9)' : `inset 0 -1px ${fragment.color}`,
+                                      background: fragment.type === 'breakdown' ? withAlpha(fragment.color, 0.22) : `${fragment.color}2E`,
+                                      boxShadow: `inset 0 -1px ${fragment.color}`,
                                     }}
                                   />
                                 ))}
@@ -1518,9 +1570,10 @@ export default function ScriptTab() {
             ) : null}
             {[
               { id: 'scriptEstimation', title: 'Script & Estimation' },
+              { id: 'scenePagination', title: 'Scene Pagination' },
               { id: 'paginationMode', title: 'Pagination Mode' },
               { id: 'writeOptions', title: 'Write panel options' },
-              { id: 'formatInspector', title: 'Page & Styles' },
+              { id: 'pageStyles', title: 'Page & Styles' },
             ].map(section => (
               <section key={section.id} className="ss-module script-inspector-section">
                 <button
@@ -1532,27 +1585,77 @@ export default function ScriptTab() {
                 </button>
                 {inspectorSections[section.id] && (
                   <div style={{ padding: 10 }}>
-                    {section.id === 'scriptEstimation' && (
-                      <>
-                        <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <input
-                            type="range"
-                            min={3}
-                            max={10}
-                            step={0.5}
-                            value={scriptSettings?.baseMinutesPerPage ?? 5}
-                            onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
-                            style={{ flex: 1, accentColor: '#2563eb' }}
-                          />
-                          <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
-                            {scriptSettings?.baseMinutesPerPage ?? 5}
-                          </span>
+                    {section.id === 'scriptControls' && (
+                      <div className="script-format-inspector">
+                        <div className="script-format-mode-switch" role="tablist" aria-label="Script controls modes">
+                          {[
+                            { id: 'estimation', label: 'Estimation' },
+                            { id: 'pagination', label: 'Pagination' },
+                            { id: 'write', label: 'Write' },
+                          ].map((mode) => {
+                            const isActive = scriptInspectorMode === mode.id
+                            return (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                className={`script-format-mode-btn ${isActive ? 'is-active' : ''}`}
+                                onClick={() => setScriptInspectorMode(mode.id)}
+                                title={mode.label}
+                              >
+                                <span>{mode.label}</span>
+                              </button>
+                            )
+                          })}
                         </div>
-                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
-                          1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
-                        </div>
-                      </>
+
+                        {scriptInspectorMode === 'estimation' && (
+                          <>
+                            <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <input
+                                type="range"
+                                min={3}
+                                max={10}
+                                step={0.5}
+                                value={scriptSettings?.baseMinutesPerPage ?? 5}
+                                onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
+                                style={{ flex: 1, accentColor: '#2563eb' }}
+                              />
+                              <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
+                                {scriptSettings?.baseMinutesPerPage ?? 5}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                              1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
+                            </div>
+                          </>
+                        )}
+                        {scriptInspectorMode === 'pagination' && (
+                          <select
+                            className="ss-input"
+                            value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                            onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                            style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
+                          >
+                            <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                            <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                          </select>
+                        )}
+                        {scriptInspectorMode === 'write' && (
+                          <>
+                            <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
+                              <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
+                              Bold Slugline
+                            </label>
+                            <label className="script-checkbox-row">
+                              <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
+                              Bold Character
+                            </label>
+                          </>
+                        )}
+                      </div>
                     )}
                     {section.id === 'paginationMode' && (
                       <select
@@ -1577,82 +1680,59 @@ export default function ScriptTab() {
                         </label>
                       </>
                     )}
-                    {section.id === 'formatInspector' && (
-                      <div className="script-format-inspector">
-                        <div className="script-format-mode-switch" role="tablist" aria-label="Page and style inspector modes">
-                          {[
-                            { id: 'all', label: 'All', icon: Settings2 },
-                            { id: 'page', label: 'Page', icon: Ruler },
-                            { id: 'paragraph', label: 'Paragraph', icon: Pilcrow },
-                          ].map((mode) => {
-                            const Icon = mode.icon
-                            const isActive = formatInspectorMode === mode.id
-                            return (
-                              <button
-                                key={mode.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={isActive}
-                                className={`script-format-mode-btn ${isActive ? 'is-active' : ''}`}
-                                onClick={() => setFormatInspectorMode(mode.id)}
-                                title={mode.label}
-                              >
-                                <Icon size={14} strokeWidth={2} />
-                                <span>{mode.label}</span>
-                              </button>
-                            )
-                          })}
+                    {section.id === 'pageStyles' && (
+                      <>
+                        <div className="script-page-style-tabs">
+                          <button
+                            type="button"
+                            className={`script-page-style-tab ${(inspectorSections.pageStylesTab || 'page') === 'page' ? 'is-active' : ''}`}
+                            onClick={() => setInspectorSections(prev => ({ ...prev, pageStylesTab: 'page' }))}
+                          >
+                            Page
+                          </button>
+                          <button
+                            type="button"
+                            className={`script-page-style-tab ${(inspectorSections.pageStylesTab || 'page') === 'paragraph' ? 'is-active' : ''}`}
+                            onClick={() => setInspectorSections(prev => ({ ...prev, pageStylesTab: 'paragraph' }))}
+                          >
+                            Paragraph
+                          </button>
                         </div>
-
-                        {(formatInspectorMode === 'all' || formatInspectorMode === 'page') && (
-                          <div className="script-format-group">
-                            <div className="script-format-group-label">
-                              <Ruler size={13} />
-                              <span>Page Setup</span>
-                            </div>
-                            <div className="script-format-grid">
-                              <CompactInchField icon="W" label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
-                              <CompactInchField icon="H" label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
-                              <CompactInchField icon="T" label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
-                              <CompactInchField icon="R" label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
-                              <CompactInchField icon="B" label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
-                              <CompactInchField icon="L" label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
-                            </div>
-                          </div>
+                        {(inspectorSections.pageStylesTab || 'page') === 'page' ? (
+                          <>
+                            <CompactInchField icon="W" label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
+                            <CompactInchField icon="H" label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
+                            <CompactInchField icon="T" label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
+                            <CompactInchField icon="R" label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
+                            <CompactInchField icon="B" label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
+                            <CompactInchField icon="L" label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
+                          </>
+                        ) : (
+                          <>
+                            <CompactInchField icon="L" label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                              ...prev,
+                              blockStyles: {
+                                ...prev.blockStyles,
+                                [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
+                              },
+                            }))} />
+                            <CompactInchField icon="R" label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                              ...prev,
+                              blockStyles: {
+                                ...prev.blockStyles,
+                                [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
+                              },
+                            }))} />
+                            <CompactInchField icon="1" label="First-line" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                              ...prev,
+                              blockStyles: {
+                                ...prev.blockStyles,
+                                [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
+                              },
+                            }))} />
+                          </>
                         )}
-
-                        {(formatInspectorMode === 'all' || formatInspectorMode === 'paragraph') && (
-                          <div className="script-format-group">
-                            <div className="script-format-group-label">
-                              <Pilcrow size={13} />
-                              <span>Element Styles · {BLOCK_TYPE_OPTIONS.find(option => option.value === selectedStyleType)?.label || selectedStyleType}</span>
-                            </div>
-                            <div className="script-format-grid">
-                              <CompactInchField label="Left indent" icon="L" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                                ...prev,
-                                blockStyles: {
-                                  ...prev.blockStyles,
-                                  [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
-                                },
-                              }))} />
-                              <CompactInchField label="Right indent" icon="R" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                                ...prev,
-                                blockStyles: {
-                                  ...prev.blockStyles,
-                                  [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
-                                },
-                              }))} />
-                              <CompactInchField label="First-line" icon="1" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                                ...prev,
-                                blockStyles: {
-                                  ...prev.blockStyles,
-                                  [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
-                                },
-                              }))} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      </>
                     )}
                   </div>
                 )}
