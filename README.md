@@ -275,3 +275,4 @@ ShotScribe mobile now supports **two explicit workflows**:
 
 - On the Script tab right sidebar, **Script Controls** now groups Estimation, Pagination, and Write options into a single tabbed panel.
 - The controls and behavior are unchanged; this is a UI consolidation to reduce inspector clutter while keeping the existing Page & Styles panel untouched.
+- Regression fix (April 3, 2026): the Script tab no longer crashes when scenes are created/loaded after mount. Mobile sidebar effects now run unconditionally to preserve React hook order in `ScriptTab`.
