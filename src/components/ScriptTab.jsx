@@ -505,6 +505,24 @@ export default function ScriptTab() {
     return () => window.clearInterval(timer)
   }, [activeSceneId, cloudProjectId, heartbeatPresence, view])
 
+  useEffect(() => {
+    if (!isDesktopDown) {
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+  }, [isDesktopDown])
+
+  useEffect(() => {
+    if (!isDesktopDown) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDesktopDown])
+
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
@@ -1143,24 +1161,6 @@ export default function ScriptTab() {
   }
 
   const { viewHeight, sceneHeight } = resolveStackHeights()
-
-  useEffect(() => {
-    if (!isDesktopDown) {
-      setMobileLeftOpen(false)
-      setMobileRightOpen(false)
-    }
-  }, [isDesktopDown])
-
-  useEffect(() => {
-    if (!isDesktopDown) return undefined
-    const handleKeyDown = (event) => {
-      if (event.key !== 'Escape') return
-      setMobileLeftOpen(false)
-      setMobileRightOpen(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isDesktopDown])
 
   return (
     <>
