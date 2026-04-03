@@ -70,6 +70,8 @@ export async function uploadStoryboardAssetToCloud({
 
 export function collectCloudAssetIdsFromProjectData(projectData: any) {
   const ids = new Set<string>()
+  const heroAssetId = projectData?.projectHeroImage?.imageAsset?.cloud?.assetId
+  if (heroAssetId) ids.add(String(heroAssetId))
   for (const scene of (projectData?.scenes || [])) {
     for (const shot of (scene?.shots || [])) {
       const assetId = shot?.imageAsset?.cloud?.assetId

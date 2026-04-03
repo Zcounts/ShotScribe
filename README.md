@@ -19,6 +19,7 @@ This monorepo currently contains:
 - Local-only mode remains supported when cloud auth/env is not configured.
 - Current auth/account/admin behavior is intentionally preserved.
 - Shotlist and Schedule desktop views collapse secondary side panels at smaller viewports to preserve laptop usability without changing core workflows.
+- Home tab hero now stays visible for loaded projects and can be edited via Project Properties (title/icon/logline + hero background image + hero overlay color) with local/cloud persistence parity.
 
 ---
 
@@ -221,7 +222,12 @@ npm run build
 - **Paid cloud users** edit a local working copy first; cloud snapshot sync is layered on top via a debounced queue (8 s on desktop/web, 6 s on mobile).
 - Shot edits on mobile are persisted to localStorage immediately (safe offline), then uploaded to the same Convex project snapshot that desktop reads.
 - Toolbar shows a status dot that transitions through: not yet saved → saved on device → uploading (dot pulses) → backed up to cloud / backup failed.
+- Desktop/web "Save / Sync Status" dialog now opens in a simplified state with verbose diagnostics collapsed behind a "Show details" toggle.
 - Unsaved-change exit guards fire only while local persistence is genuinely pending; they do not block when cloud sync is merely queued.
+- Home sidebar (web app) switches from local recents to a cloud project list for signed-in paid users, sorted by latest project update.
+- Cloud project deletion is a 24-hour reversible pending state first (`pendingDeleteAt`/`deleteAfter`), then hard-deleted by scheduled Convex reconciliation along with linked cloud project records/assets.
+- Cloud snapshot payloads are normalized before Convex writes through one shared transformer (undefined/non-serializable values stripped, duplicate thumbnail fields de-duplicated, and inline `data:`/`blob:`/`file:` image payloads removed so cloud snapshots only store references). This prevents failed first snapshots and zero-snapshot cloud stubs when enabling backup from populated local projects.
+- Cloud project lists now hide malformed legacy projects that have no usable snapshot history, so broken historical stubs are not shown as openable projects.
 - Full implementation detail + manual QA checklist: `docs/save-sync-architecture.md`.
 
 ## Mobile companion modes (April 2026 update)

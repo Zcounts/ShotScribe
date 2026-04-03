@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import {
   Plus,
@@ -12,9 +13,25 @@ import {
   Calendar,
   FilePlus,
   Download,
+  Settings2,
 } from 'lucide-react'
 import './HomeView.css'
 import SidebarPane from './SidebarPane'
+import ProjectPropertiesDialog from './ProjectPropertiesDialog'
+import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
+import { runtimeConfig } from '../config/runtimeConfig'
+import { isCloudAuthConfigured } from '../auth/authConfig'
+import { notifyError, notifySuccess } from '../lib/toast'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog'
 
 function monogram(name) {
   const raw = String(name || 'Untitled').trim().split(/\s+/).filter(Boolean)
@@ -29,17 +46,58 @@ function formatDateLabel(dateStr) {
   return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+function formatUpdatedAt(timestamp) {
+  if (!timestamp) return 'Updated recently'
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return 'Updated recently'
+  return `Updated ${date.toLocaleDateString()}`
+}
+
+function isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts }) {
+  const hasOnlyDefaultScene = Array.isArray(scenes)
+    && scenes.length === 1
+    && (scenes[0]?.shots || []).length === 0
+    && !scenes[0]?.slugline
+    && (scenes[0]?.sceneLabel || '').trim().toUpperCase() === 'SCENE 1'
+    && (scenes[0]?.location || '').trim().toUpperCase() === 'LOCATION'
+  const hasNoSupportingData = (schedule?.length || 0) === 0
+    && (castRoster?.length || 0) === 0
+    && (crewRoster?.length || 0) === 0
+    && (scriptScenes?.length || 0) === 0
+    && (importedScripts?.length || 0) === 0
+  const hasDefaultName = !projectName || projectName === 'Untitled Shotlist'
+  return hasOnlyDefaultScene && hasNoSupportingData && hasDefaultName
+}
+
 export default function HomeView() {
   const scenes = useStore(s => s.scenes)
   const schedule = useStore(s => s.schedule)
   const castRoster = useStore(s => s.castRoster)
+  const crewRoster = useStore(s => s.crewRoster)
+  const scriptScenes = useStore(s => s.scriptScenes)
+  const importedScripts = useStore(s => s.importedScripts)
   const projectName = useStore(s => s.projectName)
+  const projectEmoji = useStore(s => s.projectEmoji)
+  const projectLogline = useStore(s => s.projectLogline)
+  const projectHeroImage = useStore(s => s.projectHeroImage)
+  const projectHeroOverlayColor = useStore(s => s.projectHeroOverlayColor)
   const projectPath = useStore(s => s.projectPath)
   const browserProjectId = useStore(s => s.browserProjectId)
+  const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
+  const saveSyncState = useStore(s => s.saveSyncState)
+  const projectRef = useStore(s => s.projectRef)
+  const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const recentProjects = useStore(s => s.recentProjects)
   const setActiveTab = useStore(s => s.setActiveTab)
   const newProject = useStore(s => s.newProject)
   const openProject = useStore(s => s.openProject)
+  const openCloudProject = useStore(s => s.openCloudProject)
+  const cloudAccessPolicy = useCloudAccessPolicy()
+
+  const [pendingOpenProjectId, setPendingOpenProjectId] = useState(null)
+  const [contextMenu, setContextMenu] = useState(null)
+  const [deleteConfirmProject, setDeleteConfirmProject] = useState(null)
+  const menuRef = useRef(null)
 
   const shotCount = useMemo(
     () => scenes.reduce((sum, scene) => sum + ((scene?.shots || []).length), 0),
@@ -54,6 +112,16 @@ export default function HomeView() {
   const dayCount = Array.isArray(schedule) ? schedule.length : 0
   const firstShootDate = schedule?.[0]?.date || null
   const hasLoadedProject = Boolean(projectPath || browserProjectId)
+  const cloudEnvEnabled = runtimeConfig.appMode.cloudEnabled
+  const cloudAuthConfigured = isCloudAuthConfigured()
+  const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
+  const cloudListEnabled = cloudEnvEnabled && cloudAuthConfigured && signedInForCloud && cloudAccessPolicy?.paidCloudAccess
+  const cloudProjects = useQuery('projects:listProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
+  const pendingDeleteProjects = useQuery('projects:listPendingDeletionProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
+  const markProjectPendingDeletion = useMutation('projects:markProjectPendingDeletion')
+  const restorePendingDeletionProject = useMutation('projects:restorePendingDeletionProject')
+  const updateProjectIdentity = useMutation('projects:updateProjectIdentity')
+  const [projectPropertiesOpen, setProjectPropertiesOpen] = useState(false)
 
   const sidebarRecent = (Array.isArray(recentProjects) && recentProjects.length > 0)
     ? recentProjects.slice(0, 3)
@@ -62,6 +130,71 @@ export default function HomeView() {
         { name: 'Warehouse Unit B', shots: 16 },
         { name: 'Stage Two Pickup', shots: 8 },
       ]
+  const hasBlockingUnsavedChanges = hasUnsavedChanges
+    && saveSyncState?.status === 'unsaved_changes'
+    && !isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts })
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const closeMenu = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) setContextMenu(null)
+    }
+    const onEsc = (event) => {
+      if (event.key === 'Escape') setContextMenu(null)
+    }
+    document.addEventListener('mousedown', closeMenu)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', closeMenu)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [contextMenu])
+
+  const requestOpenCloudProject = (projectId) => {
+    setContextMenu(null)
+    if (!projectId || String(projectRef?.projectId || '') === String(projectId)) return
+    if (hasBlockingUnsavedChanges) {
+      setPendingOpenProjectId(String(projectId))
+      return
+    }
+    openCloudProject({ projectId: String(projectId) }).catch((error) => {
+      notifyError(error?.message || 'Could not open cloud project.')
+    })
+  }
+
+  const confirmSwitchProject = async () => {
+    const targetId = pendingOpenProjectId
+    setPendingOpenProjectId(null)
+    if (!targetId) return
+    try {
+      await openCloudProject({ projectId: targetId })
+    } catch (error) {
+      notifyError(error?.message || 'Could not open cloud project.')
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!deleteConfirmProject?._id) return
+    try {
+      await markProjectPendingDeletion({ projectId: deleteConfirmProject._id })
+      notifySuccess(`${deleteConfirmProject.name || 'Project'} moved to pending deletion. You can restore it within 24 hours.`)
+    } catch (error) {
+      notifyError(error?.message || 'Could not delete cloud project.')
+    } finally {
+      setDeleteConfirmProject(null)
+      setContextMenu(null)
+    }
+  }
+
+  const handleRestoreProject = async (projectId) => {
+    try {
+      const result = await restorePendingDeletionProject({ projectId })
+      if (result?.ok) notifySuccess('Project restored.')
+      else notifyError('Restore window has elapsed for this project.')
+    } catch (error) {
+      notifyError(error?.message || 'Could not restore cloud project.')
+    }
+  }
 
   const workflowCards = [
     {
@@ -173,12 +306,47 @@ export default function HomeView() {
     },
   ]
 
+  const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
+  const heroOverlayColor = projectHeroOverlayColor || '#1f1f27'
+
+  const saveProjectIdentity = async ({ name, emoji }) => {
+    if (projectRef?.type !== 'cloud') return
+    await updateProjectIdentity({
+      projectId: projectRef.projectId,
+      name,
+      emoji,
+    })
+  }
+
   return (
     <div className="home-view">
       <SidebarPane bodyClassName="home-sidebar-content">
-        <div className="home-section-label">Recent Projects</div>
+        <div className="home-section-label">{cloudListEnabled ? 'Cloud Projects' : 'Recent Projects'}</div>
         <div className="home-recent-list">
-          {sidebarRecent.map((project, index) => (
+          {cloudListEnabled ? (
+            Array.isArray(cloudProjects) && cloudProjects.length > 0 ? cloudProjects.map((project) => (
+              <button
+                key={String(project._id)}
+                className={`home-recent-item ${String(projectRef?.projectId || '') === String(project._id) ? 'active' : ''}`}
+                type="button"
+                onClick={() => requestOpenCloudProject(String(project._id))}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  setContextMenu({
+                    project,
+                    x: event.clientX,
+                    y: event.clientY,
+                  })
+                }}
+              >
+                <div className="home-thumb">{project.emoji || monogram(project.name)}</div>
+                <div>
+                  <div className="home-recent-name">{project.name}</div>
+                  <div className="home-recent-meta">{formatUpdatedAt(project.updatedAt)} · {project.currentUserRole}</div>
+                </div>
+              </button>
+            )) : <div className="home-empty-note">No cloud projects yet.</div>
+          ) : sidebarRecent.map((project, index) => (
             <button key={`${project.name}-${index}`} className={`home-recent-item ${index === 0 ? 'active' : ''}`} type="button">
               <div className="home-thumb">{monogram(project.name)}</div>
               <div>
@@ -188,6 +356,23 @@ export default function HomeView() {
             </button>
           ))}
         </div>
+
+        {cloudListEnabled && Array.isArray(pendingDeleteProjects) && pendingDeleteProjects.length > 0 ? (
+          <div className="home-pending-list">
+            <div className="home-section-label">Pending deletion</div>
+            {pendingDeleteProjects.map((project) => (
+              <div key={`pending-${String(project._id)}`} className="home-pending-item">
+                <div className="home-pending-copy">
+                  <div className="home-recent-name">{project.name}</div>
+                  <div className="home-recent-meta">Deletes after {new Date(project.deleteAfter).toLocaleString()}</div>
+                </div>
+                <button type="button" className="ss-btn ghost home-pending-restore" onClick={() => handleRestoreProject(project._id)}>
+                  Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="home-action-stack">
           <button type="button" className="ss-btn home-btn-dashed home-btn-inline" onClick={() => newProject()}>
@@ -202,24 +387,51 @@ export default function HomeView() {
       </SidebarPane>
 
       <main className="home-main">
-        {!hasLoadedProject && (
-          <section className="home-hero">
-            <div>
-              <div className="home-hero-kicker">// ShotScribe · Production Suite</div>
-              <div className="home-hero-title">
-                Build the <span className="is-blue">Shot.</span><br />
-                Run the <span className="is-blue">Day.</span>
-              </div>
-              <div className="home-hero-copy">
-                Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.
-              </div>
+        <section
+          className={`home-hero ${hasLoadedProject ? 'project-loaded' : ''}`}
+          style={hasLoadedProject && heroBackgroundImage
+            ? {
+                backgroundImage: `linear-gradient(0deg, ${heroOverlayColor}99, ${heroOverlayColor}99), url(${heroBackgroundImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }
+            : undefined}
+        >
+          <div>
+            <div className="home-hero-kicker">{hasLoadedProject ? '// Active Project' : '// ShotScribe · Production Suite'}</div>
+            <div className="home-hero-title">
+              {hasLoadedProject ? (
+                <>
+                  <span className="home-hero-project-icon">{projectEmoji || '🎬'}</span>
+                  <span className="home-hero-project-title-text">{projectName || 'Untitled Shotlist'}</span>
+                </>
+              ) : (
+                <>
+                  Build the <span className="is-blue">Shot.</span><br />
+                  Run the <span className="is-blue">Day.</span>
+                </>
+              )}
             </div>
-            <div className="home-hero-actions">
-              <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
-              <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+            <div className="home-hero-copy">
+              {hasLoadedProject
+                ? (projectLogline || 'Add a project logline in Project Properties.')
+                : 'Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.'}
             </div>
-          </section>
-        )}
+          </div>
+          <div className="home-hero-actions">
+            {hasLoadedProject ? (
+              <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => setProjectPropertiesOpen(true)}>
+                <Settings2 size={14} strokeWidth={1.6} />
+                Project Properties
+              </button>
+            ) : (
+              <>
+                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
+                <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+              </>
+            )}
+          </div>
+        </section>
 
         <section className="home-stat-strip">
           {[
@@ -310,6 +522,61 @@ export default function HomeView() {
           </div>
         </footer>
       </main>
+      {contextMenu ? (
+        <div
+          ref={menuRef}
+          className="home-cloud-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button type="button" className="home-cloud-menu-item" onClick={() => requestOpenCloudProject(String(contextMenu.project._id))}>Open</button>
+          <button type="button" className="home-cloud-menu-item disabled" disabled title="Coming soon">Make Copy (Coming soon)</button>
+          <button
+            type="button"
+            className="home-cloud-menu-item danger"
+            onClick={() => {
+              setDeleteConfirmProject(contextMenu.project)
+              setContextMenu(null)
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      ) : null}
+
+      <AlertDialog open={!!pendingOpenProjectId} onOpenChange={(open) => { if (!open) setPendingOpenProjectId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch projects?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved local changes. Open another project anyway?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay here</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSwitchProject}>Open project</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirmProject} onOpenChange={(open) => { if (!open) setDeleteConfirmProject(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure? This project will be deleted. You can restore it within 24 hours.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteProject}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ProjectPropertiesDialog
+        open={projectPropertiesOpen}
+        onClose={() => setProjectPropertiesOpen(false)}
+        onSaveIdentity={saveProjectIdentity}
+      />
     </div>
   )
 }

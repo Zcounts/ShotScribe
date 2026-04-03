@@ -24,6 +24,7 @@ import { platformService } from './services/platformService'
 import { runtimeConfig } from './config/runtimeConfig'
 import { logTelemetry } from './utils/telemetry'
 import { createCloudProjectAdapter, createProjectRepository } from './data/repository'
+import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -214,6 +215,9 @@ function getUndoableSnapshot(state) {
     castCrewNotes: state.castCrewNotes,
     projectName: state.projectName,
     projectEmoji: state.projectEmoji,
+    projectLogline: state.projectLogline,
+    projectHeroImage: state.projectHeroImage,
+    projectHeroOverlayColor: state.projectHeroOverlayColor,
     columnCount: state.columnCount,
     defaultFocalLength: state.defaultFocalLength,
     useDropdowns: state.useDropdowns,
@@ -576,6 +580,12 @@ function buildSyncState({
 
 let projectRepository = createProjectRepository()
 
+function devCloudBackupLog(event, details = {}) {
+  if (!import.meta.env.DEV) return
+  // eslint-disable-next-line no-console
+  console.info(`[cloud-backup] ${event}`, details)
+}
+
 const useStore = create((set, get) => ({
   // Project metadata
   projectPath: null,
@@ -583,6 +593,9 @@ const useStore = create((set, get) => ({
   projectRef: { type: 'local', path: null, browserProjectId: null },
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
+  projectLogline: '',
+  projectHeroImage: null,
+  projectHeroOverlayColor: '#1f1f27',
   lastSaved: null,
   hasUnsavedChanges: false,
   saveSyncState: buildSyncState({
@@ -1990,6 +2003,37 @@ const useStore = create((set, get) => ({
     set({ projectEmoji: emoji || '🎬' })
     get()._scheduleAutoSave()
   },
+  setProjectLogline: (logline) => {
+    set({ projectLogline: logline || '' })
+    get()._scheduleAutoSave('project_logline')
+  },
+  setProjectHeroImage: (heroImagePayload) => {
+    const image = heroImagePayload?.imageAsset?.thumb || heroImagePayload?.image || null
+    const imageAsset = heroImagePayload?.imageAsset
+      ? {
+          version: heroImagePayload.imageAsset.version || 1,
+          mime: heroImagePayload.imageAsset.mime || 'image/webp',
+          thumb: heroImagePayload.imageAsset.thumb || image || null,
+          full: null,
+          meta: heroImagePayload.imageAsset.meta || null,
+          cloud: heroImagePayload.imageAsset.cloud || null,
+        }
+      : null
+    set({
+      projectHeroImage: image
+        ? { image, imageAsset }
+        : null,
+    })
+    get()._scheduleAutoSave('project_hero_image')
+  },
+  clearProjectHeroImage: () => {
+    set({ projectHeroImage: null })
+    get()._scheduleAutoSave('project_hero_image')
+  },
+  setProjectHeroOverlayColor: (overlayColor) => {
+    set({ projectHeroOverlayColor: overlayColor || '#1f1f27' })
+    get()._scheduleAutoSave('project_hero_overlay')
+  },
 
   // ── UI actions ───────────────────────────────────────────────────────
 
@@ -2225,7 +2269,7 @@ const useStore = create((set, get) => ({
   getProjectData: () => {
     const startedAt = performance.now()
     const {
-      projectName, projectEmoji, columnCount, defaultFocalLength,
+      projectName, projectEmoji, projectLogline, projectHeroImage, projectHeroOverlayColor, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns, scenes, shotlistColumnConfig,
       customColumns, customDropdownOptions, schedule, scheduleColumnConfig,
       shotlistColumnWidths, callsheets, callsheetSectionConfig, callsheetColumnConfig,
@@ -2242,6 +2286,23 @@ const useStore = create((set, get) => ({
       version: 2,
       projectName,
       projectEmoji: projectEmoji || '🎬',
+      projectLogline: projectLogline || '',
+      projectHeroImage: projectHeroImage?.image
+        ? {
+            image: projectHeroImage.imageAsset?.thumb || projectHeroImage.image || null,
+            imageAsset: projectHeroImage?.imageAsset
+              ? {
+                  version: projectHeroImage.imageAsset.version || 1,
+                  mime: projectHeroImage.imageAsset.mime || 'image/webp',
+                  thumb: projectHeroImage.imageAsset.thumb || projectHeroImage.image || null,
+                  full: null,
+                  meta: projectHeroImage.imageAsset.meta || null,
+                  cloud: projectHeroImage.imageAsset.cloud || null,
+                }
+              : null,
+          }
+        : null,
+      projectHeroOverlayColor: projectHeroOverlayColor || '#1f1f27',
       columnCount,
       defaultFocalLength,
       theme,
@@ -2553,7 +2614,7 @@ const useStore = create((set, get) => ({
 
   loadProject: (data) => {
     const {
-      projectName, projectEmoji, columnCount, defaultFocalLength,
+      projectName, projectEmoji, projectLogline, projectHeroImage, projectHeroOverlayColor, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns,
     } = data
 
@@ -2712,6 +2773,25 @@ const useStore = create((set, get) => ({
     set({
       projectName: projectName || 'Untitled Shotlist',
       projectEmoji: projectEmoji || '🎬',
+      projectLogline: typeof projectLogline === 'string' ? projectLogline : '',
+      projectHeroImage: projectHeroImage?.image
+        ? {
+            image: projectHeroImage.imageAsset?.thumb || projectHeroImage.image || null,
+            imageAsset: projectHeroImage?.imageAsset
+              ? {
+                  version: projectHeroImage.imageAsset.version || 1,
+                  mime: projectHeroImage.imageAsset.mime || 'image/webp',
+                  thumb: projectHeroImage.imageAsset.thumb || projectHeroImage.image || null,
+                  full: null,
+                  meta: projectHeroImage.imageAsset.meta || null,
+                  cloud: projectHeroImage.imageAsset.cloud || null,
+                }
+              : null,
+          }
+        : null,
+      projectHeroOverlayColor: typeof projectHeroOverlayColor === 'string' && projectHeroOverlayColor.trim()
+        ? projectHeroOverlayColor
+        : '#1f1f27',
       columnCount: columnCount || 4,
       defaultFocalLength: defaultFocalLength || '85mm',
       theme: theme || 'light',
@@ -2987,6 +3067,9 @@ const useStore = create((set, get) => ({
     set({
       projectName: name,
       projectEmoji: '🎬',
+      projectLogline: '',
+      projectHeroImage: null,
+      projectHeroOverlayColor: '#1f1f27',
       scenes: [scene],
       storyboardSceneOrder: [],
       storyboardDisplayConfig: DEFAULT_STORYBOARD_DISPLAY_CONFIG,
@@ -3052,17 +3135,57 @@ const useStore = create((set, get) => ({
     }
 
     const payload = get().getProjectData()
+    devCloudBackupLog('local_conversion:start', {
+      ownerUserId,
+      sceneCount: Array.isArray(payload?.scenes) ? payload.scenes.length : 0,
+      shotCount: Array.isArray(payload?.scenes)
+        ? payload.scenes.reduce((sum, scene) => sum + ((scene?.shots || []).length), 0)
+        : 0,
+    })
     const cloudProject = await cloudRepository.createProject({
       ownerUserId,
       name: payload.projectName || get().projectName || 'Untitled Shotlist',
       emoji: payload.projectEmoji || get().projectEmoji || '🎬',
     })
-    const snapshot = await cloudRepository.createSnapshot({
-      projectId: cloudProject.id,
-      createdByUserId: ownerUserId,
-      source: 'local_conversion',
-      payload,
-    })
+    devCloudBackupLog('local_conversion:project_created', { projectId: cloudProject.id })
+
+    let snapshot
+    try {
+      snapshot = await cloudRepository.createSnapshot({
+        projectId: cloudProject.id,
+        createdByUserId: ownerUserId,
+        source: 'local_conversion',
+        payload,
+      })
+      devCloudBackupLog('local_conversion:snapshot_result', {
+        projectId: cloudProject.id,
+        snapshotId: snapshot?.id || null,
+        conflict: !!snapshot?.conflict,
+      })
+      if (!snapshot?.id) {
+        throw new Error(snapshot?.conflict ? 'Cloud snapshot conflicted before first version was committed.' : 'Cloud snapshot was not created.')
+      }
+    } catch (error) {
+      if (cloudRepository?.deleteProjectIfSnapshotless) {
+        try {
+          const cleanupResult = await cloudRepository.deleteProjectIfSnapshotless(cloudProject.id)
+          devCloudBackupLog('local_conversion:cleanup_result', {
+            projectId: cloudProject.id,
+            cleanupResult,
+          })
+        } catch (cleanupError) {
+          if (import.meta.env.DEV) {
+            console.error('[cloud-backup] failed to cleanup snapshotless cloud project', cleanupError)
+          }
+        }
+      }
+      if (import.meta.env.DEV) {
+        console.error('[cloud-backup] create snapshot failed during local conversion', error)
+      }
+      throw new Error(
+        'Cloud backup couldn’t be enabled for this project yet. We cleaned up the failed cloud draft. Please try again.'
+      )
+    }
 
     set({
       projectRef: {
@@ -3094,10 +3217,13 @@ const useStore = create((set, get) => ({
       throw new Error('projectId is required')
     }
 
+    devCloudBackupLog('open:start', { projectId })
     const snapshot = await cloudRepository.getLatestSnapshot(projectId)
     if (!snapshot?.payload) {
+      devCloudBackupLog('open:missing_snapshot', { projectId })
       throw new Error('Cloud project has no snapshots')
     }
+    devCloudBackupLog('open:loaded_snapshot', { projectId, snapshotId: snapshot.id })
 
     get().loadProject(snapshot.payload)
     set({
@@ -3275,11 +3401,12 @@ const useStore = create((set, get) => ({
     })
     try {
       const latest = get()
+      const safePayload = buildConvexSafeSnapshotPayload(latest.getProjectData())
       const result = await runSnapshotMutation({
         projectId: latest.projectRef.projectId,
         createdByUserId: currentUserId,
         source: reason === 'manual' ? 'manual_save' : 'autosave',
-        payload: latest.getProjectData(),
+        payload: safePayload,
         expectedLatestSnapshotId: latest.projectRef.snapshotId || undefined,
         conflictStrategy: latest.cloudSyncContext.collaborationMode ? 'last_write_wins' : 'fail_on_conflict',
       })
@@ -3301,6 +3428,11 @@ const useStore = create((set, get) => ({
       }))
       return { ok: true, snapshotId: result.snapshotId }
     } catch (error) {
+      devCloudBackupLog('sync:failed', {
+        reason,
+        projectId: state.projectRef?.type === 'cloud' ? state.projectRef.projectId : null,
+        error: error?.message || 'Cloud backup failed',
+      })
       set((nextState) => ({
         _cloudSyncInFlight: false,
         saveSyncState: buildSyncState({

@@ -10,4 +10,11 @@ crons.interval(
   { limit: 50 },
 )
 
+crons.interval(
+  'reconcile due project hard deletes',
+  { hours: 1 },
+  internal.projects.runProjectDeleteReconciliation,
+  { limit: 20 },
+)
+
 export default crons
