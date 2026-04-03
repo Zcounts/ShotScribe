@@ -1,3 +1,5 @@
+import { buildConvexSafeSnapshotPayload } from './cloudSnapshotPayload'
+
 /**
  * Cloud repository adapter that accepts transport functions so the store
  * can use Convex-backed projects without depending directly on React hooks.
@@ -33,11 +35,12 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
       expectedLatestSnapshotId = undefined,
       conflictStrategy = 'last_write_wins',
     }) {
+      const safePayload = buildConvexSafeSnapshotPayload(payload)
       const result = await runMutation('projectSnapshots:createSnapshot', {
         projectId,
         createdByUserId,
         source,
-        payload,
+        payload: safePayload,
         conflictStrategy,
         ...(expectedLatestSnapshotId ? { expectedLatestSnapshotId } : {}),
       })
@@ -48,7 +51,7 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
           createdByUserId,
           source,
           createdAt: null,
-          payload,
+          payload: safePayload,
           conflict: true,
           latestSnapshotId: result?.latestSnapshotId ? String(result.latestSnapshotId) : null,
         }
@@ -63,6 +66,10 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
         versionToken: result.versionToken || null,
         conflict: false,
       }
+    },
+
+    async deleteProjectIfSnapshotless(projectId) {
+      return runMutation('projects:deleteProjectIfSnapshotless', { projectId })
     },
 
     async getProject(projectId) {
