@@ -552,6 +552,99 @@
     display: block;
   }
 
+  .script-format-inspector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .script-format-mode-switch {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .script-format-mode-btn {
+    border: 1px solid rgba(148,163,184,0.35);
+    border-radius: 7px;
+    padding: 6px 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: #fff;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  }
+
+  .script-format-mode-btn:hover {
+    border-color: rgba(82,101,236,0.48);
+    background: rgba(82,101,236,0.07);
+  }
+
+  .script-format-mode-btn.is-active {
+    border-color: rgba(82,101,236,0.6);
+    color: #1d4ed8;
+    background: rgba(82,101,236,0.14);
+  }
+
+  .script-format-group {
+    border: 1px solid rgba(148,163,184,0.24);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(248,250,252,0.8);
+  }
+
+  .script-format-group-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .script-format-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .script-compact-inch-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .script-compact-inch-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #475569;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+
+  .script-compact-inch-icon {
+    min-width: 14px;
+    text-align: center;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .script-compact-inch-field input {
+    width: 100%;
+    padding: 4px 5px;
+    font-size: 11px;
+    min-height: 28px;
+  }
+
   /* Pages container — centres all page-document divs vertically */
   .pages-container {
     display: flex;

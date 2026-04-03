@@ -180,21 +180,13 @@ These flows must feel good enough to write a script from scratch.
 ---
 
 ## 9. Formatting surfaces
-Formatting should be separated into two surfaces.
+Formatting should use one compact inspector surface with grouped controls.
 
-### Page Setup
+### Page & Styles Inspector
 Contains:
-- paper size
-- page margins
-- page numbering behavior
-
-### Element Styles
-Contains:
-- per-element indent values
-- spacing before
-- spacing after
-- alignment
-- any screenplay element-specific formatting controls
+- page setup controls (paper size + margins)
+- element style controls (per-element indent values and related formatting controls)
+- quick mode toggles (All / Page / Paragraph) so setup is dense and scan-friendly
 
 These surfaces are secondary.
 They must not replace direct on-page editing.
