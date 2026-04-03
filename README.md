@@ -21,6 +21,7 @@ This monorepo currently contains:
 - Shotlist and Schedule desktop views collapse secondary side panels at smaller viewports to preserve laptop usability without changing core workflows.
 - Home tab hero now stays visible for loaded projects and can be edited via Project Properties (title/icon/logline + hero background image + hero overlay color) with local/cloud persistence parity; default no-project headline/subhead are admin-editable with safe fallbacks.
 - Home tab responsive header now uses clearer row stacking at narrower widths (project identity row, actions row, menu/configure row, then tabs) and removes the legacy Quick actions launcher from the main toolbar.
+- Scene right-click context menu behavior is now consistent across Scenes tab cards/table rows and Script tab sidebar scene items, reusing the existing shared context menu actions.
 
 ---
 

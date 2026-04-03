@@ -1281,6 +1281,8 @@ export default function ScriptTab() {
                       <button
                         key={scene.id}
                         onClick={() => jumpToScene(scene.id)}
+                        data-entity-type="scene"
+                        data-entity-id={scene.id}
                         style={{
                           width: '100%',
                           textAlign: 'left',
