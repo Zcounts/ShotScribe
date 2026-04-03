@@ -13,9 +13,11 @@ import {
   Calendar,
   FilePlus,
   Download,
+  Settings2,
 } from 'lucide-react'
 import './HomeView.css'
 import SidebarPane from './SidebarPane'
+import ProjectPropertiesDialog from './ProjectPropertiesDialog'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
@@ -75,6 +77,10 @@ export default function HomeView() {
   const scriptScenes = useStore(s => s.scriptScenes)
   const importedScripts = useStore(s => s.importedScripts)
   const projectName = useStore(s => s.projectName)
+  const projectEmoji = useStore(s => s.projectEmoji)
+  const projectLogline = useStore(s => s.projectLogline)
+  const projectHeroImage = useStore(s => s.projectHeroImage)
+  const projectHeroOverlayColor = useStore(s => s.projectHeroOverlayColor)
   const projectPath = useStore(s => s.projectPath)
   const browserProjectId = useStore(s => s.browserProjectId)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
@@ -114,6 +120,8 @@ export default function HomeView() {
   const pendingDeleteProjects = useQuery('projects:listPendingDeletionProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
   const markProjectPendingDeletion = useMutation('projects:markProjectPendingDeletion')
   const restorePendingDeletionProject = useMutation('projects:restorePendingDeletionProject')
+  const updateProjectIdentity = useMutation('projects:updateProjectIdentity')
+  const [projectPropertiesOpen, setProjectPropertiesOpen] = useState(false)
 
   const sidebarRecent = (Array.isArray(recentProjects) && recentProjects.length > 0)
     ? recentProjects.slice(0, 3)
@@ -298,6 +306,18 @@ export default function HomeView() {
     },
   ]
 
+  const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
+  const heroOverlayColor = projectHeroOverlayColor || '#1f1f27'
+
+  const saveProjectIdentity = async ({ name, emoji }) => {
+    if (projectRef?.type !== 'cloud') return
+    await updateProjectIdentity({
+      projectId: projectRef.projectId,
+      name,
+      emoji,
+    })
+  }
+
   return (
     <div className="home-view">
       <SidebarPane bodyClassName="home-sidebar-content">
@@ -367,24 +387,51 @@ export default function HomeView() {
       </SidebarPane>
 
       <main className="home-main">
-        {!hasLoadedProject && (
-          <section className="home-hero">
-            <div>
-              <div className="home-hero-kicker">// ShotScribe · Production Suite</div>
-              <div className="home-hero-title">
-                Build the <span className="is-blue">Shot.</span><br />
-                Run the <span className="is-blue">Day.</span>
-              </div>
-              <div className="home-hero-copy">
-                Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.
-              </div>
+        <section
+          className={`home-hero ${hasLoadedProject ? 'project-loaded' : ''}`}
+          style={hasLoadedProject && heroBackgroundImage
+            ? {
+                backgroundImage: `linear-gradient(0deg, ${heroOverlayColor}99, ${heroOverlayColor}99), url(${heroBackgroundImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }
+            : undefined}
+        >
+          <div>
+            <div className="home-hero-kicker">{hasLoadedProject ? '// Active Project' : '// ShotScribe · Production Suite'}</div>
+            <div className="home-hero-title">
+              {hasLoadedProject ? (
+                <>
+                  <span className="home-hero-project-icon">{projectEmoji || '🎬'}</span>
+                  <span className="home-hero-project-title-text">{projectName || 'Untitled Shotlist'}</span>
+                </>
+              ) : (
+                <>
+                  Build the <span className="is-blue">Shot.</span><br />
+                  Run the <span className="is-blue">Day.</span>
+                </>
+              )}
             </div>
-            <div className="home-hero-actions">
-              <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
-              <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+            <div className="home-hero-copy">
+              {hasLoadedProject
+                ? (projectLogline || 'Add a project logline in Project Properties.')
+                : 'Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.'}
             </div>
-          </section>
-        )}
+          </div>
+          <div className="home-hero-actions">
+            {hasLoadedProject ? (
+              <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => setProjectPropertiesOpen(true)}>
+                <Settings2 size={14} strokeWidth={1.6} />
+                Project Properties
+              </button>
+            ) : (
+              <>
+                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
+                <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+              </>
+            )}
+          </div>
+        </section>
 
         <section className="home-stat-strip">
           {[
@@ -525,6 +572,11 @@ export default function HomeView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ProjectPropertiesDialog
+        open={projectPropertiesOpen}
+        onClose={() => setProjectPropertiesOpen(false)}
+        onSaveIdentity={saveProjectIdentity}
+      />
     </div>
   )
 }

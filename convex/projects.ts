@@ -123,6 +123,32 @@ export const listPendingDeletionProjectsForCurrentUser = query({
   },
 })
 
+export const updateProjectIdentity = mutation({
+  args: {
+    projectId: v.id('projects'),
+    name: v.optional(v.string()),
+    emoji: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireCloudWritesEnabled(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'editor')
+    const project = await ctx.db.get(args.projectId)
+    if (!project) throw new Error('Project not found')
+
+    const name = typeof args.name === 'string' ? args.name.trim() : project.name
+    const emoji = typeof args.emoji === 'string' ? args.emoji.trim() : project.emoji
+    const now = Date.now()
+
+    await ctx.db.patch(args.projectId, {
+      name: name || project.name,
+      emoji: emoji || project.emoji || '🎬',
+      updatedAt: now,
+    })
+    return { ok: true, updatedAt: now }
+  },
+})
+
 export const markProjectPendingDeletion = mutation({
   args: {
     projectId: v.id('projects'),

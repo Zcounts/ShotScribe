@@ -33,6 +33,8 @@ async function hasLatestSnapshotReference(ctx: any, projectId: any, assetId: any
   const project = await ctx.db.get(projectId)
   if (!project?.latestSnapshotId) return false
   const snapshot = await ctx.db.get(project.latestSnapshotId)
+  const heroAssetId = snapshot?.payload?.projectHeroImage?.imageAsset?.cloud?.assetId
+  if (heroAssetId && String(heroAssetId) === String(assetId)) return true
   const scenes = snapshot?.payload?.scenes || []
   for (const scene of scenes) {
     for (const shot of (scene?.shots || [])) {

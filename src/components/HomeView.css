@@ -184,6 +184,9 @@
   display: flex;
   justify-content: space-between;
   gap: 16px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
 }
 
 .home-hero-kicker {
@@ -212,10 +215,98 @@
   max-width: 500px;
 }
 
+.home-hero.project-loaded .home-hero-kicker,
+.home-hero.project-loaded .home-hero-copy {
+  color: #f5f4f2;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+.home-hero.project-loaded .home-hero-title {
+  color: #ffffff;
+  font-size: clamp(3rem, 9vw, 6.4rem);
+  line-height: 0.95;
+  display: flex;
+  align-items: baseline;
+  gap: 0.22em;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+}
+
+.home-hero-project-icon {
+  font-size: 0.74em;
+}
+
+.home-hero-project-title-text {
+  overflow-wrap: anywhere;
+}
+
 .home-hero-actions {
   display: flex;
   gap: 8px;
   align-items: flex-end;
+}
+
+.home-project-props-dialog {
+  width: min(760px, 92vw);
+  max-width: 760px;
+  max-height: 84vh;
+  overflow-y: auto;
+}
+
+.home-project-props-emoji-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  gap: 6px;
+}
+
+.home-project-props-emoji {
+  border: 1px solid #d0ced0;
+  border-radius: 8px;
+  background: #fff;
+  height: 34px;
+}
+
+.home-project-props-emoji.active {
+  border-color: #5265ec;
+  box-shadow: 0 0 0 2px rgba(82, 101, 236, 0.16) inset;
+}
+
+.home-project-props-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.home-project-props-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-project-props-hero-preview {
+  min-height: 110px;
+  border-radius: 10px;
+  border: 1px solid #d0ced0;
+  background: #ede8e2;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #737373;
+  font-size: 12px;
+}
+
+.home-project-props-library {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.home-project-props-library button {
+  border: 1px solid #d0ced0;
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: #fff;
 }
 
 .home-stat-strip {
