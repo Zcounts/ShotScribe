@@ -19,6 +19,7 @@ This monorepo currently contains:
 - Local-only mode remains supported when cloud auth/env is not configured.
 - Current auth/account/admin behavior is intentionally preserved.
 - Shotlist and Schedule desktop views collapse secondary side panels at smaller viewports to preserve laptop usability without changing core workflows.
+- Home tab hero now stays visible for loaded projects and can be edited via Project Properties (title/icon/logline + hero background image + hero overlay color) with local/cloud persistence parity; default no-project headline/subhead are admin-editable with safe fallbacks.
 
 ---
 

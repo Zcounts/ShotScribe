@@ -77,6 +77,10 @@ export default function AdminConsolePage() {
   const setGrandfatheredAccess = useMutation('admin:setGrandfatheredAccessForUser')
   const setAdminRole = useMutation('admin:setAdminRole')
   const setCloudWritesEnabled = useMutation('admin:setCloudWritesEnabled')
+  const setHomeHeroDefaults = useMutation('admin:setHomeHeroDefaults')
+  const homeHeroDefaults = useQuery('admin:getHomeHeroDefaults', canRunAdminQueries ? {} : 'skip')
+  const [homeHeroHeadlineInput, setHomeHeroHeadlineInput] = useState('')
+  const [homeHeroSubheadInput, setHomeHeroSubheadInput] = useState('')
 
   const loading = adminStateLoading || (canRunAdminQueries && (overview === undefined || opsControls === undefined))
 
@@ -127,6 +131,12 @@ export default function AdminConsolePage() {
     setCloudWriteMode(opsControls.cloudWritesEnabled ? 'enabled' : 'disabled')
   }, [opsControls?.cloudWritesEnabled])
 
+  useEffect(() => {
+    if (!homeHeroDefaults) return
+    setHomeHeroHeadlineInput(homeHeroDefaults.headline || '')
+    setHomeHeroSubheadInput(homeHeroDefaults.subhead || '')
+  }, [homeHeroDefaults?.headline, homeHeroDefaults?.subhead])
+
   const summary = useMemo(() => {
     if (!overview?.totals) return []
     return [
@@ -150,6 +160,14 @@ export default function AdminConsolePage() {
       { name: 'Shared', value: overview.totals.totalSharedProjects },
     ]
   }, [overview?.totals])
+
+  const saveHomeHeroDefaults = async () => {
+    await setHomeHeroDefaults({
+      headline: homeHeroHeadlineInput,
+      subhead: homeHeroSubheadInput,
+    })
+    setFeedback('Default Home hero copy saved.')
+  }
 
   if (!canUseCloudAuth) {
     return <div style={containerStyle}><div style={{ maxWidth: 1080, margin: '0 auto' }}><div style={cardStyle}>Cloud auth is not configured. Admin console is unavailable.</div></div></div>
@@ -223,6 +241,34 @@ export default function AdminConsolePage() {
                   { value: 'disabled', label: 'Writes OFF' },
                 ]}
               />
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle, display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 12, color: '#9AA6BC', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Default Home hero copy</div>
+            <label style={{ fontSize: 12, color: '#9AA6BC' }}>
+              Headline
+              <input
+                style={{ ...inputStyle, marginTop: 6 }}
+                value={homeHeroHeadlineInput}
+                onChange={(e) => setHomeHeroHeadlineInput(e.target.value)}
+                placeholder="Build the Shot. Run the Day."
+              />
+            </label>
+            <label style={{ fontSize: 12, color: '#9AA6BC' }}>
+              Subhead
+              <textarea
+                style={{ ...inputStyle, marginTop: 6, minHeight: 84, resize: 'vertical' }}
+                value={homeHeroSubheadInput}
+                onChange={(e) => setHomeHeroSubheadInput(e.target.value)}
+                placeholder="Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace..."
+              />
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 11, color: '#9AA6BC' }}>
+                Last updated: {formatDateTime(homeHeroDefaults?.updatedAt)}
+              </div>
+              <button type="button" style={buttonStyle} onClick={saveHomeHeroDefaults}>Save Home Hero Defaults</button>
             </div>
           </div>
 

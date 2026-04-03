@@ -13,9 +13,11 @@ import {
   Calendar,
   FilePlus,
   Download,
+  Settings2,
 } from 'lucide-react'
 import './HomeView.css'
 import SidebarPane from './SidebarPane'
+import ProjectPropertiesDialog from './ProjectPropertiesDialog'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
@@ -75,6 +77,9 @@ export default function HomeView() {
   const scriptScenes = useStore(s => s.scriptScenes)
   const importedScripts = useStore(s => s.importedScripts)
   const projectName = useStore(s => s.projectName)
+  const projectLogline = useStore(s => s.projectLogline)
+  const projectHeroImage = useStore(s => s.projectHeroImage)
+  const projectHeroOverlayColor = useStore(s => s.projectHeroOverlayColor)
   const projectPath = useStore(s => s.projectPath)
   const browserProjectId = useStore(s => s.browserProjectId)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
@@ -90,8 +95,10 @@ export default function HomeView() {
 
   const [pendingOpenProjectId, setPendingOpenProjectId] = useState(null)
   const [contextMenu, setContextMenu] = useState(null)
+  const [heroContextMenu, setHeroContextMenu] = useState(null)
   const [deleteConfirmProject, setDeleteConfirmProject] = useState(null)
   const menuRef = useRef(null)
+  const heroMenuRef = useRef(null)
 
   const shotCount = useMemo(
     () => scenes.reduce((sum, scene) => sum + ((scene?.shots || []).length), 0),
@@ -111,9 +118,12 @@ export default function HomeView() {
   const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
   const cloudListEnabled = cloudEnvEnabled && cloudAuthConfigured && signedInForCloud && cloudAccessPolicy?.paidCloudAccess
   const cloudProjects = useQuery('projects:listProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
+  const homeHeroDefaults = useQuery('admin:getHomeHeroDefaultsPublic', cloudEnvEnabled ? {} : 'skip')
   const pendingDeleteProjects = useQuery('projects:listPendingDeletionProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
   const markProjectPendingDeletion = useMutation('projects:markProjectPendingDeletion')
   const restorePendingDeletionProject = useMutation('projects:restorePendingDeletionProject')
+  const updateProjectIdentity = useMutation('projects:updateProjectIdentity')
+  const [projectPropertiesOpen, setProjectPropertiesOpen] = useState(false)
 
   const sidebarRecent = (Array.isArray(recentProjects) && recentProjects.length > 0)
     ? recentProjects.slice(0, 3)
@@ -127,12 +137,16 @@ export default function HomeView() {
     && !isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts })
 
   useEffect(() => {
-    if (!contextMenu) return
+    if (!contextMenu && !heroContextMenu) return
     const closeMenu = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) setContextMenu(null)
+      if (heroMenuRef.current && !heroMenuRef.current.contains(event.target)) setHeroContextMenu(null)
     }
     const onEsc = (event) => {
-      if (event.key === 'Escape') setContextMenu(null)
+      if (event.key === 'Escape') {
+        setContextMenu(null)
+        setHeroContextMenu(null)
+      }
     }
     document.addEventListener('mousedown', closeMenu)
     document.addEventListener('keydown', onEsc)
@@ -140,7 +154,7 @@ export default function HomeView() {
       document.removeEventListener('mousedown', closeMenu)
       document.removeEventListener('keydown', onEsc)
     }
-  }, [contextMenu])
+  }, [contextMenu, heroContextMenu])
 
   const requestOpenCloudProject = (projectId) => {
     setContextMenu(null)
@@ -298,6 +312,21 @@ export default function HomeView() {
     },
   ]
 
+  const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
+  const heroOverlayColor = projectHeroOverlayColor || '#1f1f27'
+  const defaultHeroTitle = (homeHeroDefaults?.headline || '').trim() || 'Build the Shot. Run the Day.'
+  const defaultHeroSubhead = (homeHeroDefaults?.subhead || '').trim() || 'Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.'
+  const defaultHeroBackground = 'https://fairlyodd.org/wp-content/uploads/2022/12/camera.jpg'
+
+  const saveProjectIdentity = async ({ name, emoji }) => {
+    if (projectRef?.type !== 'cloud') return
+    await updateProjectIdentity({
+      projectId: projectRef.projectId,
+      name,
+      emoji,
+    })
+  }
+
   return (
     <div className="home-view">
       <SidebarPane bodyClassName="home-sidebar-content">
@@ -367,24 +396,63 @@ export default function HomeView() {
       </SidebarPane>
 
       <main className="home-main">
-        {!hasLoadedProject && (
-          <section className="home-hero">
-            <div>
-              <div className="home-hero-kicker">// ShotScribe · Production Suite</div>
-              <div className="home-hero-title">
-                Build the <span className="is-blue">Shot.</span><br />
-                Run the <span className="is-blue">Day.</span>
-              </div>
-              <div className="home-hero-copy">
-                Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.
-              </div>
+        <section
+          className={`home-hero ${hasLoadedProject ? 'project-loaded' : ''}`}
+          style={hasLoadedProject
+            ? (
+                heroBackgroundImage
+                  ? {
+                      backgroundImage: `linear-gradient(0deg, ${heroOverlayColor}99, ${heroOverlayColor}99), url(${heroBackgroundImage})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }
+                  : undefined
+              )
+            : {
+                backgroundImage: `linear-gradient(0deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url(${defaultHeroBackground})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            setContextMenu(null)
+            setHeroContextMenu({
+              x: event.clientX,
+              y: event.clientY,
+            })
+          }}
+        >
+          <div>
+            <div className="home-hero-kicker">{hasLoadedProject ? '// Active Project' : '// ShotScribe · Production Suite'}</div>
+            <div className="home-hero-title">
+              {hasLoadedProject ? (
+                <span className="home-hero-project-title-text">{projectName || 'Untitled Shotlist'}</span>
+              ) : (
+                <>
+                  {defaultHeroTitle}
+                </>
+              )}
             </div>
-            <div className="home-hero-actions">
-              <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
-              <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+            <div className="home-hero-copy">
+              {hasLoadedProject
+                ? (projectLogline || 'Add a project logline in Project Properties.')
+                : defaultHeroSubhead}
             </div>
-          </section>
-        )}
+          </div>
+          <div className="home-hero-actions">
+            {hasLoadedProject ? (
+              <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => setProjectPropertiesOpen(true)}>
+                <Settings2 size={14} strokeWidth={1.6} />
+                Project Properties
+              </button>
+            ) : (
+              <>
+                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
+                <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+              </>
+            )}
+          </div>
+        </section>
 
         <section className="home-stat-strip">
           {[
@@ -495,6 +563,27 @@ export default function HomeView() {
           </button>
         </div>
       ) : null}
+      {heroContextMenu ? (
+        <div
+          ref={heroMenuRef}
+          className="home-cloud-menu"
+          style={{ left: heroContextMenu.x, top: heroContextMenu.y }}
+        >
+          {hasLoadedProject ? (
+            <button type="button" className="home-cloud-menu-item" onClick={() => {
+              setProjectPropertiesOpen(true)
+              setHeroContextMenu(null)
+            }}
+            >
+              Project Properties
+            </button>
+          ) : (
+            <button type="button" className="home-cloud-menu-item disabled" disabled title="Load a project to edit project properties">
+              Project Properties (Load project first)
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <AlertDialog open={!!pendingOpenProjectId} onOpenChange={(open) => { if (!open) setPendingOpenProjectId(null) }}>
         <AlertDialogContent>
@@ -525,6 +614,11 @@ export default function HomeView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ProjectPropertiesDialog
+        open={projectPropertiesOpen}
+        onClose={() => setProjectPropertiesOpen(false)}
+        onSaveIdentity={saveProjectIdentity}
+      />
     </div>
   )
 }
