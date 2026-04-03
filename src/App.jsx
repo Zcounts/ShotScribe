@@ -1021,7 +1021,7 @@ export default function App() {
               <div
                 style={isDesktopDown
                   ? { width: 0, position: 'relative', alignSelf: 'stretch', height: '100%', display: 'flex' }
-                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'stretch', height: 'calc(100vh - 128px)', minHeight: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }
+                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'stretch', height: 'calc(100vh - 128px)', minHeight: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', marginBottom: -14, display: 'flex' }
                 }
               >
                 <SidebarPane
