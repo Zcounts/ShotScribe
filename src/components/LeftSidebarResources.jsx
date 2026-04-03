@@ -9,10 +9,15 @@ export default function LeftSidebarResources() {
     <div className="ss-left-sidebar-footer">
       <div className="ss-left-sidebar-divider" />
       <div className="ss-left-sidebar-section-label">Resources</div>
-      <button type="button" className="ss-left-sidebar-resource-item">
+      <a
+        className="ss-left-sidebar-resource-item"
+        href="https://shot-scribe.com/docs/"
+        target="_blank"
+        rel="noreferrer"
+      >
         <BookOpen size={14} strokeWidth={1.5} />
         Documentation
-      </button>
+      </a>
       <button type="button" className="ss-left-sidebar-resource-item" onClick={() => toggleSettings()}>
         <Settings size={14} strokeWidth={1.5} />
         Settings
