@@ -192,6 +192,29 @@ export const restorePendingDeletionProject = mutation({
   },
 })
 
+export const deleteProjectIfSnapshotless = mutation({
+  args: {
+    projectId: v.id('projects'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'owner')
+    if (!project) return { ok: false, reason: 'not_found' as const }
+
+    const snapshots = await ctx.db
+      .query('projectSnapshots')
+      .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', args.projectId))
+      .take(1)
+
+    if (snapshots.length > 0 || project.latestSnapshotId) {
+      return { ok: false, reason: 'has_snapshots' as const }
+    }
+
+    await ctx.db.delete(args.projectId)
+    return { ok: true }
+  },
+})
+
 export const listDueProjectDeletes = internalQuery({
   args: {
     limit: v.optional(v.number()),

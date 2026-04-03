@@ -39,6 +39,7 @@
  *   createSnapshot(input: { projectId: string, createdByUserId: string, source: 'manual_save'|'autosave'|'local_conversion'|'restore'|'conflict_recovery', payload: Record<string, any>, expectedLatestSnapshotId?: string, conflictStrategy?: 'last_write_wins'|'fail_on_conflict' }): Promise<CloudProjectSnapshot>,
  *   getProject(projectId: string): Promise<CloudProject | null>,
  *   getLatestSnapshot(projectId: string): Promise<CloudProjectSnapshot | null>,
+ *   deleteProjectIfSnapshotless?(projectId: string): Promise<{ ok: boolean }>,
  * }} CloudProjectRepository
  *
  * @typedef {{
