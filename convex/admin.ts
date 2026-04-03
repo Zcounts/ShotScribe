@@ -437,6 +437,70 @@ export const getSafeOperationalControls = query({
   },
 })
 
+function normalizeHeroCopy(value: string | undefined | null) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+async function getLatestHomeHeroContentRow(ctx: any) {
+  const rows = await ctx.db
+    .query('homeHeroContent')
+    .withIndex('by_updated_at')
+    .order('desc')
+    .take(1)
+  return rows[0] || null
+}
+
+export const getHomeHeroDefaultsPublic = query({
+  args: {},
+  handler: async (ctx) => {
+    const row = await getLatestHomeHeroContentRow(ctx)
+    return {
+      headline: normalizeHeroCopy(row?.headline),
+      subhead: normalizeHeroCopy(row?.subhead),
+      updatedAt: row?.updatedAt || null,
+    }
+  },
+})
+
+export const getHomeHeroDefaults = query({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await requireCurrentAdmin(ctx)
+    const row = await getLatestHomeHeroContentRow(ctx)
+    return {
+      headline: normalizeHeroCopy(row?.headline),
+      subhead: normalizeHeroCopy(row?.subhead),
+      updatedAt: row?.updatedAt || null,
+      updatedByUserId: row?.updatedByUserId ? String(row.updatedByUserId) : null,
+      viewedByUserId: String(user._id),
+    }
+  },
+})
+
+export const setHomeHeroDefaults = mutation({
+  args: {
+    headline: v.optional(v.string()),
+    subhead: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireCurrentAdmin(ctx)
+    const now = Date.now()
+    const existing = await getLatestHomeHeroContentRow(ctx)
+    const patch = {
+      headline: normalizeHeroCopy(args.headline),
+      subhead: normalizeHeroCopy(args.subhead),
+      updatedByUserId: user._id,
+      updatedAt: now,
+    }
+    if (existing?._id) {
+      await ctx.db.patch(existing._id, patch)
+      return { ok: true, updatedAt: now, id: existing._id }
+    }
+    const id = await ctx.db.insert('homeHeroContent', patch)
+    return { ok: true, updatedAt: now, id }
+  },
+})
+
 export const setCloudWritesEnabled = mutation({
   args: {
     enabled: v.boolean(),

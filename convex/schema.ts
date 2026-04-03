@@ -182,6 +182,13 @@ export default defineSchema({
     .index('by_project_id_user_id', ['projectId', 'userId'])
     .index('by_project_id_expires_at', ['projectId', 'expiresAt']),
 
+  homeHeroContent: defineTable({
+    headline: v.optional(v.string()),
+    subhead: v.optional(v.string()),
+    updatedByUserId: v.optional(v.id('users')),
+    updatedAt: v.number(),
+  }).index('by_updated_at', ['updatedAt']),
+
   operationalFlags: defineTable({
     key: v.string(),
     enabled: v.boolean(),
