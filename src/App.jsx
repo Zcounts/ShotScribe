@@ -119,7 +119,8 @@ function getOutlineItemStyle(color, isActive = false) {
   }
 }
 
-const STORYBOARD_OUTLINE_LABEL_COLOR = '#C4CEDF'
+const STORYBOARD_OUTLINE_LABEL_COLOR = 'var(--ss-left-sidebar-text)'
+const STORYBOARD_OUTLINE_SUBTITLE_COLOR = '#9AA9C2'
 
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
@@ -186,9 +187,9 @@ function SortableStoryboardSceneNavItem({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 10, height: 10, borderRadius: 999, background: item.color, border: '1px solid rgba(0,0,0,0.1)' }} />
-        <div style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{item.label}</div>
+        <div className="storyboard-outline-item-label" style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{item.label}</div>
       </div>
-      <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
+      <div className="storyboard-outline-item-subtitle" style={{ fontSize: 10, color: STORYBOARD_OUTLINE_SUBTITLE_COLOR, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
     </button>
   )
 }
@@ -1020,11 +1021,12 @@ export default function App() {
               <div
                 style={isDesktopDown
                   ? { width: 0, position: 'relative', alignSelf: 'stretch', height: '100%', display: 'flex' }
-                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'flex-start', height: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }
+                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'stretch', height: 'calc(100vh - 128px)', minHeight: 'calc(100vh - 128px)', maxHeight: 'calc(100vh - 128px)', display: 'flex' }
                 }
               >
                 <SidebarPane
                   className="storyboard-outline-sidebar"
+                  bodyClassName="storyboard-outline-body"
                   responsiveLabel="Open storyboard navigation"
                                     controls={(
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -1059,9 +1061,9 @@ export default function App() {
                             <div style={{ ...getOutlineItemStyle(activeOutlineDragItem.color, true), boxShadow: '0 10px 24px rgba(0,0,0,0.2)' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ width: 10, height: 10, borderRadius: 999, background: activeOutlineDragItem.color }} />
-                                <div style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{activeOutlineDragItem.label}</div>
+                                <div className="storyboard-outline-item-label" style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{activeOutlineDragItem.label}</div>
                               </div>
-                              <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeOutlineDragItem.subtitle}</div>
+                              <div className="storyboard-outline-item-subtitle" style={{ fontSize: 10, color: STORYBOARD_OUTLINE_SUBTITLE_COLOR, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeOutlineDragItem.subtitle}</div>
                             </div>
                           </div>
                         ) : null}
@@ -1069,8 +1071,8 @@ export default function App() {
                     </DndContext>
                   ) : storyboardPageItems.map(item => (
                   <button key={item.id} onClick={() => jumpToStoryboardPage(item.id)} style={getOutlineItemStyle(item.sceneColor, activeOutlineItem === item.id)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{item.label}</div></div>
-                    <div style={{ fontSize: 10, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div className="storyboard-outline-item-label" style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{item.label}</div></div>
+                    <div className="storyboard-outline-item-subtitle" style={{ fontSize: 10, color: STORYBOARD_OUTLINE_SUBTITLE_COLOR, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
                   </button>
                 ))}
                 </SidebarPane>
