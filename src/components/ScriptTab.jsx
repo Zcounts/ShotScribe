@@ -505,6 +505,24 @@ export default function ScriptTab() {
     return () => window.clearInterval(timer)
   }, [activeSceneId, cloudProjectId, heartbeatPresence, view])
 
+  useEffect(() => {
+    if (!isDesktopDown) {
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+  }, [isDesktopDown])
+
+  useEffect(() => {
+    if (!isDesktopDown) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      setMobileLeftOpen(false)
+      setMobileRightOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDesktopDown])
+
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
@@ -1144,24 +1162,6 @@ export default function ScriptTab() {
 
   const { viewHeight, sceneHeight } = resolveStackHeights()
 
-  useEffect(() => {
-    if (!isDesktopDown) {
-      setMobileLeftOpen(false)
-      setMobileRightOpen(false)
-    }
-  }, [isDesktopDown])
-
-  useEffect(() => {
-    if (!isDesktopDown) return undefined
-    const handleKeyDown = (event) => {
-      if (event.key !== 'Escape') return
-      setMobileLeftOpen(false)
-      setMobileRightOpen(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isDesktopDown])
-
   return (
     <>
       <div className="script-tab-shell" data-compact={isDesktopDown ? 'true' : 'false'} style={{ display: 'flex', height: '100%', position: 'relative' }}>
@@ -1700,30 +1700,30 @@ export default function ScriptTab() {
                         </div>
                         {(inspectorSections.pageStylesTab || 'page') === 'page' ? (
                           <>
-                            <InlineInchField label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
-                            <InlineInchField label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
-                            <InlineInchField label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
-                            <InlineInchField label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
-                            <InlineInchField label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
-                            <InlineInchField label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
+                            <CompactInchField icon="W" label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
+                            <CompactInchField icon="H" label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
+                            <CompactInchField icon="T" label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
+                            <CompactInchField icon="R" label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
+                            <CompactInchField icon="B" label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
+                            <CompactInchField icon="L" label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
                           </>
                         ) : (
                           <>
-                            <InlineInchField label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                            <CompactInchField icon="L" label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
                               ...prev,
                               blockStyles: {
                                 ...prev.blockStyles,
                                 [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
                               },
                             }))} />
-                            <InlineInchField label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                            <CompactInchField icon="R" label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
                               ...prev,
                               blockStyles: {
                                 ...prev.blockStyles,
                                 [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
                               },
                             }))} />
-                            <InlineInchField label="First-line" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                            <CompactInchField icon="1" label="First-line" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
                               ...prev,
                               blockStyles: {
                                 ...prev.blockStyles,
