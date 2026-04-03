@@ -875,7 +875,7 @@ export default function App() {
     },
   }
   const activeConfigure = configureHandlers[activeTab] || configureHandlers.script
-  const showHomeCompactHeaderRows = activeTab === 'home' && isDesktopDown
+  const showCompactHeaderRows = isDesktopDown
 
   const handleEntityDoubleClickCapture = useCallback((event) => {
     const target = event.target
@@ -967,15 +967,16 @@ export default function App() {
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
       <div className="tab-nav" style={{
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: showCompactHeaderRows ? 'column' : 'row',
         flexShrink: 0,
+        alignItems: showCompactHeaderRows ? 'stretch' : 'center',
         borderBottom: '1px solid #3A3A3C',
         backgroundColor: '#1C1C1E',
         paddingLeft: '10px',
         paddingRight: '10px',
-        gap: showHomeCompactHeaderRows ? 0 : 8,
+        gap: showCompactHeaderRows ? 0 : 8,
       }}>
-        {showHomeCompactHeaderRows ? (
+        {showCompactHeaderRows ? (
           <div className="tab-nav-home-controls">
             <button
               type="button"
@@ -1019,7 +1020,7 @@ export default function App() {
             </button>
           ))}
         </div>
-        {!showHomeCompactHeaderRows ? (
+        {!showCompactHeaderRows ? (
           <div style={{ marginLeft: 'auto', position: 'relative', flexShrink: 0 }}>
             <ConfigureButton onClick={activeConfigure.onToggle} active={activeConfigure.isActive} />
           </div>

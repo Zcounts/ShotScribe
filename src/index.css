@@ -2191,27 +2191,27 @@
       margin-left: auto;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar {
+    .app-shell[data-desktop-down="true"] .toolbar {
       row-gap: 6px;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar-section-left {
+    .app-shell[data-desktop-down="true"] .toolbar-section-left {
       order: 1;
       flex-basis: 100%;
       width: 100%;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar-help-btn {
+    .app-shell[data-desktop-down="true"] .toolbar-help-btn {
       display: none;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar-section-center,
-    .app-shell[data-active-tab="home"] .toolbar-section-right {
+    .app-shell[data-desktop-down="true"] .toolbar-section-center,
+    .app-shell[data-desktop-down="true"] .toolbar-section-right {
       order: 2;
       width: auto;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar-section-center {
+    .app-shell[data-desktop-down="true"] .toolbar-section-center {
       margin-right: 0;
       overflow-x: auto;
       flex: 1 1 auto;
@@ -2219,22 +2219,26 @@
       padding-bottom: 0;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar-section-right {
+    .app-shell[data-desktop-down="true"] .toolbar-section-right {
       margin-left: 0;
       flex: 0 0 auto;
       white-space: nowrap;
     }
 
-    .app-shell[data-active-tab="home"] .tab-nav {
+    .app-shell[data-desktop-down="true"] .tab-nav {
       padding-top: 6px;
       padding-bottom: 4px;
     }
 
-    .app-shell[data-active-tab="home"] .tab-nav-home-controls {
+    .app-shell[data-desktop-down="true"] .tab-nav-home-controls {
       width: 100%;
       border-bottom: 1px solid #3A3A3C;
       padding-bottom: 6px;
       margin-bottom: 4px;
+    }
+
+    .app-shell[data-desktop-down="true"] .ss-left-sidebar-toggle-slot {
+      display: none;
     }
 
     .toolbar-meta,
@@ -2294,22 +2298,22 @@
       border-left-width: 0;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar {
+    .app-shell[data-desktop-down="true"] .toolbar {
       padding: 8px 8px;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar-section-right {
+    .app-shell[data-desktop-down="true"] .toolbar-section-right {
       width: auto;
       justify-content: flex-start;
     }
 
-    .app-shell[data-active-tab="home"] .toolbar-section-center .toolbar-btn,
-    .app-shell[data-active-tab="home"] .toolbar-section-right .toolbar-btn {
+    .app-shell[data-desktop-down="true"] .toolbar-section-center .toolbar-btn,
+    .app-shell[data-desktop-down="true"] .toolbar-section-right .toolbar-btn {
       font-size: 11px;
       padding-inline: 10px;
     }
 
-    .app-shell[data-active-tab="home"] .tab-nav-button {
+    .app-shell[data-desktop-down="true"] .tab-nav-button {
       min-height: 32px;
       padding: 8px 9px;
     }
