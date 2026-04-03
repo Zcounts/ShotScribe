@@ -52,6 +52,7 @@ export default function SaveSyncStatusControl({
   const cloudRepositoryReady = useStore((state) => state.cloudRepositoryReady)
 
   const [open, setOpen] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
   const [openCloudList, setOpenCloudList] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('viewer')
@@ -125,6 +126,7 @@ export default function SaveSyncStatusControl({
 
   useEffect(() => {
     if (!open) return
+    setShowDetails(false)
     const onPointerDown = (event) => {
       if (panelRef.current && !panelRef.current.contains(event.target)) setOpen(false)
     }
@@ -203,17 +205,28 @@ export default function SaveSyncStatusControl({
             <div style={{ fontSize: 12, fontWeight: 700 }}>Save / Sync Status</div>
             <span style={{ fontSize: 10, color: statusTheme.text }}>{modeLabel}</span>
           </div>
-          <div style={{ display: 'grid', gap: 8, fontSize: 11, lineHeight: 1.45 }}>
-            <div><strong>Project mode:</strong> {modeLabel}</div>
-            <div><strong>Cloud environment:</strong> {cloudEnvironmentLabel}</div>
-            <div><strong>Cloud project adapter:</strong> {cloudRepositoryReady ? 'Connected' : 'Not ready yet'}</div>
-            <div><strong>Cloud sign-in:</strong> {signedInForCloud ? 'Signed in' : 'Signed out'}</div>
-            <div><strong>Current status:</strong> {currentStatus}</div>
-            <div><strong>Latest result:</strong> {latestResult}</div>
-            <div><strong>Collaboration:</strong> {members.length > 1 ? `Shared (${members.length} members)` : (isCloudProject ? 'Solo cloud project' : 'Collaboration off')}</div>
-            {isCloudProject ? (<div><strong>Live activity:</strong> {activeCollaborators} active · {sceneLockCount} scene lock{sceneLockCount === 1 ? '' : 's'}</div>) : null}
-            {saveSyncState?.error ? (<div style={{ color: '#FCA5A5' }}><strong>Last error:</strong> {saveSyncState.error}</div>) : null}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowDetails((prev) => !prev)}
+            aria-expanded={showDetails}
+            aria-controls="save-sync-status-details"
+            style={{ border: '1px solid rgba(148,163,184,0.35)', background: 'rgba(15,23,42,0.46)', color: '#CBD5E1', borderRadius: 6, fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}
+          >
+            {showDetails ? 'Hide details' : 'Show details'}
+          </button>
+          {showDetails ? (
+            <div id="save-sync-status-details" style={{ display: 'grid', gap: 8, fontSize: 11, lineHeight: 1.45, marginTop: 10 }}>
+              <div><strong>Project mode:</strong> {modeLabel}</div>
+              <div><strong>Cloud environment:</strong> {cloudEnvironmentLabel}</div>
+              <div><strong>Cloud project adapter:</strong> {cloudRepositoryReady ? 'Connected' : 'Not ready yet'}</div>
+              <div><strong>Cloud sign-in:</strong> {signedInForCloud ? 'Signed in' : 'Signed out'}</div>
+              <div><strong>Current status:</strong> {currentStatus}</div>
+              <div><strong>Latest result:</strong> {latestResult}</div>
+              <div><strong>Collaboration:</strong> {members.length > 1 ? `Shared (${members.length} members)` : (isCloudProject ? 'Solo cloud project' : 'Collaboration off')}</div>
+              {isCloudProject ? (<div><strong>Live activity:</strong> {activeCollaborators} active · {sceneLockCount} scene lock{sceneLockCount === 1 ? '' : 's'}</div>) : null}
+              {saveSyncState?.error ? (<div style={{ color: '#FCA5A5' }}><strong>Last error:</strong> {saveSyncState.error}</div>) : null}
+            </div>
+          ) : null}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 11, flexWrap: 'wrap' }}>
             {!isCloudProject ? (

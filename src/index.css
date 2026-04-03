@@ -236,6 +236,26 @@
     padding: 0 10px 10px;
   }
 
+  .ss-left-sidebar:not(.ss-left-sidebar-mobile).storyboard-outline-sidebar .ss-left-sidebar-scroll {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: 10px;
+  }
+
+  .ss-left-sidebar:not(.ss-left-sidebar-mobile).storyboard-outline-sidebar .storyboard-outline-body {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .ss-left-sidebar:not(.ss-left-sidebar-mobile).storyboard-outline-sidebar .storyboard-outline-item-label {
+    color: var(--ss-left-sidebar-text);
+  }
+
+  .ss-left-sidebar:not(.ss-left-sidebar-mobile).storyboard-outline-sidebar .storyboard-outline-item-subtitle {
+    color: #9aa9c2;
+  }
+
   .ss-left-sidebar-footer {
     margin-top: auto;
     padding-bottom: 12px;
