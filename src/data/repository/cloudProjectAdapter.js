@@ -36,14 +36,27 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
       conflictStrategy = 'last_write_wins',
     }) {
       const safePayload = buildConvexSafeSnapshotPayload(payload)
-      const result = await runMutation('projectSnapshots:createSnapshot', {
-        projectId,
-        createdByUserId,
-        source,
-        payload: safePayload,
-        conflictStrategy,
-        ...(expectedLatestSnapshotId ? { expectedLatestSnapshotId } : {}),
-      })
+      let result
+      try {
+        result = await runMutation('projectSnapshots:createSnapshot', {
+          projectId,
+          createdByUserId,
+          source,
+          payload: safePayload,
+          conflictStrategy,
+          ...(expectedLatestSnapshotId ? { expectedLatestSnapshotId } : {}),
+        })
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.error('[cloud-backup] createSnapshot mutation failed', {
+            projectId,
+            source,
+            message: error?.message || 'unknown_error',
+          })
+        }
+        throw error
+      }
       if (!result?.ok) {
         return {
           id: null,

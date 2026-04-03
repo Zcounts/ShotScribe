@@ -100,9 +100,25 @@ export const listProjectsForCurrentUser = query({
       deduped.set(String(project._id), project)
     }
 
-    return Array.from(deduped.values())
+    const candidates = Array.from(deduped.values())
       .filter((project: any) => !project.pendingDeleteAt && !project.deleteAfter)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
+
+    const usableProjects = await Promise.all(candidates.map(async (project: any) => {
+      if (project.latestSnapshotId) {
+        const latestSnapshot = await ctx.db.get(project.latestSnapshotId)
+        if (latestSnapshot?.payload) return project
+      }
+      const fallbackSnapshots = await ctx.db
+        .query('projectSnapshots')
+        .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', project._id))
+        .order('desc')
+        .take(1)
+      return fallbackSnapshots[0]?.payload ? project : null
+    }))
+
+    return usableProjects
+      .filter(Boolean)
+      .sort((a: any, b: any) => b.updatedAt - a.updatedAt)
   },
 })
 

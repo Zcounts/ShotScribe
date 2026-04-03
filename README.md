@@ -226,7 +226,8 @@ npm run build
 - Unsaved-change exit guards fire only while local persistence is genuinely pending; they do not block when cloud sync is merely queued.
 - Home sidebar (web app) switches from local recents to a cloud project list for signed-in paid users, sorted by latest project update.
 - Cloud project deletion is a 24-hour reversible pending state first (`pendingDeleteAt`/`deleteAfter`), then hard-deleted by scheduled Convex reconciliation along with linked cloud project records/assets.
-- Cloud snapshot payloads are normalized before Convex writes (undefined/non-serializable values stripped and duplicate thumbnail fields de-duplicated) to keep local→cloud backup enablement reliable for populated projects.
+- Cloud snapshot payloads are normalized before Convex writes through one shared transformer (undefined/non-serializable values stripped, duplicate thumbnail fields de-duplicated, and inline `data:`/`blob:`/`file:` image payloads removed so cloud snapshots only store references). This prevents failed first snapshots and zero-snapshot cloud stubs when enabling backup from populated local projects.
+- Cloud project lists now hide malformed legacy projects that have no usable snapshot history, so broken historical stubs are not shown as openable projects.
 - Full implementation detail + manual QA checklist: `docs/save-sync-architecture.md`.
 
 ## Mobile companion modes (April 2026 update)
