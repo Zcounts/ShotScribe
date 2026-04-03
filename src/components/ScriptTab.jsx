@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
+import { Pilcrow, Ruler, Settings2 } from 'lucide-react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
@@ -130,10 +131,13 @@ function readStoredObject(key, fallback) {
   }
 }
 
-function InlineInchField({ label, valuePx, onChangePx, min = 0, max = null }) {
+function CompactInchField({ icon, label, valuePx, onChangePx, min = 0, max = null }) {
   return (
-    <label style={{ display: 'grid', gridTemplateColumns: '1fr 74px', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
-      <span>{label}</span>
+    <label className="script-compact-inch-field">
+      <span className="script-compact-inch-label">
+        <span className="script-compact-inch-icon" aria-hidden="true">{icon}</span>
+        {label}
+      </span>
       <input
         className="ss-input"
         type="number"
@@ -142,7 +146,6 @@ function InlineInchField({ label, valuePx, onChangePx, min = 0, max = null }) {
         max={max != null ? pxToInches(max) : undefined}
         value={pxToInches(valuePx)}
         onChange={(event) => onChangePx(inchesToPx(event.target.value))}
-        style={{ width: '100%', padding: '4px 6px', fontSize: 12 }}
       />
     </label>
   )
@@ -360,7 +363,6 @@ export default function ScriptTab() {
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const projectRef = useStore(s => s.projectRef)
   const getProjectData = useStore(s => s.getProjectData)
-  const loadProject = useStore(s => s.loadProject)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
@@ -368,7 +370,6 @@ export default function ScriptTab() {
   const cloudUser = useQuery('users:currentUser')
   const presenceRows = useQuery('presence:listProjectPresence', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
   const locks = useQuery('screenplayLocks:listProjectLocks', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
-  const snapshotHistory = useQuery('projectSnapshots:listSnapshotsForProject', cloudProjectId ? { projectId: cloudProjectId, limit: 8 } : 'skip')
   const heartbeatPresence = useMutation('presence:heartbeat')
   const acquireSceneLock = useMutation('screenplayLocks:acquireSceneLock')
   const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
@@ -396,12 +397,11 @@ export default function ScriptTab() {
   const [overlayFragmentsByBlock, setOverlayFragmentsByBlock] = useState({})
   const [inspectorSections, setInspectorSections] = useState(() => readStoredObject(SIDEBAR_STORAGE_KEYS.inspectorSections, {
     scriptEstimation: true,
-    scenePagination: true,
     paginationMode: true,
     writeOptions: true,
-    pageSetup: true,
-    elementStyles: true,
+    formatInspector: true,
   }))
+  const [formatInspectorMode, setFormatInspectorMode] = useState('all')
 
   const documentScrollerRef = useRef(null)
   const pageCanvasRef = useRef(null)
@@ -870,15 +870,6 @@ export default function ScriptTab() {
       setIsSavingSnapshot(false)
     }
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
-
-  const handleRestoreSnapshot = useCallback((snapshot) => {
-    if (!snapshot?.payload) return
-    loadProject(snapshot.payload)
-    if (projectRef?.type === 'cloud') {
-      setCloudSnapshotId(String(snapshot._id))
-    }
-    setCollabNotice(`Restored snapshot from ${new Date(snapshot.createdAt).toLocaleString()}.`)
-  }, [loadProject, projectRef?.type, setCloudSnapshotId])
 
   const resolveStackHeights = useCallback(() => {
     const stackHeight = sidebarStackRef.current?.clientHeight || 0
@@ -1527,11 +1518,9 @@ export default function ScriptTab() {
             ) : null}
             {[
               { id: 'scriptEstimation', title: 'Script & Estimation' },
-              { id: 'scenePagination', title: 'Scene Pagination' },
               { id: 'paginationMode', title: 'Pagination Mode' },
               { id: 'writeOptions', title: 'Write panel options' },
-              { id: 'pageSetup', title: 'Page Setup' },
-              { id: 'elementStyles', title: 'Element Styles' },
+              { id: 'formatInspector', title: 'Page & Styles' },
             ].map(section => (
               <section key={section.id} className="ss-module script-inspector-section">
                 <button
@@ -1565,30 +1554,6 @@ export default function ScriptTab() {
                         </div>
                       </>
                     )}
-                    {section.id === 'scenePagination' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <button
-                          onClick={() => setScriptSettings({ scenePaginationMode: SCENE_PAGINATION_MODES.CONTINUE })}
-                          className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
-                            (scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE) === SCENE_PAGINATION_MODES.CONTINUE
-                              ? 'bg-blue-600/20 border-blue-400 text-slate-700'
-                              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                          }`}
-                        >
-                          Continue naturally <span style={{ fontSize: 11, color: '#64748b' }}>· Standard screenplay flow</span>
-                        </button>
-                        <button
-                          onClick={() => setScriptSettings({ scenePaginationMode: SCENE_PAGINATION_MODES.NEW_PAGE })}
-                          className={`w-full text-left px-3 py-2 text-sm rounded border transition-colors ${
-                            (scriptSettings?.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE) === SCENE_PAGINATION_MODES.NEW_PAGE
-                              ? 'bg-blue-600/20 border-blue-400 text-slate-700'
-                              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                          }`}
-                        >
-                          Start each scene on a new page <span style={{ fontSize: 11, color: '#64748b' }}>· Planning view mode</span>
-                        </button>
-                      </div>
-                    )}
                     {section.id === 'paginationMode' && (
                       <select
                         className="ss-input"
@@ -1612,40 +1577,82 @@ export default function ScriptTab() {
                         </label>
                       </>
                     )}
-                    {section.id === 'pageSetup' && (
-                      <>
-                        <InlineInchField label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
-                        <InlineInchField label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
-                        <InlineInchField label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
-                        <InlineInchField label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
-                        <InlineInchField label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
-                        <InlineInchField label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
-                      </>
-                    )}
-                    {section.id === 'elementStyles' && (
-                      <>
-                        <InlineInchField label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                          ...prev,
-                          blockStyles: {
-                            ...prev.blockStyles,
-                            [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
-                          },
-                        }))} />
-                        <InlineInchField label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                          ...prev,
-                          blockStyles: {
-                            ...prev.blockStyles,
-                            [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
-                          },
-                        }))} />
-                        <InlineInchField label="First-line" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                          ...prev,
-                          blockStyles: {
-                            ...prev.blockStyles,
-                            [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
-                          },
-                        }))} />
-                      </>
+                    {section.id === 'formatInspector' && (
+                      <div className="script-format-inspector">
+                        <div className="script-format-mode-switch" role="tablist" aria-label="Page and style inspector modes">
+                          {[
+                            { id: 'all', label: 'All', icon: Settings2 },
+                            { id: 'page', label: 'Page', icon: Ruler },
+                            { id: 'paragraph', label: 'Paragraph', icon: Pilcrow },
+                          ].map((mode) => {
+                            const Icon = mode.icon
+                            const isActive = formatInspectorMode === mode.id
+                            return (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                className={`script-format-mode-btn ${isActive ? 'is-active' : ''}`}
+                                onClick={() => setFormatInspectorMode(mode.id)}
+                                title={mode.label}
+                              >
+                                <Icon size={14} strokeWidth={2} />
+                                <span>{mode.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {(formatInspectorMode === 'all' || formatInspectorMode === 'page') && (
+                          <div className="script-format-group">
+                            <div className="script-format-group-label">
+                              <Ruler size={13} />
+                              <span>Page Setup</span>
+                            </div>
+                            <div className="script-format-grid">
+                              <CompactInchField icon="W" label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
+                              <CompactInchField icon="H" label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
+                              <CompactInchField icon="T" label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
+                              <CompactInchField icon="R" label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
+                              <CompactInchField icon="B" label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
+                              <CompactInchField icon="L" label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
+                            </div>
+                          </div>
+                        )}
+
+                        {(formatInspectorMode === 'all' || formatInspectorMode === 'paragraph') && (
+                          <div className="script-format-group">
+                            <div className="script-format-group-label">
+                              <Pilcrow size={13} />
+                              <span>Element Styles · {BLOCK_TYPE_OPTIONS.find(option => option.value === selectedStyleType)?.label || selectedStyleType}</span>
+                            </div>
+                            <div className="script-format-grid">
+                              <CompactInchField label="Left indent" icon="L" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                                ...prev,
+                                blockStyles: {
+                                  ...prev.blockStyles,
+                                  [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
+                                },
+                              }))} />
+                              <CompactInchField label="Right indent" icon="R" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                                ...prev,
+                                blockStyles: {
+                                  ...prev.blockStyles,
+                                  [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
+                                },
+                              }))} />
+                              <CompactInchField label="First-line" icon="1" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                                ...prev,
+                                blockStyles: {
+                                  ...prev.blockStyles,
+                                  [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
+                                },
+                              }))} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1667,34 +1674,6 @@ export default function ScriptTab() {
                 <button className="ss-btn secondary" onClick={() => setShowImportModal(true)} style={{ width: '100%', marginTop: 8 }}>+ Import Script</button>
               </div>
             </section>
-            {cloudProjectId && (
-              <section className="ss-module script-inspector-section">
-                <div className="ss-module-header script-inspector-header" style={{ width: '100%', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
-                  Presence & Snapshot History
-                </div>
-                <div style={{ padding: 10 }}>
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-                    Active collaborators: {activePresence.length}
-                  </div>
-                  {(activePresence || []).slice(0, 5).map((row) => (
-                    <div key={row._id} style={{ fontSize: 11, color: '#334155', marginBottom: 4 }}>
-                      {(row.userName || row.userEmail || 'Collaborator')} · {row.mode}{row.sceneId ? ` · ${row.sceneId}` : ''}
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', marginBottom: 4 }}>Recent snapshots</div>
-                  {(snapshotHistory || []).map((snapshot) => (
-                    <button
-                      key={snapshot._id}
-                      className="toolbar-btn"
-                      onClick={() => handleRestoreSnapshot(snapshot)}
-                      style={{ width: '100%', marginBottom: 6, textAlign: 'left' }}
-                    >
-                      {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.source}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
         </div>
       </div>
