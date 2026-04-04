@@ -1292,7 +1292,6 @@ export default function ShotlistTab({
   }, [visibleColumns])
 
   const c = {
-    pageBg:      '#F5F2EC',
     tableBg:     '#FAF8F4',
     rowAlt:      '#F1ECE2',
     headerBg:    '#2C2C2E',
@@ -1424,6 +1423,7 @@ export default function ShotlistTab({
 
   return (
     <div
+      className="canvas-texture"
       ref={el => {
         scrollerRef.current = el
         if (containerRef) containerRef.current = el
@@ -1434,7 +1434,7 @@ export default function ShotlistTab({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        background: c.pageBg,
+        background: 'transparent',
       }}
     >
 
@@ -1455,7 +1455,7 @@ export default function ShotlistTab({
         justifyContent: 'flex-end',
         padding: '5px 16px',
         borderBottom: `1px solid ${c.thickBorder}`,
-        backgroundColor: c.pageBg,
+        backgroundColor: 'transparent',
         position: 'relative',
         zIndex: 20,
         flexShrink: 0,
