@@ -864,7 +864,7 @@ export default function App() {
     script: {
       isActive: false,
       onToggle: () => {
-        window.dispatchEvent(new CustomEvent('shotscribe:close-script-right-sidebar'))
+        window.dispatchEvent(new CustomEvent('shotscribe:toggle-script-right-sidebar'))
         setStoryboardConfigOpen(false)
       },
     },

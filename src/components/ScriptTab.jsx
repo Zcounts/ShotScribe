@@ -416,6 +416,7 @@ export default function ScriptTab() {
   const { isDesktopDown } = useResponsiveViewport()
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false)
   const [mobileRightOpen, setMobileRightOpen] = useState(false)
+  const [desktopRightOpen, setDesktopRightOpen] = useState(true)
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const [collabNotice, setCollabNotice] = useState('')
   const [isSavingSnapshot, setIsSavingSnapshot] = useState(false)
@@ -542,12 +543,16 @@ export default function ScriptTab() {
   }, [isDesktopDown])
 
   useEffect(() => {
-    const handleCloseRightSidebar = () => {
-      setMobileRightOpen(false)
+    const handleToggleRightSidebar = () => {
+      if (isDesktopDown) {
+        setMobileRightOpen(value => !value)
+        return
+      }
+      setDesktopRightOpen(value => !value)
     }
-    window.addEventListener('shotscribe:close-script-right-sidebar', handleCloseRightSidebar)
-    return () => window.removeEventListener('shotscribe:close-script-right-sidebar', handleCloseRightSidebar)
-  }, [])
+    window.addEventListener('shotscribe:toggle-script-right-sidebar', handleToggleRightSidebar)
+    return () => window.removeEventListener('shotscribe:toggle-script-right-sidebar', handleToggleRightSidebar)
+  }, [isDesktopDown])
 
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
@@ -1590,7 +1595,8 @@ export default function ScriptTab() {
             </div>
           </div>
 
-          <div className={`script-sidebar script-sidebar-right ${isDesktopDown ? 'script-sidebar-mobile-right' : ''} ${mobileRightOpen ? 'is-mobile-open' : ''}`}>
+          {(isDesktopDown ? mobileRightOpen : desktopRightOpen) ? (
+            <div className={`script-sidebar script-sidebar-right ${isDesktopDown ? 'script-sidebar-mobile-right' : ''} ${mobileRightOpen ? 'is-mobile-open' : ''}`}>
             {isDesktopDown ? (
               <div className="script-sidebar-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Inspector</div>
@@ -1809,7 +1815,8 @@ export default function ScriptTab() {
                 <button className="ss-btn secondary" onClick={() => setShowImportModal(true)} style={{ width: '100%', marginTop: 8 }}>+ Import Script</button>
               </div>
             </section>
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
 

@@ -221,7 +221,7 @@ Avoid:
 ---
 
 ## Script header Configure behavior (Script tab only)
-- In Script tab context, the top-header **Configure** action closes the Script right sidebar/inspector drawer.
+- In Script tab context, the top-header **Configure** action toggles the Script right sidebar/inspector drawer.
 - This behavior is intentionally scoped to Script only and must not change Configure behavior on other tabs.
 - Compact/mobile behavior remains unchanged: the Script right sidebar starts closed by default.
 
