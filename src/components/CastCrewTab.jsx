@@ -140,6 +140,8 @@ export default function CastCrewTab() {
                 onChange={setActiveSubTab}
                 fullWidth
                 minButtonWidth={0}
+                buttonClassName="script-view-btn"
+                buttonStyle={{ borderRadius: 999, padding: '5px 10px', fontSize: 12, minWidth: 56 }}
               />
               <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#8299FF]/70 text-[#EAF0FF] bg-[#5265E0]/32 hover:bg-[#5265E0]/42" onClick={() => openProfile('cast', null)}>
                 + Add Cast
