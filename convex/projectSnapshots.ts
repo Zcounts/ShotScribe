@@ -53,8 +53,17 @@ export const createSnapshot = mutation({
       createdAt: now,
     })
 
+    const payloadProjectName = typeof args.payload?.projectName === 'string'
+      ? args.payload.projectName.trim()
+      : ''
+    const payloadProjectEmoji = typeof args.payload?.projectEmoji === 'string'
+      ? args.payload.projectEmoji.trim()
+      : ''
+
     await ctx.db.patch(args.projectId, {
       latestSnapshotId: snapshotId,
+      ...(payloadProjectName ? { name: payloadProjectName } : {}),
+      ...(payloadProjectEmoji ? { emoji: payloadProjectEmoji } : {}),
       updatedAt: now,
     })
 
