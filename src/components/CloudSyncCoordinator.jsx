@@ -38,7 +38,12 @@ export default function CloudSyncCoordinator() {
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
   const convex = useConvex()
   const createProject = useMutation('projects:createProject')
+  const ensureStoryboardLiveModel = useMutation('projects:ensureStoryboardLiveModel')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
+  const upsertLiveScene = useMutation('projectScenesLive:upsertScene')
+  const deleteLiveScene = useMutation('projectScenesLive:deleteScene')
+  const upsertLiveShot = useMutation('projectShotsLive:upsertShot')
+  const deleteLiveShot = useMutation('projectShotsLive:deleteShot')
   const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
@@ -46,17 +51,29 @@ export default function CloudSyncCoordinator() {
   const getAssetThumbnailBase64 = useAction('assets:getAssetThumbnailBase64')
   const cloudUser = useQuery('users:currentUser')
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
+  const cloudProject = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const liveScenes = useQuery(
+    'projectScenesLive:listScenesByProject',
+    cloudProjectId && Number(cloudProject?.liveModelVersion || 0) >= 1 ? { projectId: cloudProjectId } : 'skip',
+  )
+  const liveShots = useQuery(
+    'projectShotsLive:listShotsByProject',
+    cloudProjectId && Number(cloudProject?.liveModelVersion || 0) >= 1 ? { projectId: cloudProjectId } : 'skip',
+  )
   const latestSnapshot = useQuery(
     'projectSnapshots:getLatestSnapshotForProject',
     cloudProjectId ? { projectId: cloudProjectId } : 'skip',
   )
   const cloudAccessPolicy = useCloudAccessPolicy()
+  const setLiveModelVersion = useStore(s => s.setLiveModelVersion)
+  const applyLiveStoryboardState = useStore(s => s.applyLiveStoryboardState)
 
   // Guard so the sessionStorage restore runs at most once per mount, even if
   // the adapter effect re-fires due to dependency changes.
   const hasAttemptedRestoreRef = useRef(false)
   const localImageBackfillInFlightRef = useRef(false)
   const localImageUploadCacheRef = useRef(new Map())
+  const liveMigrationRequestedRef = useRef(new Set())
 
   useEffect(() => {
     setCloudRepositoryAdapter({
@@ -94,6 +111,47 @@ export default function CloudSyncCoordinator() {
       canSync: isCloudProject && cloudAccessPolicy.canEditCloudProject,
       cloudWritesEnabled: cloudAccessPolicy.canEditCloudProject,
       runSnapshotMutation: createSnapshot,
+      syncLiveStoryboardState: async ({ projectId, scenes, storyboardSceneOrder }) => {
+        const existingScenes = await convex.query('projectScenesLive:listScenesByProject', { projectId })
+        const existingShots = await convex.query('projectShotsLive:listShotsByProject', { projectId })
+        const sceneOrder = Array.isArray(storyboardSceneOrder) && storyboardSceneOrder.length > 0
+          ? storyboardSceneOrder
+          : (scenes || []).map((scene) => scene.id)
+        const orderBySceneId = new Map(sceneOrder.map((id, index) => [String(id), index]))
+
+        for (const scene of (scenes || [])) {
+          const sceneId = String(scene.id)
+          await upsertLiveScene({
+            projectId,
+            sceneId,
+            order: orderBySceneId.has(sceneId) ? orderBySceneId.get(sceneId) : Number.MAX_SAFE_INTEGER,
+            payload: scene,
+          })
+          for (const [index, shot] of (scene.shots || []).entries()) {
+            await upsertLiveShot({
+              projectId,
+              sceneId,
+              shotId: String(shot.id),
+              order: index,
+              payload: shot,
+            })
+          }
+        }
+
+        const nextSceneIds = new Set((scenes || []).map((scene) => String(scene.id)))
+        await Promise.all(
+          (existingScenes || [])
+            .filter((scene) => !nextSceneIds.has(String(scene.sceneId)))
+            .map((scene) => deleteLiveScene({ projectId, sceneId: String(scene.sceneId) })),
+        )
+
+        const nextShotIds = new Set((scenes || []).flatMap((scene) => (scene.shots || []).map((shot) => String(shot.id))))
+        await Promise.all(
+          (existingShots || [])
+            .filter((shot) => !nextShotIds.has(String(shot.shotId)))
+            .map((shot) => deleteLiveShot({ projectId, shotId: String(shot.shotId) })),
+        )
+      },
       currentUserId: cloudUser?.user?._id ? String(cloudUser.user._id) : null,
       collaborationMode: isCloudProject && cloudAccessPolicy.canCollaborateOnCloudProject,
     })
@@ -101,10 +159,36 @@ export default function CloudSyncCoordinator() {
     cloudAccessPolicy.canCollaborateOnCloudProject,
     cloudAccessPolicy.canEditCloudProject,
     cloudUser?.user?._id,
+    convex,
     createSnapshot,
+    deleteLiveScene,
+    deleteLiveShot,
     projectRef?.type,
     setCloudSyncContext,
+    upsertLiveScene,
+    upsertLiveShot,
   ])
+
+  useEffect(() => {
+    if (!cloudProjectId || !cloudProject) return
+    const nextVersion = Number(cloudProject.liveModelVersion || 0)
+    setLiveModelVersion(nextVersion)
+    if (nextVersion >= 1) return
+    if (!cloudAccessPolicy.canEditCloudProject) return
+    const key = String(cloudProjectId)
+    if (liveMigrationRequestedRef.current.has(key)) return
+    liveMigrationRequestedRef.current.add(key)
+    ensureStoryboardLiveModel({ projectId: cloudProjectId }).catch(() => {
+      liveMigrationRequestedRef.current.delete(key)
+    })
+  }, [cloudAccessPolicy.canEditCloudProject, cloudProject, cloudProjectId, ensureStoryboardLiveModel, setLiveModelVersion])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (Number(cloudProject?.liveModelVersion || 0) < 1) return
+    if (!Array.isArray(liveScenes) || !Array.isArray(liveShots)) return
+    applyLiveStoryboardState({ scenes: liveScenes, shots: liveShots })
+  }, [applyLiveStoryboardState, cloudProject?.liveModelVersion, cloudProjectId, liveScenes, liveShots])
 
   useEffect(() => {
     if (projectRef?.type !== 'cloud') return undefined
