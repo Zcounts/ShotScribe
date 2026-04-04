@@ -695,6 +695,30 @@ export const listDueAssetDeletes = internalQuery({
   },
 })
 
+// Fetches an S3-backed asset server-side and returns it as a base64 data URL.
+// This bypasses CORS restrictions that prevent browser-side fetch() of signed
+// S3 GET URLs.  Used by CloudSyncCoordinator to embed image bytes in local
+// .shotlist exports so files remain self-contained without cloud connectivity.
+export const getAssetThumbnailBase64 = action({
+  args: {
+    projectId: v.id('projects'),
+    assetId: v.id('projectAssets'),
+  },
+  handler: async (ctx, args) => {
+    const dbAsset = await ctx.runQuery(internal.assets.getAssetRecordForSignedView, args)
+    if (!dbAsset?.objectKey) return null
+    const signed = await createPresignedReadUrl({ objectKey: dbAsset.objectKey })
+    const resp = await fetch(signed.readUrl)
+    if (!resp.ok) return null
+    const arrayBuffer = await resp.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuffer)
+    // latin1 decode maps each byte to its Unicode code point (0–255), which
+    // btoa then encodes correctly as base64.
+    const latin1 = new TextDecoder('latin1').decode(bytes)
+    return `data:image/webp;base64,${btoa(latin1)}`
+  },
+})
+
 export const runAssetDeleteReconciliation = internalAction({
   args: {
     limit: v.optional(v.number()),

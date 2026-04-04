@@ -3,6 +3,7 @@ import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
+import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
@@ -40,6 +41,7 @@ export default function CloudSyncCoordinator() {
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
   const getAssetSignedView = useAction('assets:getAssetSignedView')
+  const getAssetThumbnailBase64 = useAction('assets:getAssetThumbnailBase64')
   const cloudUser = useQuery('users:currentUser')
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const latestSnapshot = useQuery(
@@ -133,16 +135,8 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     async function uploadSingleShot(projectId, { shotId, sourceRef, meta }) {
       const blob = await resolveInlineImageBlob(sourceRef)
-      const processed = {
-        thumbBlob: blob,
-        fullBlob: blob,
-        mime: blob.type || 'image/webp',
-        thumbDataUrl: sourceRef,
-        meta: {
-          ...(meta || {}),
-          sourceName: meta?.sourceName || `migrated-${shotId}.webp`,
-        },
-      }
+      const file = new File([blob], meta?.sourceName || `migrated-${shotId}.webp`, { type: blob.type || 'image/webp' })
+      const processed = await processStoryboardUploadForCloud(file)
       const uploaded = await uploadStoryboardAssetToCloud({
         projectId,
         processed,
@@ -178,21 +172,11 @@ export default function CloudSyncCoordinator() {
       return
     }
     async function resolveCloudAssetDataUrl(projectId, assetId) {
-      const signedView = await getAssetSignedView({ projectId, assetId })
-      if (!signedView?.thumbUrl) return null
-      const resp = await fetch(signedView.thumbUrl)
-      if (!resp.ok) return null
-      const blob = await resp.blob()
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = () => reject(new Error('FileReader failed'))
-        reader.readAsDataURL(blob)
-      })
+      return getAssetThumbnailBase64({ projectId, assetId })
     }
     setCloudImageResolver(resolveCloudAssetDataUrl)
     return () => setCloudImageResolver(null)
-  }, [cloudProjectId, getAssetSignedView, setCloudImageResolver])
+  }, [cloudProjectId, getAssetThumbnailBase64, setCloudImageResolver])
 
   // ── Reactive local-image backfill (safety net) ─────────────────────────
   // Catches any inline images that were not uploaded during createCloudProjectFromLocal
@@ -228,16 +212,8 @@ export default function CloudSyncCoordinator() {
           let payload = localImageUploadCacheRef.current.get(shot.sourceRef) || null
           if (!payload) {
             const blob = await resolveInlineImageBlob(shot.sourceRef)
-            const processed = {
-              thumbBlob: blob,
-              fullBlob: blob,
-              mime: blob.type || 'image/webp',
-              thumbDataUrl: shot.sourceRef,
-              meta: {
-                ...(shot.meta || {}),
-                sourceName: shot?.meta?.sourceName || `migrated-${shot.shotId}.webp`,
-              },
-            }
+            const file = new File([blob], shot?.meta?.sourceName || `migrated-${shot.shotId}.webp`, { type: blob.type || 'image/webp' })
+            const processed = await processStoryboardUploadForCloud(file)
             const uploaded = await uploadStoryboardAssetToCloud({
               projectId: cloudProjectId,
               processed,
