@@ -273,6 +273,29 @@ export function getSceneScreenplayElements(scene) {
   return parseScreenplayText(scene?.screenplayText || scene?.actionText || '')
 }
 
+/**
+ * Split screenplay elements into scene chunks whenever a heading appears.
+ * Falls back to a single chunk when no heading exists to avoid destructive
+ * behavior for loose/manual text.
+ */
+export function splitScreenplayElementsIntoSceneChunks(elements = []) {
+  const normalized = ensureEditableScreenplayElements(elements)
+  const chunks = []
+  let current = []
+
+  normalized.forEach((element) => {
+    const isHeading = element?.type === 'heading' && String(element?.text || '').trim().length > 0
+    if (isHeading && current.length > 0) {
+      chunks.push(current)
+      current = []
+    }
+    current.push(element)
+  })
+
+  if (current.length > 0) chunks.push(current)
+  return chunks.length > 0 ? chunks : [normalized]
+}
+
 export function estimateScreenplayPagination(scenes = [], options = {}) {
   const scenePaginationMode = options.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE
   let totalLineUnits = 0
