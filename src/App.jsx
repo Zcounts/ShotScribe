@@ -1038,7 +1038,7 @@ export default function App() {
           className="flex-1 overflow-auto canvas-texture"
           onScroll={handleStoryboardScroll}
         >
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', minHeight: '100%', paddingTop: 0, paddingRight: 14, paddingBottom: 14, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', minHeight: '100%', paddingTop: 0, paddingRight: 14, paddingBottom: 14, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
             {showStoryboardOutline && (
               <div
                 style={isDesktopDown
