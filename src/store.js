@@ -598,6 +598,7 @@ const useStore = create((set, get) => ({
   projectPath: null,
   browserProjectId: null,
   projectRef: { type: 'local', path: null, browserProjectId: null },
+  cloudLineage: null, // { originProjectId, lastKnownSnapshotId }
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
   projectLogline: '',
@@ -2290,6 +2291,7 @@ const useStore = create((set, get) => ({
       storyboardDisplayConfig,
       castCrewDisplayConfig,
       tabViewState,
+      cloudLineage,
     } = get()
     const payload = {
       version: 2,
@@ -2325,6 +2327,12 @@ const useStore = create((set, get) => ({
       storyboardSceneOrder: normalizeStoryboardSceneOrder(storyboardSceneOrder, scenes),
       storyboardDisplayConfig: normalizeStoryboardDisplayConfig(storyboardDisplayConfig),
       castCrewDisplayConfig: normalizeCastCrewDisplayConfig(castCrewDisplayConfig),
+      cloudLineage: (cloudLineage?.originProjectId
+        ? {
+            originProjectId: String(cloudLineage.originProjectId),
+            lastKnownSnapshotId: cloudLineage.lastKnownSnapshotId ? String(cloudLineage.lastKnownSnapshotId) : null,
+          }
+        : null),
       // Scenes and shots are reconstructed field-by-field so that any
       // non-serializable value that accidentally landed in state (e.g. a DOM
       // event object spread via an overrides parameter) is stripped before
@@ -2626,6 +2634,12 @@ const useStore = create((set, get) => ({
       projectName, projectEmoji, projectLogline, projectHeroImage, projectHeroOverlayColor, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns,
     } = data
+    const loadedCloudLineage = (typeof data.cloudLineage === 'object' && data.cloudLineage?.originProjectId)
+      ? {
+          originProjectId: String(data.cloudLineage.originProjectId),
+          lastKnownSnapshotId: data.cloudLineage.lastKnownSnapshotId ? String(data.cloudLineage.lastKnownSnapshotId) : null,
+        }
+      : null
 
     const loadedCustomColumns = data.customColumns || []
     const loadedCustomDropdownOptions = data.customDropdownOptions || {}
@@ -2921,6 +2935,7 @@ const useStore = create((set, get) => ({
         status: 'saved_locally',
         message: 'Saved locally on this device',
       }),
+      cloudLineage: loadedCloudLineage,
       browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
       projectRef: {
         type: 'local',
@@ -3095,6 +3110,7 @@ const useStore = create((set, get) => ({
       projectPath: null,
       browserProjectId,
       projectRef: { type: 'local', path: null, browserProjectId },
+      cloudLineage: null,
       lastSaved: null,
       hasUnsavedChanges: false,
       saveSyncState: buildSyncState({
@@ -3173,12 +3189,37 @@ const useStore = create((set, get) => ({
       throw new Error('Cloud image migration is not ready yet. Please wait a moment and try again.')
     }
 
-    const cloudProject = await cloudRepository.createProject({
-      ownerUserId,
-      name: payload.projectName || get().projectName || 'Untitled Shotlist',
-      emoji: payload.projectEmoji || get().projectEmoji || '🎬',
-    })
-    devCloudBackupLog('local_conversion:project_created', { projectId: cloudProject.id })
+    const lineageProjectId = payload?.cloudLineage?.originProjectId
+      || get().cloudLineage?.originProjectId
+      || null
+
+    let cloudProject = null
+    let createdProject = false
+    if (lineageProjectId) {
+      try {
+        const existingProject = await cloudRepository.getProject(lineageProjectId)
+        if (existingProject) {
+          cloudProject = existingProject
+          devCloudBackupLog('local_conversion:reconnected_project', { projectId: cloudProject.id })
+        }
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn('[cloud-backup] cloud lineage project lookup failed; creating new cloud project', {
+            projectId: lineageProjectId,
+            message: error?.message || 'unknown_error',
+          })
+        }
+      }
+    }
+    if (!cloudProject) {
+      cloudProject = await cloudRepository.createProject({
+        ownerUserId,
+        name: payload.projectName || get().projectName || 'Untitled Shotlist',
+        emoji: payload.projectEmoji || get().projectEmoji || '🎬',
+      })
+      createdProject = true
+      devCloudBackupLog('local_conversion:project_created', { projectId: cloudProject.id })
+    }
 
     let snapshot
     try {
@@ -3234,7 +3275,7 @@ const useStore = create((set, get) => ({
         throw new Error(snapshot?.conflict ? 'Cloud snapshot conflicted before first version was committed.' : 'Cloud snapshot was not created.')
       }
     } catch (error) {
-      if (cloudRepository?.deleteProjectIfSnapshotless) {
+      if (createdProject && cloudRepository?.deleteProjectIfSnapshotless) {
         try {
           const cleanupResult = await cloudRepository.deleteProjectIfSnapshotless(cloudProject.id)
           devCloudBackupLog('local_conversion:cleanup_result', {
@@ -3272,6 +3313,10 @@ const useStore = create((set, get) => ({
         type: 'cloud',
         projectId: cloudProject.id,
         snapshotId: snapshot.id,
+      },
+      cloudLineage: {
+        originProjectId: cloudProject.id,
+        lastKnownSnapshotId: snapshot.id,
       },
       saveSyncState: buildSyncState({
         mode: 'cloud_solo',
@@ -3322,6 +3367,10 @@ const useStore = create((set, get) => ({
         projectId,
         snapshotId: snapshot.id,
       },
+      cloudLineage: {
+        originProjectId: projectId,
+        lastKnownSnapshotId: snapshot.id,
+      },
       hasUnsavedChanges: false,
       lastSaved: new Date().toISOString(),
       saveSyncState: buildSyncState({
@@ -3340,12 +3389,18 @@ const useStore = create((set, get) => ({
     set((state) => {
       if (state.projectRef?.type !== 'cloud') return state
       return {
-        projectRef: {
-          ...state.projectRef,
-          snapshotId: snapshotId || null,
-        },
-      }
-    })
+      projectRef: {
+        ...state.projectRef,
+        snapshotId: snapshotId || null,
+      },
+      cloudLineage: state.cloudLineage?.originProjectId
+        ? {
+            ...state.cloudLineage,
+            lastKnownSnapshotId: snapshotId || null,
+          }
+        : state.cloudLineage,
+    }
+  })
   },
 
   applyIncomingCloudSnapshot: ({ projectId, snapshotId, payload }) => {
@@ -3377,6 +3432,12 @@ const useStore = create((set, get) => ({
       // { type: 'local' }, so the old "check latestState.type === 'cloud'"
       // guard always evaluated to false and left projectRef as local.
       projectRef: { ...preservedProjectRef, snapshotId },
+      cloudLineage: latestState.cloudLineage?.originProjectId
+        ? {
+            ...latestState.cloudLineage,
+            lastKnownSnapshotId: snapshotId,
+          }
+        : latestState.cloudLineage,
       // Stay on whichever tab the user was on; never kick them back to Script.
       activeTab: preservedActiveTab,
       hasUnsavedChanges: false,
@@ -3407,6 +3468,12 @@ const useStore = create((set, get) => ({
         path: platformService.isDesktop() ? state.projectPath : null,
         browserProjectId: state.browserProjectId || null,
       },
+      cloudLineage: state.cloudLineage?.originProjectId
+        ? {
+            ...state.cloudLineage,
+            lastKnownSnapshotId: state.projectRef?.snapshotId || state.cloudLineage.lastKnownSnapshotId || null,
+          }
+        : state.cloudLineage,
       _cloudSyncTimeout: null,
       _cloudSyncInFlight: false,
       saveSyncState: buildSyncState({
@@ -3556,6 +3623,12 @@ const useStore = create((set, get) => ({
         projectRef: nextState.projectRef?.type === 'cloud'
           ? { ...nextState.projectRef, snapshotId: String(result.snapshotId) }
           : nextState.projectRef,
+        cloudLineage: nextState.cloudLineage?.originProjectId
+          ? {
+              ...nextState.cloudLineage,
+              lastKnownSnapshotId: String(result.snapshotId),
+            }
+          : nextState.cloudLineage,
         saveSyncState: buildSyncState({
           mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
           status: 'synced_to_cloud',
