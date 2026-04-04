@@ -1190,10 +1190,11 @@ export default function ScriptTab() {
                 </button>
               ) : null}
             </div>
-            <div className="schedule-view-switcher">
+            <div className="schedule-view-switcher" role="group" aria-label="Script mode">
               {VIEW_OPTIONS.map(option => (
                 <button
                   key={option.id}
+                  type="button"
                   onClick={() => {
                     if (option.id === 'write' && cloudProjectId && !cloudAccessPolicy.canEditCloudProject) {
                       setCollabNotice('Write mode is disabled while this cloud project is read-only due to inactive billing.')
