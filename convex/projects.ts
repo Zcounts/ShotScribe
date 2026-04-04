@@ -10,6 +10,101 @@ import { internal } from './_generated/api'
 
 const PROJECT_DELETE_RETENTION_MS = 24 * 60 * 60 * 1000
 
+function summarizeStoryboardPayloadShape(payload: any) {
+  const hasPayload = !!payload && typeof payload === 'object'
+  const hasScenesArray = Array.isArray(payload?.scenes)
+  const hasShotsArray = Array.isArray(payload?.shots)
+  const hasStoryboardObject = !!payload?.storyboard && typeof payload.storyboard === 'object'
+  const hasStoryboardScenesArray = Array.isArray(payload?.storyboard?.scenes)
+  const hasStoryboardShotsArray = Array.isArray(payload?.storyboard?.shots)
+  return {
+    hasPayload,
+    hasScenesArray,
+    scenesCount: hasScenesArray ? payload.scenes.length : 0,
+    hasShotsArray,
+    shotsCount: hasShotsArray ? payload.shots.length : 0,
+    hasStoryboardObject,
+    hasStoryboardScenesArray,
+    storyboardScenesCount: hasStoryboardScenesArray ? payload.storyboard.scenes.length : 0,
+    hasStoryboardShotsArray,
+    storyboardShotsCount: hasStoryboardShotsArray ? payload.storyboard.shots.length : 0,
+  }
+}
+
+function normalizeLegacyScene(scene: any, index: number) {
+  const sceneId = String(scene?.id || scene?.sceneId || `scene_${index + 1}`)
+  return {
+    id: sceneId,
+    sceneLabel: String(scene?.sceneLabel || scene?.sceneNumber || `SCENE ${index + 1}`),
+    slugline: scene?.slugline || '',
+    location: scene?.location || '',
+    intOrExt: scene?.intOrExt || scene?.intExt || '',
+    dayNight: scene?.dayNight || '',
+    color: scene?.color || null,
+    linkedScriptSceneId: scene?.linkedScriptSceneId || null,
+    pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes : [''],
+    pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors : [],
+    shots: Array.isArray(scene?.shots) ? scene.shots : [],
+  }
+}
+
+function resolveStoryboardScenesForMigration(payload: any) {
+  if (Array.isArray(payload?.scenes)) {
+    return {
+      source: 'payload.scenes',
+      scenes: payload.scenes.map((scene: any, index: number) => normalizeLegacyScene(scene, index)),
+    }
+  }
+
+  if (Array.isArray(payload?.storyboard?.scenes)) {
+    return {
+      source: 'payload.storyboard.scenes',
+      scenes: payload.storyboard.scenes.map((scene: any, index: number) => normalizeLegacyScene(scene, index)),
+    }
+  }
+
+  if (Array.isArray(payload?.shots)) {
+    return {
+      source: 'payload.shots',
+      scenes: [normalizeLegacyScene({
+        id: payload?.sceneId || 'scene_1',
+        sceneLabel: payload?.sceneLabel || 'SCENE 1',
+        slugline: payload?.slugline || '',
+        location: payload?.location || '',
+        intOrExt: payload?.intOrExt || payload?.intExt || '',
+        dayNight: payload?.dayNight || '',
+        color: payload?.color || null,
+        pageNotes: payload?.pageNotes,
+        pageColors: payload?.pageColors,
+        shots: payload.shots,
+      }, 0)],
+    }
+  }
+
+  if (Array.isArray(payload?.storyboard?.shots)) {
+    return {
+      source: 'payload.storyboard.shots',
+      scenes: [normalizeLegacyScene({
+        id: payload?.storyboard?.sceneId || 'scene_1',
+        sceneLabel: payload?.storyboard?.sceneLabel || 'SCENE 1',
+        slugline: payload?.storyboard?.slugline || '',
+        location: payload?.storyboard?.location || '',
+        intOrExt: payload?.storyboard?.intOrExt || payload?.storyboard?.intExt || '',
+        dayNight: payload?.storyboard?.dayNight || '',
+        color: payload?.storyboard?.color || null,
+        pageNotes: payload?.storyboard?.pageNotes,
+        pageColors: payload?.storyboard?.pageColors,
+        shots: payload.storyboard.shots,
+      }, 0)],
+    }
+  }
+
+  return {
+    source: 'none',
+    scenes: [],
+  }
+}
+
 export const createProject = mutation({
   args: {
     ownerUserId: v.id('users'),
@@ -76,91 +171,129 @@ export const ensureStoryboardLiveModel = mutation({
     }
 
     const snapshot = project.latestSnapshotId ? await ctx.db.get(project.latestSnapshotId) : null
-    if (!snapshot?.payload?.scenes || !Array.isArray(snapshot.payload.scenes)) {
+    const payloadShape = summarizeStoryboardPayloadShape(snapshot?.payload)
+    const normalizedStoryboard = resolveStoryboardScenesForMigration(snapshot?.payload)
+
+    if (!Array.isArray(normalizedStoryboard.scenes) || normalizedStoryboard.scenes.length === 0) {
+      await writeOperationalEvent(ctx, {
+        level: 'warn',
+        event: 'project.storyboard_live_model.ensure_invalid_payload',
+        details: {
+          projectId: String(args.projectId),
+          liveModelVersion: Number(project.liveModelVersion || 0),
+          normalizeSource: normalizedStoryboard.source,
+          ...payloadShape,
+        },
+      })
       throw new Error('Project has no valid storyboard snapshot payload for migration')
     }
 
-    const existingScenes = await ctx.db
-      .query('projectScenes')
-      .withIndex('by_project_id_order', (q: any) => q.eq('projectId', args.projectId))
-      .collect()
-    const existingShots = await ctx.db
-      .query('projectShots')
-      .withIndex('by_project_id_scene_id_order', (q: any) => q.eq('projectId', args.projectId))
-      .collect()
+    try {
+      const existingScenes = await ctx.db
+        .query('projectScenes')
+        .withIndex('by_project_id_order', (q: any) => q.eq('projectId', args.projectId))
+        .collect()
+      const existingShots = await ctx.db
+        .query('projectShots')
+        .withIndex('by_project_id_scene_id_order', (q: any) => q.eq('projectId', args.projectId))
+        .collect()
 
-    if (existingScenes.length === 0 && existingShots.length === 0) {
-      const now = Date.now()
-      for (const [sceneIndex, scene] of snapshot.payload.scenes.entries()) {
-        await ctx.db.insert('projectScenes', {
-          projectId: args.projectId,
-          sceneId: String(scene.id || `scene_${sceneIndex + 1}`),
-          order: sceneIndex,
-          sceneLabel: String(scene.sceneLabel || `SCENE ${sceneIndex + 1}`),
-          slugline: scene.slugline || '',
-          location: scene.location || '',
-          intOrExt: scene.intOrExt || '',
-          dayNight: scene.dayNight || '',
-          color: scene.color || null,
-          linkedScriptSceneId: scene.linkedScriptSceneId || null,
-          pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes.map((entry: any) => String(entry || '')) : [''],
-          pageColors: Array.isArray(scene.pageColors) ? scene.pageColors.map((entry: any) => String(entry || '')) : [],
-          updatedByUserId: currentUserId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        for (const [shotIndex, shot] of (scene.shots || []).entries()) {
-          const customFields = Object.fromEntries(
-            Object.entries(shot || {}).filter(([key]) => String(key).startsWith('custom_')),
-          )
-          await ctx.db.insert('projectShots', {
+      if (existingScenes.length === 0 && existingShots.length === 0) {
+        const now = Date.now()
+        for (const [sceneIndex, scene] of normalizedStoryboard.scenes.entries()) {
+          await ctx.db.insert('projectScenes', {
             projectId: args.projectId,
             sceneId: String(scene.id || `scene_${sceneIndex + 1}`),
-            shotId: String(shot.id || `shot_${sceneIndex}_${shotIndex}`),
-            order: shotIndex,
-            cameraName: shot.cameraName || 'Camera 1',
-            focalLength: shot.focalLength || '',
-            color: shot.color || null,
-            image: shot.image || null,
-            imageAsset: shot.imageAsset || null,
-            specs: shot.specs || { size: '', type: '', move: '', equip: '' },
-            notes: shot.notes || '',
-            subject: shot.subject || '',
-            description: shot.description || '',
-            cast: shot.cast || '',
-            checked: !!shot.checked,
-            intOrExt: shot.intOrExt || '',
-            dayNight: shot.dayNight || '',
-            scriptTime: shot.scriptTime || '',
-            setupTime: shot.setupTime || '',
-            shotAspectRatio: shot.shotAspectRatio || '',
-            predictedTakes: shot.predictedTakes || '',
-            shootTime: shot.shootTime || '',
-            takeNumber: shot.takeNumber || '',
-            sound: shot.sound || '',
-            props: shot.props || '',
-            frameRate: shot.frameRate || '',
-            linkedSceneId: shot.linkedSceneId || null,
-            linkedDialogueLine: shot.linkedDialogueLine || null,
-            linkedDialogueOffset: Number.isFinite(shot.linkedDialogueOffset) ? shot.linkedDialogueOffset : undefined,
-            linkedScriptRangeStart: Number.isFinite(shot.linkedScriptRangeStart) ? shot.linkedScriptRangeStart : undefined,
-            linkedScriptRangeEnd: Number.isFinite(shot.linkedScriptRangeEnd) ? shot.linkedScriptRangeEnd : undefined,
-            customFields,
+            order: sceneIndex,
+            sceneLabel: String(scene.sceneLabel || `SCENE ${sceneIndex + 1}`),
+            slugline: scene.slugline || '',
+            location: scene.location || '',
+            intOrExt: scene.intOrExt || '',
+            dayNight: scene.dayNight || '',
+            color: scene.color || null,
+            linkedScriptSceneId: scene.linkedScriptSceneId || null,
+            pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes.map((entry: any) => String(entry || '')) : [''],
+            pageColors: Array.isArray(scene.pageColors) ? scene.pageColors.map((entry: any) => String(entry || '')) : [],
             updatedByUserId: currentUserId,
             createdAt: now,
             updatedAt: now,
           })
+          for (const [shotIndex, shot] of (scene.shots || []).entries()) {
+            const customFields = Object.fromEntries(
+              Object.entries(shot || {}).filter(([key]) => String(key).startsWith('custom_')),
+            )
+            await ctx.db.insert('projectShots', {
+              projectId: args.projectId,
+              sceneId: String(scene.id || `scene_${sceneIndex + 1}`),
+              shotId: String(shot.id || `shot_${sceneIndex}_${shotIndex}`),
+              order: shotIndex,
+              cameraName: shot.cameraName || 'Camera 1',
+              focalLength: shot.focalLength || '',
+              color: shot.color || null,
+              image: shot.image || null,
+              imageAsset: shot.imageAsset || null,
+              specs: shot.specs || { size: '', type: '', move: '', equip: '' },
+              notes: shot.notes || '',
+              subject: shot.subject || '',
+              description: shot.description || '',
+              cast: shot.cast || '',
+              checked: !!shot.checked,
+              intOrExt: shot.intOrExt || '',
+              dayNight: shot.dayNight || '',
+              scriptTime: shot.scriptTime || '',
+              setupTime: shot.setupTime || '',
+              shotAspectRatio: shot.shotAspectRatio || '',
+              predictedTakes: shot.predictedTakes || '',
+              shootTime: shot.shootTime || '',
+              takeNumber: shot.takeNumber || '',
+              sound: shot.sound || '',
+              props: shot.props || '',
+              frameRate: shot.frameRate || '',
+              linkedSceneId: shot.linkedSceneId || null,
+              linkedDialogueLine: shot.linkedDialogueLine || null,
+              linkedDialogueOffset: Number.isFinite(shot.linkedDialogueOffset) ? shot.linkedDialogueOffset : undefined,
+              linkedScriptRangeStart: Number.isFinite(shot.linkedScriptRangeStart) ? shot.linkedScriptRangeStart : undefined,
+              linkedScriptRangeEnd: Number.isFinite(shot.linkedScriptRangeEnd) ? shot.linkedScriptRangeEnd : undefined,
+              customFields,
+              updatedByUserId: currentUserId,
+              createdAt: now,
+              updatedAt: now,
+            })
+          }
         }
       }
-    }
 
-    const now = Date.now()
-    await ctx.db.patch(args.projectId, {
-      liveModelVersion: 1,
-      storyboardLiveMigratedAt: now,
-      updatedAt: now,
-    })
-    return { ok: true, migrated: true, liveModelVersion: 1 }
+      const now = Date.now()
+      await ctx.db.patch(args.projectId, {
+        liveModelVersion: 1,
+        storyboardLiveMigratedAt: now,
+        updatedAt: now,
+      })
+      await writeOperationalEvent(ctx, {
+        event: 'project.storyboard_live_model.ensure_succeeded',
+        details: {
+          projectId: String(args.projectId),
+          normalizeSource: normalizedStoryboard.source,
+          ...payloadShape,
+        },
+      })
+      return { ok: true, migrated: true, liveModelVersion: 1 }
+    } catch (error: any) {
+      await writeOperationalEvent(ctx, {
+        level: 'error',
+        event: 'project.storyboard_live_model.ensure_failed',
+        details: {
+          projectId: String(args.projectId),
+          liveModelVersion: Number(project.liveModelVersion || 0),
+          normalizeSource: normalizedStoryboard.source,
+          ...payloadShape,
+          errorName: String(error?.name || 'Error'),
+          errorCode: error?.code || error?.data?.code || null,
+          errorMessage: String(error?.message || 'unknown_error').slice(0, 220),
+        },
+      })
+      throw error
+    }
   },
 })
 
