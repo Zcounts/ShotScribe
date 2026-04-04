@@ -69,3 +69,8 @@ Logs are scoped to this mutation path and avoid snapshot payload dumps.
 Patch migration to support legacy payloads that do not yet have `payload.scenes`.
 
 Specifically, in `ensureStoryboardLiveModel`, add server-side normalization/fallback from legacy shape to a scenes array before migration.
+
+## Follow-up observation after first pass
+
+- Client-side cooldown reduced retry loops within a single mounted coordinator instance, but did not eliminate production noise because the backend mutation still failed for legacy payloads and failure cache could reset on remount/reload boundaries.
+- Additional websocket reconnect noise (`1011`, `1013`) can amplify repeated attempts once connectivity returns; this indicates the root problem must be fixed server-side, not only throttled client-side.

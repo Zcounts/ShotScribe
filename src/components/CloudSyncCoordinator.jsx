@@ -8,6 +8,7 @@ import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipelin
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
 const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
+const ensureStoryboardFailureCache = new Map()
 
 function normalizeEnsureErrorMessage(error) {
   const message = String(error?.message || 'unknown_error')
@@ -82,7 +83,7 @@ export default function CloudSyncCoordinator() {
   const localImageBackfillInFlightRef = useRef(false)
   const localImageUploadCacheRef = useRef(new Map())
   const liveMigrationRequestedRef = useRef(new Set())
-  const liveMigrationFailureRef = useRef(new Map())
+  const liveMigrationFailureRef = useRef(ensureStoryboardFailureCache)
 
   useEffect(() => {
     setCloudRepositoryAdapter({
