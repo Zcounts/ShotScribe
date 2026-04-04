@@ -94,8 +94,24 @@ export function createCloudProjectAdapter({ runMutation, runQuery }) {
         name: project.name,
         emoji: project.emoji,
         latestSnapshotId: project.latestSnapshotId ? String(project.latestSnapshotId) : null,
+        liveModelVersion: Number(project.liveModelVersion || 0),
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
+      }
+    },
+
+    async ensureStoryboardLiveModel(projectId) {
+      return runMutation('projects:ensureStoryboardLiveModel', { projectId })
+    },
+
+    async getLiveStoryboard(projectId) {
+      const [scenes, shots] = await Promise.all([
+        runQuery('projectScenesLive:listScenesByProject', { projectId }),
+        runQuery('projectShotsLive:listShotsByProject', { projectId }),
+      ])
+      return {
+        scenes: Array.isArray(scenes) ? scenes : [],
+        shots: Array.isArray(shots) ? shots : [],
       }
     },
 

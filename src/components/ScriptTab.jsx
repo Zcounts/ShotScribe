@@ -915,7 +915,7 @@ export default function ScriptTab() {
         createdByUserId: currentUserId,
         source: 'manual_save',
         payload: safePayload,
-        conflictStrategy: 'last_write_wins',
+        conflictStrategy: 'fail_on_conflict',
         ...(currentSnapshotId ? { expectedLatestSnapshotId: currentSnapshotId } : {}),
       })
       if (!result?.ok) {

@@ -59,6 +59,8 @@ export default defineSchema({
     name: v.string(),
     emoji: v.string(),
     latestSnapshotId: v.optional(v.id('projectSnapshots')),
+    liveModelVersion: v.optional(v.number()),
+    storyboardLiveMigratedAt: v.optional(v.number()),
     archivedAt: v.optional(v.number()),
     pendingDeleteAt: v.optional(v.number()),
     deleteAfter: v.optional(v.number()),
@@ -67,6 +69,66 @@ export default defineSchema({
   })
     .index('by_owner_user_id', ['ownerUserId'])
     .index('by_owner_user_id_updated_at', ['ownerUserId', 'updatedAt']),
+
+  projectScenes: defineTable({
+    projectId: v.id('projects'),
+    sceneId: v.string(),
+    order: v.number(),
+    sceneLabel: v.string(),
+    slugline: v.optional(v.string()),
+    location: v.optional(v.string()),
+    intOrExt: v.optional(v.string()),
+    dayNight: v.optional(v.string()),
+    color: v.optional(v.string()),
+    linkedScriptSceneId: v.optional(v.string()),
+    pageNotes: v.optional(v.array(v.string())),
+    pageColors: v.optional(v.array(v.string())),
+    updatedByUserId: v.id('users'),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_project_id_order', ['projectId', 'order'])
+    .index('by_project_id_scene_id', ['projectId', 'sceneId']),
+
+  projectShots: defineTable({
+    projectId: v.id('projects'),
+    sceneId: v.string(),
+    shotId: v.string(),
+    order: v.number(),
+    cameraName: v.optional(v.string()),
+    focalLength: v.optional(v.string()),
+    color: v.optional(v.string()),
+    image: v.optional(v.string()),
+    imageAsset: v.optional(v.any()),
+    specs: v.optional(v.any()),
+    notes: v.optional(v.string()),
+    subject: v.optional(v.string()),
+    description: v.optional(v.string()),
+    cast: v.optional(v.string()),
+    checked: v.optional(v.boolean()),
+    intOrExt: v.optional(v.string()),
+    dayNight: v.optional(v.string()),
+    scriptTime: v.optional(v.string()),
+    setupTime: v.optional(v.string()),
+    shotAspectRatio: v.optional(v.string()),
+    predictedTakes: v.optional(v.string()),
+    shootTime: v.optional(v.string()),
+    takeNumber: v.optional(v.string()),
+    sound: v.optional(v.string()),
+    props: v.optional(v.string()),
+    frameRate: v.optional(v.string()),
+    linkedSceneId: v.optional(v.string()),
+    linkedDialogueLine: v.optional(v.string()),
+    linkedDialogueOffset: v.optional(v.number()),
+    linkedScriptRangeStart: v.optional(v.number()),
+    linkedScriptRangeEnd: v.optional(v.number()),
+    customFields: v.optional(v.any()),
+    updatedByUserId: v.id('users'),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_project_id_scene_id_order', ['projectId', 'sceneId', 'order'])
+    .index('by_project_id_shot_id', ['projectId', 'shotId']),
 
 
 
