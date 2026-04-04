@@ -1679,55 +1679,74 @@ export default function ScriptTab() {
                     )}
                     {section.id === 'pageStyles' && (
                       <>
-                        <div className="script-page-style-tabs">
+                        <div className="script-page-style-tabs script-page-style-tabs--inspector">
                           <button
                             type="button"
-                            className={`script-page-style-tab ${(inspectorSections.pageStylesTab || 'page') === 'page' ? 'is-active' : ''}`}
+                            className={`script-page-style-tab script-page-style-tab--icon ${(inspectorSections.pageStylesTab || 'page') === 'page' ? 'is-active' : ''}`}
                             onClick={() => setInspectorSections(prev => ({ ...prev, pageStylesTab: 'page' }))}
                           >
+                            <Ruler size={13} aria-hidden="true" />
                             Page
                           </button>
                           <button
                             type="button"
-                            className={`script-page-style-tab ${(inspectorSections.pageStylesTab || 'page') === 'paragraph' ? 'is-active' : ''}`}
+                            className={`script-page-style-tab script-page-style-tab--icon ${(inspectorSections.pageStylesTab || 'page') === 'paragraph' ? 'is-active' : ''}`}
                             onClick={() => setInspectorSections(prev => ({ ...prev, pageStylesTab: 'paragraph' }))}
                           >
+                            <Pilcrow size={13} aria-hidden="true" />
                             Paragraph
                           </button>
                         </div>
                         {(inspectorSections.pageStylesTab || 'page') === 'page' ? (
-                          <>
-                            <CompactInchField icon="W" label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
-                            <CompactInchField icon="H" label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
-                            <CompactInchField icon="T" label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
-                            <CompactInchField icon="R" label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
-                            <CompactInchField icon="B" label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
-                            <CompactInchField icon="L" label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
-                          </>
+                          <div className="script-page-styles-pane">
+                            <div className="script-page-style-group">
+                              <div className="script-page-style-group-title"><Ruler size={12} aria-hidden="true" /> Size</div>
+                              <div className="script-page-style-field-grid">
+                                <CompactInchField icon="W" label="Width" valuePx={pageSettings.widthPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, widthPx: value } }))} />
+                                <CompactInchField icon="H" label="Height" valuePx={pageSettings.heightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, heightPx: value } }))} />
+                              </div>
+                            </div>
+                            <div className="script-page-style-group">
+                              <div className="script-page-style-group-title"><Settings2 size={12} aria-hidden="true" /> Margins</div>
+                              <div className="script-page-style-field-grid">
+                                <CompactInchField icon="T" label="Top" valuePx={pageSettings.marginTopPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginTopPx: value } }))} />
+                                <CompactInchField icon="R" label="Right" valuePx={pageSettings.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginRightPx: value } }))} />
+                                <CompactInchField icon="B" label="Bottom" valuePx={pageSettings.marginBottomPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginBottomPx: value } }))} />
+                                <CompactInchField icon="L" label="Left" valuePx={pageSettings.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({ ...prev, page: { ...prev.page, marginLeftPx: value } }))} />
+                              </div>
+                            </div>
+                          </div>
                         ) : (
-                          <>
-                            <CompactInchField icon="L" label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                              ...prev,
-                              blockStyles: {
-                                ...prev.blockStyles,
-                                [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
-                              },
-                            }))} />
-                            <CompactInchField icon="R" label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                              ...prev,
-                              blockStyles: {
-                                ...prev.blockStyles,
-                                [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
-                              },
-                            }))} />
-                            <CompactInchField icon="1" label="First-line" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
-                              ...prev,
-                              blockStyles: {
-                                ...prev.blockStyles,
-                                [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
-                              },
-                            }))} />
-                          </>
+                          <div className="script-page-styles-pane">
+                            <div className="script-page-style-group">
+                              <div className="script-page-style-group-title"><Pilcrow size={12} aria-hidden="true" /> Indentation</div>
+                              <div className="script-page-style-field-grid">
+                                <CompactInchField icon="L" label="Left indent" valuePx={selectedStyle.marginLeftPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                                  ...prev,
+                                  blockStyles: {
+                                    ...prev.blockStyles,
+                                    [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginLeftPx: value },
+                                  },
+                                }))} />
+                                <CompactInchField icon="R" label="Right indent" valuePx={selectedStyle.marginRightPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                                  ...prev,
+                                  blockStyles: {
+                                    ...prev.blockStyles,
+                                    [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], marginRightPx: value },
+                                  },
+                                }))} />
+                                <div className="script-page-style-field-span">
+                                  <CompactInchField icon="1" label="First-line indent" valuePx={selectedStyle.firstLineIndentPx} onChangePx={(value) => updateDocumentSettings(prev => ({
+                                    ...prev,
+                                    blockStyles: {
+                                      ...prev.blockStyles,
+                                      [selectedStyleType]: { ...prev.blockStyles[selectedStyleType], firstLineIndentPx: value },
+                                    },
+                                  }))} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </>
                     )}
