@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
-import { Pilcrow, Ruler, Settings2 } from 'lucide-react'
+import { Lock, Pilcrow, Ruler, Save, Settings2, Unlock } from 'lucide-react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
@@ -413,7 +413,7 @@ export default function ScriptTab() {
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
   const [showImportModal, setShowImportModal] = useState(false)
-  const { isDesktopDown, isPhone } = useResponsiveViewport()
+  const { isDesktopDown } = useResponsiveViewport()
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false)
   const [mobileRightOpen, setMobileRightOpen] = useState(false)
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
@@ -1212,6 +1212,46 @@ export default function ScriptTab() {
                 </button>
               ))}
             </div>
+            <div className="script-sidebar-utility-panel">
+              <div className="script-sidebar-utility-heading">Script Document</div>
+              <div className="script-sidebar-utility-status">
+                {cloudProjectId
+                  ? (!cloudAccessPolicy.canEditCloudProject
+                    ? 'Read-only cloud mode: billing inactive.'
+                    : (isWriteBlockedByLock ? `Locked by ${activeSceneLock?.holderName || 'another collaborator'}.` : 'Collaboration safety active.'))
+                  : 'Collaboration safety active.'}
+                {collabNotice ? ` ${collabNotice}` : ''}
+              </div>
+              <div className="script-sidebar-utility-actions">
+                <button
+                  className="script-icon-btn"
+                  onClick={handleSaveScreenplaySnapshot}
+                  disabled={!cloudProjectId || isSavingSnapshot || !cloudAccessPolicy.canEditCloudProject}
+                  aria-label={isSavingSnapshot ? 'Saving snapshot' : 'Save Snapshot'}
+                  title={isSavingSnapshot ? 'Saving snapshot' : 'Save Snapshot'}
+                >
+                  <Save size={14} aria-hidden="true" />
+                </button>
+                <button
+                  className="script-icon-btn"
+                  onClick={handleAcquireActiveSceneLock}
+                  disabled={!cloudProjectId || !cloudAccessPolicy.canEditCloudProject}
+                  aria-label="Lock scene"
+                  title="Lock scene"
+                >
+                  <Lock size={14} aria-hidden="true" />
+                </button>
+                <button
+                  className="script-icon-btn"
+                  onClick={handleReleaseActiveSceneLock}
+                  disabled={!cloudProjectId || !cloudAccessPolicy.canEditCloudProject}
+                  aria-label="Unlock"
+                  title="Unlock"
+                >
+                  <Unlock size={14} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
           </div>
 
           <div ref={sidebarStackRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -1363,56 +1403,6 @@ export default function ScriptTab() {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div
-              className="app-surface-card"
-              style={{
-                borderRadius: 0,
-                borderLeft: 'none',
-                borderRight: 'none',
-                borderBottom: '1px solid rgba(148,163,184,0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-                padding: '6px 12px',
-                flexWrap: 'wrap',
-                background: cloudProjectId && (isWriteBlockedByLock || !cloudAccessPolicy.canEditCloudProject) ? '#fff7ed' : '#f8fafc',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 320px' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#334155', flexShrink: 0 }}>Script Document</span>
-                {cloudProjectId && (
-                  <span style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {!cloudAccessPolicy.canEditCloudProject
-                      ? 'Read-only cloud mode: billing inactive.'
-                      : (isWriteBlockedByLock ? `Locked by ${activeSceneLock?.holderName || 'another collaborator'}.` : 'Collaboration safety active.')}
-                    {collabNotice ? ` ${collabNotice}` : ''}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {isDesktopDown && (
-                  <>
-                    <button className="toolbar-btn" onClick={() => setMobileLeftOpen(true)} style={{ minHeight: isPhone ? 34 : undefined }}>
-                      Panel
-                    </button>
-                    <button className="toolbar-btn" onClick={() => setMobileRightOpen(true)} style={{ minHeight: isPhone ? 34 : undefined }}>
-                      Inspector
-                    </button>
-                  </>
-                )}
-                {cloudProjectId && (
-                  <>
-                    <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot || !cloudAccessPolicy.canEditCloudProject}>
-                      {isSavingSnapshot ? 'Saving…' : 'Save Snapshot'}
-                    </button>
-                    <button className="toolbar-btn" onClick={handleAcquireActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Lock scene</button>
-                    <button className="toolbar-btn" onClick={handleReleaseActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Unlock</button>
-                  </>
-                )}
-              </div>
-            </div>
-
             <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
               <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
                 <div>
