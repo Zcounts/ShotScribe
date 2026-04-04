@@ -44,6 +44,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
   const getAssetSignedView = useAction('assets:getAssetSignedView')
+  const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
   const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
   const softDeleteLibraryAsset = useMutation('assets:softDeleteLibraryAsset')
@@ -69,6 +70,8 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const [hovered, setHovered] = useState(false)
   const [cloudAssetView, setCloudAssetView] = useState(null)
   const [imagePickerStep, setImagePickerStep] = useState(null)
+  const [libraryAssetViews, setLibraryAssetViews] = useState({})
+  const [isLoadingLibraryViews, setIsLoadingLibraryViews] = useState(false)
   const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
   const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
   const { isDesktopDown, isPhone } = useResponsiveViewport()
@@ -104,6 +107,35 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
       cancelled = true
     }
   }, [cloudAssetBlocked, getAssetSignedView, projectRef, shot?.imageAsset?.cloud?.assetId])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadLibraryViews() {
+      if (
+        imagePickerStep !== 'library'
+        || projectRef?.type !== 'cloud'
+        || cloudAssetBlocked
+        || !Array.isArray(libraryAssets)
+        || libraryAssets.length === 0
+      ) return
+      setIsLoadingLibraryViews(true)
+      try {
+        const views = await getAssetSignedViewsBatch({
+          projectId: projectRef.projectId,
+          assetIds: libraryAssets.map(asset => asset.assetId),
+        })
+        if (!cancelled) setLibraryAssetViews(views || {})
+      } catch (err) {
+        console.warn('Failed to load library image previews', err)
+      } finally {
+        if (!cancelled) setIsLoadingLibraryViews(false)
+      }
+    }
+    loadLibraryViews()
+    return () => {
+      cancelled = true
+    }
+  }, [cloudAssetBlocked, getAssetSignedViewsBatch, imagePickerStep, libraryAssets, projectRef])
 
   const {
     attributes,
@@ -381,7 +413,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
 
       {/* Image Area */}
       <div
-        className="image-placeholder"
+        className={`image-placeholder ${imagePickerStep === 'options' && projectRef?.type === 'cloud' ? 'image-placeholder-active' : ''}`}
         onClick={handleImageClick}
         style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
       >
@@ -402,6 +434,34 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
             <span className="text-xs font-medium">Click to add image</span>
           </div>
         )}
+        {imagePickerStep === 'options' && projectRef?.type === 'cloud' ? (
+          <div className="shot-image-picker-overlay" onClick={(e) => e.stopPropagation()}>
+            <div className="shot-image-picker-title">Add Image to Shot</div>
+            <div className="shot-image-picker-actions">
+              <button type="button" className="shot-image-picker-button" onClick={() => setImagePickerStep('library')}>
+                Choose from Project Library
+              </button>
+              <button type="button" className="shot-image-picker-button" onClick={() => fileInputRef.current?.click()}>
+                Upload New
+              </button>
+              {storyboardImageSrc ? (
+                <button
+                  type="button"
+                  className="shot-image-picker-button shot-image-picker-button-danger"
+                  onClick={() => {
+                    clearShotImage()
+                    setImagePickerStep(null)
+                  }}
+                >
+                  Remove from Shot
+                </button>
+              ) : null}
+              <button type="button" className="shot-image-picker-button" onClick={() => setImagePickerStep(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
         <input
           ref={fileInputRef}
           type="file"
@@ -410,133 +470,74 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
           onChange={handleImageChange}
         />
       </div>
-      {projectRef?.type === 'cloud' && (
-        <div className="mt-1 flex justify-end">
-          <button
-            type="button"
-            className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
-            onClick={(e) => {
-              e.stopPropagation()
-              setImagePickerStep('options')
-            }}
-          >
-            Add Image
-          </button>
-        </div>
-      )}
-      {imagePickerStep === 'options' && projectRef?.type === 'cloud' && (
-        <div className="mt-1 rounded border border-gray-700 bg-gray-900 p-2 text-xs text-gray-100">
-          <div className="mb-1 font-medium">Add Image to Shot</div>
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
-              onClick={(e) => {
-                e.stopPropagation()
-                setImagePickerStep('library')
-              }}
-            >
-              Choose from Library
-            </button>
-            <button
-              type="button"
-              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
-              onClick={(e) => {
-                e.stopPropagation()
-                fileInputRef.current?.click()
-              }}
-            >
-              Upload New
-            </button>
-            {storyboardImageSrc ? (
-              <button
-                type="button"
-                className="rounded border border-red-700 bg-red-950 px-2 py-1 text-left text-red-200 hover:bg-red-900"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  clearShotImage()
-                  setImagePickerStep(null)
-                }}
-              >
-                Remove from Shot
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-left hover:bg-gray-700"
-              onClick={(e) => {
-                e.stopPropagation()
-                setImagePickerStep(null)
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
       {imagePickerStep === 'library' && projectRef?.type === 'cloud' && (
-        <div className="mt-2 rounded border border-gray-700 bg-gray-900 p-2 text-xs text-gray-100">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="font-medium">Project Media Library</div>
-            <button
-              type="button"
-              className="rounded border border-gray-700 bg-gray-800 px-2 py-1 hover:bg-gray-700"
-              onClick={() => setImagePickerStep('options')}
-            >
-              Back
-            </button>
-          </div>
-          <div className="max-h-40 overflow-auto pr-1">
-            {(libraryAssets || []).length === 0 ? (
-              <div className="text-gray-400">No library images yet. Upload a new image first.</div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {(libraryAssets || []).map((asset) => (
-                  <div
-                    key={String(asset.assetId)}
-                    className="rounded border border-gray-700 bg-gray-800 p-2"
-                  >
-                    <button
-                      type="button"
-                      disabled={isAssigningFromLibrary}
-                      className="w-full text-left hover:opacity-90 disabled:opacity-60"
-                      onClick={() => assignLibraryAssetToShot(asset.assetId)}
-                    >
-                      <div className="truncate text-[11px] font-medium">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
-                      <div className="text-[10px] text-gray-400">{new Date(asset.createdAt).toLocaleDateString()}</div>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isDeletingLibraryAsset}
-                      className="mt-1 rounded border border-red-700 bg-red-950 px-2 py-1 text-[10px] text-red-200 hover:bg-red-900 disabled:opacity-60"
-                      onClick={() => handleSoftDeleteLibraryAsset(asset.assetId)}
-                    >
-                      Delete from Library
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {(recentlyDeletedAssets || []).length > 0 ? (
-            <div className="mt-2 border-t border-gray-700 pt-2">
-              <div className="mb-1 text-[10px] uppercase tracking-wide text-gray-400">Recently deleted</div>
-              <div className="space-y-1">
-                {(recentlyDeletedAssets || []).slice(0, 3).map((asset) => (
-                  <div key={`deleted-${String(asset.assetId)}`} className="flex items-center justify-between rounded border border-gray-700 bg-gray-800 px-2 py-1">
-                    <div className="truncate pr-2 text-[10px] text-gray-300">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
-                    <button
-                      type="button"
-                      className="rounded border border-gray-600 bg-gray-700 px-2 py-0.5 text-[10px] text-white hover:bg-gray-600"
-                      onClick={() => handleUndoDelete(asset.assetId)}
-                    >
-                      Undo
-                    </button>
-                  </div>
-                ))}
-              </div>
+        <div className="modal-overlay" style={{ zIndex: 760 }} onClick={() => setImagePickerStep('options')}>
+          <div className="modal app-dialog shot-library-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shot-library-picker-header">
+              <h3 className="dialog-title">Project Media Library</h3>
+              <button type="button" className="dialog-button-secondary" onClick={() => setImagePickerStep('options')}>Back</button>
             </div>
-          ) : null}
+            <p className="dialog-description">Select an image to assign to this storyboard shot.</p>
+            <div className="shot-library-picker-grid">
+              {(libraryAssets || []).length === 0 ? (
+                <div className="text-gray-500">No library images yet. Upload a new image first.</div>
+              ) : (
+                (libraryAssets || []).map((asset) => {
+                  const assetView = libraryAssetViews?.[String(asset.assetId)] || null
+                  const previewSrc = assetView?.thumbUrl || assetView?.fullUrl || null
+                  return (
+                    <div key={String(asset.assetId)} className="shot-library-picker-card">
+                      <button
+                        type="button"
+                        disabled={isAssigningFromLibrary}
+                        className="shot-library-picker-select"
+                        onClick={() => assignLibraryAssetToShot(asset.assetId)}
+                      >
+                        <div className="shot-library-picker-thumb">
+                          {previewSrc ? (
+                            <img src={previewSrc} alt={asset.sourceName || 'Library image preview'} loading="lazy" decoding="async" />
+                          ) : (
+                            <div className="shot-library-picker-thumb-fallback">
+                              {isLoadingLibraryViews ? 'Loading preview…' : 'No preview'}
+                            </div>
+                          )}
+                        </div>
+                        <div className="truncate text-xs font-semibold">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
+                        <div className="text-[11px] text-gray-500">{new Date(asset.createdAt).toLocaleDateString()}</div>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isDeletingLibraryAsset}
+                        className="shot-library-picker-delete"
+                        onClick={() => handleSoftDeleteLibraryAsset(asset.assetId)}
+                      >
+                        Delete from Library
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            {(recentlyDeletedAssets || []).length > 0 ? (
+              <div className="mt-3 border-t border-slate-200 pt-3">
+                <div className="mb-2 text-[11px] uppercase tracking-wide text-gray-500">Recently deleted</div>
+                <div className="space-y-2">
+                  {(recentlyDeletedAssets || []).slice(0, 3).map((asset) => (
+                    <div key={`deleted-${String(asset.assetId)}`} className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-2 py-1.5">
+                      <div className="truncate pr-2 text-[11px] text-gray-700">{asset.sourceName || `Asset ${String(asset.assetId).slice(-6)}`}</div>
+                      <button
+                        type="button"
+                        className="rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] text-gray-700 hover:bg-slate-100"
+                        onClick={() => handleUndoDelete(asset.assetId)}
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
 
