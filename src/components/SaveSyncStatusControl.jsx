@@ -139,7 +139,13 @@ export default function SaveSyncStatusControl({
     if (!open) return
     setShowDetails(false)
     const onPointerDown = (event) => {
-      if (panelRef.current && !panelRef.current.contains(event.target)) setOpen(false)
+      const target = event.target instanceof Element ? event.target : null
+      if (!target) return
+      // Radix Select content is portaled outside panelRef. Treat those clicks as
+      // internal so role selection does not close the dialog before onValueChange
+      // applies, which could otherwise revert to default viewer role.
+      if (target.closest('[data-save-sync-select-content="true"]')) return
+      if (panelRef.current && !panelRef.current.contains(target)) setOpen(false)
     }
     const onEsc = (event) => {
       if (event.key === 'Escape') setOpen(false)
@@ -182,6 +188,7 @@ export default function SaveSyncStatusControl({
     if (!projectId || !canManageMembers) return
     try {
       await updateProjectMemberRole({ projectId, userId, role })
+      setShareMessage(`Updated member role to ${role}.`)
     } catch (error) {
       setShareMessage(error?.message || 'Could not update member role.')
     }
@@ -321,7 +328,7 @@ export default function SaveSyncStatusControl({
                       <SelectTrigger className="h-[30px] w-[96px] border-[rgba(148,163,184,0.35)] bg-[rgba(15,23,42,0.5)] text-[11px] text-[#E2E8F0]">
                         <SelectValue placeholder="Role" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent data-save-sync-select-content="true">
                         <SelectItem value="viewer">Viewer</SelectItem>
                         <SelectItem value="editor">Editor</SelectItem>
                       </SelectContent>
@@ -354,7 +361,7 @@ export default function SaveSyncStatusControl({
                           <SelectTrigger className="h-[24px] w-[84px] border-[rgba(148,163,184,0.35)] bg-[rgba(15,23,42,0.5)] px-1.5 text-[10px] text-[#E2E8F0]">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent data-save-sync-select-content="true">
                             <SelectItem value="viewer">viewer</SelectItem>
                             <SelectItem value="editor">editor</SelectItem>
                           </SelectContent>
