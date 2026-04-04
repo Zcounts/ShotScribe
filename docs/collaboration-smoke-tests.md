@@ -1,6 +1,6 @@
 # Collaboration Smoke Tests (Public Beta)
 
-Date: 2026-04-01
+Date: 2026-04-04
 
 ## Scope
 Shared paid cloud projects only. Local-only workflows are explicitly out of scope and must remain unchanged.
@@ -27,6 +27,31 @@ Expected:
 - Scene lock notices appear when both target the same scene.
 - Snapshot saves succeed with `last_write_wins` conflict strategy.
 - Last successful snapshot save is the authoritative latest snapshot.
+
+### 1b. Role enforcement (editor vs viewer)
+
+1. Owner sets collaborator role to `editor`.
+2. Collaborator opens shared cloud project and updates storyboard/script fields.
+3. Confirm save/sync succeeds and project snapshot updates.
+4. Owner switches collaborator role to `viewer`.
+5. Collaborator keeps project open and attempts the same edits/save.
+
+Expected:
+- `editor` can edit and create cloud snapshots.
+- `viewer` sees read-only state in UI and cannot write cloud snapshots.
+- Server-side write attempts from `viewer` are rejected with `Forbidden`.
+
+### 1c. Live propagation across open sessions (no refresh)
+
+1. Keep owner and collaborator sessions open on the same cloud project.
+2. Owner makes a change and waits for autosave/manual save completion.
+3. Confirm collaborator session updates to latest snapshot without re-opening project.
+4. Repeat in reverse: collaborator edits, owner receives update without page refresh.
+
+Expected:
+- Latest cloud snapshot propagates reactively to other open sessions.
+- No full page refresh or project reopen is required to observe new snapshot data.
+- Save/sync status stays valid after inbound collaborator updates.
 
 ---
 

@@ -16,7 +16,16 @@ const DEFAULT_SUMMARY = Object.freeze({
   billingState: 'none',
 })
 
-export function getReadOnlyReason(entitlement) {
+const ROLE_RANK = Object.freeze({
+  viewer: 1,
+  editor: 2,
+  owner: 3,
+})
+
+export function getReadOnlyReason(entitlement, currentUserRole = null) {
+  if (currentUserRole === 'viewer') {
+    return 'You have viewer access on this cloud project. Ask the owner to grant editor access to make changes.'
+  }
   if (!entitlement?.subscriptionStatus) {
     return 'Cloud access requires an active paid plan. You can keep using local-only projects and local import/export.'
   }
@@ -26,31 +35,36 @@ export function getReadOnlyReason(entitlement) {
 export default function useCloudAccessPolicy() {
   const projectRef = useStore(s => s.projectRef)
   const isCloudProject = projectRef?.type === 'cloud'
+  const cloudProjectId = isCloudProject ? projectRef.projectId : null
   const entitlementQuery = useQuery('billing:getMyEntitlement')
+  const projectQuery = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
   const entitlement = entitlementQuery || DEFAULT_SUMMARY
   const isEntitlementLoading = entitlementQuery === undefined
 
   return useMemo(() => {
+    const currentUserRole = isCloudProject ? (projectQuery?.currentUserRole || null) : null
+    const hasEditorRole = !isCloudProject || ROLE_RANK[currentUserRole] >= ROLE_RANK.editor
     const context = {
       isAuthenticated: true,
       subscriptionStatus: entitlement.subscriptionStatus,
       hasGrandfatheredAccess: entitlement.grandfatheredOrComped,
       hasCompedAccess: false,
-      hasProjectMembership: isCloudProject,
+      hasProjectMembership: isCloudProject ? Boolean(currentUserRole) : false,
       cloudWritesEnabled: true,
       allCollaboratorsHavePaidAccess: true,
     }
 
     const paidCloudAccess = hasPaidCloudAccess(context)
-    const canEdit = isCloudProject ? canEditCloudProject(context) : true
+    const canEdit = isCloudProject ? canEditCloudProject(context) && hasEditorRole : true
     const canExport = isCloudProject ? canExportCloudProject(context) : true
     const canAccessAssets = isCloudProject ? canAccessCloudAssets(context) : true
-    const canCollaborate = isCloudProject ? canCollaborateOnCloudProject(context) : true
+    const canCollaborate = isCloudProject ? canCollaborateOnCloudProject(context) && hasEditorRole : true
     const readOnly = isCloudProject && !canEdit
 
     return {
       entitlement,
       isCloudProject,
+      currentUserRole,
       isEntitlementLoading,
       paidCloudAccess,
       canEditCloudProject: canEdit,
@@ -58,7 +72,7 @@ export default function useCloudAccessPolicy() {
       canAccessCloudAssets: canAccessAssets,
       canCollaborateOnCloudProject: canCollaborate,
       readOnly,
-      readOnlyReason: readOnly ? getReadOnlyReason(entitlement) : '',
+      readOnlyReason: readOnly ? getReadOnlyReason(entitlement, currentUserRole) : '',
     }
-  }, [entitlement, isCloudProject, isEntitlementLoading])
+  }, [entitlement, isCloudProject, isEntitlementLoading, projectQuery?.currentUserRole])
 }

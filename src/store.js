@@ -3257,6 +3257,37 @@ const useStore = create((set, get) => ({
     })
   },
 
+  applyIncomingCloudSnapshot: ({ projectId, snapshotId, payload }) => {
+    if (!projectId || !snapshotId || !payload) return { applied: false, reason: 'invalid_snapshot' }
+    const state = get()
+    if (state.projectRef?.type !== 'cloud' || state.projectRef.projectId !== projectId) {
+      return { applied: false, reason: 'different_project' }
+    }
+    if (state.projectRef.snapshotId === snapshotId) {
+      return { applied: false, reason: 'already_current' }
+    }
+    if (state.hasUnsavedChanges || state._cloudSyncInFlight) {
+      return { applied: false, reason: 'local_changes_pending' }
+    }
+
+    get().loadProject(payload)
+    const syncedAt = new Date().toISOString()
+    set((latestState) => ({
+      projectRef: latestState.projectRef?.type === 'cloud' && latestState.projectRef.projectId === projectId
+        ? { ...latestState.projectRef, snapshotId }
+        : latestState.projectRef,
+      hasUnsavedChanges: false,
+      lastSaved: syncedAt,
+      saveSyncState: buildSyncState({
+        mode: latestState.cloudSyncContext?.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+        status: 'synced_to_cloud',
+        message: 'Saved on device · synced with collaborator changes',
+        lastSyncedAt: syncedAt,
+      }),
+    }))
+    return { applied: true }
+  },
+
   disableCloudBackupForCurrentProject: () => {
     const state = get()
     if (state.projectRef?.type !== 'cloud') return { ok: false, reason: 'not_cloud_project' }
