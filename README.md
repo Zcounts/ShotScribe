@@ -21,6 +21,7 @@ This monorepo currently contains:
 - Shotlist and Schedule desktop views collapse secondary side panels at smaller viewports to preserve laptop usability without changing core workflows.
 - Home tab hero now stays visible for loaded projects and can be edited via Project Properties (title/icon/logline + hero background image + hero overlay color) with local/cloud persistence parity; default no-project headline/subhead are admin-editable with safe fallbacks.
 - Main app responsive header now uses clearer row stacking at narrower widths across tabs (project identity row, actions row, menu/configure row, then tabs) and keeps the legacy Quick actions launcher removed from the main toolbar.
+- Storyboard shot cards now keep cloud “Add image” actions inside the existing image area and open the Project Media Library as a large overlay picker with thumbnails (title/date metadata retained) to avoid card layout shifts while selecting media.
 
 ---
 
