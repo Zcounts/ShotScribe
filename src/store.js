@@ -585,6 +585,61 @@ function isInlineStoryboardImageRef(value) {
   return trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('file:')
 }
 
+async function materializeCloudImagesForLocalSave({
+  payload,
+  projectRef,
+  cloudImageResolver,
+}) {
+  if (projectRef?.type !== 'cloud') return payload
+  if (typeof cloudImageResolver !== 'function') return payload
+
+  const nextPayload = JSON.parse(JSON.stringify(payload || {}))
+  const cache = new Map()
+  const resolveAssetDataUrl = async (assetId) => {
+    if (!assetId) return null
+    const key = String(assetId)
+    if (cache.has(key)) return cache.get(key)
+    let dataUrl = null
+    try {
+      dataUrl = await cloudImageResolver(projectRef.projectId, key)
+    } catch {
+      dataUrl = null
+    }
+    cache.set(key, dataUrl || null)
+    return dataUrl || null
+  }
+
+  const heroAssetId = nextPayload?.projectHeroImage?.imageAsset?.cloud?.assetId
+  if (heroAssetId) {
+    const resolved = await resolveAssetDataUrl(heroAssetId)
+    if (typeof resolved === 'string' && resolved.trim()) {
+      nextPayload.projectHeroImage.image = resolved
+      nextPayload.projectHeroImage.imageAsset = {
+        ...(nextPayload.projectHeroImage.imageAsset || {}),
+        thumb: resolved,
+      }
+    }
+  }
+
+  for (const scene of (nextPayload?.scenes || [])) {
+    for (const shot of (scene?.shots || [])) {
+      const assetId = shot?.imageAsset?.cloud?.assetId
+      if (!assetId) continue
+      const hasInlineThumb = isInlineStoryboardImageRef(shot?.imageAsset?.thumb) || isInlineStoryboardImageRef(shot?.image)
+      if (hasInlineThumb) continue
+      const resolved = await resolveAssetDataUrl(assetId)
+      if (typeof resolved !== 'string' || !resolved.trim()) continue
+      shot.image = resolved
+      shot.imageAsset = {
+        ...(shot.imageAsset || {}),
+        thumb: resolved,
+      }
+    }
+  }
+
+  return nextPayload
+}
+
 let projectRepository = createProjectRepository()
 
 function devCloudBackupLog(event, details = {}) {
@@ -2489,6 +2544,11 @@ const useStore = create((set, get) => ({
     let data, json
     try {
       data = get().getProjectData()
+      data = await materializeCloudImagesForLocalSave({
+        payload: data,
+        projectRef: get().projectRef,
+        cloudImageResolver: get().cloudImageResolver,
+      })
       json = JSON.stringify(data, null, 2)
     } catch (err) {
       // Try each top-level field individually to surface which one contains
@@ -2566,6 +2626,11 @@ const useStore = create((set, get) => ({
     let data, json
     try {
       data = get().getProjectData()
+      data = await materializeCloudImagesForLocalSave({
+        payload: data,
+        projectRef: get().projectRef,
+        cloudImageResolver: get().cloudImageResolver,
+      })
       json = JSON.stringify(data, null, 2)
     } catch (err) {
       let badField = null
