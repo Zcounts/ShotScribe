@@ -7,6 +7,14 @@ import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipelin
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
+const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
+
+function normalizeEnsureErrorMessage(error) {
+  const message = String(error?.message || 'unknown_error')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return message.slice(0, 220)
+}
 
 function isInlineImageRef(value) {
   if (typeof value !== 'string') return false
@@ -74,6 +82,7 @@ export default function CloudSyncCoordinator() {
   const localImageBackfillInFlightRef = useRef(false)
   const localImageUploadCacheRef = useRef(new Map())
   const liveMigrationRequestedRef = useRef(new Set())
+  const liveMigrationFailureRef = useRef(new Map())
 
   useEffect(() => {
     setCloudRepositoryAdapter({
@@ -172,13 +181,75 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     if (!cloudProjectId || !cloudProject) return
     const nextVersion = Number(cloudProject.liveModelVersion || 0)
-    setLiveModelVersion(nextVersion)
-    if (nextVersion >= 1) return
-    if (!cloudAccessPolicy.canEditCloudProject) return
+    const canEditCloudProject = Boolean(cloudAccessPolicy.canEditCloudProject)
     const key = String(cloudProjectId)
+    const gateSignature = `${nextVersion}:${canEditCloudProject ? 'edit' : 'readonly'}`
+    setLiveModelVersion(nextVersion)
+
+    const priorFailure = liveMigrationFailureRef.current.get(key)
+    if (priorFailure && priorFailure.gateSignature !== gateSignature) {
+      liveMigrationFailureRef.current.delete(key)
+    }
+
+    if (nextVersion >= 1) return
+    if (!canEditCloudProject) return
+    const failure = liveMigrationFailureRef.current.get(key)
+    if (failure) {
+      const now = Date.now()
+      const elapsedMs = now - Number(failure.lastFailureAt || 0)
+      if (elapsedMs < ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS) {
+        if (import.meta.env.DEV && now - Number(failure.lastThrottleLogAt || 0) > 30000) {
+          // eslint-disable-next-line no-console
+          console.info('[cloud-sync] ensureStoryboardLiveModel throttled after failure', {
+            projectId: key,
+            liveModelVersion: nextVersion,
+            canEditCloudProject,
+            attemptCount: Number(failure.attemptCount || 0),
+            lastErrorSignature: failure.lastErrorSignature || 'unknown_error',
+            cooldownRemainingMs: ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS - elapsedMs,
+          })
+          liveMigrationFailureRef.current.set(key, {
+            ...failure,
+            lastThrottleLogAt: now,
+          })
+        }
+        return
+      }
+    }
     if (liveMigrationRequestedRef.current.has(key)) return
     liveMigrationRequestedRef.current.add(key)
-    ensureStoryboardLiveModel({ projectId: cloudProjectId }).catch(() => {
+    ensureStoryboardLiveModel({ projectId: cloudProjectId }).then(() => {
+      liveMigrationFailureRef.current.delete(key)
+    }).catch((error) => {
+      const errorName = String(error?.name || 'Error')
+      const errorMessage = normalizeEnsureErrorMessage(error)
+      const errorCode = error?.code || error?.data?.code || null
+      const errorSignature = `${errorName}:${errorMessage}`
+      const prior = liveMigrationFailureRef.current.get(key)
+      const attemptCount = Number(prior?.attemptCount || 0) + 1
+      const repeatFailure = prior?.lastErrorSignature === errorSignature
+      liveMigrationFailureRef.current.set(key, {
+        lastFailureAt: Date.now(),
+        attemptCount,
+        lastErrorSignature: errorSignature,
+        lastThrottleLogAt: prior?.lastThrottleLogAt || 0,
+        gateSignature,
+      })
+      if (import.meta.env.DEV) {
+        // TODO(legacy-live-model): likely next pass is server-side fallback/normalization for legacy snapshots that do not have payload.scenes.
+        // eslint-disable-next-line no-console
+        console.warn('[cloud-sync] ensureStoryboardLiveModel failed', {
+          projectId: key,
+          liveModelVersion: nextVersion,
+          canEditCloudProject,
+          errorName,
+          errorCode,
+          errorMessage,
+          attemptCount,
+          repeatFailure,
+          cooldownMs: ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS,
+        })
+      }
       liveMigrationRequestedRef.current.delete(key)
     })
   }, [cloudAccessPolicy.canEditCloudProject, cloudProject, cloudProjectId, ensureStoryboardLiveModel, setLiveModelVersion])
