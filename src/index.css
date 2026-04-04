@@ -2318,6 +2318,23 @@
       padding: 8px 9px;
     }
 
+<<<<<<< codex/update-home-tab-responsive-layout-04th3n
+    .app-shell[data-desktop-down="true"] .tab-nav-scroll {
+      order: 1;
+    }
+
+    .app-shell[data-desktop-down="true"] .tab-nav-home-controls {
+      order: 2;
+      border-bottom: none;
+      border-top: 1px solid #3A3A3C;
+      padding-top: 6px;
+      padding-bottom: 2px;
+      margin-top: 4px;
+      margin-bottom: 0;
+    }
+
+=======
+>>>>>>> main
     .page-document {
       border-left: none;
       border-right: none;
