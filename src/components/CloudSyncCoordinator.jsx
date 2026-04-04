@@ -27,6 +27,8 @@ export default function CloudSyncCoordinator() {
   const projectRef = useStore(s => s.projectRef)
   const setCloudSyncContext = useStore(s => s.setCloudSyncContext)
   const setCloudRepositoryAdapter = useStore(s => s.setCloudRepositoryAdapter)
+  const setCloudImageUploader = useStore(s => s.setCloudImageUploader)
+  const setCloudImageResolver = useStore(s => s.setCloudImageResolver)
   const flushCloudSync = useStore(s => s.flushCloudSync)
   const applyIncomingCloudSnapshot = useStore(s => s.applyIncomingCloudSnapshot)
   const openCloudProject = useStore(s => s.openCloudProject)
