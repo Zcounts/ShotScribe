@@ -675,6 +675,7 @@ const useStore = create((set, get) => ({
   },
   _cloudSyncTimeout: null,
   _cloudSyncInFlight: false,
+  pendingRemoteSnapshot: null, // { projectId, snapshotId, payload, detectedAt }
   cloudRepositoryReady: false,
   cloudImageUploader: null,
   cloudImageResolver: null,
@@ -3000,6 +3001,7 @@ const useStore = create((set, get) => ({
         status: 'saved_locally',
         message: 'Saved locally on this device',
       }),
+      pendingRemoteSnapshot: null,
       cloudLineage: loadedCloudLineage,
       browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
       projectRef: {
@@ -3444,6 +3446,7 @@ const useStore = create((set, get) => ({
         message: 'Saved on device · backed up to cloud',
         lastSyncedAt: new Date().toISOString(),
       }),
+      pendingRemoteSnapshot: null,
     })
     // Persist across browser refresh so the same cloud project reopens
     // automatically when the user refreshes the page.
@@ -3478,6 +3481,21 @@ const useStore = create((set, get) => ({
       return { applied: false, reason: 'already_current' }
     }
     if (state.hasUnsavedChanges || state._cloudSyncInFlight) {
+      set((latestState) => ({
+        pendingRemoteSnapshot: {
+          projectId,
+          snapshotId,
+          payload,
+          detectedAt: new Date().toISOString(),
+        },
+        saveSyncState: buildSyncState({
+          mode: latestState.cloudSyncContext?.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'remote_update_pending',
+          message: 'Remote collaborator changes are available',
+          pendingReason: 'remote_update_pending',
+          lastSyncedAt: latestState.saveSyncState.lastSyncedAt,
+        }),
+      }))
       return { applied: false, reason: 'local_changes_pending' }
     }
 
@@ -3513,8 +3531,23 @@ const useStore = create((set, get) => ({
         message: 'Saved on device · synced with collaborator changes',
         lastSyncedAt: syncedAt,
       }),
+      pendingRemoteSnapshot: null,
     }))
     return { applied: true }
+  },
+
+  applyPendingRemoteSnapshot: () => {
+    const pending = get().pendingRemoteSnapshot
+    if (!pending) return { applied: false, reason: 'none_pending' }
+    return get().applyIncomingCloudSnapshot({
+      projectId: pending.projectId,
+      snapshotId: pending.snapshotId,
+      payload: pending.payload,
+    })
+  },
+
+  clearPendingRemoteSnapshot: () => {
+    set({ pendingRemoteSnapshot: null })
   },
 
   disableCloudBackupForCurrentProject: () => {
@@ -3541,6 +3574,7 @@ const useStore = create((set, get) => ({
         : state.cloudLineage,
       _cloudSyncTimeout: null,
       _cloudSyncInFlight: false,
+      pendingRemoteSnapshot: null,
       saveSyncState: buildSyncState({
         mode: 'local_only',
         status: state.hasUnsavedChanges ? 'unsaved_changes' : 'saved_locally',
@@ -3583,6 +3617,18 @@ const useStore = create((set, get) => ({
           mode: 'cloud_blocked',
           status: 'saved_locally',
           message: 'Saved on device · cloud backup unavailable',
+          pendingReason: reason,
+          lastSyncedAt: state.saveSyncState.lastSyncedAt,
+        }),
+      })
+      return
+    }
+    if (state.pendingRemoteSnapshot) {
+      set({
+        saveSyncState: buildSyncState({
+          mode: state.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'remote_update_pending',
+          message: 'Remote collaborator changes are available',
           pendingReason: reason,
           lastSyncedAt: state.saveSyncState.lastSyncedAt,
         }),
@@ -3647,6 +3693,19 @@ const useStore = create((set, get) => ({
       return { skipped: true, reason: 'sync_blocked' }
     }
     if (state._cloudSyncInFlight) return { skipped: true, reason: 'sync_in_flight' }
+    if (state.pendingRemoteSnapshot) {
+      set((nextState) => ({
+        saveSyncState: buildSyncState({
+          mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'cloud_sync_conflict',
+          message: 'Save blocked · reload collaborator updates first',
+          pendingReason: 'remote_update_pending',
+          error: 'A newer collaborator snapshot is waiting. Reload remote changes before saving.',
+          lastSyncedAt: nextState.saveSyncState.lastSyncedAt,
+        }),
+      }))
+      return { ok: false, reason: 'remote_update_pending' }
+    }
     const runSnapshotMutation = state.cloudSyncContext?.runSnapshotMutation
     const currentUserId = state.cloudSyncContext?.currentUserId
     if (!currentUserId || typeof runSnapshotMutation !== 'function') {
@@ -3677,9 +3736,25 @@ const useStore = create((set, get) => ({
         source: reason === 'manual' ? 'manual_save' : 'autosave',
         payload: safePayload,
         expectedLatestSnapshotId: latest.projectRef.snapshotId || undefined,
-        conflictStrategy: latest.cloudSyncContext.collaborationMode ? 'last_write_wins' : 'fail_on_conflict',
+        conflictStrategy: 'fail_on_conflict',
       })
-      if (!result?.ok) throw new Error(result?.reason || 'sync_failed')
+      if (!result?.ok) {
+        if (result?.reason === 'version_conflict') {
+          set((nextState) => ({
+            _cloudSyncInFlight: false,
+            saveSyncState: buildSyncState({
+              mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+              status: 'cloud_sync_conflict',
+              message: 'Save blocked · newer collaborator version detected',
+              pendingReason: reason,
+              error: 'Another collaborator saved first. Reload latest cloud snapshot before retrying.',
+              lastSyncedAt: nextState.saveSyncState.lastSyncedAt,
+            }),
+          }))
+          return { ok: false, reason: 'version_conflict', latestSnapshotId: result?.latestSnapshotId || null }
+        }
+        throw new Error(result?.reason || 'sync_failed')
+      }
       const syncedAt = new Date().toISOString()
       set((nextState) => ({
         _cloudSyncInFlight: false,
@@ -3700,6 +3775,7 @@ const useStore = create((set, get) => ({
           message: 'Saved on device · backed up to cloud',
           lastSyncedAt: syncedAt,
         }),
+        pendingRemoteSnapshot: null,
       }))
       return { ok: true, snapshotId: result.snapshotId }
     } catch (error) {

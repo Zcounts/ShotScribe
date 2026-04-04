@@ -34,6 +34,8 @@ export default function CloudSyncCoordinator() {
   const openCloudProject = useStore(s => s.openCloudProject)
   const updateShotImage = useStore(s => s.updateShotImage)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
+  const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
+  const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
   const convex = useConvex()
   const createProject = useMutation('projects:createProject')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
@@ -126,6 +128,13 @@ export default function CloudSyncCoordinator() {
       payload: latestSnapshot.payload,
     })
   }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
+
+  useEffect(() => {
+    if (!cloudProjectId || hasUnsavedChanges) return
+    if (!pendingRemoteSnapshot) return
+    if (pendingRemoteSnapshot.projectId !== cloudProjectId) return
+    applyPendingRemoteSnapshot()
+  }, [applyPendingRemoteSnapshot, cloudProjectId, hasUnsavedChanges, pendingRemoteSnapshot])
 
   // ── Cloud image uploader ───────────────────────────────────────────────
   // Registers a function that the store can call during createCloudProjectFromLocal
