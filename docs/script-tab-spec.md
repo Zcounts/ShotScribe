@@ -218,6 +218,13 @@ Avoid:
 - pixel-oriented UI
 - custom web-app feel that fights the document
 
+---
+
+## Script header Configure behavior (Script tab only)
+- In Script tab context, the top-header **Configure** action toggles the Script right sidebar/inspector drawer.
+- This behavior is intentionally scoped to Script only and must not change Configure behavior on other tabs.
+- Compact/mobile behavior remains unchanged: the Script right sidebar starts closed by default.
+
 - Keep SCRIPT document controls compact in a left-sidebar utility strip: title, cloud status, and Save Snapshot/Lock scene/Unlock should stay icon-led and minimal.
 - Keep Script Settings tabs focused on Estimation + Pagination for the launch-safe panel.
 
