@@ -70,6 +70,23 @@
 9. On failure: status is `cloud_sync_failed`; the error is surfaced in the toolbar tooltip.
     The local copy is safe — the next edit will queue another cloud attempt.
 
+### Local → cloud storyboard image backfill
+
+When a project is switched from local-only to cloud backup, ShotScribe now runs a targeted
+backfill pass for storyboard shots that still reference inline local image URLs (`data:`,
+`blob:`, or `file:`):
+
+1. Detect shots that have an image but no `imageAsset.cloud.assetId`.
+2. Upload each unique local image source into the cloud asset pipeline.
+3. Register uploaded assets in the Project Media Library and assign each shot to the
+   corresponding library asset.
+4. Rewrite shot image payloads to cloud-backed `imageAsset.cloud.assetId` references.
+5. Flush one cloud snapshot after migration so collaborators and reopened sessions load
+   the migrated images.
+
+This keeps local-first behavior intact while making local → cloud conversion seamless for
+existing storyboard images.
+
 **Conflict handling:**
 - Solo mode: `fail_on_conflict` — rejected if `expectedLatestSnapshotId` doesn't match.
   The UI shows `cloud_sync_failed`; the user can reload to get the latest snapshot.
@@ -152,6 +169,14 @@ Guarded transitions:
 6. On completion: dot turns green; message shows **"Saved on device · backed up to cloud · HH:MM"**.
 7. In Convex dashboard, verify only 1–2 snapshots were created (not one per keystroke).
 8. Refresh page. Confirm project reloads from cloud snapshot with all edits present.
+
+### 2b. Local-only storyboard images → cloud backup conversion
+
+1. Start local-only, add storyboard images to multiple shots, then enable **Cloud Backup**.
+2. Open a shot image picker and confirm migrated images appear in **Project Media Library**.
+3. Refresh and reopen the cloud project; confirm storyboard images remain attached.
+4. Share the project with a collaborator account; confirm collaborator sees the same images.
+5. Save/sync again and verify no duplicate media items are created for already migrated shots.
 
 ---
 
