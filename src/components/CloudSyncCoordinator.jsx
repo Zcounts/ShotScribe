@@ -1,9 +1,26 @@
 import { useEffect, useRef } from 'react'
-import { useConvex, useMutation, useQuery } from 'convex/react'
+import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
+import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
+const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
+
+function isInlineImageRef(value) {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed) return false
+  return INLINE_IMAGE_PREFIXES.some(prefix => trimmed.startsWith(prefix))
+}
+
+async function resolveInlineImageBlob(source) {
+  const response = await fetch(source)
+  if (!response.ok) {
+    throw new Error(`Failed to load local image payload (${response.status})`)
+  }
+  return response.blob()
+}
 
 export default function CloudSyncCoordinator() {
   const projectRef = useStore(s => s.projectRef)
@@ -12,10 +29,15 @@ export default function CloudSyncCoordinator() {
   const flushCloudSync = useStore(s => s.flushCloudSync)
   const applyIncomingCloudSnapshot = useStore(s => s.applyIncomingCloudSnapshot)
   const openCloudProject = useStore(s => s.openCloudProject)
+  const updateShotImage = useStore(s => s.updateShotImage)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
   const convex = useConvex()
   const createProject = useMutation('projects:createProject')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
+  const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
+  const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
+  const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
+  const getAssetSignedView = useAction('assets:getAssetSignedView')
   const cloudUser = useQuery('users:currentUser')
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const latestSnapshot = useQuery(
@@ -27,6 +49,8 @@ export default function CloudSyncCoordinator() {
   // Guard so the sessionStorage restore runs at most once per mount, even if
   // the adapter effect re-fires due to dependency changes.
   const hasAttemptedRestoreRef = useRef(false)
+  const localImageBackfillInFlightRef = useRef(false)
+  const localImageUploadCacheRef = useRef(new Map())
 
   useEffect(() => {
     setCloudRepositoryAdapter({
@@ -98,6 +122,110 @@ export default function CloudSyncCoordinator() {
       payload: latestSnapshot.payload,
     })
   }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
+
+  useEffect(() => {
+    if (projectRef?.type !== 'cloud' || !cloudProjectId) return
+    if (!cloudAccessPolicy.canEditCloudProject || !cloudAccessPolicy.canAccessCloudAssets) return
+    if (localImageBackfillInFlightRef.current) return
+
+    const state = useStore.getState()
+    const shotsToBackfill = []
+    for (const scene of (state.scenes || [])) {
+      for (const shot of (scene?.shots || [])) {
+        const hasCloudAsset = typeof shot?.imageAsset?.cloud?.assetId === 'string' && shot.imageAsset.cloud.assetId.trim().length > 0
+        if (hasCloudAsset) continue
+        const sourceRef = shot?.imageAsset?.thumb || shot?.image || null
+        if (!isInlineImageRef(sourceRef)) continue
+        shotsToBackfill.push({ shotId: shot.id, sourceRef, meta: shot?.imageAsset?.meta || null })
+      }
+    }
+    if (shotsToBackfill.length === 0) return
+
+    let cancelled = false
+    localImageBackfillInFlightRef.current = true
+
+    async function backfillLocalStoryboardImages() {
+      let migratedCount = 0
+      for (const shot of shotsToBackfill) {
+        if (cancelled) break
+        try {
+          let payload = localImageUploadCacheRef.current.get(shot.sourceRef) || null
+          if (!payload) {
+            const blob = await resolveInlineImageBlob(shot.sourceRef)
+            const processed = {
+              thumbBlob: blob,
+              fullBlob: blob,
+              mime: blob.type || 'image/webp',
+              thumbDataUrl: shot.sourceRef,
+              meta: {
+                ...(shot.meta || {}),
+                sourceName: shot?.meta?.sourceName || `migrated-${shot.shotId}.webp`,
+              },
+            }
+            const uploaded = await uploadStoryboardAssetToCloud({
+              projectId: cloudProjectId,
+              processed,
+              createAssetUploadIntent,
+              finalizeAssetUpload,
+            })
+            const assetId = uploaded?.imageAsset?.cloud?.assetId
+            if (assetId) {
+              const signedView = await getAssetSignedView({
+                projectId: cloudProjectId,
+                assetId,
+              })
+              payload = buildShotImageFromLibraryAsset(signedView) || uploaded
+            } else {
+              payload = uploaded
+            }
+            localImageUploadCacheRef.current.set(shot.sourceRef, payload)
+          }
+
+          const assetId = payload?.imageAsset?.cloud?.assetId
+          if (assetId) {
+            await assignShotLibraryAsset({
+              projectId: cloudProjectId,
+              shotId: shot.shotId,
+              assetId,
+            })
+          }
+          updateShotImage(shot.shotId, payload)
+          migratedCount += 1
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            // eslint-disable-next-line no-console
+            console.warn('[cloud-backup] local storyboard image backfill failed', {
+              shotId: shot.shotId,
+              message: error?.message || 'unknown_error',
+            })
+          }
+        }
+      }
+      if (migratedCount > 0 && !cancelled) {
+        await useStore.getState().flushCloudSync({ reason: 'local_asset_backfill' })
+      }
+    }
+
+    backfillLocalStoryboardImages().finally(() => {
+      if (!cancelled) {
+        localImageBackfillInFlightRef.current = false
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    assignShotLibraryAsset,
+    cloudAccessPolicy.canAccessCloudAssets,
+    cloudAccessPolicy.canEditCloudProject,
+    cloudProjectId,
+    createAssetUploadIntent,
+    finalizeAssetUpload,
+    getAssetSignedView,
+    projectRef?.type,
+    updateShotImage,
+  ])
 
   return null
 }
