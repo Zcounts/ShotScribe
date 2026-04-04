@@ -1363,33 +1363,6 @@
     box-shadow: inset 0 0 0 1px rgba(171,188,255,0.25);
   }
 
-  .script-view-btn {
-    opacity: 0.56;
-    background: rgba(148,163,184,0.12);
-    border-color: rgba(148,163,184,0.5);
-    color: #cbd5e1;
-  }
-
-  .script-view-btn:hover,
-  .script-view-btn:focus-visible {
-    opacity: 0.78;
-    border-color: rgba(148,163,184,0.66);
-  }
-
-  .script-view-btn.is-active,
-  .script-view-btn[aria-pressed="true"] {
-    opacity: 1;
-    background: rgba(59,130,246,0.42);
-    border-color: rgba(96,165,250,0.95);
-    color: #eff6ff;
-  }
-
-  .script-view-btn img,
-  .script-view-btn.is-active img,
-  .script-view-btn[aria-pressed="true"] img {
-    filter: brightness(0) invert(1);
-  }
-
   .script-breakdown-category-row {
     width: 100%;
     display: flex;
