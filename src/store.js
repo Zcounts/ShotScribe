@@ -654,6 +654,7 @@ const useStore = create((set, get) => ({
   browserProjectId: null,
   projectRef: { type: 'local', path: null, browserProjectId: null },
   cloudLineage: null, // { originProjectId, lastKnownSnapshotId }
+  liveModelVersion: 0,
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
   projectLogline: '',
@@ -672,9 +673,11 @@ const useStore = create((set, get) => ({
     runSnapshotMutation: null,
     currentUserId: null,
     collaborationMode: false,
+    syncLiveStoryboardState: null,
   },
   _cloudSyncTimeout: null,
   _cloudSyncInFlight: false,
+  pendingRemoteSnapshot: null, // { projectId, snapshotId, payload, detectedAt }
   cloudRepositoryReady: false,
   cloudImageUploader: null,
   cloudImageResolver: null,
@@ -1652,6 +1655,26 @@ const useStore = create((set, get) => ({
   getTotalShots: () => get().scenes.reduce((acc, s) => acc + s.shots.length, 0),
 
   // ── Scene actions ────────────────────────────────────────────────────
+  _syncLiveStoryboardIfEnabled: async () => {
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') return
+    if (Number(state.liveModelVersion || 0) < 1) return
+    if (!state.cloudSyncContext?.canSync || !state.cloudSyncContext?.cloudWritesEnabled) return
+    const syncFn = state.cloudSyncContext?.syncLiveStoryboardState
+    if (typeof syncFn !== 'function') return
+    try {
+      await syncFn({
+        projectId: state.projectRef.projectId,
+        scenes: state.scenes || [],
+        storyboardSceneOrder: state.storyboardSceneOrder || [],
+      })
+    } catch (error) {
+      devCloudBackupLog('live_storyboard_sync:failed', {
+        projectId: state.projectRef?.projectId || null,
+        error: error?.message || 'unknown_error',
+      })
+    }
+  },
 
   addScene: (overrides = {}) => {
     const currentScenes = get().scenes
@@ -3000,7 +3023,9 @@ const useStore = create((set, get) => ({
         status: 'saved_locally',
         message: 'Saved locally on this device',
       }),
+      pendingRemoteSnapshot: null,
       cloudLineage: loadedCloudLineage,
+      liveModelVersion: 0,
       browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
       projectRef: {
         type: 'local',
@@ -3416,7 +3441,10 @@ const useStore = create((set, get) => ({
     }
 
     devCloudBackupLog('open:start', { projectId })
-    const snapshot = await cloudRepository.getLatestSnapshot(projectId)
+    const [snapshot, cloudProject] = await Promise.all([
+      cloudRepository.getLatestSnapshot(projectId),
+      typeof cloudRepository.getProject === 'function' ? cloudRepository.getProject(projectId) : null,
+    ])
     if (!snapshot?.payload) {
       devCloudBackupLog('open:missing_snapshot', { projectId })
       throw new Error('Cloud project has no snapshots')
@@ -3436,6 +3464,7 @@ const useStore = create((set, get) => ({
         originProjectId: projectId,
         lastKnownSnapshotId: snapshot.id,
       },
+      liveModelVersion: Number(cloudProject?.liveModelVersion || 0),
       hasUnsavedChanges: false,
       lastSaved: new Date().toISOString(),
       saveSyncState: buildSyncState({
@@ -3444,10 +3473,85 @@ const useStore = create((set, get) => ({
         message: 'Saved on device · backed up to cloud',
         lastSyncedAt: new Date().toISOString(),
       }),
+      pendingRemoteSnapshot: null,
     })
     // Persist across browser refresh so the same cloud project reopens
     // automatically when the user refreshes the page.
     try { sessionStorage.setItem('ss_active_cloud_project_id', projectId) } catch {}
+  },
+
+  setLiveModelVersion: (version = 0) => {
+    set({ liveModelVersion: Math.max(0, Number(version) || 0) })
+  },
+
+  applyLiveStoryboardState: ({ scenes = [], shots = [] } = {}) => {
+    if (!Array.isArray(scenes) || !Array.isArray(shots)) return { applied: false }
+    const shotsByScene = new Map()
+    shots
+      .slice()
+      .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+      .forEach((shot) => {
+        const sceneId = String(shot.sceneId || '')
+        if (!sceneId) return
+        if (!shotsByScene.has(sceneId)) shotsByScene.set(sceneId, [])
+        const customFields = (shot.customFields && typeof shot.customFields === 'object') ? shot.customFields : {}
+        shotsByScene.get(sceneId).push({
+          id: shot.shotId,
+          cameraName: shot.cameraName || 'Camera 1',
+          focalLength: shot.focalLength || '',
+          color: shot.color || null,
+          image: shot.image || null,
+          imageAsset: shot.imageAsset || null,
+          specs: shot.specs || { size: '', type: '', move: '', equip: '' },
+          notes: shot.notes || '',
+          subject: shot.subject || '',
+          description: shot.description || '',
+          cast: shot.cast || '',
+          checked: !!shot.checked,
+          intOrExt: shot.intOrExt || '',
+          dayNight: shot.dayNight || '',
+          scriptTime: shot.scriptTime || '',
+          setupTime: shot.setupTime || '',
+          shotAspectRatio: shot.shotAspectRatio || '',
+          predictedTakes: shot.predictedTakes || '',
+          shootTime: shot.shootTime || '',
+          takeNumber: shot.takeNumber || '',
+          sound: shot.sound || '',
+          props: shot.props || '',
+          frameRate: shot.frameRate || '',
+          linkedSceneId: shot.linkedSceneId || null,
+          linkedDialogueLine: shot.linkedDialogueLine || null,
+          linkedDialogueOffset: shot.linkedDialogueOffset ?? null,
+          linkedScriptRangeStart: shot.linkedScriptRangeStart ?? null,
+          linkedScriptRangeEnd: shot.linkedScriptRangeEnd ?? null,
+          ...customFields,
+        })
+      })
+
+    const orderedScenes = scenes
+      .slice()
+      .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+      .map((scene) => ({
+        id: scene.sceneId,
+        sceneLabel: scene.sceneLabel || '',
+        slugline: scene.slugline || '',
+        location: scene.location || '',
+        intOrExt: scene.intOrExt || '',
+        dayNight: scene.dayNight || '',
+        color: scene.color || null,
+        linkedScriptSceneId: scene.linkedScriptSceneId || null,
+        pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes : [''],
+        pageColors: Array.isArray(scene.pageColors) ? scene.pageColors : [],
+        shots: shotsByScene.get(String(scene.sceneId)) || [],
+      }))
+
+    const order = orderedScenes.map((scene) => scene.id)
+    set({
+      scenes: orderedScenes,
+      storyboardSceneOrder: order,
+      hasUnsavedChanges: false,
+    })
+    return { applied: true }
   },
 
   setCloudSnapshotId: (snapshotId) => {
@@ -3478,6 +3582,21 @@ const useStore = create((set, get) => ({
       return { applied: false, reason: 'already_current' }
     }
     if (state.hasUnsavedChanges || state._cloudSyncInFlight) {
+      set((latestState) => ({
+        pendingRemoteSnapshot: {
+          projectId,
+          snapshotId,
+          payload,
+          detectedAt: new Date().toISOString(),
+        },
+        saveSyncState: buildSyncState({
+          mode: latestState.cloudSyncContext?.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'remote_update_pending',
+          message: 'Remote collaborator changes are available',
+          pendingReason: 'remote_update_pending',
+          lastSyncedAt: latestState.saveSyncState.lastSyncedAt,
+        }),
+      }))
       return { applied: false, reason: 'local_changes_pending' }
     }
 
@@ -3513,8 +3632,23 @@ const useStore = create((set, get) => ({
         message: 'Saved on device · synced with collaborator changes',
         lastSyncedAt: syncedAt,
       }),
+      pendingRemoteSnapshot: null,
     }))
     return { applied: true }
+  },
+
+  applyPendingRemoteSnapshot: () => {
+    const pending = get().pendingRemoteSnapshot
+    if (!pending) return { applied: false, reason: 'none_pending' }
+    return get().applyIncomingCloudSnapshot({
+      projectId: pending.projectId,
+      snapshotId: pending.snapshotId,
+      payload: pending.payload,
+    })
+  },
+
+  clearPendingRemoteSnapshot: () => {
+    set({ pendingRemoteSnapshot: null })
   },
 
   disableCloudBackupForCurrentProject: () => {
@@ -3541,6 +3675,8 @@ const useStore = create((set, get) => ({
         : state.cloudLineage,
       _cloudSyncTimeout: null,
       _cloudSyncInFlight: false,
+      pendingRemoteSnapshot: null,
+      liveModelVersion: 0,
       saveSyncState: buildSyncState({
         mode: 'local_only',
         status: state.hasUnsavedChanges ? 'unsaved_changes' : 'saved_locally',
@@ -3589,6 +3725,18 @@ const useStore = create((set, get) => ({
       })
       return
     }
+    if (state.pendingRemoteSnapshot) {
+      set({
+        saveSyncState: buildSyncState({
+          mode: state.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'remote_update_pending',
+          message: 'Remote collaborator changes are available',
+          pendingReason: reason,
+          lastSyncedAt: state.saveSyncState.lastSyncedAt,
+        }),
+      })
+      return
+    }
     set({
       saveSyncState: buildSyncState({
         mode: state.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
@@ -3615,6 +3763,7 @@ const useStore = create((set, get) => ({
     runSnapshotMutation = null,
     currentUserId = null,
     collaborationMode = false,
+    syncLiveStoryboardState = null,
   } = {}) => {
     set({
       cloudSyncContext: {
@@ -3623,6 +3772,7 @@ const useStore = create((set, get) => ({
         runSnapshotMutation: runSnapshotMutation || null,
         currentUserId: currentUserId ? String(currentUserId) : null,
         collaborationMode: !!collaborationMode,
+        syncLiveStoryboardState: typeof syncLiveStoryboardState === 'function' ? syncLiveStoryboardState : null,
       },
     })
     const state = get()
@@ -3647,6 +3797,19 @@ const useStore = create((set, get) => ({
       return { skipped: true, reason: 'sync_blocked' }
     }
     if (state._cloudSyncInFlight) return { skipped: true, reason: 'sync_in_flight' }
+    if (state.pendingRemoteSnapshot) {
+      set((nextState) => ({
+        saveSyncState: buildSyncState({
+          mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'cloud_sync_conflict',
+          message: 'Save blocked · reload collaborator updates first',
+          pendingReason: 'remote_update_pending',
+          error: 'A newer collaborator snapshot is waiting. Reload remote changes before saving.',
+          lastSyncedAt: nextState.saveSyncState.lastSyncedAt,
+        }),
+      }))
+      return { ok: false, reason: 'remote_update_pending' }
+    }
     const runSnapshotMutation = state.cloudSyncContext?.runSnapshotMutation
     const currentUserId = state.cloudSyncContext?.currentUserId
     if (!currentUserId || typeof runSnapshotMutation !== 'function') {
@@ -3677,9 +3840,25 @@ const useStore = create((set, get) => ({
         source: reason === 'manual' ? 'manual_save' : 'autosave',
         payload: safePayload,
         expectedLatestSnapshotId: latest.projectRef.snapshotId || undefined,
-        conflictStrategy: latest.cloudSyncContext.collaborationMode ? 'last_write_wins' : 'fail_on_conflict',
+        conflictStrategy: 'fail_on_conflict',
       })
-      if (!result?.ok) throw new Error(result?.reason || 'sync_failed')
+      if (!result?.ok) {
+        if (result?.reason === 'version_conflict') {
+          set((nextState) => ({
+            _cloudSyncInFlight: false,
+            saveSyncState: buildSyncState({
+              mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+              status: 'cloud_sync_conflict',
+              message: 'Save blocked · newer collaborator version detected',
+              pendingReason: reason,
+              error: 'Another collaborator saved first. Reload latest cloud snapshot before retrying.',
+              lastSyncedAt: nextState.saveSyncState.lastSyncedAt,
+            }),
+          }))
+          return { ok: false, reason: 'version_conflict', latestSnapshotId: result?.latestSnapshotId || null }
+        }
+        throw new Error(result?.reason || 'sync_failed')
+      }
       const syncedAt = new Date().toISOString()
       set((nextState) => ({
         _cloudSyncInFlight: false,
@@ -3700,6 +3879,7 @@ const useStore = create((set, get) => ({
           message: 'Saved on device · backed up to cloud',
           lastSyncedAt: syncedAt,
         }),
+        pendingRemoteSnapshot: null,
       }))
       return { ok: true, snapshotId: result.snapshotId }
     } catch (error) {
@@ -3726,6 +3906,7 @@ const useStore = create((set, get) => ({
     set({ hasUnsavedChanges: true })
     get()._updateSaveSyncStateForChange(reason)
     get()._scheduleCloudSync(reason)
+    get()._syncLiveStoryboardIfEnabled()
     const state = get()
     if (!state.autoSave) return
     if (state._autoSaveTimeout) clearTimeout(state._autoSaveTimeout)

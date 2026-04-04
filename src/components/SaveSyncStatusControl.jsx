@@ -50,6 +50,9 @@ export default function SaveSyncStatusControl({
   const lastSaved = useStore((state) => state.lastSaved)
   const openCloudProject = useStore((state) => state.openCloudProject)
   const cloudRepositoryReady = useStore((state) => state.cloudRepositoryReady)
+  const pendingRemoteSnapshot = useStore((state) => state.pendingRemoteSnapshot)
+  const applyPendingRemoteSnapshot = useStore((state) => state.applyPendingRemoteSnapshot)
+  const clearPendingRemoteSnapshot = useStore((state) => state.clearPendingRemoteSnapshot)
 
   const [open, setOpen] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -91,6 +94,8 @@ export default function SaveSyncStatusControl({
     if (saveSyncState?.status === 'syncing_to_cloud') return 'Syncing to cloud'
     if (saveSyncState?.status === 'synced_to_cloud') return 'Backed up to cloud'
     if (saveSyncState?.status === 'cloud_sync_failed') return 'Cloud backup failed'
+    if (saveSyncState?.status === 'cloud_sync_conflict') return 'Conflict requires reload'
+    if (saveSyncState?.status === 'remote_update_pending') return 'Remote update pending'
     if (saveSyncState?.status === 'saved_locally') return 'Saved locally, cloud sync pending'
     if (saveSyncState?.status === 'unsaved_changes') return 'Changes pending sync'
     return 'Cloud status unavailable'
@@ -100,6 +105,12 @@ export default function SaveSyncStatusControl({
     if (!isCloudProject) return `Saved locally at ${formatTimestamp(lastSaved)}`
     if (saveSyncState?.status === 'cloud_sync_failed') {
       return saveSyncState?.error || 'Cloud backup failed. Local copy is still safe on this device.'
+    }
+    if (saveSyncState?.status === 'cloud_sync_conflict') {
+      return saveSyncState?.error || 'Conflict detected. Reload collaborator updates before saving again.'
+    }
+    if (saveSyncState?.status === 'remote_update_pending') {
+      return 'A collaborator saved newer changes. Reload remote updates to continue safely.'
     }
     if (saveSyncState?.status === 'synced_to_cloud') {
       return `Cloud backup completed at ${formatTimestamp(saveSyncState?.lastSyncedAt)}`
@@ -185,6 +196,19 @@ export default function SaveSyncStatusControl({
     }
   }
 
+  const handleReloadRemote = async () => {
+    try {
+      const result = await applyPendingRemoteSnapshot()
+      if (!result?.applied) {
+        setShareMessage('Remote update is queued until local edits are cleared.')
+      } else {
+        setShareMessage('Loaded latest collaborator changes.')
+      }
+    } catch (error) {
+      setShareMessage(error?.message || 'Could not load collaborator changes.')
+    }
+  }
+
   return (
     <div ref={panelRef} style={{ position: 'relative', flexShrink: 0 }}>
       <button
@@ -225,6 +249,11 @@ export default function SaveSyncStatusControl({
               <div><strong>Collaboration:</strong> {members.length > 1 ? `Shared (${members.length} members)` : (isCloudProject ? 'Solo cloud project' : 'Collaboration off')}</div>
               {isCloudProject ? (<div><strong>Live activity:</strong> {activeCollaborators} active · {sceneLockCount} scene lock{sceneLockCount === 1 ? '' : 's'}</div>) : null}
               {saveSyncState?.error ? (<div style={{ color: '#FCA5A5' }}><strong>Last error:</strong> {saveSyncState.error}</div>) : null}
+              {pendingRemoteSnapshot ? (
+                <div style={{ color: '#FCD34D' }}>
+                  <strong>Pending remote update:</strong> Snapshot {String(pendingRemoteSnapshot.snapshotId || '')}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -244,6 +273,25 @@ export default function SaveSyncStatusControl({
               </>
             )}
           </div>
+
+          {pendingRemoteSnapshot ? (
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                type="button"
+                onClick={handleReloadRemote}
+                style={{ border: '1px solid rgba(251,191,36,0.45)', background: 'rgba(120,53,15,0.36)', color: '#FCD34D', borderRadius: 6, fontSize: 11, padding: '5px 9px', cursor: 'pointer' }}
+              >
+                Reload collaborator changes
+              </button>
+              <button
+                type="button"
+                onClick={clearPendingRemoteSnapshot}
+                style={{ border: '1px solid rgba(148,163,184,0.35)', background: 'rgba(15,23,42,0.46)', color: '#CBD5E1', borderRadius: 6, fontSize: 11, padding: '5px 9px', cursor: 'pointer' }}
+              >
+                Dismiss notice
+              </button>
+            </div>
+          ) : null}
 
           {cloudEnvEnabled && signedInForCloud && (cloudProjects?.length || 0) > 0 ? (
             <div style={{ marginTop: 12, borderTop: '1px solid rgba(74,85,104,0.35)', paddingTop: 10 }}>

@@ -922,6 +922,11 @@ export default function App() {
     showContextMenu(entity.entityType, entity.entityId, event.clientX, event.clientY)
   }, [showContextMenu, showPersonContextMenu])
 
+  const cloudReadOnlyTab = cloudAccessPolicy.readOnly && activeTab !== 'home'
+  const cloudReadOnlyInteractionStyle = cloudReadOnlyTab
+    ? { pointerEvents: 'none', userSelect: 'none' }
+    : null
+
   return (
     <div
       className="flex flex-col app-shell"
@@ -961,7 +966,7 @@ export default function App() {
         <>
       {cloudAccessPolicy.readOnly && (
         <div style={{ padding: '8px 16px', background: '#3f2d0b', borderBottom: '1px solid rgba(251,191,36,0.45)', color: '#fde68a', fontSize: 12 }}>
-          <strong>Cloud project is read-only.</strong> You can view project data, but editing, cloud export, and cloud asset access are blocked while billing is inactive. Local-only projects continue to work normally. Manage billing from Account.
+          <strong>Cloud project is read-only.</strong> {cloudAccessPolicy.readOnlyReason || 'You can view project data, but editing and cloud sync are currently blocked.'}
         </div>
       )}
       {/* Top-level tab navigation — sticky, never scrolls out of view */}
@@ -1037,6 +1042,7 @@ export default function App() {
           ref={storyboardScrollRef}
           className="flex-1 overflow-auto canvas-texture"
           onScroll={handleStoryboardScroll}
+          style={cloudReadOnlyInteractionStyle || undefined}
         >
           <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', minHeight: '100%', paddingTop: 0, paddingRight: 14, paddingBottom: 0, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
             {showStoryboardOutline && (
@@ -1193,7 +1199,7 @@ export default function App() {
           </div>
         </div>
       ) : activeTab === 'shotlist' ? (
-        <div className="flex-1 flex flex-col overflow-auto canvas-texture">
+        <div className="flex-1 flex flex-col overflow-auto canvas-texture" style={cloudReadOnlyInteractionStyle || undefined}>
           <ShotlistTab
             key={`shotlist-${documentSession}`}
             containerRef={shotlistRef}
@@ -1202,7 +1208,7 @@ export default function App() {
           />
         </div>
       ) : activeTab === 'scenes' ? (
-        <div className="flex-1 overflow-hidden canvas-texture">
+        <div className="flex-1 overflow-hidden canvas-texture" style={cloudReadOnlyInteractionStyle || undefined}>
           <ScenesTab
             key={`scenes-${documentSession}`}
             configureOpen={scenesConfigOpen}
@@ -1210,11 +1216,11 @@ export default function App() {
           />
         </div>
       ) : activeTab === 'script' ? (
-        <div className="flex-1 overflow-hidden canvas-texture">
+        <div className="flex-1 overflow-hidden canvas-texture" style={cloudReadOnlyInteractionStyle || undefined}>
           <ScriptTab key={`script-${documentSession}`} />
         </div>
       ) : activeTab === 'schedule' ? (
-        <div className="flex-1 overflow-y-auto canvas-texture">
+        <div className="flex-1 overflow-y-auto canvas-texture" style={cloudReadOnlyInteractionStyle || undefined}>
           <ScheduleTab
             key={`schedule-${documentSession}`}
             configureOpen={scheduleConfigOpen}
@@ -1222,7 +1228,7 @@ export default function App() {
           />
         </div>
       ) : activeTab === 'callsheet' ? (
-        <div className="flex-1 flex flex-col overflow-hidden canvas-texture">
+        <div className="flex-1 flex flex-col overflow-hidden canvas-texture" style={cloudReadOnlyInteractionStyle || undefined}>
           <CallsheetTab
             key={`callsheet-${documentSession}`}
             configureOpen={callsheetConfigOpen}
@@ -1233,7 +1239,7 @@ export default function App() {
           />
         </div>
       ) : activeTab === 'castcrew' ? (
-        <div className="flex-1 overflow-hidden canvas-texture">
+        <div className="flex-1 overflow-hidden canvas-texture" style={cloudReadOnlyInteractionStyle || undefined}>
           <CastCrewTab key={`castcrew-${documentSession}`} />
         </div>
       ) : null}
