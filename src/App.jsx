@@ -1038,12 +1038,12 @@ export default function App() {
           className="flex-1 overflow-auto canvas-texture"
           onScroll={handleStoryboardScroll}
         >
-          <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', minHeight: '100%', paddingTop: 0, paddingRight: 14, paddingBottom: 14, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', minHeight: '100%', paddingTop: 0, paddingRight: 14, paddingBottom: 0, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
             {showStoryboardOutline && (
               <div
                 style={isDesktopDown
-                  ? { width: 0, position: 'relative', alignSelf: 'stretch', height: '100%', display: 'flex' }
-                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'stretch', height: '100%', minHeight: '100%', maxHeight: '100%', display: 'flex' }
+                  ? { width: 0, position: 'relative', alignSelf: 'stretch', display: 'flex' }
+                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'stretch', minHeight: '100%', maxHeight: '100%', display: 'flex' }
                 }
               >
                 <SidebarPane
