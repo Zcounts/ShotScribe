@@ -312,11 +312,12 @@ export default function HomeView() {
     },
   ]
 
+  const defaultHeroBackground = 'https://fairlyodd.org/wp-content/uploads/2022/12/camera.jpg'
   const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
+  const resolvedProjectHeroBackground = heroBackgroundImage || defaultHeroBackground
   const heroOverlayColor = projectHeroOverlayColor || '#1f1f27'
   const defaultHeroTitle = (homeHeroDefaults?.headline || '').trim() || 'Build the Shot. Run the Day.'
   const defaultHeroSubhead = (homeHeroDefaults?.subhead || '').trim() || 'Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.'
-  const defaultHeroBackground = 'https://fairlyodd.org/wp-content/uploads/2022/12/camera.jpg'
 
   const saveProjectIdentity = async ({ name, emoji }) => {
     if (projectRef?.type !== 'cloud') return
@@ -399,15 +400,11 @@ export default function HomeView() {
         <section
           className={`home-hero ${hasLoadedProject ? 'project-loaded' : ''}`}
           style={hasLoadedProject
-            ? (
-                heroBackgroundImage
-                  ? {
-                      backgroundImage: `linear-gradient(0deg, ${heroOverlayColor}99, ${heroOverlayColor}99), url(${heroBackgroundImage})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                    }
-                  : undefined
-              )
+            ? {
+                backgroundImage: `linear-gradient(0deg, ${heroOverlayColor}99, ${heroOverlayColor}99), url(${resolvedProjectHeroBackground})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }
             : {
                 backgroundImage: `linear-gradient(0deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url(${defaultHeroBackground})`,
                 backgroundSize: 'cover',
