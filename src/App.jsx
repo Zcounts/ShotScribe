@@ -863,7 +863,10 @@ export default function App() {
     },
     script: {
       isActive: false,
-      onToggle: () => setStoryboardConfigOpen(false),
+      onToggle: () => {
+        window.dispatchEvent(new CustomEvent('shotscribe:close-script-right-sidebar'))
+        setStoryboardConfigOpen(false)
+      },
     },
     castcrew: {
       isActive: castCrewConfigOpen,

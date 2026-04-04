@@ -541,6 +541,14 @@ export default function ScriptTab() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isDesktopDown])
 
+  useEffect(() => {
+    const handleCloseRightSidebar = () => {
+      setMobileRightOpen(false)
+    }
+    window.addEventListener('shotscribe:close-script-right-sidebar', handleCloseRightSidebar)
+    return () => window.removeEventListener('shotscribe:close-script-right-sidebar', handleCloseRightSidebar)
+  }, [])
+
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
