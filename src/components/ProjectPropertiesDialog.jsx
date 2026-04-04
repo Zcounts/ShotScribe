@@ -9,6 +9,14 @@ const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '�
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
+function hasHeroImageValue(value) {
+  if (!value || typeof value !== 'object') return false
+  if (typeof value.image === 'string' && value.image.trim()) return true
+  if (typeof value?.imageAsset?.thumb === 'string' && value.imageAsset.thumb.trim()) return true
+  if (typeof value?.imageAsset?.cloud?.assetId === 'string' && value.imageAsset.cloud.assetId.trim()) return true
+  return false
+}
+
 export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity }) {
   const projectRef = useStore(s => s.projectRef)
   const projectName = useStore(s => s.projectName)
@@ -136,7 +144,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
       setProjectEmoji(emoji.trim() || '🎬')
       setProjectLogline(logline)
       setProjectHeroOverlayColor(overlayColor || '#1f1f27')
-      if (heroImageDraft?.image || heroImageDraft?.imageAsset?.thumb) {
+      if (hasHeroImageValue(heroImageDraft)) {
         setProjectHeroImage(heroImageDraft)
       } else {
         clearProjectHeroImage()
