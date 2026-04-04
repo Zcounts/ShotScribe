@@ -3243,6 +3243,9 @@ const useStore = create((set, get) => ({
         lastSyncedAt: new Date().toISOString(),
       }),
     })
+    // Persist across browser refresh so the same cloud project reopens
+    // automatically when the user refreshes the page.
+    try { sessionStorage.setItem('ss_active_cloud_project_id', projectId) } catch {}
   },
 
   setCloudSnapshotId: (snapshotId) => {
@@ -3270,12 +3273,24 @@ const useStore = create((set, get) => ({
       return { applied: false, reason: 'local_changes_pending' }
     }
 
+    // Preserve workspace navigation before loadProject resets it.
+    // loadProject always resets projectRef to { type: 'local' } and activeTab to
+    // 'script', which would kick the collaborator off their current tab and
+    // silently drop cloud mode. Capture both before the call so we can restore
+    // them unconditionally afterward.
+    const preservedProjectRef = state.projectRef
+    const preservedActiveTab = state.activeTab
+
     get().loadProject(payload)
+
     const syncedAt = new Date().toISOString()
     set((latestState) => ({
-      projectRef: latestState.projectRef?.type === 'cloud' && latestState.projectRef.projectId === projectId
-        ? { ...latestState.projectRef, snapshotId }
-        : latestState.projectRef,
+      // Restore cloud identity unconditionally — loadProject always writes
+      // { type: 'local' }, so the old "check latestState.type === 'cloud'"
+      // guard always evaluated to false and left projectRef as local.
+      projectRef: { ...preservedProjectRef, snapshotId },
+      // Stay on whichever tab the user was on; never kick them back to Script.
+      activeTab: preservedActiveTab,
       hasUnsavedChanges: false,
       lastSaved: syncedAt,
       saveSyncState: buildSyncState({
@@ -3294,6 +3309,9 @@ const useStore = create((set, get) => ({
     if (state._cloudSyncTimeout) {
       clearTimeout(state._cloudSyncTimeout)
     }
+    // Clear the sessionStorage entry so a subsequent browser refresh doesn't
+    // try to reopen the project that the user has just detached from the cloud.
+    try { sessionStorage.removeItem('ss_active_cloud_project_id') } catch {}
 
     set({
       projectRef: {

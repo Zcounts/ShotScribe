@@ -38,16 +38,28 @@ export default function SharingSettingsSection() {
     )
   }
 
+  // Viewers have no collaboration management access and no editor role.
+  // Show a role-aware message rather than always blaming billing.
+  const memberRole = membersResult?.currentUserRole || null
   if (!cloudAccessPolicy.canCollaborateOnCloudProject) {
+    const isViewerRole = memberRole === 'viewer'
     return (
       <div style={cardStyle}>
         <div className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1">Project Sharing</div>
-        <div className="text-xs text-amber-300 mb-2">
-          Collaboration is unavailable for this cloud project while your paid cloud access is inactive.
-        </div>
-        <div className="text-xs text-gray-400">
-          You can still view existing project data. Local-only projects and local import/export continue to work normally.
-        </div>
+        {isViewerRole ? (
+          <div className="text-xs text-gray-400">
+            You have <strong>viewer</strong> access to this project. Ask the owner to upgrade your role to editor if you need to make changes.
+          </div>
+        ) : (
+          <>
+            <div className="text-xs text-amber-300 mb-2">
+              Collaboration management is unavailable while your paid cloud access is inactive.
+            </div>
+            <div className="text-xs text-gray-400">
+              You can still view existing project data. Local-only projects and local import/export continue to work normally.
+            </div>
+          </>
+        )}
       </div>
     )
   }
