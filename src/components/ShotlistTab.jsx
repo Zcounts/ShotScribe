@@ -1441,18 +1441,18 @@ export default function ShotlistTab({
       />
 
       {/* ── Toolbar ── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        padding: '5px 16px',
-        borderBottom: `1px solid ${c.thickBorder}`,
-        backgroundColor: 'transparent',
-        position: 'relative',
-        zIndex: 20,
-        flexShrink: 0,
-      }}>
-        {configureOpen && (
+      {configureOpen && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          padding: '5px 16px',
+          borderBottom: `1px solid ${c.thickBorder}`,
+          backgroundColor: 'transparent',
+          position: 'relative',
+          zIndex: 20,
+          flexShrink: 0,
+        }}>
           <ColumnConfigPanel
             config={shotlistColumnConfig || []}
             isDark={isDark}
@@ -1464,8 +1464,8 @@ export default function ShotlistTab({
             viewSettings={viewSettings}
             onViewSettingsChange={(patch) => setViewSettings(prev => ({ ...prev, ...patch }))}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── No days empty state ── */}
       {schedule.length === 0 && (
