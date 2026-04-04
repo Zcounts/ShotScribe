@@ -1568,10 +1568,110 @@ export default function ScriptTab() {
                 </button>
               </div>
             ) : null}
+            {/* Combined Script Settings panel: Estimation / Scene Pagination / Pagination */}
+            <section className="ss-module script-inspector-section">
+              <button
+                onClick={() => setInspectorSections(prev => ({ ...prev, scriptEstimation: !prev.scriptEstimation }))}
+                className="ss-module-header script-inspector-header"
+                style={{ width: '100%', borderBottom: inspectorSections.scriptEstimation ? '1px solid rgba(148,163,184,0.2)' : 'none', textAlign: 'left', fontSize: 12, fontWeight: 700 }}
+              >
+                {inspectorSections.scriptEstimation ? '▾' : '▸'} Script Settings
+              </button>
+              {inspectorSections.scriptEstimation && (
+                <div style={{ padding: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4, marginBottom: 10 }}>
+                    {[
+                      { id: 'estimation', label: 'Estimation' },
+                      { id: 'scenePagination', label: 'Scene Pag.' },
+                      { id: 'pagination', label: 'Pagination' },
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={`script-page-style-tab${scriptInspectorMode === tab.id ? ' is-active' : ''}`}
+                        onClick={() => setScriptInspectorMode(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {scriptInspectorMode === 'estimation' && (
+                    <>
+                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="range"
+                          min={3}
+                          max={10}
+                          step={0.5}
+                          value={scriptSettings?.baseMinutesPerPage ?? 5}
+                          onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
+                          style={{ flex: 1, accentColor: '#2563eb' }}
+                        />
+                        <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
+                          {scriptSettings?.baseMinutesPerPage ?? 5}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                        1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
+                      </div>
+                    </>
+                  )}
+
+                  {scriptInspectorMode === 'scenePagination' && (
+                    <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                      {orderedScenes.length === 0 && (
+                        <div style={{ fontSize: 11, color: '#64748b' }}>No scenes yet.</div>
+                      )}
+                      {(() => {
+                        const scenePageMap = {}
+                        documentModel.pages.forEach(page => {
+                          page.blocks.forEach(block => {
+                            if (!scenePageMap[block.sceneId]) {
+                              scenePageMap[block.sceneId] = { firstPage: page.number, lastPage: page.number }
+                            } else {
+                              scenePageMap[block.sceneId].lastPage = page.number
+                            }
+                          })
+                        })
+                        return orderedScenes.map(scene => {
+                          const pag = scenePageMap[scene.id]
+                          return (
+                            <div key={scene.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '4px 0', borderBottom: '1px solid rgba(148,163,184,0.12)', fontSize: 11 }}>
+                              <span style={{ color: '#334155', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 6 }}>
+                                {scene.sceneNumber ? <span style={{ color: '#94a3b8', marginRight: 4 }}>SC {scene.sceneNumber}</span> : null}
+                                {sceneHeader(scene)}
+                              </span>
+                              <span style={{ color: '#64748b', flexShrink: 0, fontFamily: 'monospace', fontSize: 10 }}>
+                                {pag ? (pag.firstPage === pag.lastPage ? `p.${pag.firstPage}` : `p.${pag.firstPage}–${pag.lastPage}`) : '—'}
+                              </span>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                  )}
+
+                  {scriptInspectorMode === 'pagination' && (
+                    <>
+                      <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Scene pagination mode</label>
+                      <select
+                        className="ss-input"
+                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
+                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
+                        style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
+                      >
+                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
+                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
+                      </select>
+                    </>
+                  )}
+                </div>
+              )}
+            </section>
+
             {[
-              { id: 'scriptEstimation', title: 'Script & Estimation' },
-              { id: 'scenePagination', title: 'Scene Pagination' },
-              { id: 'paginationMode', title: 'Pagination Mode' },
               { id: 'writeOptions', title: 'Write panel options' },
               { id: 'pageStyles', title: 'Page & Styles' },
             ].map(section => (
@@ -1585,89 +1685,6 @@ export default function ScriptTab() {
                 </button>
                 {inspectorSections[section.id] && (
                   <div style={{ padding: 10 }}>
-                    {section.id === 'scriptControls' && (
-                      <div className="script-format-inspector">
-                        <div className="script-format-mode-switch" role="tablist" aria-label="Script controls modes">
-                          {[
-                            { id: 'estimation', label: 'Estimation' },
-                            { id: 'pagination', label: 'Pagination' },
-                            { id: 'write', label: 'Write' },
-                          ].map((mode) => {
-                            const isActive = scriptInspectorMode === mode.id
-                            return (
-                              <button
-                                key={mode.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={isActive}
-                                className={`script-format-mode-btn ${isActive ? 'is-active' : ''}`}
-                                onClick={() => setScriptInspectorMode(mode.id)}
-                                title={mode.label}
-                              >
-                                <span>{mode.label}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-
-                        {scriptInspectorMode === 'estimation' && (
-                          <>
-                            <label style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 6 }}>Base minutes per page</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <input
-                                type="range"
-                                min={3}
-                                max={10}
-                                step={0.5}
-                                value={scriptSettings?.baseMinutesPerPage ?? 5}
-                                onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
-                                style={{ flex: 1, accentColor: '#2563eb' }}
-                              />
-                              <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
-                                {scriptSettings?.baseMinutesPerPage ?? 5}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
-                              1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
-                            </div>
-                          </>
-                        )}
-                        {scriptInspectorMode === 'pagination' && (
-                          <select
-                            className="ss-input"
-                            value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
-                            onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                            style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
-                          >
-                            <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
-                            <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
-                          </select>
-                        )}
-                        {scriptInspectorMode === 'write' && (
-                          <>
-                            <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
-                              <input type="checkbox" checked={writeOptions.boldSlugline} onChange={(event) => toggleWriteOption('boldSlugline', event.target.checked)} />
-                              Bold Slugline
-                            </label>
-                            <label className="script-checkbox-row">
-                              <input type="checkbox" checked={writeOptions.boldCharacter} onChange={(event) => toggleWriteOption('boldCharacter', event.target.checked)} />
-                              Bold Character
-                            </label>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {section.id === 'paginationMode' && (
-                      <select
-                        className="ss-input"
-                        value={scriptSettings.scenePaginationMode || SCENE_PAGINATION_MODES.CONTINUE}
-                        onChange={(event) => setScriptSettings({ scenePaginationMode: event.target.value })}
-                        style={{ width: '100%', padding: '5px 6px', fontSize: 12 }}
-                      >
-                        <option value={SCENE_PAGINATION_MODES.CONTINUE}>Natural pagination</option>
-                        <option value={SCENE_PAGINATION_MODES.NEW_PAGE}>New page per scene</option>
-                      </select>
-                    )}
                     {section.id === 'writeOptions' && (
                       <>
                         <label className="script-checkbox-row" style={{ marginBottom: 8 }}>
