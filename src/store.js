@@ -578,6 +578,13 @@ function buildSyncState({
   }
 }
 
+function isInlineStoryboardImageRef(value) {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed) return false
+  return trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('file:')
+}
+
 let projectRepository = createProjectRepository()
 
 function devCloudBackupLog(event, details = {}) {
@@ -613,6 +620,8 @@ const useStore = create((set, get) => ({
   _cloudSyncTimeout: null,
   _cloudSyncInFlight: false,
   cloudRepositoryReady: false,
+  cloudImageUploader: null,
+  cloudImageResolver: null,
   documentSession: 0,
   appMode: runtimeConfig.appMode,
 
@@ -3135,13 +3144,35 @@ const useStore = create((set, get) => ({
     }
 
     const payload = get().getProjectData()
+    const payloadWithCloudAssets = JSON.parse(JSON.stringify(payload || {}))
+    const uploader = get().cloudImageUploader
+    const uploadCache = new Map()
+    const migratedShots = new Map()
+    let localImagesToMigrate = 0
+
+    for (const scene of (payloadWithCloudAssets.scenes || [])) {
+      for (const shot of (scene?.shots || [])) {
+        const hasCloudAsset = typeof shot?.imageAsset?.cloud?.assetId === 'string' && shot.imageAsset.cloud.assetId.trim().length > 0
+        if (hasCloudAsset) continue
+        const sourceRef = shot?.imageAsset?.thumb || shot?.image || null
+        if (!isInlineStoryboardImageRef(sourceRef)) continue
+        localImagesToMigrate += 1
+      }
+    }
+
     devCloudBackupLog('local_conversion:start', {
       ownerUserId,
       sceneCount: Array.isArray(payload?.scenes) ? payload.scenes.length : 0,
       shotCount: Array.isArray(payload?.scenes)
         ? payload.scenes.reduce((sum, scene) => sum + ((scene?.shots || []).length), 0)
         : 0,
+      localImagesToMigrate,
     })
+
+    if (localImagesToMigrate > 0 && typeof uploader !== 'function') {
+      throw new Error('Cloud image migration is not ready yet. Please wait a moment and try again.')
+    }
+
     const cloudProject = await cloudRepository.createProject({
       ownerUserId,
       name: payload.projectName || get().projectName || 'Untitled Shotlist',
@@ -3151,11 +3182,48 @@ const useStore = create((set, get) => ({
 
     let snapshot
     try {
+      for (const scene of (payloadWithCloudAssets.scenes || [])) {
+        for (const shot of (scene?.shots || [])) {
+          const shotId = shot?.id
+          if (!shotId) continue
+          const hasCloudAsset = typeof shot?.imageAsset?.cloud?.assetId === 'string' && shot.imageAsset.cloud.assetId.trim().length > 0
+          if (hasCloudAsset) continue
+          const sourceRef = shot?.imageAsset?.thumb || shot?.image || null
+          if (!isInlineStoryboardImageRef(sourceRef)) continue
+
+          let uploaded = uploadCache.get(sourceRef) || null
+          if (!uploaded) {
+            uploaded = await uploader(cloudProject.id, {
+              shotId,
+              sourceRef,
+              meta: shot?.imageAsset?.meta || null,
+            })
+            uploadCache.set(sourceRef, uploaded)
+          }
+          if (!uploaded?.imageAsset?.cloud?.assetId) {
+            throw new Error('Cloud image migration failed before project conversion completed.')
+          }
+
+          shot.image = uploaded?.imageAsset?.thumb || uploaded?.image || null
+          shot.imageAsset = uploaded?.imageAsset
+            ? {
+                ...shot.imageAsset,
+                ...uploaded.imageAsset,
+                cloud: uploaded.imageAsset.cloud || null,
+              }
+            : shot.imageAsset
+          migratedShots.set(shotId, {
+            image: shot.image,
+            imageAsset: shot.imageAsset,
+          })
+        }
+      }
+
       snapshot = await cloudRepository.createSnapshot({
         projectId: cloudProject.id,
         createdByUserId: ownerUserId,
         source: 'local_conversion',
-        payload,
+        payload: payloadWithCloudAssets,
       })
       devCloudBackupLog('local_conversion:snapshot_result', {
         projectId: cloudProject.id,
@@ -3188,6 +3256,18 @@ const useStore = create((set, get) => ({
     }
 
     set({
+      scenes: get().scenes.map((scene) => ({
+        ...scene,
+        shots: (scene?.shots || []).map((shot) => {
+          const migrated = migratedShots.get(shot.id)
+          if (!migrated) return shot
+          return {
+            ...shot,
+            image: migrated.image,
+            imageAsset: migrated.imageAsset,
+          }
+        }),
+      })),
       projectRef: {
         type: 'cloud',
         projectId: cloudProject.id,
@@ -3207,6 +3287,14 @@ const useStore = create((set, get) => ({
     const cloudRepository = createCloudProjectAdapter({ runMutation, runQuery })
     projectRepository = createProjectRepository({ cloud: cloudRepository })
     set({ cloudRepositoryReady: !!cloudRepository })
+  },
+
+  setCloudImageUploader: (uploader = null) => {
+    set({ cloudImageUploader: typeof uploader === 'function' ? uploader : null })
+  },
+
+  setCloudImageResolver: (resolver = null) => {
+    set({ cloudImageResolver: typeof resolver === 'function' ? resolver : null })
   },
 
   openCloudProject: async ({ cloudRepository = projectRepository.cloud, projectId }) => {
