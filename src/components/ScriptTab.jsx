@@ -1363,8 +1363,33 @@ export default function ScriptTab() {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div className="app-surface-card" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 12px' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Script Document</span>
+            <div
+              className="app-surface-card"
+              style={{
+                borderRadius: 0,
+                borderLeft: 'none',
+                borderRight: 'none',
+                borderBottom: '1px solid rgba(148,163,184,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: '6px 12px',
+                flexWrap: 'wrap',
+                background: cloudProjectId && (isWriteBlockedByLock || !cloudAccessPolicy.canEditCloudProject) ? '#fff7ed' : '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 320px' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#334155', flexShrink: 0 }}>Script Document</span>
+                {cloudProjectId && (
+                  <span style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {!cloudAccessPolicy.canEditCloudProject
+                      ? 'Read-only cloud mode: billing inactive.'
+                      : (isWriteBlockedByLock ? `Locked by ${activeSceneLock?.holderName || 'another collaborator'}.` : 'Collaboration safety active.')}
+                    {collabNotice ? ` ${collabNotice}` : ''}
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {isDesktopDown && (
                   <>
@@ -1377,26 +1402,16 @@ export default function ScriptTab() {
                   </>
                 )}
                 {cloudProjectId && (
-                  <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot || !cloudAccessPolicy.canEditCloudProject}>
-                    {isSavingSnapshot ? 'Saving…' : 'Save Snapshot'}
-                  </button>
+                  <>
+                    <button className="toolbar-btn" onClick={handleSaveScreenplaySnapshot} disabled={isSavingSnapshot || !cloudAccessPolicy.canEditCloudProject}>
+                      {isSavingSnapshot ? 'Saving…' : 'Save Snapshot'}
+                    </button>
+                    <button className="toolbar-btn" onClick={handleAcquireActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Lock scene</button>
+                    <button className="toolbar-btn" onClick={handleReleaseActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Unlock</button>
+                  </>
                 )}
               </div>
             </div>
-            {cloudProjectId && (
-              <div style={{ padding: '6px 12px', borderBottom: '1px solid rgba(148,163,184,0.2)', background: (isWriteBlockedByLock || !cloudAccessPolicy.canEditCloudProject) ? '#fff7ed' : '#f8fafc', fontSize: 12, color: '#475569', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span>
-                  {!cloudAccessPolicy.canEditCloudProject
-                    ? 'Read-only cloud mode: billing inactive.'
-                    : (isWriteBlockedByLock ? `Locked by ${activeSceneLock?.holderName || 'another collaborator'}.` : 'Collaboration safety active.')}
-                  {collabNotice ? ` ${collabNotice}` : ''}
-                </span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="toolbar-btn" onClick={handleAcquireActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Lock scene</button>
-                  <button className="toolbar-btn" onClick={handleReleaseActiveSceneLock} disabled={!cloudAccessPolicy.canEditCloudProject}>Unlock</button>
-                </div>
-              </div>
-            )}
 
             <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
               <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
@@ -1568,7 +1583,7 @@ export default function ScriptTab() {
                 </button>
               </div>
             ) : null}
-            {/* Combined Script Settings panel: Estimation / Scene Pagination / Pagination */}
+            {/* Combined Script Settings panel: Estimation / Pagination */}
             <section className="ss-module script-inspector-section">
               <button
                 onClick={() => setInspectorSections(prev => ({ ...prev, scriptEstimation: !prev.scriptEstimation }))}
@@ -1579,10 +1594,9 @@ export default function ScriptTab() {
               </button>
               {inspectorSections.scriptEstimation && (
                 <div style={{ padding: 10 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4, marginBottom: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, marginBottom: 10 }}>
                     {[
                       { id: 'estimation', label: 'Estimation' },
-                      { id: 'scenePagination', label: 'Scene Pag.' },
                       { id: 'pagination', label: 'Pagination' },
                     ].map(tab => (
                       <button
@@ -1617,40 +1631,6 @@ export default function ScriptTab() {
                         1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
                       </div>
                     </>
-                  )}
-
-                  {scriptInspectorMode === 'scenePagination' && (
-                    <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                      {orderedScenes.length === 0 && (
-                        <div style={{ fontSize: 11, color: '#64748b' }}>No scenes yet.</div>
-                      )}
-                      {(() => {
-                        const scenePageMap = {}
-                        documentModel.pages.forEach(page => {
-                          page.blocks.forEach(block => {
-                            if (!scenePageMap[block.sceneId]) {
-                              scenePageMap[block.sceneId] = { firstPage: page.number, lastPage: page.number }
-                            } else {
-                              scenePageMap[block.sceneId].lastPage = page.number
-                            }
-                          })
-                        })
-                        return orderedScenes.map(scene => {
-                          const pag = scenePageMap[scene.id]
-                          return (
-                            <div key={scene.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '4px 0', borderBottom: '1px solid rgba(148,163,184,0.12)', fontSize: 11 }}>
-                              <span style={{ color: '#334155', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 6 }}>
-                                {scene.sceneNumber ? <span style={{ color: '#94a3b8', marginRight: 4 }}>SC {scene.sceneNumber}</span> : null}
-                                {sceneHeader(scene)}
-                              </span>
-                              <span style={{ color: '#64748b', flexShrink: 0, fontFamily: 'monospace', fontSize: 10 }}>
-                                {pag ? (pag.firstPage === pag.lastPage ? `p.${pag.firstPage}` : `p.${pag.firstPage}–${pag.lastPage}`) : '—'}
-                              </span>
-                            </div>
-                          )
-                        })
-                      })()}
-                    </div>
                   )}
 
                   {scriptInspectorMode === 'pagination' && (
