@@ -1384,6 +1384,12 @@
     color: #eff6ff;
   }
 
+  .script-sidebar .script-view-btn img,
+  .script-sidebar .script-view-btn.is-active img,
+  .script-sidebar .script-view-btn[aria-pressed="true"] img {
+    filter: brightness(0) invert(1);
+  }
+
   .script-breakdown-category-row {
     width: 100%;
     display: flex;
