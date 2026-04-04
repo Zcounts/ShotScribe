@@ -270,10 +270,10 @@ function AccordionSection({ title, isOpen, onToggle, children, grow = false }) {
         onClick={onToggle}
         className="schedule-sidebar-section-toggle"
       >
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+        <span className="schedule-sidebar-section-title" style={{ fontSize: 11, fontWeight: 700 }}>
           {title}
         </span>
-        <ChevronIcon collapsed={!isOpen} color="#64748b" size={10} />
+        <ChevronIcon collapsed={!isOpen} size={10} />
       </button>
       {isOpen && (
         <div className="schedule-sidebar-section-body">
@@ -3705,17 +3705,17 @@ export default function ScheduleTab({
             }
           >
             <AccordionSection title="Selected Day" isOpen={sectionOpen.selectedDay} onToggle={() => setSectionOpen(prev => ({ ...prev, selectedDay: !prev.selectedDay }))}>
-              <div style={{ display: 'grid', gap: 6, fontSize: 12, color: '#334155' }}>
+              <div className="schedule-sidebar-selected-day" style={{ display: 'grid', gap: 6, fontSize: 12 }}>
                 <div>
                   <span className="ss-chip schedule-sidebar-meta-chip" style={{ fontFamily: 'monospace', fontSize: 10 }}>
                     {selectedDay ? `DAY ${selectedDayIndex + 1}` : 'NO DAY'}
                   </span>
                 </div>
-                <div style={{ color: '#64748b', fontSize: 11 }}>{selectedDay?.date ? formatDate(selectedDay.date) : 'No date set'}</div>
+                <div className="schedule-sidebar-selected-date" style={{ fontSize: 11 }}>{selectedDay?.date ? formatDate(selectedDay.date) : 'No date set'}</div>
               </div>
             </AccordionSection>
             <AccordionSection title="Summary" isOpen={sectionOpen.summary} onToggle={() => setSectionOpen(prev => ({ ...prev, summary: !prev.summary }))}>
-              <div style={{ display: 'grid', gap: 5, fontSize: 11, color: '#334155' }}>
+              <div className="schedule-sidebar-summary-grid" style={{ display: 'grid', gap: 5, fontSize: 11 }}>
                 <div className="schedule-sidebar-summary-row"><span>Total</span><strong>{totalStrips} strips · {schedule.length} days</strong></div>
                 <div className="schedule-sidebar-summary-row"><span>Pages</span><strong>{totalPages > 0 ? totalPages.toFixed(2) : '0.00'}</strong></div>
                 <div className="schedule-sidebar-summary-row"><span>Time</span><strong>{totalShootMins > 0 ? formatMins(totalShootMins) : '0m'} + breaks {totalBreakMins > 0 ? formatMins(totalBreakMins) : '0m'}</strong></div>
