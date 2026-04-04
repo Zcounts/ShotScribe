@@ -419,6 +419,10 @@ export default function ScriptTab() {
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const [collabNotice, setCollabNotice] = useState('')
   const [isSavingSnapshot, setIsSavingSnapshot] = useState(false)
+  const baseMinutesPerPage = Number.isFinite(scriptSettings?.baseMinutesPerPage) && scriptSettings.baseMinutesPerPage > 0
+    ? scriptSettings.baseMinutesPerPage
+    : 5
+  const [baseMinutesInput, setBaseMinutesInput] = useState(() => String(baseMinutesPerPage))
 
   const [isViewPanelCollapsed, setIsViewPanelCollapsed] = useState(() => readStoredBoolean(SIDEBAR_STORAGE_KEYS.viewCollapsed, false))
   const [isScenePanelCollapsed, setIsScenePanelCollapsed] = useState(() => readStoredBoolean(SIDEBAR_STORAGE_KEYS.sceneCollapsed, false))
@@ -428,6 +432,20 @@ export default function ScriptTab() {
   const [breakdownDraft, setBreakdownDraft] = useState({ name: '', quantity: 1, category: BREAKDOWN_CATEGORIES[1], tagAllMentions: false })
   const [activeBreakdownCategory, setActiveBreakdownCategory] = useState(null)
   const [overlayFragmentsByBlock, setOverlayFragmentsByBlock] = useState({})
+
+  useEffect(() => {
+    setBaseMinutesInput(String(baseMinutesPerPage))
+  }, [baseMinutesPerPage])
+
+  const commitBaseMinutesInput = useCallback(() => {
+    const parsed = parseFloat(baseMinutesInput)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      setScriptSettings({ baseMinutesPerPage: parsed })
+      setBaseMinutesInput(String(parsed))
+      return
+    }
+    setBaseMinutesInput(String(baseMinutesPerPage))
+  }, [baseMinutesInput, baseMinutesPerPage, setScriptSettings])
   const [inspectorSections, setInspectorSections] = useState(() => readStoredObject(SIDEBAR_STORAGE_KEYS.inspectorSections, {
     scriptEstimation: true,
     scenePagination: true,
@@ -1606,19 +1624,42 @@ export default function ScriptTab() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <input
                           type="range"
-                          min={3}
-                          max={10}
+                          min={1}
+                          max={60}
                           step={0.5}
-                          value={scriptSettings?.baseMinutesPerPage ?? 5}
+                          value={Math.min(baseMinutesPerPage, 60)}
                           onChange={event => setScriptSettings({ baseMinutesPerPage: parseFloat(event.target.value) })}
                           style={{ flex: 1, accentColor: '#2563eb' }}
                         />
+                        <input
+                          type="number"
+                          min={1}
+                          step={0.5}
+                          inputMode="decimal"
+                          value={baseMinutesInput}
+                          onChange={(event) => {
+                            const nextValue = event.target.value
+                            setBaseMinutesInput(nextValue)
+                            const parsed = parseFloat(nextValue)
+                            if (Number.isFinite(parsed) && parsed > 0) {
+                              setScriptSettings({ baseMinutesPerPage: parsed })
+                            }
+                          }}
+                          onBlur={commitBaseMinutesInput}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.currentTarget.blur()
+                            }
+                          }}
+                          style={{ width: 64, padding: '2px 4px', fontSize: 12 }}
+                          aria-label="Base minutes per page"
+                        />
                         <span style={{ fontSize: 12, color: '#334155', fontFamily: 'monospace', width: 28, textAlign: 'right' }}>
-                          {scriptSettings?.baseMinutesPerPage ?? 5}
+                          {baseMinutesPerPage}
                         </span>
                       </div>
                       <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
-                        1 script page ≈ {scriptSettings?.baseMinutesPerPage ?? 5} min shoot time
+                        1 script page ≈ {baseMinutesPerPage} min shoot time
                       </div>
                     </>
                   )}
