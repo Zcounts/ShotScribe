@@ -209,7 +209,6 @@ function SceneSection({
   onPageMeasured,
   onOpenSceneProperties,
 }) {
-  const getShotsForScene = useStore(s => s.getShotsForScene)
   const addShot = useStore(s => s.addShot)
   const deleteScene = useStore(s => s.deleteScene)
   const scenes = useStore(s => s.scenes)
@@ -233,7 +232,12 @@ function SceneSection({
     deleteScene(scene.id)
   }
 
-  const shotsWithIds = getShotsForScene(scene.id)
+  const sceneIndex = scenes.findIndex(s => s.id === scene.id)
+  const sceneNumber = sceneIndex + 1
+  const shotsWithIds = (scene.shots || []).map((shot, shotIndex) => ({
+    ...shot,
+    displayId: `${sceneNumber}${getShotLetter(shotIndex)}`
+  }))
   const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
   const canonicalSceneColor = canonical?.color || scene.color || null
   const cardsPerPage = CARDS_PER_PAGE[columnCount] || 8
@@ -864,7 +868,7 @@ export default function App() {
     script: {
       isActive: false,
       onToggle: () => {
-        window.dispatchEvent(new CustomEvent('shotscribe:close-script-right-sidebar'))
+        window.dispatchEvent(new CustomEvent('shotscribe:toggle-script-right-sidebar'))
         setStoryboardConfigOpen(false)
       },
     },

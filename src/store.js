@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { arrayMove } from '@dnd-kit/sortable'
 import { computeEstimate, computeConfidence, parseSlugline } from './utils/scriptParser'
-import { ensureEditableScreenplayElements, estimateScreenplayPagination } from './utils/screenplay'
+import { ensureEditableScreenplayElements, estimateScreenplayPagination, splitScreenplayElementsIntoSceneChunks } from './utils/screenplay'
 import { DEFAULT_SCRIPT_DOCUMENT_SETTINGS, normalizeDocumentSettings } from './utils/scriptDocumentFormatting'
 import { computeCastSceneMetrics, resolveLinkedScriptSceneId } from './utils/callsheetMetrics'
 import {
@@ -301,6 +301,14 @@ function deriveScriptSceneFromElements(scene, elements) {
     location: parsedHeading.location ?? scene.location ?? '',
     sceneNumber: scene.sceneNumber != null ? String(scene.sceneNumber) : '',
   }
+}
+
+function createScriptSceneId() {
+  return `sc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function buildScriptSceneFromChunk(baseScene, chunkElements) {
+  return deriveScriptSceneFromElements(baseScene, chunkElements)
 }
 
 function normalizeCastEntry(entry = {}) {
@@ -920,15 +928,61 @@ const useStore = create((set, get) => ({
   updateScriptSceneScreenplay: (sceneId, screenplayElements) => {
     set(state => {
       const settings = state.scriptSettings
-      const updatedScenes = state.scriptScenes.map(scene => (
-        scene.id === sceneId
-          ? deriveScriptSceneFromElements(scene, screenplayElements)
-          : scene
-      ))
+      const targetIndex = state.scriptScenes.findIndex(scene => scene.id === sceneId)
+      if (targetIndex === -1) return state
+
+      const targetScene = state.scriptScenes[targetIndex]
+      const chunks = splitScreenplayElementsIntoSceneChunks(screenplayElements)
+
+      // Preserve the original scene id for the first chunk whenever possible
+      // so downstream links remain stable for unchanged scene content.
+      const rebuiltScenes = chunks.map((chunk, chunkIndex) => {
+        const baseScene = chunkIndex === 0
+          ? targetScene
+          : {
+              ...targetScene,
+              id: createScriptSceneId(),
+              sceneNumber: '',
+              linkedShotIds: [],
+            }
+        return buildScriptSceneFromChunk(baseScene, chunk)
+      })
+
+      // If the edited scene no longer contains a heading and has a previous
+      // scene, merge the text into the previous scene and retire this scene id.
+      // This gives a safe "slugline removed" reduction without rebuilding all scenes.
+      const firstSceneHeading = rebuiltScenes[0]?.slugline || ''
+      const canMergeIntoPrevious = rebuiltScenes.length === 1 && !firstSceneHeading && targetIndex > 0
+
+      let updatedScenes
+      let remapFromSceneIds = []
+      let remapToSceneId = null
+
+      if (canMergeIntoPrevious) {
+        const previousScene = state.scriptScenes[targetIndex - 1]
+        const previousElements = ensureEditableScreenplayElements(previousScene.screenplayElements)
+        const mergedElements = [...previousElements, ...ensureEditableScreenplayElements(rebuiltScenes[0].screenplayElements)]
+        const mergedPrevious = buildScriptSceneFromChunk(previousScene, mergedElements)
+        updatedScenes = [
+          ...state.scriptScenes.slice(0, targetIndex - 1),
+          mergedPrevious,
+          ...state.scriptScenes.slice(targetIndex + 1),
+        ]
+        remapFromSceneIds = [targetScene.id]
+        remapToSceneId = previousScene.id
+      } else {
+        updatedScenes = [
+          ...state.scriptScenes.slice(0, targetIndex),
+          ...rebuiltScenes,
+          ...state.scriptScenes.slice(targetIndex + 1),
+        ]
+      }
+
       const pagination = estimateScreenplayPagination(updatedScenes, {
         scenePaginationMode: settings.scenePaginationMode,
       })
       const updatedScene = updatedScenes.find(scene => scene.id === sceneId)
+      const remapSet = new Set(remapFromSceneIds)
       return {
         scriptScenes: updatedScenes.map(scene => ({
           ...scene,
@@ -937,15 +991,34 @@ const useStore = create((set, get) => ({
           pageEnd: pagination.byScene[scene.id]?.endPage ?? scene.pageEnd ?? null,
           estimatedMinutes: computeEstimate(scene, settings.baseMinutesPerPage),
         })),
-        scenes: !updatedScene
-          ? state.scenes
-          : state.scenes.map(storyScene => {
-            if (storyScene.linkedScriptSceneId !== sceneId) return storyScene
+        scenes: state.scenes.map(storyScene => {
+          const remappedShots = remapSet.size > 0 && remapToSceneId
+            ? (storyScene.shots || []).map(shot => (
+                remapSet.has(shot.linkedSceneId)
+                  ? { ...shot, linkedSceneId: remapToSceneId }
+                  : shot
+              ))
+            : storyScene.shots
+
+          if (remapSet.size > 0 && remapSet.has(storyScene.linkedScriptSceneId) && remapToSceneId) {
+            const canonicalScene = updatedScenes.find(scene => scene.id === remapToSceneId)
             return {
               ...storyScene,
-              ...(mapScriptSceneToStoryboardMetadata(updatedScene) || {}),
+              linkedScriptSceneId: remapToSceneId,
+              ...(mapScriptSceneToStoryboardMetadata(canonicalScene) || {}),
+              shots: remappedShots,
             }
-          }),
+          }
+          if (!updatedScene || storyScene.linkedScriptSceneId !== sceneId) {
+            if (remappedShots !== storyScene.shots) return { ...storyScene, shots: remappedShots }
+            return storyScene
+          }
+          return {
+            ...storyScene,
+            ...(mapScriptSceneToStoryboardMetadata(updatedScene) || {}),
+            shots: remappedShots,
+          }
+        }),
       }
     })
     get()._scheduleAutoSave()
@@ -1927,6 +2000,25 @@ const useStore = create((set, get) => ({
   // Storyboard reorder behavior (legacy/original): move shot objects only.
   // Storyboard cards derive display labels from visual order.
   reorderShots: (sceneId, activeId, overId) => {
+    set(state => ({
+      scenes: state.scenes.map((scene, sceneIndex) => {
+        if (scene.id !== sceneId) return scene
+        const oldIndex = scene.shots.findIndex(s => s.id === activeId)
+        const newIndex = scene.shots.findIndex(s => s.id === overId)
+        if (oldIndex === -1 || newIndex === -1) return scene
+        const sceneNumber = sceneIndex + 1
+        const shotsWithStableDisplayIds = scene.shots.map((shot, shotIndex) => ({
+          ...shot,
+          displayId: ensureShotDisplayId(shot, sceneNumber, shotIndex),
+        }))
+        return { ...scene, shots: arrayMove(shotsWithStableDisplayIds, oldIndex, newIndex) }
+      }),
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  // Shotlist-only reorder: preserve each shot's displayId while changing row order.
+  reorderShotlistShots: (sceneId, activeId, overId) => {
     set(state => ({
       scenes: state.scenes.map((scene, sceneIndex) => {
         if (scene.id !== sceneId) return scene
