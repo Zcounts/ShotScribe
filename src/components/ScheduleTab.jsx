@@ -222,9 +222,7 @@ function summarizeDay(blocks, pageCountByScene, enrichedBlockMap) {
 }
 
 const LIST_GRID_TEMPLATE = '92px minmax(320px,2.5fr) 108px 128px minmax(160px,1.2fr) 88px 118px 126px 30px 30px'
-const LIST_DAY_TAB_BAR_HEIGHT = 36
-const LIST_DAY_TAB_BAR_TOP = 0
-const LIST_COLUMN_HEADER_TOP = LIST_DAY_TAB_BAR_TOP + LIST_DAY_TAB_BAR_HEIGHT
+const LIST_COLUMN_HEADER_TOP = 0
 const LIST_HEADER_COLUMNS = [
   'Scene #',
   'Set',
@@ -3633,6 +3631,12 @@ export default function ScheduleTab({
     const newDayId = addShootingDay()
     if (newDayId) setListActiveDayId(newDayId)
   }, [addShootingDay])
+  const handleDaySelect = useCallback((dayId) => {
+    setListActiveDayId(dayId)
+    if (scheduleView !== 'list') return
+    const el = document.getElementById(`sched-day-${dayId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [scheduleView])
 
   useEffect(() => {
     const node = containerRef.current
@@ -3664,6 +3668,16 @@ export default function ScheduleTab({
     <div
       className="flex flex-col h-full overflow-hidden canvas-texture"
     >
+      {schedule.length > 0 && (
+        <DayTabBar
+          days={dayTabs}
+          activeDay={listActiveDayId}
+          onSelect={handleDaySelect}
+          onAddDay={handleAddDay}
+          onDeleteDay={handleDeleteDay}
+          enableDayContextMenu
+        />
+      )}
       <div className="flex-1 min-h-0 pt-0">
         <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 520, height: '100%' }}>
           <SidebarPane
@@ -3718,21 +3732,6 @@ export default function ScheduleTab({
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />
       ) : scheduleView === 'calendar' ? (
         <>
-          <div style={{ position: 'sticky', top: LIST_DAY_TAB_BAR_TOP, zIndex: 30, marginBottom: 4 }}>
-            <DayTabBar
-              days={dayTabs}
-              activeDay={listActiveDayId}
-              onSelect={(dayId) => {
-                setListActiveDayId(dayId)
-                if (scheduleView !== 'list') return
-                const el = document.getElementById(`sched-day-${dayId}`)
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }}
-              onAddDay={handleAddDay}
-              onDeleteDay={handleDeleteDay}
-              enableDayContextMenu
-            />
-          </div>
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>Calendar view is temporarily unavailable for this data. Switch to List or Stripboard.</div>}>
         <CalendarView
           schedule={schedule}
@@ -3747,20 +3746,6 @@ export default function ScheduleTab({
       ) : scheduleView === 'list' ? (
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>List view failed to render for current data. Try another view.</div>}>
         <div>
-              <div style={{ position: 'sticky', top: LIST_DAY_TAB_BAR_TOP, zIndex: 30, marginBottom: 4 }}>
-                <DayTabBar
-                  days={dayTabs}
-                  activeDay={listActiveDayId}
-                  onSelect={(dayId) => {
-                    setListActiveDayId(dayId)
-                    const el = document.getElementById(`sched-day-${dayId}`)
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  }}
-                  onAddDay={handleAddDay}
-                  onDeleteDay={handleDeleteDay}
-                  enableDayContextMenu
-                />
-              </div>
               <ScheduleListColumnHeader listGridTemplate={listGridTemplate} />
               <DndContext
                 sensors={sensors}
@@ -3821,16 +3806,6 @@ export default function ScheduleTab({
         </ScheduleSubviewBoundary>
           ) : (
         <>
-        <div style={{ position: 'sticky', top: LIST_DAY_TAB_BAR_TOP, zIndex: 30, marginBottom: 4 }}>
-          <DayTabBar
-            days={dayTabs}
-            activeDay={listActiveDayId}
-            onSelect={(dayId) => setListActiveDayId(dayId)}
-            onAddDay={handleAddDay}
-            onDeleteDay={handleDeleteDay}
-            enableDayContextMenu
-          />
-        </div>
         <ScheduleSubviewBoundary resetKey={resetKey} fallback={<div style={{ padding: 16, color: '#64748b', fontFamily: 'monospace' }}>Stripboard view is temporarily unavailable for this data. Switch to List or Calendar.</div>}>
         <DndContext
           sensors={sensors}
