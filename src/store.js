@@ -473,6 +473,25 @@ export function getShotLetter(index) {
   return VALID_SHOT_LETTERS[firstIdx] + VALID_SHOT_LETTERS[secondIdx]
 }
 
+function getShotDisplayId(sceneNumber, shotIndex) {
+  return `${sceneNumber}${getShotLetter(shotIndex)}`
+}
+
+function ensureShotDisplayId(shot, sceneNumber, shotIndex) {
+  return shot.displayId || getShotDisplayId(sceneNumber, shotIndex)
+}
+
+function getNextShotDisplayId(scene, sceneNumber) {
+  const used = new Set((scene.shots || []).map(shot => String(shot.displayId || '').trim()).filter(Boolean))
+  let index = 0
+  while (index < 2000) {
+    const candidate = getShotDisplayId(sceneNumber, index)
+    if (!used.has(candidate)) return candidate
+    index += 1
+  }
+  return `${sceneNumber}ZZ`
+}
+
 const initialScene = createScene({
   id: 'scene_1',
   sceneLabel: 'SCENE 1',
@@ -1647,7 +1666,7 @@ const useStore = create((set, get) => ({
     const sceneNum = sceneIndex + 1
     return scene.shots.map((shot, index) => ({
       ...shot,
-      displayId: `${sceneNum}${getShotLetter(index)}`,
+      displayId: ensureShotDisplayId(shot, sceneNum, index),
     }))
   },
 
@@ -1833,8 +1852,10 @@ const useStore = create((set, get) => ({
 
   addShot: (sceneId) => {
     const { scenes, defaultFocalLength } = get()
-    const scene = scenes.find(s => s.id === sceneId)
-    if (!scene) return null
+    const sceneIndex = scenes.findIndex(s => s.id === sceneId)
+    if (sceneIndex === -1) return null
+    const scene = scenes[sceneIndex]
+    const sceneNumber = sceneIndex + 1
     const newShot = createShot({
       cameraName: scene.cameras?.[0]?.name || 'Camera 1',
       focalLength: defaultFocalLength,
@@ -1842,6 +1863,7 @@ const useStore = create((set, get) => ({
       intOrExt: scene.intOrExt || '',
       dayNight: scene.dayNight || '',
       linkedSceneId: scene.linkedScriptSceneId || null,
+      displayId: getNextShotDisplayId(scene, sceneNumber),
     })
     set(state => ({
       scenes: state.scenes.map(s =>
@@ -1878,7 +1900,7 @@ const useStore = create((set, get) => ({
 
   duplicateShot: (shotId) => {
     set(state => ({
-      scenes: state.scenes.map(scene => {
+      scenes: state.scenes.map((scene, sceneIndex) => {
         const idx = scene.shots.findIndex(s => s.id === shotId)
         if (idx === -1) return scene
         shotCounter++
@@ -1886,6 +1908,7 @@ const useStore = create((set, get) => ({
         const duplicate = {
           ...original,
           id: `shot_${Date.now()}_${shotCounter}`,
+          displayId: getNextShotDisplayId(scene, sceneIndex + 1),
           specs: { ...original.specs },
         }
         return {
@@ -1901,6 +1924,8 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
+  // Storyboard reorder behavior (legacy/original): move shot objects only.
+  // Storyboard cards derive display labels from visual order.
   reorderShots: (sceneId, activeId, overId) => {
     set(state => ({
       scenes: state.scenes.map(scene => {
@@ -1909,6 +1934,25 @@ const useStore = create((set, get) => ({
         const newIndex = scene.shots.findIndex(s => s.id === overId)
         if (oldIndex === -1 || newIndex === -1) return scene
         return { ...scene, shots: arrayMove(scene.shots, oldIndex, newIndex) }
+      }),
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  // Shotlist-only reorder: preserve each shot's displayId while changing row order.
+  reorderShotlistShots: (sceneId, activeId, overId) => {
+    set(state => ({
+      scenes: state.scenes.map((scene, sceneIndex) => {
+        if (scene.id !== sceneId) return scene
+        const oldIndex = scene.shots.findIndex(s => s.id === activeId)
+        const newIndex = scene.shots.findIndex(s => s.id === overId)
+        if (oldIndex === -1 || newIndex === -1) return scene
+        const sceneNumber = sceneIndex + 1
+        const shotsWithStableDisplayIds = scene.shots.map((shot, shotIndex) => ({
+          ...shot,
+          displayId: ensureShotDisplayId(shot, sceneNumber, shotIndex),
+        }))
+        return { ...scene, shots: arrayMove(shotsWithStableDisplayIds, oldIndex, newIndex) }
       }),
     }))
     get()._scheduleAutoSave()
