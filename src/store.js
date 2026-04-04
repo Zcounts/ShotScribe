@@ -613,6 +613,8 @@ const useStore = create((set, get) => ({
   _cloudSyncTimeout: null,
   _cloudSyncInFlight: false,
   cloudRepositoryReady: false,
+  cloudImageUploader: null,
+  cloudImageResolver: null,
   documentSession: 0,
   appMode: runtimeConfig.appMode,
 
@@ -3207,6 +3209,14 @@ const useStore = create((set, get) => ({
     const cloudRepository = createCloudProjectAdapter({ runMutation, runQuery })
     projectRepository = createProjectRepository({ cloud: cloudRepository })
     set({ cloudRepositoryReady: !!cloudRepository })
+  },
+
+  setCloudImageUploader: (uploader = null) => {
+    set({ cloudImageUploader: typeof uploader === 'function' ? uploader : null })
+  },
+
+  setCloudImageResolver: (resolver = null) => {
+    set({ cloudImageResolver: typeof resolver === 'function' ? resolver : null })
   },
 
   openCloudProject: async ({ cloudRepository = projectRepository.cloud, projectId }) => {
