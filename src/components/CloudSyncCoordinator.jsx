@@ -8,11 +8,17 @@ export default function CloudSyncCoordinator() {
   const setCloudSyncContext = useStore(s => s.setCloudSyncContext)
   const setCloudRepositoryAdapter = useStore(s => s.setCloudRepositoryAdapter)
   const flushCloudSync = useStore(s => s.flushCloudSync)
+  const applyIncomingCloudSnapshot = useStore(s => s.applyIncomingCloudSnapshot)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
   const convex = useConvex()
   const createProject = useMutation('projects:createProject')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
   const cloudUser = useQuery('users:currentUser')
+  const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
+  const latestSnapshot = useQuery(
+    'projectSnapshots:getLatestSnapshotForProject',
+    cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+  )
   const cloudAccessPolicy = useCloudAccessPolicy()
 
   useEffect(() => {
@@ -57,6 +63,15 @@ export default function CloudSyncCoordinator() {
       window.removeEventListener('pagehide', flush)
     }
   }, [flushCloudSync, hasUnsavedChanges, projectRef?.type])
+
+  useEffect(() => {
+    if (!cloudProjectId || !latestSnapshot?._id || !latestSnapshot?.payload) return
+    applyIncomingCloudSnapshot({
+      projectId: cloudProjectId,
+      snapshotId: String(latestSnapshot._id),
+      payload: latestSnapshot.payload,
+    })
+  }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
 
   return null
 }
