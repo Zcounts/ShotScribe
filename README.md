@@ -282,3 +282,4 @@ ShotScribe mobile now supports **two explicit workflows**:
 - The controls and behavior are unchanged; this is a UI consolidation to reduce inspector clutter while keeping the existing Page & Styles panel untouched.
 - Regression fix (April 3, 2026): the Script tab no longer crashes when scenes are created/loaded after mount. Mobile sidebar effects now run unconditionally to preserve React hook order in `ScriptTab`.
 - Follow-up UI correction (April 4, 2026): **Page & Styles** now uses a compact icon-led inspector with only `Page` and `Paragraph` tabs (no `All` tab), while preserving existing field behavior/data flow.
+- Scene sync fix (April 4, 2026): manual screenplay edits now split screenplay blocks by slugline headings and sync persisted `scriptScenes` so the Scenes tab stays aligned with Script tab sluglines. Import behavior remains unchanged.
