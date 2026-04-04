@@ -3,6 +3,7 @@ import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
+import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
@@ -38,6 +39,7 @@ export default function CloudSyncCoordinator() {
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
   const getAssetSignedView = useAction('assets:getAssetSignedView')
+  const getAssetThumbnailBase64 = useAction('assets:getAssetThumbnailBase64')
   const cloudUser = useQuery('users:currentUser')
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const latestSnapshot = useQuery(
@@ -123,6 +125,62 @@ export default function CloudSyncCoordinator() {
     })
   }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
 
+  // ── Cloud image uploader ───────────────────────────────────────────────
+  // Registers a function that the store can call during createCloudProjectFromLocal
+  // to upload a single local inline image to cloud storage BEFORE the first
+  // snapshot is committed.  This makes the local→cloud conversion transactional:
+  // the initial snapshot already contains valid cloud asset IDs.
+  useEffect(() => {
+    async function uploadSingleShot(projectId, { shotId, sourceRef, meta }) {
+      const blob = await resolveInlineImageBlob(sourceRef)
+      const file = new File([blob], meta?.sourceName || `migrated-${shotId}.webp`, { type: blob.type || 'image/webp' })
+      const processed = await processStoryboardUploadForCloud(file)
+      const uploaded = await uploadStoryboardAssetToCloud({
+        projectId,
+        processed,
+        createAssetUploadIntent,
+        finalizeAssetUpload,
+      })
+      const assetId = uploaded?.imageAsset?.cloud?.assetId
+      if (assetId) {
+        await assignShotLibraryAsset({ projectId, shotId, assetId })
+        const signedView = await getAssetSignedView({ projectId, assetId })
+        return buildShotImageFromLibraryAsset(signedView) || uploaded
+      }
+      return uploaded
+    }
+
+    setCloudImageUploader(uploadSingleShot)
+    return () => setCloudImageUploader(null)
+  }, [
+    assignShotLibraryAsset,
+    createAssetUploadIntent,
+    finalizeAssetUpload,
+    getAssetSignedView,
+    setCloudImageUploader,
+  ])
+
+  // ── Cloud image resolver ───────────────────────────────────────────────
+  // Registers a function that saveProject / saveProjectAs call to fetch a
+  // cloud asset as a base64 data URL so the local file is self-contained.
+  // Only active while a cloud project is open so signed-view fetches are scoped.
+  useEffect(() => {
+    if (!cloudProjectId) {
+      setCloudImageResolver(null)
+      return
+    }
+    async function resolveCloudAssetDataUrl(projectId, assetId) {
+      return getAssetThumbnailBase64({ projectId, assetId })
+    }
+    setCloudImageResolver(resolveCloudAssetDataUrl)
+    return () => setCloudImageResolver(null)
+  }, [cloudProjectId, getAssetThumbnailBase64, setCloudImageResolver])
+
+  // ── Reactive local-image backfill (safety net) ─────────────────────────
+  // Catches any inline images that were not uploaded during createCloudProjectFromLocal
+  // (e.g. partial failure, page refresh mid-conversion, or projects converted
+  // before this fix was deployed).  Idempotent: exits immediately when all shots
+  // already have cloud asset IDs.
   useEffect(() => {
     if (projectRef?.type !== 'cloud' || !cloudProjectId) return
     if (!cloudAccessPolicy.canEditCloudProject || !cloudAccessPolicy.canAccessCloudAssets) return
@@ -152,16 +210,8 @@ export default function CloudSyncCoordinator() {
           let payload = localImageUploadCacheRef.current.get(shot.sourceRef) || null
           if (!payload) {
             const blob = await resolveInlineImageBlob(shot.sourceRef)
-            const processed = {
-              thumbBlob: blob,
-              fullBlob: blob,
-              mime: blob.type || 'image/webp',
-              thumbDataUrl: shot.sourceRef,
-              meta: {
-                ...(shot.meta || {}),
-                sourceName: shot?.meta?.sourceName || `migrated-${shot.shotId}.webp`,
-              },
-            }
+            const file = new File([blob], shot?.meta?.sourceName || `migrated-${shot.shotId}.webp`, { type: blob.type || 'image/webp' })
+            const processed = await processStoryboardUploadForCloud(file)
             const uploaded = await uploadStoryboardAssetToCloud({
               projectId: cloudProjectId,
               processed,
