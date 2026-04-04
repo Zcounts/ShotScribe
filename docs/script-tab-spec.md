@@ -218,6 +218,9 @@ Avoid:
 - pixel-oriented UI
 - custom web-app feel that fights the document
 
+- Keep SCRIPT document controls compact: title, cloud status, and Save Snapshot/Lock scene/Unlock should share one top row when layout allows.
+- Keep Script Settings tabs focused on Estimation + Pagination for the launch-safe panel.
+
 Do not copy StudioBinder structurally.
 The structural visual target is closer to scriptOdd.
 StudioBinder is relevant as a reference for production-linking concepts like highlighted linked text and tagging popovers.

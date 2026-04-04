@@ -586,6 +586,73 @@ function devCloudBackupLog(event, details = {}) {
   console.info(`[cloud-backup] ${event}`, details)
 }
 
+/** Returns true if the string is a local/runtime-only non-portable image reference. */
+function isInlineImageRef(v) {
+  if (typeof v !== 'string') return false
+  const t = v.trim()
+  return t.startsWith('data:') || t.startsWith('blob:') || t.startsWith('file:')
+}
+
+/**
+ * Given a project payload, a resolver function, and a projectId, fetches each
+ * cloud-backed shot image that has no embedded data URL and replaces its thumb
+ * with a base64 data URL so the local file is self-contained.
+ *
+ * Resolver signature: async (projectId, assetId) => dataUrlString | null
+ * Errors per-shot are non-fatal — the shot is left as-is if resolution fails.
+ */
+async function enrichPayloadWithEmbeddedImages(payload, resolver, projectId) {
+  if (!payload || !resolver || !projectId) return payload
+
+  async function enrichShot(shot) {
+    const assetId = shot?.imageAsset?.cloud?.assetId
+    if (!assetId) return shot
+    // Already has a portable data URL — no need to re-fetch.
+    const existingThumb = shot.imageAsset?.thumb || shot.image
+    if (typeof existingThumb === 'string' && existingThumb.startsWith('data:')) return shot
+    try {
+      const dataUrl = await resolver(projectId, assetId)
+      if (!dataUrl) return shot
+      return {
+        ...shot,
+        image: dataUrl,
+        imageAsset: { ...shot.imageAsset, thumb: dataUrl },
+      }
+    } catch {
+      return shot // non-fatal; shot will have no thumb in local file
+    }
+  }
+
+  async function enrichHeroImage(heroImage) {
+    if (!heroImage) return heroImage
+    const assetId = heroImage?.imageAsset?.cloud?.assetId
+    if (!assetId) return heroImage
+    const existingThumb = heroImage.imageAsset?.thumb || heroImage.image
+    if (typeof existingThumb === 'string' && existingThumb.startsWith('data:')) return heroImage
+    try {
+      const dataUrl = await resolver(projectId, assetId)
+      if (!dataUrl) return heroImage
+      return {
+        ...heroImage,
+        image: dataUrl,
+        imageAsset: { ...heroImage.imageAsset, thumb: dataUrl },
+      }
+    } catch {
+      return heroImage
+    }
+  }
+
+  const enrichedScenes = await Promise.all(
+    (payload.scenes || []).map(async (scene) => ({
+      ...scene,
+      shots: await Promise.all((scene.shots || []).map(enrichShot)),
+    }))
+  )
+  const enrichedHeroImage = await enrichHeroImage(payload.projectHeroImage)
+
+  return { ...payload, projectHeroImage: enrichedHeroImage, scenes: enrichedScenes }
+}
+
 const useStore = create((set, get) => ({
   // Project metadata
   projectPath: null,
@@ -689,6 +756,13 @@ const useStore = create((set, get) => ({
   customColumns: [], // [{ key, label, fieldType: 'text'|'dropdown' }]
   customDropdownOptions: {}, // { fieldKey: ['option1', 'option2', ...] }
   storyboardImageCache: {}, // { [shotId]: { full, updatedAt } } (runtime-only; excluded from project payload)
+  // Registered by CloudSyncCoordinator when Convex context is available.
+  // _cloudImageUploader: async (projectId, { shotId, sourceRef, meta }) => { image, imageAsset } | null
+  //   Used by createCloudProjectFromLocal to upload local inline images BEFORE the first cloud snapshot.
+  // _cloudImageResolver: async (projectId, assetId) => dataUrlString | null
+  //   Used by saveProject/saveProjectAs to embed cloud image bytes into portable local saves.
+  _cloudImageUploader: null,
+  _cloudImageResolver: null,
   shortcutBindings: loadShortcutBindings(),
   undoPast: [],
   undoFuture: [],
@@ -2472,6 +2546,15 @@ const useStore = create((set, get) => ({
     let data, json
     try {
       data = get().getProjectData()
+      // When saving a cloud project to a local file, embed cloud image bytes as
+      // data URLs so the file is self-contained and images survive reopen without
+      // cloud connectivity.  _cloudImageResolver is registered by
+      // CloudSyncCoordinator when Convex context is available.
+      const resolver = get()._cloudImageResolver
+      const cloudProjectId = get().projectRef?.type === 'cloud' ? get().projectRef.projectId : null
+      if (resolver && cloudProjectId) {
+        data = await enrichPayloadWithEmbeddedImages(data, resolver, cloudProjectId)
+      }
       json = JSON.stringify(data, null, 2)
     } catch (err) {
       // Try each top-level field individually to surface which one contains
@@ -2549,6 +2632,12 @@ const useStore = create((set, get) => ({
     let data, json
     try {
       data = get().getProjectData()
+      // Same cloud→local image embedding as saveProject (see comment there).
+      const resolver = get()._cloudImageResolver
+      const cloudProjectId = get().projectRef?.type === 'cloud' ? get().projectRef.projectId : null
+      if (resolver && cloudProjectId) {
+        data = await enrichPayloadWithEmbeddedImages(data, resolver, cloudProjectId)
+      }
       json = JSON.stringify(data, null, 2)
     } catch (err) {
       let badField = null
@@ -3149,13 +3238,83 @@ const useStore = create((set, get) => ({
     })
     devCloudBackupLog('local_conversion:project_created', { projectId: cloudProject.id })
 
+    // ── Transactional local-image migration ──────────────────────────────
+    // Before the first snapshot is committed, upload any inline storyboard
+    // images (data:/blob:/file: refs) to cloud storage so the snapshot
+    // contains cloud-backed asset IDs instead of inline blobs that would be
+    // stripped by buildConvexSafeSnapshotPayload.
+    //
+    // _cloudImageUploader is registered by CloudSyncCoordinator (which has
+    // Convex action/mutation hooks).  If it isn't available (e.g. during unit
+    // tests or very early render), we fall back to the reactive post-conversion
+    // backfill that already exists in CloudSyncCoordinator.
+    let snapshotPayload = payload
+    const uploader = get()._cloudImageUploader
+    if (uploader) {
+      const shotsToMigrate = []
+      for (const scene of (payload.scenes || [])) {
+        for (const shot of (scene?.shots || [])) {
+          if (shot?.imageAsset?.cloud?.assetId) continue // already cloud-backed
+          const src = shot?.imageAsset?.thumb || shot?.image || null
+          if (!isInlineImageRef(src)) continue
+          shotsToMigrate.push({ shotId: shot.id, sourceRef: src, meta: shot?.imageAsset?.meta || null })
+        }
+      }
+      devCloudBackupLog('local_conversion:image_migration_start', {
+        projectId: cloudProject.id,
+        shotsToMigrate: shotsToMigrate.length,
+      })
+      if (shotsToMigrate.length > 0) {
+        const remapped = {} // shotId → { image, imageAsset }
+        for (const shotInfo of shotsToMigrate) {
+          try {
+            const migrated = await uploader(cloudProject.id, shotInfo)
+            if (migrated?.imageAsset?.cloud?.assetId) {
+              remapped[shotInfo.shotId] = migrated
+            }
+          } catch (uploadErr) {
+            // Non-fatal: shot keeps its inline ref; the reactive backfill in
+            // CloudSyncCoordinator will retry it after conversion.
+            if (import.meta.env.DEV) {
+              console.warn('[cloud-backup] pre-conversion image upload failed', {
+                shotId: shotInfo.shotId, error: uploadErr?.message,
+              })
+            }
+          }
+        }
+        const migratedCount = Object.keys(remapped).length
+        devCloudBackupLog('local_conversion:image_migration_done', {
+          projectId: cloudProject.id, migratedCount,
+        })
+        if (migratedCount > 0) {
+          // Remap shots in the payload that will be snapshotted.
+          snapshotPayload = {
+            ...payload,
+            scenes: payload.scenes.map(scene => ({
+              ...scene,
+              shots: scene.shots.map(shot => {
+                const r = remapped[shot.id]
+                if (!r) return shot
+                return { ...shot, image: r.image, imageAsset: r.imageAsset }
+              }),
+            })),
+          }
+          // Also update in-memory store so the UI immediately reflects the
+          // newly registered cloud asset identities.
+          for (const [shotId, migrated] of Object.entries(remapped)) {
+            get().updateShotImage(shotId, migrated)
+          }
+        }
+      }
+    }
+
     let snapshot
     try {
       snapshot = await cloudRepository.createSnapshot({
         projectId: cloudProject.id,
         createdByUserId: ownerUserId,
         source: 'local_conversion',
-        payload,
+        payload: snapshotPayload, // contains cloud asset IDs where migration succeeded
       })
       devCloudBackupLog('local_conversion:snapshot_result', {
         projectId: cloudProject.id,
@@ -3208,6 +3367,11 @@ const useStore = create((set, get) => ({
     projectRepository = createProjectRepository({ cloud: cloudRepository })
     set({ cloudRepositoryReady: !!cloudRepository })
   },
+
+  // Registered by CloudSyncCoordinator (which has Convex context) so that
+  // store actions can perform image upload/resolve without direct hook access.
+  setCloudImageUploader: (fn) => set({ _cloudImageUploader: typeof fn === 'function' ? fn : null }),
+  setCloudImageResolver: (fn) => set({ _cloudImageResolver: typeof fn === 'function' ? fn : null }),
 
   openCloudProject: async ({ cloudRepository = projectRepository.cloud, projectId }) => {
     if (!cloudRepository) {

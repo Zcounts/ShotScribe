@@ -3712,7 +3712,7 @@ export default function ScheduleTab({
           <div
             ref={containerRef}
             onScroll={(e) => setTabViewState('schedule', { scrollTop: e.currentTarget.scrollTop })}
-            style={{ flex: 1, minWidth: 0, paddingLeft: 10, overflowY: 'auto', minHeight: 0 }}
+            style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: 0 }}
           >
       {schedule.length === 0 ? (
         <EmptyState isDark={isDark} onAddDay={() => addShootingDay()} />

@@ -26,6 +26,8 @@ export default function CloudSyncCoordinator() {
   const projectRef = useStore(s => s.projectRef)
   const setCloudSyncContext = useStore(s => s.setCloudSyncContext)
   const setCloudRepositoryAdapter = useStore(s => s.setCloudRepositoryAdapter)
+  const setCloudImageUploader = useStore(s => s.setCloudImageUploader)
+  const setCloudImageResolver = useStore(s => s.setCloudImageResolver)
   const flushCloudSync = useStore(s => s.flushCloudSync)
   const applyIncomingCloudSnapshot = useStore(s => s.applyIncomingCloudSnapshot)
   const openCloudProject = useStore(s => s.openCloudProject)
@@ -123,6 +125,80 @@ export default function CloudSyncCoordinator() {
     })
   }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
 
+  // ── Cloud image uploader ───────────────────────────────────────────────
+  // Registers a function that the store can call during createCloudProjectFromLocal
+  // to upload a single local inline image to cloud storage BEFORE the first
+  // snapshot is committed.  This makes the local→cloud conversion transactional:
+  // the initial snapshot already contains valid cloud asset IDs.
+  useEffect(() => {
+    async function uploadSingleShot(projectId, { shotId, sourceRef, meta }) {
+      const blob = await resolveInlineImageBlob(sourceRef)
+      const processed = {
+        thumbBlob: blob,
+        fullBlob: blob,
+        mime: blob.type || 'image/webp',
+        thumbDataUrl: sourceRef,
+        meta: {
+          ...(meta || {}),
+          sourceName: meta?.sourceName || `migrated-${shotId}.webp`,
+        },
+      }
+      const uploaded = await uploadStoryboardAssetToCloud({
+        projectId,
+        processed,
+        createAssetUploadIntent,
+        finalizeAssetUpload,
+      })
+      const assetId = uploaded?.imageAsset?.cloud?.assetId
+      if (assetId) {
+        await assignShotLibraryAsset({ projectId, shotId, assetId })
+        const signedView = await getAssetSignedView({ projectId, assetId })
+        return buildShotImageFromLibraryAsset(signedView) || uploaded
+      }
+      return uploaded
+    }
+
+    setCloudImageUploader(uploadSingleShot)
+    return () => setCloudImageUploader(null)
+  }, [
+    assignShotLibraryAsset,
+    createAssetUploadIntent,
+    finalizeAssetUpload,
+    getAssetSignedView,
+    setCloudImageUploader,
+  ])
+
+  // ── Cloud image resolver ───────────────────────────────────────────────
+  // Registers a function that saveProject / saveProjectAs call to fetch a
+  // cloud asset as a base64 data URL so the local file is self-contained.
+  // Only active while a cloud project is open so signed-view fetches are scoped.
+  useEffect(() => {
+    if (!cloudProjectId) {
+      setCloudImageResolver(null)
+      return
+    }
+    async function resolveCloudAssetDataUrl(projectId, assetId) {
+      const signedView = await getAssetSignedView({ projectId, assetId })
+      if (!signedView?.thumbUrl) return null
+      const resp = await fetch(signedView.thumbUrl)
+      if (!resp.ok) return null
+      const blob = await resp.blob()
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(new Error('FileReader failed'))
+        reader.readAsDataURL(blob)
+      })
+    }
+    setCloudImageResolver(resolveCloudAssetDataUrl)
+    return () => setCloudImageResolver(null)
+  }, [cloudProjectId, getAssetSignedView, setCloudImageResolver])
+
+  // ── Reactive local-image backfill (safety net) ─────────────────────────
+  // Catches any inline images that were not uploaded during createCloudProjectFromLocal
+  // (e.g. partial failure, page refresh mid-conversion, or projects converted
+  // before this fix was deployed).  Idempotent: exits immediately when all shots
+  // already have cloud asset IDs.
   useEffect(() => {
     if (projectRef?.type !== 'cloud' || !cloudProjectId) return
     if (!cloudAccessPolicy.canEditCloudProject || !cloudAccessPolicy.canAccessCloudAssets) return
