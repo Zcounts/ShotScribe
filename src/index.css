@@ -2056,6 +2056,34 @@
     color: #f1f5ff;
   }
 
+  .ss-left-sidebar .schedule-sidebar-section-toggle {
+    background: transparent;
+    color: #c8d1e3;
+  }
+
+  .ss-left-sidebar .schedule-sidebar-section-title {
+    color: #9fb0c9;
+  }
+
+  .ss-left-sidebar .schedule-sidebar-section-body {
+    background: transparent;
+  }
+
+  .ss-left-sidebar .schedule-sidebar-selected-day,
+  .ss-left-sidebar .schedule-sidebar-summary-grid {
+    color: #d5deee;
+  }
+
+  .ss-left-sidebar .schedule-sidebar-selected-date {
+    color: #b5c0d2;
+  }
+
+  .ss-left-sidebar .schedule-sidebar-meta-chip {
+    border-color: rgba(148,163,184,0.34);
+    background: rgba(130,153,255,0.14);
+    color: #e4e9f3;
+  }
+
   .app-dialog .dialog-form-grid {
     display: grid;
     grid-template-columns: 180px 1fr;
