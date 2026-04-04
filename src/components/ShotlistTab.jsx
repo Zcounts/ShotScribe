@@ -1111,7 +1111,7 @@ export default function ShotlistTab({
   const addShot                 = useStore(s => s.addShot)
   const addShotBlock            = useStore(s => s.addShotBlock)
   const deleteShot              = useStore(s => s.deleteShot)
-  const reorderShots            = useStore(s => s.reorderShots)
+  const reorderShotlistShots    = useStore(s => s.reorderShotlistShots)
   const shotlistColumnConfig    = useStore(s => s.shotlistColumnConfig)
   const setShotlistColumnConfig = useStore(s => s.setShotlistColumnConfig)
   const customColumns           = useStore(s => s.customColumns)
@@ -1310,15 +1310,7 @@ export default function ShotlistTab({
       shots.sort((a, b) => Number(!!a.checked) - Number(!!b.checked))
       return shots
     }
-    const displayRank = (displayId) => {
-      const match = String(displayId || '').match(/^(\d+)([A-Z]*)$/i)
-      if (!match) return Number.MAX_SAFE_INTEGER
-      const n = Number(match[1] || 0)
-      const suffix = String(match[2] || '').toUpperCase()
-      const s = suffix ? suffix.charCodeAt(0) - 64 : 0
-      return n * 100 + s
-    }
-    shots.sort((a, b) => displayRank(a.displayId) - displayRank(b.displayId))
+    // "Shot number" mode in Shotlist preserves manual drag order.
     return shots
   }, [viewSettings.sortingMode])
 
@@ -1369,8 +1361,8 @@ export default function ShotlistTab({
   const handleRowDragEnd = useCallback((event, sceneId) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    reorderShots(sceneId, active.id, over.id)
-  }, [reorderShots])
+    reorderShotlistShots(sceneId, active.id, over.id)
+  }, [reorderShotlistShots])
 
   const [addShotModalSceneId, setAddShotModalSceneId] = useState(null)
   const addShotModalScene = useMemo(

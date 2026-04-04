@@ -1924,7 +1924,28 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
+  // Storyboard reorder behavior (legacy/original): move shot objects only.
+  // Storyboard cards derive display labels from visual order.
   reorderShots: (sceneId, activeId, overId) => {
+    set(state => ({
+      scenes: state.scenes.map((scene, sceneIndex) => {
+        if (scene.id !== sceneId) return scene
+        const oldIndex = scene.shots.findIndex(s => s.id === activeId)
+        const newIndex = scene.shots.findIndex(s => s.id === overId)
+        if (oldIndex === -1 || newIndex === -1) return scene
+        const sceneNumber = sceneIndex + 1
+        const shotsWithStableDisplayIds = scene.shots.map((shot, shotIndex) => ({
+          ...shot,
+          displayId: ensureShotDisplayId(shot, sceneNumber, shotIndex),
+        }))
+        return { ...scene, shots: arrayMove(shotsWithStableDisplayIds, oldIndex, newIndex) }
+      }),
+    }))
+    get()._scheduleAutoSave()
+  },
+
+  // Shotlist-only reorder: preserve each shot's displayId while changing row order.
+  reorderShotlistShots: (sceneId, activeId, overId) => {
     set(state => ({
       scenes: state.scenes.map((scene, sceneIndex) => {
         if (scene.id !== sceneId) return scene
