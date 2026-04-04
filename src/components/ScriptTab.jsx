@@ -1190,10 +1190,11 @@ export default function ScriptTab() {
                 </button>
               ) : null}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="schedule-view-switcher" role="group" aria-label="Script mode">
               {VIEW_OPTIONS.map(option => (
                 <button
                   key={option.id}
+                  type="button"
                   onClick={() => {
                     if (option.id === 'write' && cloudProjectId && !cloudAccessPolicy.canEditCloudProject) {
                       setCollabNotice('Write mode is disabled while this cloud project is read-only due to inactive billing.')
@@ -1201,12 +1202,11 @@ export default function ScriptTab() {
                     }
                     setView(option.id)
                   }}
-                  className={`ss-btn outline icon-toggle script-view-btn ${view === option.id ? 'is-active' : ''}`}
+                  className={`ss-btn outline icon-toggle schedule-view-switcher-btn ${view === option.id ? 'is-active' : ''}`}
                   aria-label={option.label}
                   title={option.label}
                   aria-pressed={view === option.id}
                   disabled={option.id === 'write' && cloudProjectId && !cloudAccessPolicy.canEditCloudProject}
-                  style={{ borderRadius: 999, padding: '5px 10px', fontSize: 12, minWidth: 56 }}
                 >
                   <img src={option.icon} alt="" aria-hidden="true" />
                 </button>

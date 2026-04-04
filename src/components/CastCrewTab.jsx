@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
 import useStore from '../store'
-import { SubTabNav } from './SubTabNav'
 import SidebarPane from './SidebarPane'
 import visualIcon from '../../assets/script icons/visual.svg'
 import listIcon from '../../assets/script icons/list.svg'
@@ -131,16 +130,24 @@ export default function CastCrewTab() {
           responsiveLabel="Open Cast/Crew panel"
           controls={(
             <div style={{ display: 'grid', gap: 8 }}>
-              <SubTabNav
-                tabs={[
-                  { value: 'Visual', label: 'Visual', icon: visualIcon },
-                  { value: 'List', label: 'List', icon: listIcon },
-                ]}
-                active={activeSubTab}
-                onChange={setActiveSubTab}
-                fullWidth
-                minButtonWidth={0}
-              />
+              <div className="schedule-view-switcher" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }} role="group" aria-label="Cast/Crew view">
+                {[
+                  { key: 'Visual', label: 'Visual', icon: visualIcon },
+                  { key: 'List', label: 'List', icon: listIcon },
+                ].map(view => (
+                  <button
+                    type="button"
+                    key={view.key}
+                    onClick={() => setActiveSubTab(view.key)}
+                    className={`ss-btn outline icon-toggle schedule-view-switcher-btn ${activeSubTab === view.key ? 'is-active' : ''}`}
+                    aria-pressed={activeSubTab === view.key}
+                    aria-label={`${view.label} view`}
+                    title={`${view.label} view`}
+                  >
+                    <img src={view.icon} alt="" aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
               <button className="px-3 py-1.5 text-xs font-semibold rounded border border-[#8299FF]/70 text-[#EAF0FF] bg-[#5265E0]/32 hover:bg-[#5265E0]/42" onClick={() => openProfile('cast', null)}>
                 + Add Cast
               </button>
