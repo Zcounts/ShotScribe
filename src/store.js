@@ -811,6 +811,10 @@ const useStore = create((set, get) => ({
   scenePropertiesDialog: null, // { source: 'storyboard'|'script', sceneId }
   shotPropertiesDialog: null, // { shotId }
   tabViewState: {
+    home: {
+      cloudProjectsExpanded: true,
+      pendingDeletionExpanded: false,
+    },
     script: {},
     scenes: {},
     storyboard: {},
@@ -2523,6 +2527,10 @@ const useStore = create((set, get) => ({
   },
   resetTabViewState: () => set({
     tabViewState: {
+      home: {
+        cloudProjectsExpanded: true,
+        pendingDeletionExpanded: false,
+      },
       script: {},
       scenes: {},
       storyboard: {},
@@ -3430,6 +3438,10 @@ const useStore = create((set, get) => ({
       personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
+        home: {
+          cloudProjectsExpanded: true,
+          pendingDeletionExpanded: false,
+        },
         script: {},
         scenes: {
           sceneViewMode: loadedScenesTabPreferences.sceneViewMode || 'compactGrid',
@@ -3626,6 +3638,10 @@ const useStore = create((set, get) => ({
       personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
+        home: {
+          cloudProjectsExpanded: true,
+          pendingDeletionExpanded: false,
+        },
         script: {},
         scenes: {},
         storyboard: {},
