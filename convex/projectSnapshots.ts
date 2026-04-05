@@ -5,6 +5,16 @@ import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
 
+const usageDiagnosticsEnabled = process.env.CONVEX_USAGE_DIAGNOSTICS === '1'
+
+function estimatePayloadBytes(value: any) {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value ?? null)).length
+  } catch {
+    return -1
+  }
+}
+
 export const createSnapshot = mutation({
   args: {
     projectId: v.id('projects'),
@@ -44,6 +54,7 @@ export const createSnapshot = mutation({
     }
 
     const versionToken = `${args.projectId}:${now}:${Math.random().toString(36).slice(2, 8)}`
+    const payloadBytes = estimatePayloadBytes(args.payload)
     const snapshotId = await ctx.db.insert('projectSnapshots', {
       projectId: args.projectId,
       createdByUserId: args.createdByUserId,
@@ -74,8 +85,19 @@ export const createSnapshot = mutation({
         snapshotId: String(snapshotId),
         source: args.source,
         userId: String(currentUserId),
+        payloadBytes,
       },
     })
+
+    if (usageDiagnosticsEnabled) {
+      // eslint-disable-next-line no-console
+      console.info('[convex-usage] snapshot.write', {
+        projectId: String(args.projectId),
+        snapshotId: String(snapshotId),
+        source: args.source,
+        payloadBytes,
+      })
+    }
 
     return {
       ok: true,
@@ -95,7 +117,16 @@ export const getLatestSnapshotForProject = query({
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
 
     if (project.latestSnapshotId) {
-      return ctx.db.get(project.latestSnapshotId)
+      const latest = await ctx.db.get(project.latestSnapshotId)
+      if (usageDiagnosticsEnabled && latest) {
+        // eslint-disable-next-line no-console
+        console.info('[convex-usage] snapshot.read.latest', {
+          projectId: String(args.projectId),
+          snapshotId: String(latest._id),
+          payloadBytes: estimatePayloadBytes(latest.payload),
+        })
+      }
+      return latest
     }
 
     const snapshots = await ctx.db
@@ -104,7 +135,16 @@ export const getLatestSnapshotForProject = query({
       .order('desc')
       .take(1)
 
-    return snapshots[0] || null
+    const fallback = snapshots[0] || null
+    if (usageDiagnosticsEnabled && fallback) {
+      // eslint-disable-next-line no-console
+      console.info('[convex-usage] snapshot.read.fallback', {
+        projectId: String(args.projectId),
+        snapshotId: String(fallback._id),
+        payloadBytes: estimatePayloadBytes(fallback.payload),
+      })
+    }
+    return fallback
   },
 })
 
