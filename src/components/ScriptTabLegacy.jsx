@@ -32,7 +32,9 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
-import ScriptDocumentPaginationSurface from '../features/scriptDocument/ScriptDocumentPaginationSurface'
+import ScriptDocumentPaginationSurface, {
+  updateNodeType as updateScriptDocumentNodeType,
+} from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -93,8 +95,8 @@ const SIDEBAR_STORAGE_KEYS = {
 }
 
 const WRITE_OPTIONS_DEFAULTS = {
-  boldSlugline: false,
-  boldCharacter: false,
+  boldSlugline: true,
+  boldCharacter: true,
 }
 
 const BLOCK_TYPE_OPTIONS = [
@@ -190,6 +192,9 @@ function BlockTypeIconSelector({ value, onChange, disabled = false }) {
             title={option.label}
             disabled={disabled}
             className={`script-block-type-btn ${selected ? 'is-selected' : ''}`}
+            onMouseDown={(event) => {
+              event.preventDefault()
+            }}
             onClick={() => onChange(option.value)}
           >
             <img src={BLOCK_TYPE_ICON_MAP[option.value]} alt="" aria-hidden="true" />
@@ -209,6 +214,18 @@ function computeCharsPerLine(blockStyle, pageContentWidthPx) {
 function wrapLineCount(text, charsPerLine) {
   const lines = String(text || '').split(/\r?\n/)
   return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(Math.max(1, line.length) / charsPerLine)), 0)
+}
+
+function textFromScriptNode(node) {
+  if (!node || typeof node !== 'object' || !Array.isArray(node.content)) return ''
+  return node.content
+    .map((child) => (child?.type === 'text' ? String(child.text || '') : ''))
+    .join('')
+}
+
+function blockTypeFromNodeType(nodeType) {
+  if (nodeType === 'scene_heading') return 'heading'
+  return nodeType || 'action'
 }
 
 function normalizeTextForStore(value, type) {
@@ -398,6 +415,10 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const projectRef = useStore(s => s.projectRef)
   const getProjectData = useStore(s => s.getProjectData)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
+  const scriptDocument = useStore(s => s.scriptDocument)
+  const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
+  const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
+  const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
@@ -422,6 +443,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const [collabNotice, setCollabNotice] = useState('')
   const [isSavingSnapshot, setIsSavingSnapshot] = useState(false)
+  const [unifiedSelectedNode, setUnifiedSelectedNode] = useState({ nodeIndex: null, blockType: 'action' })
   const baseMinutesPerPage = Number.isFinite(scriptSettings?.baseMinutesPerPage) && scriptSettings.baseMinutesPerPage > 0
     ? scriptSettings.baseMinutesPerPage
     : 5
@@ -558,6 +580,9 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
+  const scriptDocumentRef = scriptDocumentLive || scriptDocument
+  const shouldUseUnifiedWriteSurface = useUnifiedEditorCore && view === 'write'
+  const shouldUseUnifiedReadSurface = useUnifiedEditorCore && view !== 'write'
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
   const pageContentHeightPx = Math.max(120, pageSettings.heightPx - pageSettings.marginTopPx - pageSettings.marginBottomPx)
 
@@ -594,33 +619,68 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   const documentModel = useMemo(() => {
     const blocks = []
+    if (shouldUseUnifiedReadSurface) {
+      const nodes = Array.isArray(scriptDocumentRef?.content) ? scriptDocumentRef.content : []
+      const sceneOffsetById = {}
+      const sceneBlockCountById = {}
+      const fallbackSceneId = orderedScenes[0]?.id || null
 
-    orderedScenes.forEach(scene => {
-      let sceneOffset = 0
-      const sceneBlocks = screenplayByScene[scene.id] || []
-
-      sceneBlocks.forEach((block, blockIndex) => {
-        const blockStyle = getBlockStyleForType(documentSettings, block.type)
+      nodes.forEach((node, nodeIndex) => {
+        const sceneId = node?.attrs?.sourceSceneId || fallbackSceneId
+        if (!sceneId) return
+        const blockType = blockTypeFromNodeType(node?.type)
+        const blockText = textFromScriptNode(node)
+        const blockStyle = getBlockStyleForType(documentSettings, blockType)
         const charsPerLine = computeCharsPerLine(blockStyle, pageContentWidthPx)
-        const lineUnits = wrapLineCount(block.text, charsPerLine)
+        const lineUnits = wrapLineCount(blockText, charsPerLine)
         const blockHeightPx = (lineUnits * blockStyle.lineHeightPx) + (BLOCK_VERTICAL_PADDING * 2)
+        const sceneCharStart = sceneOffsetById[sceneId] || 0
+        const blockIndex = sceneBlockCountById[sceneId] || 0
         blocks.push({
-          sceneId: scene.id,
-          blockId: block.id,
-          blockType: block.type,
-          blockText: block.text,
+          sceneId,
+          blockId: node?.attrs?.sourceElementId || node?.attrs?.id || `pm_block_${nodeIndex}`,
+          blockType,
+          blockText,
           blockIndex,
-          sceneCharStart: sceneOffset,
-          sceneCharEnd: sceneOffset + String(block.text || '').length,
+          sceneCharStart,
+          sceneCharEnd: sceneCharStart + String(blockText || '').length,
           lineUnits,
           blockHeightPx,
           lineHeightPx: blockStyle.lineHeightPx,
           isSceneStart: blockIndex === 0,
-          isHeading: block.type === 'heading' || blockIndex === 0,
+          isHeading: blockType === 'heading' || blockIndex === 0,
         })
-        sceneOffset += String(block.text || '').length + 1
+        sceneOffsetById[sceneId] = sceneCharStart + String(blockText || '').length + 1
+        sceneBlockCountById[sceneId] = blockIndex + 1
       })
-    })
+    } else {
+      orderedScenes.forEach(scene => {
+        let sceneOffset = 0
+        const sceneBlocks = screenplayByScene[scene.id] || []
+
+        sceneBlocks.forEach((block, blockIndex) => {
+          const blockStyle = getBlockStyleForType(documentSettings, block.type)
+          const charsPerLine = computeCharsPerLine(blockStyle, pageContentWidthPx)
+          const lineUnits = wrapLineCount(block.text, charsPerLine)
+          const blockHeightPx = (lineUnits * blockStyle.lineHeightPx) + (BLOCK_VERTICAL_PADDING * 2)
+          blocks.push({
+            sceneId: scene.id,
+            blockId: block.id,
+            blockType: block.type,
+            blockText: block.text,
+            blockIndex,
+            sceneCharStart: sceneOffset,
+            sceneCharEnd: sceneOffset + String(block.text || '').length,
+            lineUnits,
+            blockHeightPx,
+            lineHeightPx: blockStyle.lineHeightPx,
+            isSceneStart: blockIndex === 0,
+            isHeading: block.type === 'heading' || blockIndex === 0,
+          })
+          sceneOffset += String(block.text || '').length + 1
+        })
+      })
+    }
 
     const pages = []
     let currentPage = { id: 'p_1', number: 1, blocks: [], usedHeightPx: 0 }
@@ -650,7 +710,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       pages,
       blocks,
     }
-  }, [documentSettings, orderedScenes, pageContentHeightPx, pageContentWidthPx, screenplayByScene, scriptSettings.scenePaginationMode])
+  }, [documentSettings, orderedScenes, pageContentHeightPx, pageContentWidthPx, screenplayByScene, scriptDocumentRef, scriptSettings.scenePaginationMode, shouldUseUnifiedReadSurface])
 
   const breakdownCountByCategory = useMemo(() => {
     const counts = {}
@@ -688,7 +748,9 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const selectedBlockData = selectedScene
     ? (screenplayByScene[selectedScene.id] || []).find(block => block.id === selectedBlock?.blockId)
     : null
-  const selectedStyleType = selectedBlockData?.type || 'action'
+  const selectedStyleType = useUnifiedEditorCore
+    ? (unifiedSelectedNode.blockType || 'action')
+    : (selectedBlockData?.type || 'action')
   const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
   const currentUserId = cloudUser?.user ? String(cloudUser.user._id) : null
   const lockBySceneId = useMemo(() => {
@@ -938,6 +1000,16 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
     }
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
 
+  const handleUnifiedSetBlockType = useCallback((nextType) => {
+    const nodeIndex = unifiedSelectedNode?.nodeIndex
+    if (!useUnifiedEditorCore || !Number.isInteger(nodeIndex) || !nextType) return
+    const documentRef = scriptDocumentLive || scriptDocument
+    const nextDocument = updateScriptDocumentNodeType(documentRef, nodeIndex, nextType)
+    updateScriptDocumentLive(nextDocument, { reason: 'script_document_surface_block_type_select' })
+    setUnifiedSelectedNode({ nodeIndex, blockType: nextType })
+    deriveScriptDocumentNow({ reason: 'script_document_surface_block_type_select', persist: true })
+  }, [deriveScriptDocumentNow, scriptDocument, scriptDocumentLive, unifiedSelectedNode, updateScriptDocumentLive, useUnifiedEditorCore])
+
   const resolveStackHeights = useCallback(() => {
     const stackHeight = sidebarStackRef.current?.clientHeight || 0
     const available = Math.max(0, stackHeight - SPLITTER_HEIGHT)
@@ -1040,6 +1112,30 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
     }
   }, [documentModel.blocks, view])
 
+  const selectFullBlockForMode = useCallback((block, blockElement, anchorEvent = null) => {
+    if (!block || !blockElement || view === 'write') return
+    const text = String(block.blockText || '').trim()
+    if (!text) {
+      setSelectionDraft(null)
+      return
+    }
+    const blockRect = blockElement.getBoundingClientRect()
+    const top = (anchorEvent?.clientY ?? blockRect.top) + window.scrollY + 8
+    const left = (anchorEvent?.clientX ?? blockRect.left) + window.scrollX
+    setActiveSceneId(block.sceneId)
+    setSelectionDraft({
+      sceneId: block.sceneId,
+      start: block.sceneCharStart,
+      end: block.sceneCharEnd,
+      text,
+      top,
+      left,
+    })
+    if (view === 'breakdown') {
+      setBreakdownDraft(prev => ({ ...prev, name: text }))
+    }
+  }, [view])
+
   const handleReadBlockDoubleClick = useCallback((event, block) => {
     if (view !== 'visualize') return
     const blockElement = event.currentTarget
@@ -1052,16 +1148,22 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   }, [openShotDialog, shotLinksByScene, view])
 
   const handleReadBlockContextMenu = useCallback((event, block) => {
-    if (view !== 'breakdown') return
-    const blockElement = event.currentTarget
-    const localOffset = getOffsetFromPoint(blockElement, event.clientX, event.clientY)
-    if (localOffset == null) return
-    const absoluteOffset = block.sceneCharStart + localOffset
-    const link = (breakdownByScene[block.sceneId] || []).find(item => absoluteOffset >= item.start && absoluteOffset <= item.end)
-    if (!link?.id) return
+    if (view !== 'breakdown' && view !== 'visualize') return
     event.preventDefault()
-    deleteBreakdownTag(link.id)
-  }, [breakdownByScene, deleteBreakdownTag, view])
+    selectFullBlockForMode(block, event.currentTarget, event)
+  }, [selectFullBlockForMode, view])
+
+  const handleDocumentSurfaceContextMenu = useCallback((event) => {
+    if (view !== 'breakdown' && view !== 'visualize') return
+    const blockElement = event.target.closest?.('[data-scene-id][data-block-id]') || null
+    event.preventDefault()
+    if (!blockElement) return
+    const sceneId = blockElement.getAttribute('data-scene-id')
+    const blockId = blockElement.getAttribute('data-block-id')
+    const block = documentModel.blocks.find(entry => entry.sceneId === sceneId && entry.blockId === blockId)
+    if (!block) return
+    selectFullBlockForMode(block, blockElement, event)
+  }, [documentModel.blocks, selectFullBlockForMode, view])
 
   const handleLinkSelectionToShot = useCallback((shotId) => {
     if (!selectionDraft || !shotId || view !== 'visualize') return
@@ -1103,6 +1205,13 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
     const computeOverlays = () => {
       const linksByScene = view === 'breakdown' ? breakdownByScene : shotLinksByScene
       const nextFragmentsByBlock = {}
+      const shotColorById = {}
+      storyboardScenes.forEach((scene) => {
+        ;(scene.shots || []).forEach((shot) => {
+          if (!shot?.id) return
+          shotColorById[shot.id] = shot.color || '#f59e0b'
+        })
+      })
 
       documentModel.blocks.forEach((block) => {
         const blockElement = container.querySelector(`[data-scene-id="${block.sceneId}"][data-block-id="${block.blockId}"]`)
@@ -1133,7 +1242,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
               left: rect.left - blockRect.left,
               width: rect.width,
               height: rect.height,
-              color: link.color || '#f59e0b',
+              color: link.color || shotColorById[link.shotId] || '#f59e0b',
             })
           })
         })
@@ -1142,12 +1251,19 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       setOverlayFragmentsByBlock(nextFragmentsByBlock)
     }
 
-    computeOverlays()
-    window.addEventListener('resize', computeOverlays)
-    return () => {
-      window.removeEventListener('resize', computeOverlays)
+    const scheduleCompute = () => {
+      window.requestAnimationFrame(computeOverlays)
     }
-  }, [activeBreakdownCategory, breakdownByScene, documentModel.blocks, shotLinksByScene, view])
+
+    scheduleCompute()
+    const scroller = documentScrollerRef.current
+    scroller?.addEventListener('scroll', scheduleCompute, { passive: true })
+    window.addEventListener('resize', scheduleCompute)
+    return () => {
+      scroller?.removeEventListener('scroll', scheduleCompute)
+      window.removeEventListener('resize', scheduleCompute)
+    }
+  }, [activeBreakdownCategory, breakdownByScene, documentModel.blocks, shotLinksByScene, storyboardScenes, view])
 
   if (orderedScenes.length === 0) {
     return (
@@ -1279,10 +1395,14 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
                       <BlockTypeIconSelector
                         value={selectedStyleType}
                         onChange={(nextType) => {
+                          if (useUnifiedEditorCore) {
+                            handleUnifiedSetBlockType(nextType)
+                            return
+                          }
                           if (!selectedBlock) return
                           setBlockType(selectedBlock.sceneId, selectedBlock.blockId, nextType)
                         }}
-                        disabled={!selectedBlock}
+                        disabled={useUnifiedEditorCore ? !Number.isInteger(unifiedSelectedNode?.nodeIndex) : !selectedBlock}
                       />
 
                     </>
@@ -1410,9 +1530,26 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={useUnifiedEditorCore ? undefined : handlePageMouseUp}>
-              {useUnifiedEditorCore ? (
-                <ScriptDocumentPaginationSurface />
+            <div
+              ref={documentScrollerRef}
+              style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }}
+              onMouseUp={shouldUseUnifiedWriteSurface ? undefined : handlePageMouseUp}
+              onContextMenu={handleDocumentSurfaceContextMenu}
+            >
+              {shouldUseUnifiedWriteSurface ? (
+                <ScriptDocumentPaginationSurface
+                  readOnly={isWriteBlockedByLock}
+                  writeOptions={writeOptions}
+                  onActiveBlockTypeChange={(blockType) => {
+                    setUnifiedSelectedNode(prev => ({ ...prev, blockType: blockType || 'action' }))
+                  }}
+                  onActiveNodeChange={({ nodeIndex, blockType }) => {
+                    setUnifiedSelectedNode({
+                      nodeIndex: Number.isInteger(nodeIndex) ? nodeIndex : null,
+                      blockType: blockType || 'action',
+                    })
+                  }}
+                />
               ) : (
                 <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
                   <div>
@@ -1539,6 +1676,12 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
                                   onClick={() => {
                                     setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
                                     setActiveSceneId(block.sceneId)
+                                  }}
+                                  onMouseUp={(event) => {
+                                    if (event.detail === 3) {
+                                      event.preventDefault()
+                                      selectFullBlockForMode(block, event.currentTarget, event)
+                                    }
                                   }}
                                   onDoubleClick={(event) => handleReadBlockDoubleClick(event, block)}
                                   onContextMenu={(event) => handleReadBlockContextMenu(event, block)}
