@@ -542,6 +542,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   useEffect(() => {
     if (!cloudProjectId) return
     const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       heartbeatPresence({
         projectId: cloudProjectId,
         sceneId: activeSceneId || undefined,
@@ -549,8 +550,15 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       }).catch(() => {})
     }
     tick()
-    const timer = window.setInterval(tick, 4000)
-    return () => window.clearInterval(timer)
+    const timer = window.setInterval(tick, 6000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [activeSceneId, cloudProjectId, heartbeatPresence, view])
 
   useEffect(() => {

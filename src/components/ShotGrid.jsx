@@ -5,6 +5,9 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
+const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
+const signedViewCache = new Map()
+
 function AddShotButton({ onClick }) {
   return (
     <button className="add-shot-btn" data-add-shot-control="true" data-suppress-entity-context-menu="true" onClick={onClick} title="Add new shot">
@@ -89,12 +92,34 @@ function ShotGrid({
         setPrefetchedAssetViews({})
         return
       }
+      const now = Date.now()
+      const cachedViews = {}
+      const missingAssetIds = []
+      for (const assetId of cloudAssetIds) {
+        const cached = signedViewCache.get(assetId)
+        if (cached && now - cached.cachedAt < SIGNED_VIEW_CACHE_TTL_MS) {
+          cachedViews[assetId] = cached.view
+        } else {
+          missingAssetIds.push(assetId)
+        }
+      }
+      if (missingAssetIds.length === 0) {
+        setPrefetchedAssetViews(cachedViews)
+        return
+      }
       try {
         const batch = await getAssetSignedViewsBatch({
           projectId: projectRef.projectId,
-          assetIds: cloudAssetIds,
+          assetIds: missingAssetIds,
         })
-        if (!cancelled) setPrefetchedAssetViews(batch || {})
+        const merged = { ...cachedViews, ...(batch || {}) }
+        Object.entries(batch || {}).forEach(([assetId, view]) => {
+          signedViewCache.set(String(assetId), {
+            view,
+            cachedAt: now,
+          })
+        })
+        if (!cancelled) setPrefetchedAssetViews(merged)
       } catch (err) {
         console.warn('Failed to prefetch cloud asset views', err)
         if (!cancelled) setPrefetchedAssetViews({})

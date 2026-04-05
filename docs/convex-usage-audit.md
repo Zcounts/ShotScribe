@@ -270,3 +270,48 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 ### Rollback notes
 - Revert UI queries to `projects:listProjectsForCurrentUser`.
 - Keep `projectSnapshotHeads` additive schema/table in place; simply stop reading from it.
+
+---
+
+## Hotspot pass follow-up (snapshot chatter + asset bursts + live-model failure)
+
+### Hotspots targeted
+1. `projectSnapshots:getLatestSnapshotForProject` runtime chatter in open editor sessions.
+2. Repeated asset signed-view calls for the same visible storyboard assets.
+3. Background presence heartbeats when the script tab is hidden.
+4. Live-model migration schema mismatch causing repeated ensure failures.
+
+### Root causes
+- Cloud sync coordinator was reactively subscribed to full latest snapshot payloads even when only latest snapshot id changes were needed.
+- Signed URLs were requested repeatedly for the same asset IDs across re-renders/mounts.
+- Presence heartbeat kept running on a fixed interval even in hidden tabs.
+- Live-model normalization inserted `null` for optional string fields (`projectScenes`/`projectShots`) that expect `undefined`.
+
+### Code changes made
+- Switched cloud sync runtime from reactive full snapshot subscription to reactive snapshot-head metadata + on-demand full snapshot fetch when snapshot id changes.
+- Added short-lived in-memory signed-view caching in `ShotGrid` and `ShotCard`, and re-used prefetched views before per-card fetches.
+- Moved asset batch authorization into `getProjectAssetRowsForBatchRead` and removed separate `getAssetReadAuthorization` query call.
+- Reduced presence heartbeat frequency and gated heartbeats when page visibility is hidden.
+- Normalized live-model migration and live upsert payloads to use `undefined` for optional fields instead of `null`.
+
+### Expected impact
+- Fewer full-payload `projectSnapshots:getLatestSnapshotForProject` calls during steady-state editing.
+- Fewer repeated asset signing calls for identical asset IDs in short windows.
+- Lower background presence mutation/query churn when tabs are hidden.
+- Fewer repeated `ensureStoryboardLiveModel` failures/retries due to schema mismatch.
+
+### What still remains
+- Full snapshot payload is still required for project-open and remote full-project apply paths.
+- Asset signed URL generation still depends on short-lived URLs and may re-sign after cache expiry.
+- Presence/lock queries are still expected while active collaboration UI is open.
+
+### Manual QA for this pass
+1. Open a cloud project and confirm updates still arrive (remote snapshot apply still works).
+2. Scroll/open storyboard pages and verify images still load while asset signing call frequency drops.
+3. Switch browser tab away/back while on script tab; verify presence still appears correctly after returning.
+4. Open a project requiring live-model migration and confirm no repeated schema mismatch failures.
+
+### Rollback notes
+- Revert `CloudSyncCoordinator` head-based fetch effect to prior reactive latest snapshot query.
+- Remove signed-view caches in `ShotGrid`/`ShotCard` if preview freshness regressions appear.
+- Revert presence heartbeat interval/visibility gating to prior behavior if collaboration UX regresses.

@@ -327,28 +327,12 @@ export const getAssetRecordForSignedView = internalQuery({
   },
 })
 
-export const getAssetReadAuthorization = internalQuery({
-  args: {
-    projectId: v.id('projects'),
-  },
-  handler: async (ctx, args) => {
-    const currentUserId = await requireCurrentUserId(ctx)
-    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
-    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
-    return { ok: true }
-  },
-})
-
 export const getAssetSignedViewsBatch = action({
   args: {
     projectId: v.id('projects'),
     assetIds: v.array(v.id('projectAssets')),
   },
   handler: async (ctx, args) => {
-    await ctx.runQuery(internal.assets.getAssetReadAuthorization, {
-      projectId: args.projectId,
-    })
-
     const requested = new Set(args.assetIds.map((id: any) => String(id)))
     if (requested.size === 0) return {}
 
@@ -389,6 +373,10 @@ export const getProjectAssetRowsForBatchRead = internalQuery({
     assetIds: v.array(v.id('projectAssets')),
   },
   handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
+
     const rows = await Promise.all(args.assetIds.map((assetId) => ctx.db.get(assetId)))
     return rows
       .filter((row: any) => row && String(row.projectId) === String(args.projectId) && !row.deletedAt)

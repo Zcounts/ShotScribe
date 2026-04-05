@@ -13,6 +13,9 @@ import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '..
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
+const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
+const signedViewCache = new Map()
+
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
   const [left, right] = String(value || '16:9').split(':')
@@ -87,11 +90,28 @@ function ShotCard({
         setCloudAssetView(null)
         return
       }
+      if (prefetchedCloudAssetView) {
+        setCloudAssetView(prefetchedCloudAssetView)
+        return
+      }
+      const assetId = String(shot.imageAsset.cloud.assetId)
+      const cached = signedViewCache.get(assetId)
+      const now = Date.now()
+      if (cached && now - cached.cachedAt < SIGNED_VIEW_CACHE_TTL_MS) {
+        setCloudAssetView(cached.view)
+        return
+      }
       try {
         const view = await getAssetSignedView({
           projectId: projectRef.projectId,
-          assetId: shot.imageAsset.cloud.assetId,
+          assetId,
         })
+        if (view) {
+          signedViewCache.set(assetId, {
+            view,
+            cachedAt: now,
+          })
+        }
         if (!cancelled) setCloudAssetView(view || null)
       } catch (err) {
         console.warn('Failed to load signed asset view', err)
@@ -102,7 +122,7 @@ function ShotCard({
     return () => {
       cancelled = true
     }
-  }, [cloudAssetBlocked, getAssetSignedView, projectRef, shot?.imageAsset?.cloud?.assetId])
+  }, [cloudAssetBlocked, getAssetSignedView, prefetchedCloudAssetView, projectRef, shot?.imageAsset?.cloud?.assetId])
 
   useEffect(() => {
     let cancelled = false

@@ -294,3 +294,31 @@ Success signal for Phase 3B first slice:
 ### Rollback notes
 - Frontend rollback: switch Home/SaveSync queries back to `projects:listProjectsForCurrentUser`.
 - Backend rollback: leave `projectSnapshotHeads` in schema but stop reading it; old list query path remains intact.
+
+---
+
+## Post-slice hotspot pass (runtime chatter reduction)
+
+### What was implemented
+- Replaced always-live full latest snapshot subscription in cloud sync runtime with snapshot-head metadata subscription and on-demand full snapshot fetch only when snapshot id changes.
+- Added short-lived per-session signed-view caches in storyboard flows (`ShotGrid`, `ShotCard`) and prioritized prefetched views over per-card refetch.
+- Removed separate `assets:getAssetReadAuthorization` hop by moving auth into `getProjectAssetRowsForBatchRead`.
+- Gated script presence heartbeat by document visibility and reduced interval to cut hidden-tab churn.
+- Fixed live-model payload normalization (`null` -> `undefined`) for optional fields to prevent repeated `ensureStoryboardLiveModel` schema failures.
+
+### What remains for later slices
+- Project-open path still hydrates from full snapshot payload.
+- Remote non-storyboard domains (script/schedule/etc.) still depend on full snapshot apply semantics.
+- Broader snapshot architecture split (metadata vs domain entities) remains staged work.
+
+### Manual QA additions for this pass
+1. Home + Save/Sync list still function and open projects correctly.
+2. Cloud project open + remote snapshot apply still work.
+3. Script tab presence still updates after tab visibility changes.
+4. Storyboard image previews still resolve correctly with caching enabled.
+5. Live-model migration no longer loops on schema mismatch for optional fields.
+
+### Rollback notes
+- Restore prior latest-snapshot reactive query in `CloudSyncCoordinator` if remote-update behavior regresses.
+- Disable signed-view caching by removing cache map usage if signed URL freshness issues appear.
+- Revert visibility-gated heartbeat if collaborator presence feels delayed.
