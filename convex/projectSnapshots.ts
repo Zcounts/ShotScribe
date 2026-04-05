@@ -15,6 +15,40 @@ function estimatePayloadBytes(value: any) {
   }
 }
 
+async function upsertSnapshotHead(ctx: any, args: {
+  projectId: any,
+  latestSnapshotId: any,
+  latestSnapshotCreatedAt: number,
+  latestSnapshotSource: any,
+  latestSnapshotVersionToken: string,
+  latestSnapshotPayloadBytes: number,
+}) {
+  const existingHead = await ctx.db
+    .query('projectSnapshotHeads')
+    .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
+    .unique()
+
+  const patch = {
+    latestSnapshotId: args.latestSnapshotId,
+    latestSnapshotCreatedAt: args.latestSnapshotCreatedAt,
+    latestSnapshotSource: args.latestSnapshotSource,
+    latestSnapshotVersionToken: args.latestSnapshotVersionToken,
+    latestSnapshotPayloadBytes: args.latestSnapshotPayloadBytes,
+    latestSnapshotHasPayload: true,
+    updatedAt: Date.now(),
+  }
+
+  if (existingHead) {
+    await ctx.db.patch(existingHead._id, patch)
+    return existingHead._id
+  }
+
+  return ctx.db.insert('projectSnapshotHeads', {
+    projectId: args.projectId,
+    ...patch,
+  })
+}
+
 export const createSnapshot = mutation({
   args: {
     projectId: v.id('projects'),
@@ -77,6 +111,14 @@ export const createSnapshot = mutation({
       ...(payloadProjectEmoji ? { emoji: payloadProjectEmoji } : {}),
       updatedAt: now,
     })
+    await upsertSnapshotHead(ctx, {
+      projectId: args.projectId,
+      latestSnapshotId: snapshotId,
+      latestSnapshotCreatedAt: now,
+      latestSnapshotSource: args.source,
+      latestSnapshotVersionToken: versionToken,
+      latestSnapshotPayloadBytes: payloadBytes,
+    })
 
     await writeOperationalEvent(ctx, {
       event: 'project.snapshot.created',
@@ -104,6 +146,48 @@ export const createSnapshot = mutation({
       snapshotId,
       versionToken,
       createdAt: now,
+    }
+  },
+})
+
+export const getLatestSnapshotHeadForProject = query({
+  args: {
+    projectId: v.id('projects'),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+
+    const head = await ctx.db
+      .query('projectSnapshotHeads')
+      .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
+      .unique()
+    if (head) return head
+
+    // Compatibility fallback for legacy projects: infer lightweight head from
+    // project pointer without pulling the full snapshot payload into list paths.
+    if (project.latestSnapshotId) {
+      return {
+        projectId: args.projectId,
+        latestSnapshotId: project.latestSnapshotId,
+        latestSnapshotCreatedAt: project.updatedAt || null,
+        latestSnapshotSource: null,
+        latestSnapshotVersionToken: null,
+        latestSnapshotPayloadBytes: null,
+        latestSnapshotHasPayload: true,
+        updatedAt: project.updatedAt || Date.now(),
+      }
+    }
+
+    return {
+      projectId: args.projectId,
+      latestSnapshotId: null,
+      latestSnapshotCreatedAt: null,
+      latestSnapshotSource: null,
+      latestSnapshotVersionToken: null,
+      latestSnapshotPayloadBytes: null,
+      latestSnapshotHasPayload: false,
+      updatedAt: Date.now(),
     }
   },
 })

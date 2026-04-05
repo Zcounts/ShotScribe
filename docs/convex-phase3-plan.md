@@ -269,3 +269,28 @@ Secondary:
 Success signal for Phase 3B first slice:
 - measurable drop in list-route query bytes/calls without any regression in project visibility/order and no change in editor/collaboration behavior.
 
+---
+
+## Phase 3B slice 1 implementation status (completed)
+
+### What was implemented
+- Added `projectSnapshotHeads` table as a lightweight latest-snapshot metadata read model.
+- Updated `projectSnapshots:createSnapshot` to dual-write/update `projectSnapshotHeads`.
+- Added `projectSnapshots:getLatestSnapshotHeadForProject` compatibility query (returns lightweight head and legacy fallback shape).
+- Added `projects:listProjectsForCurrentUserLite` and switched Home + Save/Sync cloud project lists to this metadata-first list query.
+
+### What is still left for later slices
+- Save/Sync/cloud coordinator freshness/conflict reads still use full latest snapshot docs where payload is needed.
+- Project-open still fetches full latest payload (intentional for this slice).
+- No domain-level extraction (script/schedule/etc.) yet.
+
+### Manual QA for this slice
+1. Home cloud project list still shows expected projects/order and role labels.
+2. Save/Sync project picker still lists/open projects correctly.
+3. Opening existing legacy cloud projects still works.
+4. New saves create snapshots and continue to sync/resolve conflicts correctly.
+5. Collaboration presence/locks and script editing behavior remain unchanged.
+
+### Rollback notes
+- Frontend rollback: switch Home/SaveSync queries back to `projects:listProjectsForCurrentUser`.
+- Backend rollback: leave `projectSnapshotHeads` in schema but stop reading it; old list query path remains intact.

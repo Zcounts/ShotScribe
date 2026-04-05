@@ -78,14 +78,14 @@ export default function SaveSyncStatusControl({
   const membersArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
   const presenceArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
   const locksArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
-  const cloudProjects = useQuery('projects:listProjectsForCurrentUser', cloudProjectsArgs)
+  const cloudProjects = useQuery('projects:listProjectsForCurrentUserLite', cloudProjectsArgs)
   const membersResult = useQuery('projectMembers:listProjectMembers', membersArgs)
   const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
   const lockRows = useQuery('screenplayLocks:listProjectLocks', locksArgs)
 
   useConvexQueryDiagnostics({
     component: 'SaveSyncStatusControl',
-    queryName: 'projects:listProjectsForCurrentUser',
+    queryName: 'projects:listProjectsForCurrentUserLite',
     args: cloudProjectsArgs,
     result: cloudProjects,
     active: cloudProjectsArgs !== 'skip',

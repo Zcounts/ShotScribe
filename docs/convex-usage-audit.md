@@ -237,3 +237,36 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 3. Split home/project listing into light summary endpoints (no payload touches in hot path).
 4. Add an app-shell entitlement/user context provider to fully dedupe repeated global policy queries.
 5. Evaluate collaboration read model refinements (presence/locks summaries vs full rows) if live churn remains high after Phase 2.
+
+---
+
+## Phase 3B slice 1 follow-up (implemented)
+
+### What was implemented
+- Added `projectSnapshotHeads` metadata table and dual-write from `projectSnapshots:createSnapshot`.
+- Added `projects:listProjectsForCurrentUserLite` to reduce snapshot-payload-coupled reads in list/home flows.
+- Switched Home and Save/Sync cloud project list consumers to `listProjectsForCurrentUserLite`.
+
+### Why it was changed
+- The Phase 3A-selected first slice was to remove snapshot-driven list amplification first, without changing open/edit/collab architecture.
+
+### Expected impact
+- Fewer list-route reads that touch full latest snapshot payloads.
+- Lower bandwidth/function cost for frequent cloud project list refreshes.
+- Backward-compatible behavior kept via legacy fallback logic.
+
+### What still remains
+- Full payload still required for project open and remote snapshot apply.
+- Autosave still writes full snapshot payload blobs.
+- Global entitlement dedupe/provider consolidation remains future work.
+
+### Manual QA checklist for this slice
+1. Home cloud list renders expected projects and opens selected project.
+2. Save/Sync project picker renders expected cloud projects and opens selected project.
+3. Existing legacy projects without metadata heads still appear/open.
+4. Cloud autosave/manual save still succeed and update snapshot id/status.
+5. Collaboration/presence/locks unaffected.
+
+### Rollback notes
+- Revert UI queries to `projects:listProjectsForCurrentUser`.
+- Keep `projectSnapshotHeads` additive schema/table in place; simply stop reading from it.

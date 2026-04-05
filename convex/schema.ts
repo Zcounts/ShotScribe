@@ -179,6 +179,25 @@ export default defineSchema({
     .index('by_project_id_created_at', ['projectId', 'createdAt'])
     .index('by_created_by_user_id_created_at', ['createdByUserId', 'createdAt']),
 
+  projectSnapshotHeads: defineTable({
+    projectId: v.id('projects'),
+    latestSnapshotId: v.optional(v.id('projectSnapshots')),
+    latestSnapshotCreatedAt: v.optional(v.number()),
+    latestSnapshotSource: v.optional(v.union(
+      v.literal('manual_save'),
+      v.literal('autosave'),
+      v.literal('local_conversion'),
+      v.literal('restore'),
+      v.literal('conflict_recovery'),
+    )),
+    latestSnapshotVersionToken: v.optional(v.string()),
+    latestSnapshotPayloadBytes: v.optional(v.number()),
+    latestSnapshotHasPayload: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index('by_project_id', ['projectId'])
+    .index('by_updated_at', ['updatedAt']),
+
   projectAssets: defineTable({
     projectId: v.id('projects'),
     uploadedByUserId: v.id('users'),
