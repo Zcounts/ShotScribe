@@ -70,6 +70,16 @@
 9. On failure: status is `cloud_sync_failed`; the error is surfaced in the toolbar tooltip.
     The local copy is safe — the next edit will queue another cloud attempt.
 
+### Convex auth bootstrap guard (regression note)
+
+- `CloudSyncCoordinator` now waits for `useConvexAuth()` to finish loading before performing the
+  one-shot `users:currentUser` / `billing:getMyEntitlement` boot reads.
+- If those reads run before Convex identity is ready, they can resolve as unauthenticated and
+  incorrectly seed Zustand with `currentUser = null`, which blocks cloud mutations that require
+  `createdByUserId`.
+- This guard preserves the cache optimization while preventing a session-long false unauthenticated
+  state that disables cloud saves.
+
 ### Local → cloud storyboard image backfill
 
 When a project is switched from local-only to cloud backup, ShotScribe now runs a targeted
