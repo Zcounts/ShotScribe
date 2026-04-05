@@ -32,11 +32,6 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
@@ -1133,6 +1128,18 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
     selectFullBlockForMode(block, event.currentTarget, event)
   }, [selectFullBlockForMode, view])
 
+  const handleDocumentSurfaceContextMenu = useCallback((event) => {
+    if (view !== 'breakdown' && view !== 'visualize') return
+    const blockElement = event.target.closest?.('[data-scene-id][data-block-id]') || null
+    event.preventDefault()
+    if (!blockElement) return
+    const sceneId = blockElement.getAttribute('data-scene-id')
+    const blockId = blockElement.getAttribute('data-block-id')
+    const block = documentModel.blocks.find(entry => entry.sceneId === sceneId && entry.blockId === blockId)
+    if (!block) return
+    selectFullBlockForMode(block, blockElement, event)
+  }, [documentModel.blocks, selectFullBlockForMode, view])
+
   const handleLinkSelectionToShot = useCallback((shotId) => {
     if (!selectionDraft || !shotId || view !== 'visualize') return
     linkShotToScene(shotId, selectionDraft.sceneId, {
@@ -1498,7 +1505,12 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={shouldUseUnifiedWriteSurface ? undefined : handlePageMouseUp}>
+            <div
+              ref={documentScrollerRef}
+              style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }}
+              onMouseUp={shouldUseUnifiedWriteSurface ? undefined : handlePageMouseUp}
+              onContextMenu={handleDocumentSurfaceContextMenu}
+            >
               {shouldUseUnifiedWriteSurface ? (
                 <ScriptDocumentPaginationSurface
                   readOnly={isWriteBlockedByLock}
