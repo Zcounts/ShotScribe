@@ -13,6 +13,7 @@ function readOptionalEnv(key, fallback = '') {
 }
 
 const cloudEnabledFromEnv = parseBooleanEnv(readOptionalEnv('VITE_ENABLE_CLOUD_FEATURES', 'false'), false)
+const scriptDocPaginationEnabled = parseBooleanEnv(readOptionalEnv('VITE_ENABLE_SCRIPT_DOC_PAGINATION', 'false'), false)
 
 export const APP_MODE_FLAGS = Object.freeze({
   localOnly: !cloudEnabledFromEnv,
@@ -21,6 +22,9 @@ export const APP_MODE_FLAGS = Object.freeze({
 
 export const runtimeConfig = Object.freeze({
   appMode: APP_MODE_FLAGS,
+  scriptDocument: Object.freeze({
+    paginationPhase1Enabled: scriptDocPaginationEnabled,
+  }),
   convexUrl: readOptionalEnv('VITE_CONVEX_URL', ''),
   clerkPublishableKey: readOptionalEnv('VITE_CLERK_PUBLISHABLE_KEY', ''),
 })
