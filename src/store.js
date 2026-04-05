@@ -416,10 +416,10 @@ function createShot(overrides = {}) {
     image: null,
     imageAsset: null,
     specs: {
-      size: 'WIDE SHOT',
-      type: 'EYE LVL',
-      move: 'STATIC',
-      equip: 'STICKS',
+      size: '',
+      type: '',
+      move: '',
+      equip: '',
     },
     notes: '',
     subject: '',
@@ -722,6 +722,7 @@ const useStore = create((set, get) => ({
   projectRef: { type: 'local', path: null, browserProjectId: null },
   cloudLineage: null, // { originProjectId, lastKnownSnapshotId }
   liveModelVersion: 0,
+  lastStoryboardEditAt: 0,
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
   projectLogline: '',
@@ -811,6 +812,10 @@ const useStore = create((set, get) => ({
   scenePropertiesDialog: null, // { source: 'storyboard'|'script', sceneId }
   shotPropertiesDialog: null, // { shotId }
   tabViewState: {
+    home: {
+      cloudProjectsExpanded: true,
+      pendingDeletionExpanded: false,
+    },
     script: {},
     scenes: {},
     storyboard: {},
@@ -2075,6 +2080,7 @@ const useStore = create((set, get) => ({
   updateScene: (sceneId, updates) => {
     set(state => ({
       scenes: state.scenes.map(s => s.id === sceneId ? { ...s, ...updates } : s),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
@@ -2381,6 +2387,7 @@ const useStore = create((set, get) => ({
         ...s,
         shots: s.shots.map(sh => sh.id === shotId ? { ...sh, ...updates } : sh),
       })),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
@@ -2393,6 +2400,7 @@ const useStore = create((set, get) => ({
           sh.id === shotId ? { ...sh, specs: { ...sh.specs, [specKey]: value } } : sh
         ),
       })),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
@@ -2403,6 +2411,7 @@ const useStore = create((set, get) => ({
         ...s,
         shots: s.shots.map(sh => sh.id === shotId ? { ...sh, notes } : sh),
       })),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
@@ -2523,6 +2532,10 @@ const useStore = create((set, get) => ({
   },
   resetTabViewState: () => set({
     tabViewState: {
+      home: {
+        cloudProjectsExpanded: true,
+        pendingDeletionExpanded: false,
+      },
       script: {},
       scenes: {},
       storyboard: {},
@@ -2653,6 +2666,10 @@ const useStore = create((set, get) => ({
       undoLastRecordedAt: Date.now(),
     }))
 
+    // Mark the project dirty so that the beforeunload guard fires correctly
+    // if the user tries to leave after undoing past a save point.
+    get()._scheduleAutoSave('undo')
+
     return true
   },
 
@@ -2668,6 +2685,9 @@ const useStore = create((set, get) => ({
       undoFuture: undoFuture.slice(1),
       undoLastRecordedAt: Date.now(),
     }))
+
+    // Mark dirty for the same reason as undo above.
+    get()._scheduleAutoSave('redo')
 
     return true
   },
@@ -3430,6 +3450,10 @@ const useStore = create((set, get) => ({
       personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
+        home: {
+          cloudProjectsExpanded: true,
+          pendingDeletionExpanded: false,
+        },
         script: {},
         scenes: {
           sceneViewMode: loadedScenesTabPreferences.sceneViewMode || 'compactGrid',
@@ -3626,6 +3650,10 @@ const useStore = create((set, get) => ({
       personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
+        home: {
+          cloudProjectsExpanded: true,
+          pendingDeletionExpanded: false,
+        },
         script: {},
         scenes: {},
         storyboard: {},

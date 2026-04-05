@@ -58,6 +58,7 @@ export default function Toolbar({
   const [openMenuOpen, setOpenMenuOpen] = useState(false)
   const [unsavedDialog, setUnsavedDialog] = useState(null) // { action: fn }
   const [saveActionBusy, setSaveActionBusy] = useState(false)
+  const [saveSyncOpen, setSaveSyncOpen] = useState(false)
   const saveMenuRef = useRef(null)
   const openMenuRef = useRef(null)
   const emojiPickerRef = useRef(null)
@@ -358,7 +359,7 @@ export default function Toolbar({
         )}
 
         {/* Save / Sync status */}
-        <HoverCard openDelay={280} closeDelay={140}>
+        <HoverCard openDelay={280} closeDelay={140} open={saveSyncOpen ? false : undefined}>
           <HoverCardTrigger asChild>
             <div>
               <SaveSyncStatusControl
@@ -367,6 +368,7 @@ export default function Toolbar({
                 onSaveToCloudNow={handleSaveToCloudNow}
                 onWorkLocalOnly={handleWorkLocalOnly}
                 actionBusy={saveActionBusy}
+                onOpenChange={setSaveSyncOpen}
               />
             </div>
           </HoverCardTrigger>
