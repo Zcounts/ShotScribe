@@ -1,5 +1,5 @@
 import { convertProseMirrorDocumentToLegacyCompatibility } from './legacyBridge.js'
-import { deriveBreakdownListsFromAnnotations } from './breakdownAnnotations.js'
+import { deriveBreakdownListsFromAnnotations, deriveShotLinkIndexFromAnnotations } from './breakdownAnnotations.js'
 
 export const SCRIPT_DERIVATION_DEBOUNCE_MS = 320
 
@@ -28,33 +28,8 @@ export function buildBreakdownAggregates(breakdownTags = []) {
   }
 }
 
-export function buildShotLinkIndexByScene(storyboardScenes = []) {
-  const scenes = Array.isArray(storyboardScenes) ? storyboardScenes : []
-  const result = {}
-
-  scenes.forEach((storyScene, storySceneIndex) => {
-    ;(storyScene.shots || []).forEach((shot, shotIndex) => {
-      if (!shot?.linkedSceneId) return
-      const start = Number.isFinite(shot.linkedScriptRangeStart) ? shot.linkedScriptRangeStart : null
-      const end = Number.isFinite(shot.linkedScriptRangeEnd) ? shot.linkedScriptRangeEnd : null
-      if (start == null || end == null || end <= start) return
-      if (!result[shot.linkedSceneId]) result[shot.linkedSceneId] = []
-      result[shot.linkedSceneId].push({
-        id: `shot_link_${shot.id}`,
-        shotId: shot.id,
-        start,
-        end,
-        color: shot.color || '#E84040',
-        label: shot.displayId || `${storySceneIndex + 1}${shotIndex + 1}`,
-      })
-    })
-  })
-
-  Object.keys(result).forEach((sceneId) => {
-    result[sceneId] = result[sceneId].sort((a, b) => a.start - b.start)
-  })
-
-  return result
+export function buildShotLinkIndexByScene({ scriptAnnotations = null, storyboardScenes = [] } = {}) {
+  return deriveShotLinkIndexFromAnnotations({ scriptAnnotations, storyboardScenes })
 }
 
 export function deriveScriptAdapterOutputs({
@@ -78,7 +53,7 @@ export function deriveScriptAdapterOutputs({
     scriptAnnotations,
     scriptScenes: compatibilityResult.scriptScenes || [],
   })
-  const shotLinkIndexBySceneId = buildShotLinkIndexByScene(storyboardScenes)
+  const shotLinkIndexBySceneId = buildShotLinkIndexByScene({ scriptAnnotations, storyboardScenes })
 
   return {
     scriptScenes: compatibilityResult.scriptScenes || [],

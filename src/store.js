@@ -38,6 +38,8 @@ import {
 import {
   addBreakdownAnnotation,
   removeBreakdownAnnotation,
+  removeShotLinkAnnotationByShotId,
+  upsertShotLinkAnnotation,
 } from './features/scriptDocument/breakdownAnnotations'
 
 export const CARD_COLORS = [
@@ -1344,23 +1346,55 @@ const useStore = create((set, get) => ({
     const nextOffset = opts.linkedDialogueOffset !== undefined ? opts.linkedDialogueOffset : null
     const nextRangeStart = opts.linkedScriptRangeStart !== undefined ? opts.linkedScriptRangeStart : null
     const nextRangeEnd = opts.linkedScriptRangeEnd !== undefined ? opts.linkedScriptRangeEnd : null
-    set(state => ({
-      scenes: state.scenes.map(sc => ({
+    set((state) => {
+      let linkedShot = null
+      const nextScenes = state.scenes.map((sc, sceneIdx) => ({
         ...sc,
-        shots: sc.shots.map(sh =>
-          sh.id === shotId
-            ? {
-                ...sh,
-                linkedSceneId: sceneId,
-                linkedDialogueLine: sceneId ? nextDialogue : null,
-                linkedDialogueOffset: sceneId ? nextOffset : null,
-                linkedScriptRangeStart: sceneId ? nextRangeStart : null,
-                linkedScriptRangeEnd: sceneId ? nextRangeEnd : null,
-              }
-            : sh
-        ),
-      })),
-    }))
+        shots: sc.shots.map((sh, shotIdx) => {
+          if (sh.id !== shotId) return sh
+          const nextShot = {
+            ...sh,
+            linkedSceneId: sceneId,
+            linkedDialogueLine: sceneId ? nextDialogue : null,
+            linkedDialogueOffset: sceneId ? nextOffset : null,
+            linkedScriptRangeStart: sceneId ? nextRangeStart : null,
+            linkedScriptRangeEnd: sceneId ? nextRangeEnd : null,
+            displayId: sh.displayId || `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+          }
+          linkedShot = nextShot
+          return nextShot
+        }),
+      }))
+
+      let nextAnnotations = state.scriptAnnotations
+      const hasRange = sceneId && Number.isFinite(nextRangeStart) && Number.isFinite(nextRangeEnd) && nextRangeEnd > nextRangeStart
+      if (hasRange) {
+        nextAnnotations = upsertShotLinkAnnotation({
+          scriptAnnotations: state.scriptAnnotations,
+          annotationInput: {
+            shotId,
+            sceneId,
+            from: nextRangeStart,
+            to: nextRangeEnd,
+            quote: '',
+            color: linkedShot?.color || null,
+            label: linkedShot?.displayId || '',
+          },
+        }).scriptAnnotations
+      } else {
+        nextAnnotations = removeShotLinkAnnotationByShotId({
+          scriptAnnotations: state.scriptAnnotations,
+          shotId,
+        })
+      }
+
+      return {
+        scenes: nextScenes,
+        scriptAnnotations: nextAnnotations,
+      }
+    })
+    get()._updateSaveSyncStateForChange('shot_link_annotation_update')
+    get().deriveScriptDocumentNow({ reason: 'shot_link_annotation_update', persist: false })
     get()._scheduleAutoSave()
   },
 
@@ -2710,6 +2744,7 @@ const useStore = create((set, get) => ({
       scriptScenes,
       scriptSettings,
       scriptAnnotations,
+      storyboardScenes: scenes,
       scriptLayout: scriptSettings?.documentSettings,
       preferLegacyScriptScenes: !scriptDocumentLive,
     })
@@ -3221,6 +3256,7 @@ const useStore = create((set, get) => ({
       scriptScenes: Array.isArray(data.scriptScenes) ? data.scriptScenes : [],
       scriptSettings: data.scriptSettings || null,
       scriptAnnotations: data.scriptAnnotations,
+      storyboardScenes: scenes,
       scriptLayout: data.scriptSettings?.documentSettings,
     })
     const loadedDerivedScript = deriveScriptAdapterOutputs({

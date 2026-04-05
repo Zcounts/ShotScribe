@@ -7,6 +7,7 @@ import {
 import {
   BREAKDOWN_ANNOTATION_KIND,
   migrateLegacyBreakdownTagsToAnnotations,
+  migrateLegacyShotLinksToAnnotations,
   normalizeScriptAnnotations as normalizeAnnotationEntities,
 } from './breakdownAnnotations.js'
 
@@ -375,13 +376,18 @@ export function normalizeScriptDocumentState({
   scriptScenes = [],
   scriptSettings = null,
   scriptAnnotations = null,
+  storyboardScenes = [],
   scriptLayout,
   preferLegacyScriptScenes = false,
   legacyBreakdownTags = null,
 } = {}) {
-  const annotationsWithLegacy = migrateLegacyBreakdownTagsToAnnotations({
+  const annotationsWithLegacyBreakdown = migrateLegacyBreakdownTagsToAnnotations({
     legacyBreakdownTags: legacyBreakdownTags || scriptSettings?.breakdownTags || [],
     scriptAnnotations,
+  })
+  const annotationsWithLegacy = migrateLegacyShotLinksToAnnotations({
+    storyboardScenes,
+    scriptAnnotations: annotationsWithLegacyBreakdown,
   })
 
   if (preferLegacyScriptScenes && Array.isArray(scriptScenes) && scriptScenes.length > 0) {

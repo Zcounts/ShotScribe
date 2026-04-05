@@ -2,10 +2,17 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   BREAKDOWN_ANNOTATION_KIND,
+  COMMENT_ANNOTATION_KIND,
+  SHOT_LINK_ANNOTATION_KIND,
   addBreakdownAnnotation,
+  createCommentAnnotationEntity,
+  deriveShotLinkIndexFromAnnotations,
   deriveBreakdownListsFromAnnotations,
   migrateLegacyBreakdownTagsToAnnotations,
+  migrateLegacyShotLinksToAnnotations,
   removeBreakdownAnnotation,
+  removeShotLinkAnnotationByShotId,
+  upsertShotLinkAnnotation,
 } from './breakdownAnnotations.js'
 
 function baseDocument() {
@@ -129,4 +136,95 @@ test('migrateLegacyBreakdownTagsToAnnotations keeps legacy compatibility', () =>
   assert.equal(annotation.sceneIdAtCreate, 'sc_1')
   assert.equal(annotation.anchor.from, 5)
   assert.equal(annotation.anchor.to, 12)
+})
+
+test('upsertShotLinkAnnotation upserts one link per shot id', () => {
+  const first = upsertShotLinkAnnotation({
+    scriptAnnotations: { byId: {}, order: [] },
+    annotationInput: { shotId: 'shot_1', sceneId: 'sc_1', from: 12, to: 16, color: '#22d3ee', label: '1A' },
+  })
+  const second = upsertShotLinkAnnotation({
+    scriptAnnotations: first.scriptAnnotations,
+    annotationInput: { shotId: 'shot_1', sceneId: 'sc_1', from: 18, to: 24, color: '#22d3ee', label: '1A' },
+  })
+
+  assert.equal(second.scriptAnnotations.order.length, 1)
+  const entity = second.scriptAnnotations.byId[second.scriptAnnotations.order[0]]
+  assert.equal(entity.kind, SHOT_LINK_ANNOTATION_KIND)
+  assert.equal(entity.anchor.from, 18)
+  assert.equal(entity.anchor.to, 24)
+})
+
+test('removeShotLinkAnnotationByShotId removes shot-link entities', () => {
+  const added = upsertShotLinkAnnotation({
+    scriptAnnotations: { byId: {}, order: [] },
+    annotationInput: { shotId: 'shot_2', sceneId: 'sc_2', from: 4, to: 8 },
+  })
+  const removed = removeShotLinkAnnotationByShotId({
+    scriptAnnotations: added.scriptAnnotations,
+    shotId: 'shot_2',
+  })
+
+  assert.equal(removed.order.length, 0)
+})
+
+test('migrateLegacyShotLinksToAnnotations imports historical linked ranges', () => {
+  const migrated = migrateLegacyShotLinksToAnnotations({
+    storyboardScenes: [
+      {
+        id: 'story_1',
+        shots: [{ id: 'shot_legacy', linkedSceneId: 'sc_9', linkedScriptRangeStart: 3, linkedScriptRangeEnd: 11 }],
+      },
+    ],
+    scriptAnnotations: { byId: {}, order: [] },
+  })
+
+  assert.equal(migrated.order.length, 1)
+  const entity = migrated.byId[migrated.order[0]]
+  assert.equal(entity.kind, SHOT_LINK_ANNOTATION_KIND)
+  assert.equal(entity.sceneIdAtCreate, 'sc_9')
+})
+
+test('deriveShotLinkIndexFromAnnotations prefers annotation substrate and falls back to legacy shots', () => {
+  const fromAnnotations = deriveShotLinkIndexFromAnnotations({
+    scriptAnnotations: {
+      byId: {
+        sl_1: { id: 'sl_1', kind: SHOT_LINK_ANNOTATION_KIND, shotId: 'shot_a', sceneIdAtCreate: 'sc_1', anchor: { from: 1, to: 5 }, color: '#f00', label: '1A' },
+      },
+      order: ['sl_1'],
+    },
+    storyboardScenes: [
+      {
+        id: 'story_1',
+        shots: [{ id: 'shot_a', linkedSceneId: 'sc_1', linkedScriptRangeStart: 2, linkedScriptRangeEnd: 3 }],
+      },
+    ],
+  })
+  assert.equal(fromAnnotations.sc_1.length, 1)
+  assert.equal(fromAnnotations.sc_1[0].start, 1)
+
+  const fallback = deriveShotLinkIndexFromAnnotations({
+    scriptAnnotations: { byId: {}, order: [] },
+    storyboardScenes: [
+      {
+        id: 'story_2',
+        shots: [{ id: 'shot_b', linkedSceneId: 'sc_2', linkedScriptRangeStart: 7, linkedScriptRangeEnd: 10 }],
+      },
+    ],
+  })
+  assert.equal(fallback.sc_2[0].shotId, 'shot_b')
+})
+
+test('createCommentAnnotationEntity provides comment-ready rails without enabling UI', () => {
+  const entity = createCommentAnnotationEntity({
+    threadId: 'thread_1',
+    sceneId: 'sc_4',
+    from: 9,
+    to: 20,
+    quote: 'line here',
+  })
+
+  assert.equal(entity.kind, COMMENT_ANNOTATION_KIND)
+  assert.equal(entity.threadId, 'thread_1')
+  assert.deepEqual(entity.comments, [])
 })

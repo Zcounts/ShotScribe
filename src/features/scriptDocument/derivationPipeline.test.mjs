@@ -85,20 +85,38 @@ test('buildBreakdownAggregates groups by scene and category', () => {
 })
 
 test('buildShotLinkIndexByScene ignores invalid ranges and sorts valid ranges', () => {
-  const index = buildShotLinkIndexByScene([
-    {
-      id: 'story_1',
-      shots: [
-        { id: 'shot_bad', linkedSceneId: 'sc_1', linkedScriptRangeStart: 10, linkedScriptRangeEnd: 10 },
-        { id: 'shot_b', linkedSceneId: 'sc_1', linkedScriptRangeStart: 20, linkedScriptRangeEnd: 25 },
-        { id: 'shot_a', linkedSceneId: 'sc_1', linkedScriptRangeStart: 5, linkedScriptRangeEnd: 8 },
-      ],
+  const index = buildShotLinkIndexByScene({
+    scriptAnnotations: {
+      byId: {
+        sl_bad: { id: 'sl_bad', kind: 'shot_link_annotation', shotId: 'shot_bad', sceneIdAtCreate: 'sc_1', anchor: { from: 10, to: 10 } },
+        sl_b: { id: 'sl_b', kind: 'shot_link_annotation', shotId: 'shot_b', sceneIdAtCreate: 'sc_1', anchor: { from: 20, to: 25 } },
+        sl_a: { id: 'sl_a', kind: 'shot_link_annotation', shotId: 'shot_a', sceneIdAtCreate: 'sc_1', anchor: { from: 5, to: 8 } },
+      },
+      order: ['sl_bad', 'sl_b', 'sl_a'],
     },
-  ])
+    storyboardScenes: [],
+  })
 
   assert.equal(index.sc_1.length, 2)
   assert.equal(index.sc_1[0].shotId, 'shot_a')
   assert.equal(index.sc_1[1].shotId, 'shot_b')
+})
+
+test('buildShotLinkIndexByScene falls back to legacy shot ranges when annotations are absent', () => {
+  const index = buildShotLinkIndexByScene({
+    scriptAnnotations: { byId: {}, order: [] },
+    storyboardScenes: [
+      {
+        id: 'story_1',
+        shots: [
+          { id: 'shot_a', linkedSceneId: 'sc_3', linkedScriptRangeStart: 2, linkedScriptRangeEnd: 9 },
+        ],
+      },
+    ],
+  })
+
+  assert.equal(index.sc_3.length, 1)
+  assert.equal(index.sc_3[0].shotId, 'shot_a')
 })
 
 test('createScriptDerivationDebouncer runs once for burst typing and uses latest payload', async () => {

@@ -231,3 +231,29 @@ test('normalizeScriptDocumentState migrates legacy breakdown tags into structure
   assert.equal(annotation.category, 'Locations')
   assert.equal(annotation.sceneIdAtCreate, 'sc_tag')
 })
+
+test('normalizeScriptDocumentState migrates legacy shot link ranges into shot-link annotations', () => {
+  const normalized = normalizeScriptDocumentState({
+    scriptScenes: [
+      makeLegacyScene({
+        id: 'sc_shot',
+        screenplayElements: [{ id: 'h1', type: 'heading', text: 'EXT. YARD - DAY' }],
+      }),
+    ],
+    storyboardScenes: [
+      {
+        id: 'story_1',
+        shots: [
+          { id: 'shot_legacy', linkedSceneId: 'sc_shot', linkedScriptRangeStart: 2, linkedScriptRangeEnd: 8 },
+        ],
+      },
+    ],
+  })
+
+  const shotLinkAnnotation = normalized.scriptAnnotations.order
+    .map((id) => normalized.scriptAnnotations.byId[id])
+    .find(annotation => annotation?.kind === 'shot_link_annotation')
+  assert.ok(shotLinkAnnotation)
+  assert.equal(shotLinkAnnotation.sceneIdAtCreate, 'sc_shot')
+  assert.equal(shotLinkAnnotation.shotId, 'shot_legacy')
+})
