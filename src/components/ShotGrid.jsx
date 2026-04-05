@@ -3,12 +3,8 @@ import { useAction, useQuery } from 'convex/react'
 import ShotCard from './ShotCard'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
 
 function AddShotButton({ onClick }) {
   return (
