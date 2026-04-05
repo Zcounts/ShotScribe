@@ -23,7 +23,13 @@ import { devPerfLog } from './utils/devPerf'
 import { platformService } from './services/platformService'
 import { runtimeConfig } from './config/runtimeConfig'
 import { logTelemetry } from './utils/telemetry'
-import { isSessionMetricsEnabled, recordDomainCommit, recordSnapshotWrite } from './utils/sessionMetrics'
+import {
+  isSessionMetricsEnabled,
+  recordDomainCommit,
+  recordSnapshotHydrationDeferred,
+  recordSnapshotHydrationTriggered,
+  recordSnapshotWrite,
+} from './utils/sessionMetrics'
 import { createCloudProjectAdapter, createProjectRepository } from './data/repository'
 import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
 import {
@@ -794,6 +800,11 @@ const useStore = create((set, get) => ({
   _cloudSyncTimeout: null,
   _cloudSyncInFlight: false,
   pendingRemoteSnapshot: null, // { projectId, snapshotId, payload, detectedAt }
+  // Tracks whether the full snapshot payload has been loaded for the current
+  // cloud project. 'deferred' = project opened with metadata only; 'loading' =
+  // fetch in flight; 'loaded' = loadProject() has been called with full payload;
+  // 'error' = hydration failed (project is still usable via live tables).
+  snapshotHydrationState: { status: 'idle', projectId: null },
   cloudRepositoryReady: false,
   cloudImageUploader: null,
   cloudImageResolver: null,
@@ -3938,32 +3949,57 @@ const useStore = create((set, get) => ({
     }
 
     devCloudBackupLog('open:start', { projectId })
-    const [snapshot, cloudProject] = await Promise.all([
-      cloudRepository.getLatestSnapshot(projectId),
-      typeof cloudRepository.getProject === 'function' ? cloudRepository.getProject(projectId) : null,
-    ])
-    if (!snapshot?.payload) {
-      devCloudBackupLog('open:missing_snapshot', { projectId })
-      throw new Error('Cloud project has no snapshots')
-    }
-    devCloudBackupLog('open:loaded_snapshot', { projectId, snapshotId: snapshot.id })
 
-    get().loadProject(snapshot.payload)
+    // Fetch only the lightweight project metadata row — NOT the full snapshot.
+    // Full snapshot hydration is deferred and triggered by CloudSyncCoordinator
+    // once the cloud repository adapter is ready. This makes the open path
+    // respond in ~50ms (one metadata read) rather than ~300–2000ms (metadata +
+    // full payload fetch). Storyboard data comes from live tables; other
+    // surfaces trigger hydration on first navigation.
+    const cloudProject = typeof cloudRepository.getProject === 'function'
+      ? await cloudRepository.getProject(projectId)
+      : null
+
+    devCloudBackupLog('open:loaded_metadata', {
+      projectId,
+      liveModelVersion: cloudProject?.liveModelVersion,
+    })
+
+    // Initialize a clean project state from metadata only. Surface data
+    // (scenes/shots) will be populated by live table subscriptions for
+    // liveModelVersion >= 1, or by snapshot hydration for legacy projects.
+    const scene = createScene({ id: 'scene_1', sceneLabel: 'SCENE 1', location: 'LOCATION' })
     set({
       projectPath: null,
       browserProjectId: null,
       projectRef: {
         type: 'cloud',
         projectId,
-        snapshotId: snapshot.id,
+        snapshotId: null, // populated once hydrateProjectSnapshot resolves
       },
+      projectName: cloudProject?.name || 'Untitled',
+      projectEmoji: cloudProject?.emoji || '🎬',
+      projectLogline: '',
+      projectHeroImage: null,
+      projectHeroOverlayColor: '#1f1f27',
+      scenes: [scene],
+      storyboardSceneOrder: [],
+      schedule: [],
+      callsheets: {},
+      castRoster: [],
+      crewRoster: [],
+      castCrewNotes: '',
+      scriptScenes: [],
+      importedScripts: [],
+      scriptDocument: { type: 'doc', content: [] },
+      scriptAnnotations: { byId: {}, order: [] },
       cloudLineage: {
         originProjectId: projectId,
-        lastKnownSnapshotId: snapshot.id,
+        lastKnownSnapshotId: cloudProject?.latestSnapshotId || null,
       },
       liveModelVersion: Number(cloudProject?.liveModelVersion || 0),
       hasUnsavedChanges: false,
-      lastSaved: new Date().toISOString(),
+      lastSaved: null,
       saveSyncState: buildSyncState({
         mode: 'cloud_solo',
         status: 'synced_to_cloud',
@@ -3971,14 +4007,105 @@ const useStore = create((set, get) => ({
         lastSyncedAt: new Date().toISOString(),
       }),
       pendingRemoteSnapshot: null,
+      snapshotHydrationState: { status: 'deferred', projectId },
+      undoPast: [],
+      undoFuture: [],
+      undoLastRecordedAt: 0,
+      storyboardImageCache: {},
+      documentSession: get().documentSession + 1,
     })
+
     // Persist across browser refresh so the same cloud project reopens
     // automatically when the user refreshes the page.
     try { sessionStorage.setItem('ss_active_cloud_project_id', projectId) } catch {}
+
+    if (isSessionMetricsEnabled) recordSnapshotHydrationDeferred()
   },
 
   setLiveModelVersion: (version = 0) => {
     set({ liveModelVersion: Math.max(0, Number(version) || 0) })
+  },
+
+  // Fetches and applies the full snapshot payload for the current cloud project.
+  // Called by CloudSyncCoordinator after openCloudProject sets
+  // snapshotHydrationState to 'deferred'. Uses the same preserve-then-restore
+  // pattern as applyIncomingCloudSnapshot so activeTab and projectRef are not
+  // clobbered by the loadProject call.
+  hydrateProjectSnapshot: async ({ cloudRepository = projectRepository.cloud } = {}) => {
+    const state = get()
+    if (state.snapshotHydrationState?.status !== 'deferred') {
+      return { skipped: true, reason: 'not_deferred' }
+    }
+    const projectId = state.snapshotHydrationState.projectId
+    if (!projectId || state.projectRef?.type !== 'cloud' || state.projectRef.projectId !== projectId) {
+      return { skipped: true, reason: 'project_mismatch' }
+    }
+    if (!cloudRepository) {
+      return { skipped: true, reason: 'no_repository' }
+    }
+    // If the snapshot was already applied by another path (e.g. an incoming
+    // collaborator snapshot that arrived during the deferred window), just mark
+    // as loaded rather than re-fetching.
+    if (state.projectRef.snapshotId !== null) {
+      set({ snapshotHydrationState: { status: 'loaded', projectId } })
+      return { skipped: true, reason: 'already_hydrated' }
+    }
+
+    set({ snapshotHydrationState: { status: 'loading', projectId } })
+    devCloudBackupLog('hydrate:start', { projectId })
+
+    try {
+      const snapshot = await cloudRepository.getLatestSnapshot(projectId)
+      if (!snapshot?.payload) {
+        devCloudBackupLog('hydrate:missing_snapshot', { projectId })
+        set({ snapshotHydrationState: { status: 'error', projectId } })
+        return { ok: false, reason: 'no_snapshot' }
+      }
+      devCloudBackupLog('hydrate:loaded_snapshot', { projectId, snapshotId: snapshot.id })
+
+      // Verify the project has not changed while the fetch was in flight.
+      const currentState = get()
+      if (currentState.projectRef?.type !== 'cloud' || currentState.projectRef.projectId !== projectId) {
+        return { skipped: true, reason: 'project_changed_during_hydration' }
+      }
+
+      // Preserve navigation state — loadProject resets activeTab to 'script'
+      // and projectRef to local, same as with collaborator snapshot application.
+      const preservedProjectRef = currentState.projectRef
+      const preservedActiveTab = currentState.activeTab
+
+      get().loadProject(snapshot.payload)
+
+      const syncedAt = new Date().toISOString()
+      set((latestState) => ({
+        projectRef: { ...preservedProjectRef, snapshotId: snapshot.id },
+        cloudLineage: {
+          originProjectId: projectId,
+          lastKnownSnapshotId: snapshot.id,
+        },
+        activeTab: preservedActiveTab,
+        hasUnsavedChanges: false,
+        lastSaved: syncedAt,
+        saveSyncState: buildSyncState({
+          mode: latestState.cloudSyncContext?.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+          status: 'synced_to_cloud',
+          message: 'Saved on device · backed up to cloud',
+          lastSyncedAt: syncedAt,
+        }),
+        snapshotHydrationState: { status: 'loaded', projectId },
+      }))
+
+      if (isSessionMetricsEnabled) recordSnapshotHydrationTriggered()
+      return { ok: true, snapshotId: snapshot.id }
+    } catch (error) {
+      // Only update state if we're still on the same project.
+      const currentState = get()
+      if (currentState.snapshotHydrationState?.projectId === projectId) {
+        set({ snapshotHydrationState: { status: 'error', projectId } })
+      }
+      devCloudBackupLog('hydrate:error', { projectId, error: error?.message })
+      throw error
+    }
   },
 
   applyLiveStoryboardState: ({ scenes = [], shots = [] } = {}) => {
@@ -4130,6 +4257,13 @@ const useStore = create((set, get) => ({
         lastSyncedAt: syncedAt,
       }),
       pendingRemoteSnapshot: null,
+      // If a snapshot arrived during the deferred hydration window (e.g. from a
+      // collaborator push), mark hydration as complete so hydrateProjectSnapshot
+      // does not fire a duplicate fetch afterward.
+      snapshotHydrationState: latestState.snapshotHydrationState?.status === 'deferred'
+        || latestState.snapshotHydrationState?.status === 'loading'
+        ? { status: 'loaded', projectId }
+        : latestState.snapshotHydrationState,
     }))
     return { applied: true }
   },
@@ -4413,6 +4547,14 @@ const useStore = create((set, get) => ({
   flushCloudSync: async ({ reason = 'manual' } = {}) => {
     const state = get()
     if (state.projectRef?.type !== 'cloud') return { skipped: true, reason: 'not_cloud_project' }
+    // Guard: do not save the placeholder blank state that openCloudProject sets
+    // while snapshot hydration is still pending. The full project data has not
+    // been loaded yet, so saving would overwrite the real cloud snapshot with an
+    // empty payload.
+    const hydrationStatus = state.snapshotHydrationState?.status
+    if (hydrationStatus === 'deferred' || hydrationStatus === 'loading') {
+      return { skipped: true, reason: 'snapshot_hydration_pending' }
+    }
     if (!state.cloudSyncContext?.canSync || !state.cloudSyncContext?.cloudWritesEnabled) {
       return { skipped: true, reason: 'sync_blocked' }
     }

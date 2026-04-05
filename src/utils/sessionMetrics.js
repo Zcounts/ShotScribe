@@ -12,6 +12,13 @@ const counters = {
   // users:currentUser / billing:getMyEntitlement were collapsed into a single
   // boot-time fetch cached in Zustand. Set once; never incremented at runtime.
   redundant_user_fetches_avoided: 5,
+  // Project list pagination: increments each time the user loads another page
+  // of the project list (i.e. clicks "Load more").
+  project_list_pages_loaded: 0,
+  // Snapshot hydration lifecycle: deferred = project opened without fetching
+  // the full snapshot; triggered = deferred hydration actually fired.
+  snapshot_hydrations_deferred: 0,
+  snapshot_hydrations_triggered: 0,
 }
 
 let initialized = false
@@ -30,6 +37,9 @@ function buildPayload() {
     collab_subscriptions_suspended: counters.collabSubscriptionsSuspended,
     deferred_surface_subscriptions: counters.deferredSurfaceSubscriptions,
     redundant_user_fetches_avoided: counters.redundant_user_fetches_avoided,
+    project_list_pages_loaded: counters.project_list_pages_loaded,
+    snapshot_hydrations_deferred: counters.snapshot_hydrations_deferred,
+    snapshot_hydrations_triggered: counters.snapshot_hydrations_triggered,
     session_s: sessionDurationSeconds,
   }
 }
@@ -83,6 +93,24 @@ export function recordDeferredSurfaceSubscription() {
   ensureInitialized()
   if (!isSessionMetricsEnabled) return
   counters.deferredSurfaceSubscriptions += 1
+}
+
+export function recordProjectListPageLoaded() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.project_list_pages_loaded += 1
+}
+
+export function recordSnapshotHydrationDeferred() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.snapshot_hydrations_deferred += 1
+}
+
+export function recordSnapshotHydrationTriggered() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.snapshot_hydrations_triggered += 1
 }
 
 export function startSessionMetrics() {
