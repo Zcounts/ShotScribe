@@ -18,6 +18,28 @@ import {
   getOrCreateSignedViewsBatchRequest,
 } from '../utils/assetSignedViewCache'
 
+const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
+const signedViewCache = new Map()
+const signedViewInFlight = new Map()
+
+function getCachedSignedView(assetId) {
+  const key = String(assetId || '')
+  if (!key) return null
+  const cached = signedViewCache.get(key)
+  if (!cached) return null
+  if (Date.now() - Number(cached.cachedAt || 0) >= SIGNED_VIEW_CACHE_TTL_MS) return null
+  return cached.view || null
+}
+
+function setCachedSignedView(assetId, view) {
+  const key = String(assetId || '')
+  if (!key || !view) return
+  signedViewCache.set(key, {
+    view,
+    cachedAt: Date.now(),
+  })
+}
+
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
   const [left, right] = String(value || '16:9').split(':')
@@ -149,7 +171,7 @@ function ShotCard({
             assetIds: missingAssetIds,
           }),
         })
-        if (!cancelled) setLibraryAssetViews(views || {})
+        if (!cancelled) setLibraryAssetViews({ ...cachedViews, ...(views || {}) })
       } catch (err) {
         console.warn('Failed to load library image previews', err)
       } finally {
