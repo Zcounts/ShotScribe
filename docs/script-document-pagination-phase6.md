@@ -15,11 +15,10 @@ This phase adds a stable phase-1 paginated presentation layer for the ProseMirro
   - commits via existing debounced script document update/derivation actions
 
 - `src/config/runtimeConfig.js`
-  - `VITE_ENABLE_SCRIPT_DOC_PAGINATION` flag (off by default)
+  - original `VITE_ENABLE_SCRIPT_DOC_PAGINATION` rollout flag (retired in final migration cleanup)
 
 - `src/components/ScriptTab.jsx`
-  - phase-1 PM pagination surface can be enabled via runtime config flag
-  - legacy Script tab renderer remains isolated when flag is off
+  - phase-1 PM pagination surface integration point (now superseded by final migration default routing)
 
 ## Intentional limits
 
