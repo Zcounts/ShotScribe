@@ -19,6 +19,11 @@ const counters = {
   // the full snapshot; triggered = deferred hydration actually fired.
   snapshot_hydrations_deferred: 0,
   snapshot_hydrations_triggered: 0,
+  presence_subscription_mounts: 0,
+  snapshot_full_reads: 0,
+  snapshot_head_reads: 0,
+  signed_url_cache_hits: 0,
+  signed_url_cache_misses: 0,
 }
 
 let initialized = false
@@ -40,6 +45,11 @@ function buildPayload() {
     project_list_pages_loaded: counters.project_list_pages_loaded,
     snapshot_hydrations_deferred: counters.snapshot_hydrations_deferred,
     snapshot_hydrations_triggered: counters.snapshot_hydrations_triggered,
+    presence_subscription_mounts: counters.presence_subscription_mounts,
+    snapshot_full_reads: counters.snapshot_full_reads,
+    snapshot_head_reads: counters.snapshot_head_reads,
+    signed_url_cache_hits: counters.signed_url_cache_hits,
+    signed_url_cache_misses: counters.signed_url_cache_misses,
     session_s: sessionDurationSeconds,
   }
 }
@@ -111,6 +121,36 @@ export function recordSnapshotHydrationTriggered() {
   ensureInitialized()
   if (!isSessionMetricsEnabled) return
   counters.snapshot_hydrations_triggered += 1
+}
+
+export function recordPresenceSubscriptionMount() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.presence_subscription_mounts += 1
+}
+
+export function recordSnapshotFullRead() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.snapshot_full_reads += 1
+}
+
+export function recordSnapshotHeadRead() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.snapshot_head_reads += 1
+}
+
+export function recordSignedUrlCacheHit() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.signed_url_cache_hits += 1
+}
+
+export function recordSignedUrlCacheMiss() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.signed_url_cache_misses += 1
 }
 
 export function startSessionMetrics() {

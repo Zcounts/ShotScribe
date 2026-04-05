@@ -4,7 +4,7 @@ import ShotCard from './ShotCard'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
-import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+import { getCachedSignedView, getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
 
 function AddShotButton({ onClick }) {
   return (
@@ -98,12 +98,9 @@ function ShotGrid({
       const cachedViews = {}
       const missingAssetIds = []
       for (const assetId of cloudAssetIds) {
-        const cached = signedViewCache.get(assetId)
-        if (cached && now - cached.cachedAt < SIGNED_VIEW_CACHE_TTL_MS) {
-          cachedViews[assetId] = cached.view
-        } else {
-          missingAssetIds.push(assetId)
-        }
+        const cached = getCachedSignedView(assetId, { now })
+        if (cached) cachedViews[assetId] = cached
+        else missingAssetIds.push(assetId)
       }
       if (missingAssetIds.length === 0) {
         setPrefetchedAssetViews(cachedViews)
