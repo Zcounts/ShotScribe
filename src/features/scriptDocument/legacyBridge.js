@@ -381,7 +381,32 @@ export function normalizeScriptDocumentState({
   scriptSettings = null,
   scriptAnnotations = null,
   scriptLayout,
+  preferLegacyScriptScenes = false,
 } = {}) {
+  if (preferLegacyScriptScenes && Array.isArray(scriptScenes) && scriptScenes.length > 0) {
+    const converted = convertLegacyScriptScenesToProseMirrorDocument(scriptScenes, {
+      documentSettings: scriptLayout,
+      scriptAnnotations,
+    })
+    const compatibility = convertProseMirrorDocumentToLegacyCompatibility({
+      scriptDocument: converted.scriptDocument,
+      previousScriptScenes: scriptScenes,
+      scriptSettings,
+      scriptAnnotations: converted.scriptAnnotations,
+    })
+    return {
+      scriptEngine: SCRIPT_ENGINE_PROSEMIRROR,
+      scriptDocVersion: SCRIPT_DOC_VERSION,
+      scriptDerivationVersion: SCRIPT_DERIVATION_VERSION,
+      scriptDocument: converted.scriptDocument,
+      scriptAnnotations: converted.scriptAnnotations,
+      scriptLayout: converted.scriptLayout,
+      scriptScenes: compatibility.scriptScenes,
+      compatibility: compatibility.compatibility,
+      migratedFromLegacyScriptScenes: true,
+    }
+  }
+
   const hasDoc = !!(scriptDocument && scriptDocument.type === 'doc' && Array.isArray(scriptDocument.content))
 
   if (!hasDoc) {

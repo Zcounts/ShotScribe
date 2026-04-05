@@ -172,3 +172,32 @@ test('compatibility output includes stable shape keys expected by existing consu
   assert.equal(result.compatibility.breakdownTags.length, 1)
   assert.equal(result.compatibility.breakdownTags[0].category, 'Props')
 })
+
+test('normalizeScriptDocumentState can prefer legacy script scenes when canonical doc is stale', () => {
+  const staleDoc = {
+    type: 'doc',
+    content: [
+      { type: 'scene_heading', attrs: { id: 'stale_1', sourceSceneId: 'sc_old' }, content: [{ type: 'text', text: 'INT. STALE ROOM - DAY' }] },
+    ],
+  }
+  const legacyScenes = [
+    makeLegacyScene({
+      id: 'sc_fresh',
+      screenplayElements: [
+        { id: 'f1', type: 'heading', text: 'EXT. FRESH FIELD - NIGHT' },
+        { id: 'f2', type: 'action', text: 'Wind blows.' },
+      ],
+    }),
+  ]
+
+  const normalized = normalizeScriptDocumentState({
+    scriptDocument: staleDoc,
+    scriptScenes: legacyScenes,
+    preferLegacyScriptScenes: true,
+  })
+
+  assert.equal(normalized.scriptScenes.length, 1)
+  assert.equal(normalized.scriptScenes[0].id, 'sc_fresh')
+  assert.equal(normalized.scriptScenes[0].slugline, 'EXT. FRESH FIELD - NIGHT')
+  assert.equal(normalized.migratedFromLegacyScriptScenes, true)
+})

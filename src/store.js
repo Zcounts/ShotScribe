@@ -2660,6 +2660,7 @@ const useStore = create((set, get) => ({
       scriptSettings,
       scriptAnnotations,
       scriptLayout: scriptSettings?.documentSettings,
+      preferLegacyScriptScenes: !scriptDocumentLive,
     })
     const payload = {
       version: 2,
