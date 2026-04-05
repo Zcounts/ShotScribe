@@ -13,32 +13,10 @@ import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '..
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
 import {
-  getCachedSignedView,
+  getCachedSignedView as getCachedSignedViewFromCache,
   getOrCreateSignedViewRequest,
   getOrCreateSignedViewsBatchRequest,
 } from '../utils/assetSignedViewCache'
-
-const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
-const signedViewCache = new Map()
-const signedViewInFlight = new Map()
-
-function getCachedSignedView(assetId) {
-  const key = String(assetId || '')
-  if (!key) return null
-  const cached = signedViewCache.get(key)
-  if (!cached) return null
-  if (Date.now() - Number(cached.cachedAt || 0) >= SIGNED_VIEW_CACHE_TTL_MS) return null
-  return cached.view || null
-}
-
-function setCachedSignedView(assetId, view) {
-  const key = String(assetId || '')
-  if (!key || !view) return
-  signedViewCache.set(key, {
-    view,
-    cachedAt: Date.now(),
-  })
-}
 
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
@@ -132,7 +110,7 @@ function ShotCard({
         return
       }
       const assetId = String(shot.imageAsset.cloud.assetId)
-      const cached = getCachedSignedView(assetId)
+      const cached = getCachedSignedViewFromCache(assetId)
       if (cached) {
         setCloudAssetView(cached)
         return
