@@ -42,6 +42,8 @@ import {
   recordPresenceSubscriptionMount,
 } from '../utils/sessionMetrics'
 
+const canUseConvexHook = typeof convexReact.useConvex === 'function'
+
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
   { id: 'breakdown', label: 'Breakdown', icon: breakdownIcon },
@@ -426,6 +428,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
   const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
   const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
+  const convex = canUseConvexHook ? convexReact.useConvex() : null
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
