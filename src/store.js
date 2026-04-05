@@ -25,6 +25,22 @@ import { runtimeConfig } from './config/runtimeConfig'
 import { logTelemetry } from './utils/telemetry'
 import { createCloudProjectAdapter, createProjectRepository } from './data/repository'
 import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
+import {
+  normalizeScriptDocumentState,
+  SCRIPT_DERIVATION_VERSION,
+  SCRIPT_DOC_VERSION,
+  SCRIPT_ENGINE_PROSEMIRROR,
+} from './features/scriptDocument/legacyBridge'
+import {
+  deriveScriptAdapterOutputs,
+  SCRIPT_DERIVATION_DEBOUNCE_MS,
+} from './features/scriptDocument/derivationPipeline'
+import {
+  addBreakdownAnnotation,
+  removeBreakdownAnnotation,
+  removeShotLinkAnnotationByShotId,
+  upsertShotLinkAnnotation,
+} from './features/scriptDocument/breakdownAnnotations'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -825,8 +841,174 @@ const useStore = create((set, get) => ({
     scenePaginationMode: 'natural', // natural | newPagePerScene
     documentSettings: DEFAULT_SCRIPT_DOCUMENT_SETTINGS,
   },
+  scriptEngine: SCRIPT_ENGINE_PROSEMIRROR,
+  scriptDocVersion: SCRIPT_DOC_VERSION,
+  scriptDerivationVersion: SCRIPT_DERIVATION_VERSION,
+  scriptDocument: { type: 'doc', content: [] },
+  scriptAnnotations: { byId: {}, order: [] },
+  scriptDocumentLive: null,
+  scriptDerivedCache: {
+    sceneMetadataByScriptSceneId: {},
+    breakdownTags: [],
+    breakdownAggregates: { total: 0, byScene: {}, byCategory: {} },
+    breakdownLists: { perScene: {}, global: {} },
+    shotLinkIndexBySceneId: {},
+  },
+  scriptDerivationState: {
+    status: 'idle', // idle | pending | deriving | synced | failed
+    lastDerivedAt: null,
+    lastReason: null,
+    lastError: null,
+  },
+  _scriptDerivationTimeout: null,
 
   // ── Script scene actions ──────────────────────────────────────────────
+
+  updateScriptDocumentLive: (nextDocument, { reason = 'script_typing', debounceMs = SCRIPT_DERIVATION_DEBOUNCE_MS } = {}) => {
+    const current = get()
+    const safeDocument = (nextDocument && nextDocument.type === 'doc' && Array.isArray(nextDocument.content))
+      ? nextDocument
+      : { type: 'doc', content: [] }
+
+    if (current._scriptDerivationTimeout) {
+      clearTimeout(current._scriptDerivationTimeout)
+    }
+
+    set({
+      scriptDocumentLive: safeDocument,
+      hasUnsavedChanges: true,
+      scriptDerivationState: {
+        ...current.scriptDerivationState,
+        status: 'pending',
+        lastReason: reason,
+        lastError: null,
+      },
+    })
+    get()._updateSaveSyncStateForChange(reason)
+
+    const timeout = setTimeout(() => {
+      const latest = get()
+      const committedDoc = latest.scriptDocumentLive || safeDocument
+      set({ scriptDocument: committedDoc, scriptDocumentLive: null, _scriptDerivationTimeout: null })
+      get().deriveScriptDocumentNow({ reason: 'script_document_debounce', persist: true })
+    }, Math.max(0, Number(debounceMs) || SCRIPT_DERIVATION_DEBOUNCE_MS))
+
+    set({ _scriptDerivationTimeout: timeout })
+  },
+
+  deriveScriptDocumentNow: ({ reason = 'script_document_manual', persist = false } = {}) => {
+    const state = get()
+    set({
+      scriptDerivationState: {
+        ...state.scriptDerivationState,
+        status: 'deriving',
+        lastReason: reason,
+        lastError: null,
+      },
+    })
+
+    try {
+      const derived = deriveScriptAdapterOutputs({
+        scriptDocument: state.scriptDocumentLive || state.scriptDocument,
+        previousScriptScenes: state.scriptScenes,
+        scriptSettings: state.scriptSettings,
+        scriptAnnotations: state.scriptAnnotations,
+        storyboardScenes: state.scenes,
+      })
+
+      const derivedAt = new Date().toISOString()
+      set((latestState) => ({
+        scriptScenes: derived.scriptScenes,
+        scriptDerivedCache: {
+          sceneMetadataByScriptSceneId: derived.compatibility.sceneMetadataByScriptSceneId || {},
+          breakdownTags: derived.compatibility.breakdownTags || [],
+          breakdownAggregates: derived.compatibility.breakdownAggregates || { total: 0, byScene: {}, byCategory: {} },
+          breakdownLists: derived.compatibility.breakdownLists || { perScene: {}, global: {} },
+          shotLinkIndexBySceneId: derived.compatibility.shotLinkIndexBySceneId || {},
+        },
+        scriptSettings: {
+          ...latestState.scriptSettings,
+          breakdownTags: derived.compatibility.breakdownTags || [],
+        },
+        scriptDerivationState: {
+          ...latestState.scriptDerivationState,
+          status: 'synced',
+          lastDerivedAt: derivedAt,
+          lastReason: reason,
+          lastError: null,
+        },
+      }))
+
+      if (persist) {
+        get()._scheduleAutoSave(reason)
+      }
+
+      return { ok: true, derivedAt, sceneCount: derived.scriptScenes.length }
+    } catch (error) {
+      set((latestState) => ({
+        scriptDerivationState: {
+          ...latestState.scriptDerivationState,
+          status: 'failed',
+          lastReason: reason,
+          lastError: error?.message || 'script_derivation_failed',
+        },
+      }))
+      return { ok: false, error: error?.message || 'script_derivation_failed' }
+    }
+  },
+
+  flushScriptDocumentDerivation: ({ reason = 'script_document_flush', persist = false } = {}) => {
+    const state = get()
+    if (state._scriptDerivationTimeout) {
+      clearTimeout(state._scriptDerivationTimeout)
+      set({ _scriptDerivationTimeout: null })
+    }
+    if (state.scriptDocumentLive) {
+      set({ scriptDocument: state.scriptDocumentLive, scriptDocumentLive: null })
+    }
+    return get().deriveScriptDocumentNow({ reason, persist })
+  },
+
+  addScriptBreakdownAnnotation: ({
+    sceneId = null,
+    from,
+    to,
+    quote = '',
+    name = '',
+    category = 'Props',
+    quantity = 1,
+  } = {}) => {
+    const state = get()
+    const result = addBreakdownAnnotation({
+      scriptDocument: state.scriptDocumentLive || state.scriptDocument,
+      scriptAnnotations: state.scriptAnnotations,
+      annotationInput: { sceneId, from, to, quote, name, category, quantity },
+    })
+    set({
+      scriptDocument: result.scriptDocument,
+      scriptAnnotations: result.scriptAnnotations,
+      hasUnsavedChanges: true,
+    })
+    get()._updateSaveSyncStateForChange('breakdown_annotation_add')
+    return get().deriveScriptDocumentNow({ reason: 'breakdown_annotation_add', persist: true })
+  },
+
+  removeScriptBreakdownAnnotation: (annotationId) => {
+    if (!annotationId) return { ok: false, reason: 'missing_annotation_id' }
+    const state = get()
+    const result = removeBreakdownAnnotation({
+      scriptDocument: state.scriptDocumentLive || state.scriptDocument,
+      scriptAnnotations: state.scriptAnnotations,
+      annotationId,
+    })
+    set({
+      scriptDocument: result.scriptDocument,
+      scriptAnnotations: result.scriptAnnotations,
+      hasUnsavedChanges: true,
+    })
+    get()._updateSaveSyncStateForChange('breakdown_annotation_remove')
+    return get().deriveScriptDocumentNow({ reason: 'breakdown_annotation_remove', persist: true })
+  },
 
   importScriptScenes: (parsedScenes, scriptMeta, mode = 'replace') => {
     set(state => {
@@ -1164,23 +1346,55 @@ const useStore = create((set, get) => ({
     const nextOffset = opts.linkedDialogueOffset !== undefined ? opts.linkedDialogueOffset : null
     const nextRangeStart = opts.linkedScriptRangeStart !== undefined ? opts.linkedScriptRangeStart : null
     const nextRangeEnd = opts.linkedScriptRangeEnd !== undefined ? opts.linkedScriptRangeEnd : null
-    set(state => ({
-      scenes: state.scenes.map(sc => ({
+    set((state) => {
+      let linkedShot = null
+      const nextScenes = state.scenes.map((sc, sceneIdx) => ({
         ...sc,
-        shots: sc.shots.map(sh =>
-          sh.id === shotId
-            ? {
-                ...sh,
-                linkedSceneId: sceneId,
-                linkedDialogueLine: sceneId ? nextDialogue : null,
-                linkedDialogueOffset: sceneId ? nextOffset : null,
-                linkedScriptRangeStart: sceneId ? nextRangeStart : null,
-                linkedScriptRangeEnd: sceneId ? nextRangeEnd : null,
-              }
-            : sh
-        ),
-      })),
-    }))
+        shots: sc.shots.map((sh, shotIdx) => {
+          if (sh.id !== shotId) return sh
+          const nextShot = {
+            ...sh,
+            linkedSceneId: sceneId,
+            linkedDialogueLine: sceneId ? nextDialogue : null,
+            linkedDialogueOffset: sceneId ? nextOffset : null,
+            linkedScriptRangeStart: sceneId ? nextRangeStart : null,
+            linkedScriptRangeEnd: sceneId ? nextRangeEnd : null,
+            displayId: sh.displayId || `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+          }
+          linkedShot = nextShot
+          return nextShot
+        }),
+      }))
+
+      let nextAnnotations = state.scriptAnnotations
+      const hasRange = sceneId && Number.isFinite(nextRangeStart) && Number.isFinite(nextRangeEnd) && nextRangeEnd > nextRangeStart
+      if (hasRange) {
+        nextAnnotations = upsertShotLinkAnnotation({
+          scriptAnnotations: state.scriptAnnotations,
+          annotationInput: {
+            shotId,
+            sceneId,
+            from: nextRangeStart,
+            to: nextRangeEnd,
+            quote: '',
+            color: linkedShot?.color || null,
+            label: linkedShot?.displayId || '',
+          },
+        }).scriptAnnotations
+      } else {
+        nextAnnotations = removeShotLinkAnnotationByShotId({
+          scriptAnnotations: state.scriptAnnotations,
+          shotId,
+        })
+      }
+
+      return {
+        scenes: nextScenes,
+        scriptAnnotations: nextAnnotations,
+      }
+    })
+    get()._updateSaveSyncStateForChange('shot_link_annotation_update')
+    get().deriveScriptDocumentNow({ reason: 'shot_link_annotation_update', persist: false })
     get()._scheduleAutoSave()
   },
 
@@ -2514,6 +2728,7 @@ const useStore = create((set, get) => ({
       castRoster, crewRoster,
       castCrewNotes,
       scriptScenes, importedScripts, scriptSettings,
+      scriptEngine, scriptDocVersion, scriptDerivationVersion, scriptDocument, scriptDocumentLive, scriptAnnotations,
       shortcutBindings,
       storyboardSceneOrder,
       storyboardDisplayConfig,
@@ -2521,6 +2736,18 @@ const useStore = create((set, get) => ({
       tabViewState,
       cloudLineage,
     } = get()
+    const normalizedScriptState = normalizeScriptDocumentState({
+      scriptEngine,
+      scriptDocVersion,
+      scriptDerivationVersion,
+      scriptDocument: scriptDocumentLive || scriptDocument,
+      scriptScenes,
+      scriptSettings,
+      scriptAnnotations,
+      storyboardScenes: scenes,
+      scriptLayout: scriptSettings?.documentSettings,
+      preferLegacyScriptScenes: !scriptDocumentLive,
+    })
     const payload = {
       version: 2,
       projectName,
@@ -2651,8 +2878,13 @@ const useStore = create((set, get) => ({
       castRoster: (castRoster || []).map(normalizeCastEntry),
       crewRoster: (crewRoster || []).map(normalizeCrewEntry),
       castCrewNotes: castCrewNotes || '',
+      scriptEngine: normalizedScriptState.scriptEngine,
+      scriptDocVersion: normalizedScriptState.scriptDocVersion,
+      scriptDerivationVersion: normalizedScriptState.scriptDerivationVersion,
+      scriptDocument: normalizedScriptState.scriptDocument,
+      scriptAnnotations: normalizedScriptState.scriptAnnotations,
       // Script import state
-      scriptScenes: (scriptScenes || []).map(s => ({
+      scriptScenes: (normalizedScriptState.scriptScenes || []).map(s => ({
         id: s.id,
         sceneNumber: s.sceneNumber != null ? String(s.sceneNumber) : '',
         slugline: s.slugline,
@@ -3016,6 +3248,24 @@ const useStore = create((set, get) => ({
     const loadedScenesTabPreferences = (typeof data.scenesTabPreferences === 'object' && data.scenesTabPreferences !== null)
       ? data.scenesTabPreferences
       : {}
+    const normalizedScriptState = normalizeScriptDocumentState({
+      scriptEngine: data.scriptEngine,
+      scriptDocVersion: data.scriptDocVersion,
+      scriptDerivationVersion: data.scriptDerivationVersion,
+      scriptDocument: data.scriptDocument,
+      scriptScenes: Array.isArray(data.scriptScenes) ? data.scriptScenes : [],
+      scriptSettings: data.scriptSettings || null,
+      scriptAnnotations: data.scriptAnnotations,
+      storyboardScenes: scenes,
+      scriptLayout: data.scriptSettings?.documentSettings,
+    })
+    const loadedDerivedScript = deriveScriptAdapterOutputs({
+      scriptDocument: normalizedScriptState.scriptDocument,
+      previousScriptScenes: normalizedScriptState.scriptScenes,
+      scriptSettings: data.scriptSettings || null,
+      scriptAnnotations: normalizedScriptState.scriptAnnotations,
+      storyboardScenes: scenes,
+    })
 
     set({
       projectName: projectName || 'Untitled Shotlist',
@@ -3067,7 +3317,7 @@ const useStore = create((set, get) => ({
       customDropdownOptions: loadedCustomDropdownOptions,
       scenes: scenes.map((scene, idx) => {
         if (scene.linkedScriptSceneId) return scene
-        const fallbackScriptScene = Array.isArray(data.scriptScenes) ? data.scriptScenes[idx] : null
+        const fallbackScriptScene = Array.isArray(normalizedScriptState.scriptScenes) ? normalizedScriptState.scriptScenes[idx] : null
         if (!fallbackScriptScene?.id) return scene
         return {
           ...scene,
@@ -3109,8 +3359,8 @@ const useStore = create((set, get) => ({
       })(),
       callsheetColumnConfig: normalizeCallsheetColumnConfig(data.callsheetColumnConfig),
       // Script import state — default to empty for older project files
-      scriptScenes: Array.isArray(data.scriptScenes)
-        ? data.scriptScenes.map(s => {
+      scriptScenes: Array.isArray(normalizedScriptState.scriptScenes)
+        ? normalizedScriptState.scriptScenes.map(s => {
           const derived = deriveScriptSceneFromElements(
             { ...s, sceneNumber: s?.sceneNumber != null ? String(s.sceneNumber) : '' },
             s.screenplayElements,
@@ -3127,6 +3377,26 @@ const useStore = create((set, get) => ({
           }
         })
         : [],
+      scriptEngine: normalizedScriptState.scriptEngine,
+      scriptDocVersion: normalizedScriptState.scriptDocVersion,
+      scriptDerivationVersion: normalizedScriptState.scriptDerivationVersion,
+      scriptDocument: normalizedScriptState.scriptDocument,
+      scriptAnnotations: normalizedScriptState.scriptAnnotations,
+      scriptDocumentLive: null,
+      scriptDerivedCache: {
+        sceneMetadataByScriptSceneId: loadedDerivedScript.compatibility?.sceneMetadataByScriptSceneId || {},
+        breakdownTags: loadedDerivedScript.compatibility?.breakdownTags || [],
+        breakdownAggregates: loadedDerivedScript.compatibility?.breakdownAggregates || { total: 0, byScene: {}, byCategory: {} },
+        breakdownLists: loadedDerivedScript.compatibility?.breakdownLists || { perScene: {}, global: {} },
+        shotLinkIndexBySceneId: loadedDerivedScript.compatibility?.shotLinkIndexBySceneId || {},
+      },
+      scriptDerivationState: {
+        status: 'synced',
+        lastDerivedAt: new Date().toISOString(),
+        lastReason: normalizedScriptState.migratedFromLegacyScriptScenes ? 'legacy_migration' : 'load_project',
+        lastError: null,
+      },
+      _scriptDerivationTimeout: null,
       importedScripts: Array.isArray(data.importedScripts) ? data.importedScripts : [],
       scriptSettings: {
         baseMinutesPerPage: 5,
@@ -3135,7 +3405,8 @@ const useStore = create((set, get) => ({
         defaultSceneColor: null,
         scenePaginationMode: 'natural',
         ...(data.scriptSettings || {}),
-        documentSettings: normalizeDocumentSettings(data?.scriptSettings?.documentSettings),
+        documentSettings: normalizeDocumentSettings(normalizedScriptState.scriptLayout || data?.scriptSettings?.documentSettings),
+        breakdownTags: loadedDerivedScript.compatibility?.breakdownTags || data?.scriptSettings?.breakdownTags || [],
       },
       shortcutBindings: getActiveBindings(data.shortcutBindings || loadShortcutBindings() || SHORTCUT_DEFAULTS),
       lastSaved: new Date().toISOString(),
@@ -3318,6 +3589,26 @@ const useStore = create((set, get) => ({
       crewRoster: [],
       castCrewNotes: '',
       scriptScenes: [],
+      scriptEngine: SCRIPT_ENGINE_PROSEMIRROR,
+      scriptDocVersion: SCRIPT_DOC_VERSION,
+      scriptDerivationVersion: SCRIPT_DERIVATION_VERSION,
+      scriptDocument: { type: 'doc', content: [] },
+      scriptAnnotations: { byId: {}, order: [] },
+      scriptDocumentLive: null,
+      scriptDerivedCache: {
+        sceneMetadataByScriptSceneId: {},
+        breakdownTags: [],
+        breakdownAggregates: { total: 0, byScene: {}, byCategory: {} },
+        breakdownLists: { perScene: {}, global: {} },
+        shotLinkIndexBySceneId: {},
+      },
+      scriptDerivationState: {
+        status: 'idle',
+        lastDerivedAt: null,
+        lastReason: null,
+        lastError: null,
+      },
+      _scriptDerivationTimeout: null,
       importedScripts: [],
       projectPath: null,
       browserProjectId,

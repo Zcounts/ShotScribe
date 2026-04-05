@@ -1,4 +1,4 @@
-import { SCREENPLAY_LAYOUT } from './screenplay'
+import { SCREENPLAY_LAYOUT } from './screenplay.js'
 
 const ALIGNMENTS = ['left', 'center', 'right', 'justify']
 
