@@ -430,72 +430,6 @@ function ShotCard({
 
       </div>
 
-      {timeMetadataColumns.length > 0 && (
-        <div className="shot-time-fields-wrapper">
-          <table className="shot-time-fields">
-            <caption>Shot timing and aspect ratio metadata</caption>
-            <thead>
-              <tr>
-                {timeMetadataColumns.map(column => (
-                  <th key={column.key}>{column.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                {timeMetadataColumns.map(column => (
-                  <td key={column.key} className="shot-time-field-cell">
-                    {column.key === 'setupTime' ? (
-                      <input
-                        className="shot-time-number"
-                        type="text"
-                        inputMode="decimal"
-                        value={sanitizeNumericInput(shot.setupTime || '')}
-                        onChange={handleSetupTimeChange}
-                        placeholder="15"
-                      />
-                    ) : null}
-                    {column.key === 'shotTime' ? (
-                      <input
-                        className="shot-time-number"
-                        type="text"
-                        inputMode="decimal"
-                        value={sanitizeNumericInput(shot.shootTime || '')}
-                        onChange={handleShotTimeChange}
-                        placeholder="10"
-                      />
-                    ) : null}
-                    {column.key === 'shotAspectRatio' ? (
-                      <div className="shot-time-aspect-dropdown">
-                        <CustomDropdown
-                          value={shot.shotAspectRatio || ''}
-                          options={shotAspectRatioOptions}
-                          onChange={handleShotAspectRatioChange}
-                          onAddCustomOption={(option) => addCustomDropdownOption('shotAspectRatio', option)}
-                          inputStyle={{
-                            width: '100%',
-                            border: 'none',
-                            background: 'transparent',
-                            textAlign: 'center',
-                            fontSize: 10,
-                            padding: 0,
-                            outline: 'none',
-                            fontFamily: 'inherit',
-                            cursor: 'pointer',
-                            boxSizing: 'border-box',
-                          }}
-                          placeholder="—"
-                        />
-                      </div>
-                    ) : null}
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
       {/* Image Area */}
       <div
         className={`image-placeholder ${imagePickerStep === 'options' && projectRef?.type === 'cloud' ? 'image-placeholder-active' : ''}`}
@@ -634,6 +568,72 @@ function ShotCard({
           useDropdowns={useDropdowns}
           visibleSpecKeys={visibleSpecKeys}
         />
+      )}
+
+      {timeMetadataColumns.length > 0 && (
+        <div className="shot-time-fields-wrapper">
+          <table className="shot-time-fields">
+            <caption>Shot timing and aspect ratio metadata</caption>
+            <thead>
+              <tr>
+                {timeMetadataColumns.map(column => (
+                  <th key={column.key}>{column.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {timeMetadataColumns.map(column => (
+                  <td key={column.key} className="shot-time-field-cell">
+                    {column.key === 'setupTime' ? (
+                      <input
+                        className="shot-time-number"
+                        type="text"
+                        inputMode="decimal"
+                        value={sanitizeNumericInput(shot.setupTime || '')}
+                        onChange={handleSetupTimeChange}
+                        placeholder="15"
+                      />
+                    ) : null}
+                    {column.key === 'shotTime' ? (
+                      <input
+                        className="shot-time-number"
+                        type="text"
+                        inputMode="decimal"
+                        value={sanitizeNumericInput(shot.shootTime || '')}
+                        onChange={handleShotTimeChange}
+                        placeholder="10"
+                      />
+                    ) : null}
+                    {column.key === 'shotAspectRatio' ? (
+                      <div className="shot-time-aspect-dropdown">
+                        <CustomDropdown
+                          value={shot.shotAspectRatio || ''}
+                          options={shotAspectRatioOptions}
+                          onChange={handleShotAspectRatioChange}
+                          onAddCustomOption={(option) => addCustomDropdownOption('shotAspectRatio', option)}
+                          inputStyle={{
+                            width: '100%',
+                            border: 'none',
+                            background: 'transparent',
+                            textAlign: 'center',
+                            fontSize: 10,
+                            padding: 0,
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            cursor: 'pointer',
+                            boxSizing: 'border-box',
+                          }}
+                          placeholder="—"
+                        />
+                      </div>
+                    ) : null}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Notes Area */}
