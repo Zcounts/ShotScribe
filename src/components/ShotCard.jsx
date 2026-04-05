@@ -12,6 +12,11 @@ import { processStoryboardUpload, processStoryboardUploadForCloud } from '../uti
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import {
+  getCachedSignedView,
+  getOrCreateSignedViewRequest,
+  getOrCreateSignedViewsBatchRequest,
+} from '../utils/assetSignedViewCache'
 
 const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
 const signedViewCache = new Map()
@@ -105,23 +110,14 @@ function ShotCard({
   const getSignedViewWithCache = useCallback(async (assetId) => {
     const key = String(assetId || '')
     if (!key || !cloudProjectId) return null
-    const cached = getCachedSignedView(key)
-    if (cached) return cached
-    const inFlight = signedViewInFlight.get(key)
-    if (inFlight) return inFlight
-    const request = getAssetSignedView({
+    return getOrCreateSignedViewRequest({
       projectId: cloudProjectId,
       assetId: key,
+      fetcher: () => getAssetSignedView({
+        projectId: cloudProjectId,
+        assetId: key,
+      }),
     })
-      .then((view) => {
-        setCachedSignedView(key, view || null)
-        return view || null
-      })
-      .finally(() => {
-        signedViewInFlight.delete(key)
-      })
-    signedViewInFlight.set(key, request)
-    return request
   }, [cloudProjectId, getAssetSignedView])
 
   useEffect(() => {
@@ -167,25 +163,13 @@ function ShotCard({
       ) return
       setIsLoadingLibraryViews(true)
       try {
-        const cachedViews = {}
-        const missingAssetIds = []
-        for (const asset of libraryAssets) {
-          const assetId = String(asset?.assetId || '')
-          if (!assetId) continue
-          const cached = getCachedSignedView(assetId)
-          if (cached) cachedViews[assetId] = cached
-          else missingAssetIds.push(assetId)
-        }
-        if (missingAssetIds.length === 0) {
-          if (!cancelled) setLibraryAssetViews(cachedViews)
-          return
-        }
-        const views = await getAssetSignedViewsBatch({
+        const views = await getOrCreateSignedViewsBatchRequest({
           projectId: cloudProjectId,
-          assetIds: missingAssetIds,
-        })
-        Object.entries(views || {}).forEach(([assetId, view]) => {
-          setCachedSignedView(assetId, view)
+          assetIds: libraryAssets.map(asset => asset.assetId),
+          fetcher: (missingAssetIds) => getAssetSignedViewsBatch({
+            projectId: cloudProjectId,
+            assetIds: missingAssetIds,
+          }),
         })
         if (!cancelled) setLibraryAssetViews({ ...cachedViews, ...(views || {}) })
       } catch (err) {

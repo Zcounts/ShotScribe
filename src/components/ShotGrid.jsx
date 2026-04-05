@@ -4,14 +4,11 @@ import ShotCard from './ShotCard'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
 
 const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
   ? useConvexQueryDiagnostics
   : () => {}
-
-const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
-const signedViewCache = new Map()
-const signedViewBatchInFlight = new Map()
 
 function AddShotButton({ onClick }) {
   return (
@@ -117,26 +114,15 @@ function ShotGrid({
         return
       }
       try {
-        const batchKey = `${String(projectRef.projectId)}:${missingAssetIds.slice().sort().join(',')}`
-        let request = signedViewBatchInFlight.get(batchKey)
-        if (!request) {
-          request = getAssetSignedViewsBatch({
+        const mergedViews = await getOrCreateSignedViewsBatchRequest({
+          projectId: projectRef.projectId,
+          assetIds: cloudAssetIds,
+          fetcher: (missingAssetIds) => getAssetSignedViewsBatch({
             projectId: projectRef.projectId,
             assetIds: missingAssetIds,
-          }).finally(() => {
-            signedViewBatchInFlight.delete(batchKey)
-          })
-          signedViewBatchInFlight.set(batchKey, request)
-        }
-        const batch = await request
-        const merged = { ...cachedViews, ...(batch || {}) }
-        Object.entries(batch || {}).forEach(([assetId, view]) => {
-          signedViewCache.set(String(assetId), {
-            view,
-            cachedAt: now,
-          })
+          }),
         })
-        if (!cancelled) setPrefetchedAssetViews(merged)
+        if (!cancelled) setPrefetchedAssetViews(mergedViews || {})
       } catch (err) {
         console.warn('Failed to prefetch cloud asset views', err)
         if (!cancelled) setPrefetchedAssetViews({})

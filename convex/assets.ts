@@ -333,12 +333,13 @@ export const getAssetSignedViewsBatch = action({
     assetIds: v.array(v.id('projectAssets')),
   },
   handler: async (ctx, args) => {
-    const requested = new Set(args.assetIds.map((id: any) => String(id)))
+    const dedupedAssetIds = Array.from(new Map(args.assetIds.map((id: any) => [String(id), id])).values())
+    const requested = new Set(dedupedAssetIds.map((id: any) => String(id)))
     if (requested.size === 0) return {}
 
     const rows = await ctx.runQuery(internal.assets.getProjectAssetRowsForBatchRead, {
       projectId: args.projectId,
-      assetIds: args.assetIds,
+      assetIds: dedupedAssetIds,
     })
     const matched = rows.filter((row: any) => requested.has(String(row.assetId)))
 
@@ -377,7 +378,8 @@ export const getProjectAssetRowsForBatchRead = internalQuery({
     await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
     await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
 
-    const rows = await Promise.all(args.assetIds.map((assetId) => ctx.db.get(assetId)))
+    const dedupedAssetIds = Array.from(new Map(args.assetIds.map((id: any) => [String(id), id])).values())
+    const rows = await Promise.all(dedupedAssetIds.map((assetId) => ctx.db.get(assetId)))
     return rows
       .filter((row: any) => row && String(row.projectId) === String(args.projectId) && !row.deletedAt)
       .map((row: any) => ({

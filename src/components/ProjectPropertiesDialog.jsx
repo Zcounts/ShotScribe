@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { getOrCreateSignedViewRequest } from '../utils/assetSignedViewCache'
 
 const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
   ? useConvexQueryDiagnostics
@@ -60,6 +61,17 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
   const [overlayColor, setOverlayColor] = useState(projectHeroOverlayColor || '#1f1f27')
   const [heroImageDraft, setHeroImageDraft] = useState(projectHeroImage || null)
   const [saving, setSaving] = useState(false)
+  const getSignedViewWithCache = useCallback(async (assetId) => {
+    if (projectRef?.type !== 'cloud' || !projectRef?.projectId || !assetId) return null
+    return getOrCreateSignedViewRequest({
+      projectId: projectRef.projectId,
+      assetId,
+      fetcher: () => getAssetSignedView({
+        projectId: projectRef.projectId,
+        assetId,
+      }),
+    })
+  }, [getAssetSignedView, projectRef?.projectId, projectRef?.type])
 
   useEffect(() => {
     if (!open) return
@@ -113,10 +125,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
         })
         const uploadedAssetId = uploaded?.imageAsset?.cloud?.assetId
         if (uploadedAssetId) {
-          const signedView = await getAssetSignedView({
-            projectId: projectRef.projectId,
-            assetId: uploadedAssetId,
-          })
+          const signedView = await getSignedViewWithCache(uploadedAssetId)
           const signedPayload = buildShotImageFromLibraryAsset(signedView)
           setHeroImageDraft(signedPayload || uploaded)
         } else {
@@ -150,10 +159,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
 
   const handlePickFromLibrary = async (assetId) => {
     if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
-    const view = await getAssetSignedView({
-      projectId: projectRef.projectId,
-      assetId,
-    })
+    const view = await getSignedViewWithCache(assetId)
     const payload = buildShotImageFromLibraryAsset(view)
     if (payload) setHeroImageDraft(payload)
   }

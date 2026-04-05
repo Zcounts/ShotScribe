@@ -405,3 +405,19 @@ Success signal for Phase 3B first slice:
 
 ### Tradeoff
 - Remote storyboard updates can be delayed briefly while a user is actively typing locally, then converge once unsaved edits clear.
+
+---
+
+## Asset-signing churn follow-up (targeted)
+
+### Implemented
+- Introduced shared signed-view cache/in-flight dedupe utility consumed by storyboard grid, shot cards, and project-properties hero/library previews.
+- Added batch helper behavior to fetch/sign only missing asset IDs after cache hits.
+- Added server-side duplicate-asset-id dedupe in batch signing read path.
+
+### Expected effect
+- Fewer duplicate sign requests for the same asset IDs during short-window rerenders and modal/grid overlap.
+- Lower repeated DB/read work in `getProjectAssetRowsForBatchRead`.
+
+### Not changed
+- Signed URL TTL/security model and provider architecture remain unchanged.

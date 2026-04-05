@@ -499,3 +499,55 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 
 ### Rollback notes
 - Revert hot-window guard (`LOCAL_TEXT_EDIT_HOT_WINDOW_MS`) and deferred replay timer path if any unacceptable remote-delay behavior appears.
+
+---
+
+## Targeted asset-signing + storyboard preview churn pass
+
+### Concise root cause
+- Asset churn remained mostly from short-window duplicate sign requests across parallel component paths:
+  - grid prefetch batch signing
+  - card-level single signing
+  - project properties hero/library signing
+- These paths already had local caches, but caches were fragmented per component and not shared across all preview consumers.
+
+### Exact code changes
+- Added shared signed-view cache/dedupe utility `src/utils/assetSignedViewCache.js`:
+  - short-lived cache lookup
+  - single-request in-flight dedupe
+  - batch-request in-flight dedupe
+  - cache-first + missing-only batch fetch composition
+  - dev-only repeat-request diagnostics (`ss_convex_diag`)
+- Refactored `ShotGrid` prefetch to use shared batch cache helper rather than isolated local cache map.
+- Refactored `ShotCard` single + library batch signing paths to use shared cache helper.
+- Refactored `ProjectPropertiesDialog` hero/library signing reads to use shared cache helper.
+- Added server-side dedupe of duplicate asset IDs in:
+  - `assets:getAssetSignedViewsBatch`
+  - `assets:getProjectAssetRowsForBatchRead`
+
+### Behavior preserved
+- Storyboard thumbnails/previews still resolve through existing signed-view flows.
+- Library behavior and assignment flow unchanged.
+- Signed URL security model unchanged (still signed URLs).
+- Collaboration and save/sync behavior unchanged.
+
+### Expected impact
+- **Function calls:** fewer repeated `assets:getAssetSignedView` and `assets:getAssetSignedViewsBatch` calls for the same IDs within short windows.
+- **Bandwidth:** lower duplicate signed-view payload responses and redundant batch rows.
+- **Storyboard responsiveness:** less duplicate request contention during mount/rerender/modal-open paths.
+
+### Intentionally not changed
+- No storage/provider architecture changes.
+- No signed URL lifetime/TTL policy changes.
+- No visible loading-order/UI behavior redesign.
+
+### Manual QA
+1. Open storyboard and verify card thumbnails load normally.
+2. Scroll and page through storyboard scenes; ensure previews remain stable.
+3. Open project properties and pick hero images from library; verify previews load and save unchanged.
+4. Reopen storyboard/library quickly and verify no visible stale preview issues.
+5. Confirm collaboration and autosave/manual sync behavior are unchanged.
+
+### Rollback notes
+- Revert `src/utils/assetSignedViewCache.js` integration points in `ShotGrid`/`ShotCard`/`ProjectPropertiesDialog` if any preview freshness regression appears.
+- Revert batch asset-id dedupe in `convex/assets.ts` if any unexpected ID mapping edge case is observed.
