@@ -187,6 +187,10 @@
   gap: 6px;
 }
 
+.home-hero-project-props-btn {
+  color: #ffffff;
+}
+
 .home-main {
   --home-footer-height: 44px;
   flex: 1;
