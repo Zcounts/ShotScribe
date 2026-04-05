@@ -120,7 +120,7 @@ export default function HomeView() {
   const cloudAuthConfigured = isCloudAuthConfigured()
   const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
   const cloudListEnabled = cloudEnvEnabled && cloudAuthConfigured && signedInForCloud && cloudAccessPolicy?.paidCloudAccess
-  const cloudProjects = useQuery('projects:listProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
+  const cloudProjects = useQuery('projects:listProjectsForCurrentUserLite', cloudListEnabled ? {} : 'skip')
   const homeHeroDefaults = useQuery('admin:getHomeHeroDefaultsPublic', cloudEnvEnabled ? {} : 'skip')
   const pendingDeleteProjects = useQuery('projects:listPendingDeletionProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
   const markProjectPendingDeletion = useMutation('projects:markProjectPendingDeletion')

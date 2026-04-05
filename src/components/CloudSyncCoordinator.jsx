@@ -4,11 +4,13 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
 const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
 const ensureStoryboardFailureCache = new Map()
+const DIAG_LOCAL_STORAGE_KEY = 'ss_convex_diag'
 
 function normalizeEnsureErrorMessage(error) {
   const message = String(error?.message || 'unknown_error')
@@ -30,6 +32,74 @@ async function resolveInlineImageBlob(source) {
     throw new Error(`Failed to load local image payload (${response.status})`)
   }
   return response.blob()
+}
+
+function normalizeLiveScenePayload(scene) {
+  return {
+    sceneLabel: String(scene?.sceneLabel || '').trim() || 'SCENE',
+    slugline: scene?.slugline || '',
+    location: scene?.location || '',
+    intOrExt: scene?.intOrExt || '',
+    dayNight: scene?.dayNight || '',
+    color: scene?.color || undefined,
+    linkedScriptSceneId: scene?.linkedScriptSceneId || undefined,
+    pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes.map((entry) => String(entry || '')) : [''],
+    pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors.map((entry) => String(entry || '')) : [],
+  }
+}
+
+function normalizeLiveShotPayload(shot) {
+  const customFields = Object.fromEntries(
+    Object.entries(shot || {}).filter(([key]) => String(key).startsWith('custom_')),
+  )
+  return {
+    cameraName: shot?.cameraName || 'Camera 1',
+    focalLength: shot?.focalLength || '',
+    color: shot?.color || undefined,
+    image: shot?.image || undefined,
+    imageAsset: shot?.imageAsset || undefined,
+    specs: shot?.specs || { size: '', type: '', move: '', equip: '' },
+    notes: shot?.notes || '',
+    subject: shot?.subject || '',
+    description: shot?.description || '',
+    cast: shot?.cast || '',
+    checked: !!shot?.checked,
+    intOrExt: shot?.intOrExt || '',
+    dayNight: shot?.dayNight || '',
+    scriptTime: shot?.scriptTime || '',
+    setupTime: shot?.setupTime || '',
+    shotAspectRatio: shot?.shotAspectRatio || '',
+    predictedTakes: shot?.predictedTakes || '',
+    shootTime: shot?.shootTime || '',
+    takeNumber: shot?.takeNumber || '',
+    sound: shot?.sound || '',
+    props: shot?.props || '',
+    frameRate: shot?.frameRate || '',
+    linkedSceneId: shot?.linkedSceneId || undefined,
+    linkedDialogueLine: shot?.linkedDialogueLine || undefined,
+    linkedDialogueOffset: Number.isFinite(shot?.linkedDialogueOffset) ? shot.linkedDialogueOffset : undefined,
+    linkedScriptRangeStart: Number.isFinite(shot?.linkedScriptRangeStart) ? shot.linkedScriptRangeStart : undefined,
+    linkedScriptRangeEnd: Number.isFinite(shot?.linkedScriptRangeEnd) ? shot.linkedScriptRangeEnd : undefined,
+    customFields,
+  }
+}
+
+function stableStringify(value) {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
+}
+
+function isConvexDiagEnabled() {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return false
+  try {
+    if (window.__SS_CONVEX_DIAG__ === true) return true
+    return window.localStorage?.getItem(DIAG_LOCAL_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 export default function CloudSyncCoordinator() {
@@ -69,11 +139,34 @@ export default function CloudSyncCoordinator() {
     'projectShotsLive:listShotsByProject',
     cloudProjectId && Number(cloudProject?.liveModelVersion || 0) >= 1 ? { projectId: cloudProjectId } : 'skip',
   )
-  const latestSnapshot = useQuery(
-    'projectSnapshots:getLatestSnapshotForProject',
+  const latestSnapshotHead = useQuery(
+    'projectSnapshots:getLatestSnapshotHeadForProject',
     cloudProjectId ? { projectId: cloudProjectId } : 'skip',
   )
-  const cloudAccessPolicy = useCloudAccessPolicy()
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'users:currentUser',
+    args: {},
+    result: cloudUser,
+    active: true,
+  })
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projects:getProjectById',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: cloudProject,
+    active: Boolean(cloudProjectId),
+  })
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projectSnapshots:getLatestSnapshotHeadForProject',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: latestSnapshotHead,
+    active: Boolean(cloudProjectId),
+  })
+  // Reuse role from cloudProject query so this component does not mount a
+  // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
+  const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })
   const setLiveModelVersion = useStore(s => s.setLiveModelVersion)
   const applyLiveStoryboardState = useStore(s => s.applyLiveStoryboardState)
 
@@ -84,6 +177,23 @@ export default function CloudSyncCoordinator() {
   const localImageUploadCacheRef = useRef(new Map())
   const liveMigrationRequestedRef = useRef(new Set())
   const liveMigrationFailureRef = useRef(ensureStoryboardFailureCache)
+  const fetchedRemoteSnapshotIdsRef = useRef(new Set())
+  const inFlightRemoteSnapshotIdsRef = useRef(new Set())
+  const liveSceneRowsRef = useRef([])
+  const liveShotRowsRef = useRef([])
+
+  useEffect(() => {
+    fetchedRemoteSnapshotIdsRef.current.clear()
+    inFlightRemoteSnapshotIdsRef.current.clear()
+  }, [cloudProjectId])
+
+  useEffect(() => {
+    liveSceneRowsRef.current = Array.isArray(liveScenes) ? liveScenes : []
+  }, [liveScenes])
+
+  useEffect(() => {
+    liveShotRowsRef.current = Array.isArray(liveShots) ? liveShots : []
+  }, [liveShots])
 
   useEffect(() => {
     setCloudRepositoryAdapter({
@@ -122,45 +232,99 @@ export default function CloudSyncCoordinator() {
       cloudWritesEnabled: cloudAccessPolicy.canEditCloudProject,
       runSnapshotMutation: createSnapshot,
       syncLiveStoryboardState: async ({ projectId, scenes, storyboardSceneOrder }) => {
-        const existingScenes = await convex.query('projectScenesLive:listScenesByProject', { projectId })
-        const existingShots = await convex.query('projectShotsLive:listShotsByProject', { projectId })
+        const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
+          ? liveSceneRowsRef.current
+          : await convex.query('projectScenesLive:listScenesByProject', { projectId })
+        const existingShots = Array.isArray(liveShotRowsRef.current) && liveShotRowsRef.current.length > 0
+          ? liveShotRowsRef.current
+          : await convex.query('projectShotsLive:listShotsByProject', { projectId })
         const sceneOrder = Array.isArray(storyboardSceneOrder) && storyboardSceneOrder.length > 0
           ? storyboardSceneOrder
           : (scenes || []).map((scene) => scene.id)
         const orderBySceneId = new Map(sceneOrder.map((id, index) => [String(id), index]))
+        const existingScenesById = new Map((existingScenes || []).map((scene) => [String(scene.sceneId), scene]))
+        const existingShotsById = new Map((existingShots || []).map((shot) => [String(shot.shotId), shot]))
+        const nextSceneIds = new Set()
+        const nextShotIds = new Set()
+        const ops = {
+          upsertScenes: 0,
+          skipScenes: 0,
+          upsertShots: 0,
+          skipShots: 0,
+          deleteScenes: 0,
+          deleteShots: 0,
+        }
 
         for (const scene of (scenes || [])) {
           const sceneId = String(scene.id)
-          await upsertLiveScene({
-            projectId,
-            sceneId,
-            order: orderBySceneId.has(sceneId) ? orderBySceneId.get(sceneId) : Number.MAX_SAFE_INTEGER,
-            payload: scene,
-          })
+          nextSceneIds.add(sceneId)
+          const nextOrder = orderBySceneId.has(sceneId) ? orderBySceneId.get(sceneId) : Number.MAX_SAFE_INTEGER
+          const nextPayload = normalizeLiveScenePayload(scene)
+          const existingScene = existingScenesById.get(sceneId)
+          const shouldUpsertScene = !existingScene
+            || Number(existingScene.order) !== Number(nextOrder)
+            || stableStringify(normalizeLiveScenePayload(existingScene)) !== stableStringify(nextPayload)
+          if (shouldUpsertScene) {
+            await upsertLiveScene({
+              projectId,
+              sceneId,
+              order: nextOrder,
+              payload: scene,
+            })
+            ops.upsertScenes += 1
+          } else {
+            ops.skipScenes += 1
+          }
           for (const [index, shot] of (scene.shots || []).entries()) {
+            const shotId = String(shot.id)
+            nextShotIds.add(shotId)
+            const nextShotPayload = normalizeLiveShotPayload(shot)
+            const existingShot = existingShotsById.get(shotId)
+            const shouldUpsertShot = !existingShot
+              || String(existingShot.sceneId || '') !== sceneId
+              || Number(existingShot.order) !== Number(index)
+              || stableStringify(normalizeLiveShotPayload(existingShot)) !== stableStringify(nextShotPayload)
+            if (!shouldUpsertShot) {
+              ops.skipShots += 1
+              continue
+            }
             await upsertLiveShot({
               projectId,
               sceneId,
-              shotId: String(shot.id),
+              shotId,
               order: index,
               payload: shot,
             })
+            ops.upsertShots += 1
           }
         }
 
-        const nextSceneIds = new Set((scenes || []).map((scene) => String(scene.id)))
         await Promise.all(
           (existingScenes || [])
             .filter((scene) => !nextSceneIds.has(String(scene.sceneId)))
-            .map((scene) => deleteLiveScene({ projectId, sceneId: String(scene.sceneId) })),
+            .map((scene) => {
+              ops.deleteScenes += 1
+              return deleteLiveScene({ projectId, sceneId: String(scene.sceneId) })
+            }),
         )
 
-        const nextShotIds = new Set((scenes || []).flatMap((scene) => (scene.shots || []).map((shot) => String(shot.id))))
         await Promise.all(
           (existingShots || [])
             .filter((shot) => !nextShotIds.has(String(shot.shotId)))
-            .map((shot) => deleteLiveShot({ projectId, shotId: String(shot.shotId) })),
+            .map((shot) => {
+              ops.deleteShots += 1
+              return deleteLiveShot({ projectId, shotId: String(shot.shotId) })
+            }),
         )
+
+        if (isConvexDiagEnabled()) {
+          // eslint-disable-next-line no-console
+          console.debug('[cloud-sync] live storyboard sync ops', {
+            projectId: String(projectId),
+            ...ops,
+            usedLiveQueryCache: Array.isArray(liveSceneRowsRef.current) && Array.isArray(liveShotRowsRef.current),
+          })
+        }
       },
       currentUserId: cloudUser?.user?._id ? String(cloudUser.user._id) : null,
       collaborationMode: isCloudProject && cloudAccessPolicy.canCollaborateOnCloudProject,
@@ -285,13 +449,45 @@ export default function CloudSyncCoordinator() {
   }, [flushCloudSync, projectRef?.type])
 
   useEffect(() => {
-    if (!cloudProjectId || !latestSnapshot?._id || !latestSnapshot?.payload) return
-    applyIncomingCloudSnapshot({
-      projectId: cloudProjectId,
-      snapshotId: String(latestSnapshot._id),
-      payload: latestSnapshot.payload,
-    })
-  }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
+    const latestSnapshotId = latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null
+    if (!cloudProjectId || !latestSnapshotId) return
+    if (String(projectRef?.snapshotId || '') === latestSnapshotId) return
+    if (fetchedRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
+    if (inFlightRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
+
+    let cancelled = false
+    inFlightRemoteSnapshotIdsRef.current.add(latestSnapshotId)
+
+    convex
+      .query('projectSnapshots:getLatestSnapshotForProject', { projectId: cloudProjectId })
+      .then((snapshot) => {
+        if (cancelled || !snapshot?._id || !snapshot?.payload) return
+        const snapshotId = String(snapshot._id)
+        fetchedRemoteSnapshotIdsRef.current.add(snapshotId)
+        applyIncomingCloudSnapshot({
+          projectId: cloudProjectId,
+          snapshotId,
+          payload: snapshot.payload,
+        })
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn('[cloud-sync] latest snapshot fetch failed', {
+            projectId: cloudProjectId,
+            latestSnapshotId,
+            message: error?.message || 'unknown_error',
+          })
+        }
+      })
+      .finally(() => {
+        inFlightRemoteSnapshotIdsRef.current.delete(latestSnapshotId)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyIncomingCloudSnapshot, cloudProjectId, convex, latestSnapshotHead?.latestSnapshotId, projectRef?.snapshotId])
 
   useEffect(() => {
     if (!cloudProjectId || hasUnsavedChanges) return
