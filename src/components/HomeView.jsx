@@ -4,6 +4,7 @@ import useStore from '../store'
 import {
   Plus,
   FolderOpen,
+  ChevronDown,
   Pencil,
   LayoutGrid,
   Monitor,
@@ -88,6 +89,8 @@ export default function HomeView() {
   const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const recentProjects = useStore(s => s.recentProjects)
   const setActiveTab = useStore(s => s.setActiveTab)
+  const setTabViewState = useStore(s => s.setTabViewState)
+  const homeTabViewState = useStore(s => s.tabViewState?.home || {})
   const newProject = useStore(s => s.newProject)
   const openProject = useStore(s => s.openProject)
   const openCloudProject = useStore(s => s.openCloudProject)
@@ -135,6 +138,8 @@ export default function HomeView() {
   const hasBlockingUnsavedChanges = hasUnsavedChanges
     && saveSyncState?.status === 'unsaved_changes'
     && !isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts })
+  const cloudProjectsExpanded = homeTabViewState.cloudProjectsExpanded ?? true
+  const pendingDeletionExpanded = homeTabViewState.pendingDeletionExpanded ?? false
 
   useEffect(() => {
     if (!contextMenu && !heroContextMenu) return
@@ -332,46 +337,73 @@ export default function HomeView() {
   return (
     <div className="home-view">
       <SidebarPane bodyClassName="home-sidebar-content" hideMobileToggle>
-        <div className="home-section-label">{cloudListEnabled ? 'Cloud Projects' : 'Recent Projects'}</div>
-        <div className="home-recent-list">
-          {cloudListEnabled ? (
-            Array.isArray(cloudProjects) && cloudProjects.length > 0 ? cloudProjects.map((project) => (
-              <button
-                key={String(project._id)}
-                className={`home-recent-item ${String(projectRef?.projectId || '') === String(project._id) ? 'active' : ''}`}
-                type="button"
-                onClick={() => requestOpenCloudProject(String(project._id))}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  setContextMenu({
-                    project,
-                    x: event.clientX,
-                    y: event.clientY,
-                  })
-                }}
-              >
-                <div className="home-thumb">{project.emoji || monogram(project.name)}</div>
-                <div>
-                  <div className="home-recent-name">{project.name}</div>
-                  <div className="home-recent-meta">{formatUpdatedAt(project.updatedAt)} · {project.currentUserRole}</div>
-                </div>
-              </button>
-            )) : <div className="home-empty-note">No cloud projects yet.</div>
-          ) : sidebarRecent.map((project, index) => (
-            <button key={`${project.name}-${index}`} className={`home-recent-item ${index === 0 ? 'active' : ''}`} type="button">
-              <div className="home-thumb">{monogram(project.name)}</div>
-              <div>
-                <div className="home-recent-name">{project.name}</div>
-                <div className="home-recent-meta">{project.shots ?? '—'} shots · {project.scenes ?? '—'} scenes</div>
-              </div>
+        {cloudListEnabled ? (
+          <>
+            <button
+              type="button"
+              className="home-section-toggle"
+              onClick={() => setTabViewState('home', { cloudProjectsExpanded: !cloudProjectsExpanded })}
+              aria-expanded={cloudProjectsExpanded}
+            >
+              <span className="home-section-label">Cloud Projects</span>
+              <ChevronDown size={12} strokeWidth={1.8} className={`home-section-caret ${cloudProjectsExpanded ? 'is-expanded' : ''}`} />
             </button>
-          ))}
-        </div>
+            {cloudProjectsExpanded ? (
+              <div className="home-recent-list">
+                {Array.isArray(cloudProjects) && cloudProjects.length > 0 ? cloudProjects.map((project) => (
+                  <button
+                    key={String(project._id)}
+                    className={`home-recent-item ${String(projectRef?.projectId || '') === String(project._id) ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => requestOpenCloudProject(String(project._id))}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      setContextMenu({
+                        project,
+                        x: event.clientX,
+                        y: event.clientY,
+                      })
+                    }}
+                  >
+                    <div className="home-thumb">{project.emoji || monogram(project.name)}</div>
+                    <div>
+                      <div className="home-recent-name">{project.name}</div>
+                      <div className="home-recent-meta">{formatUpdatedAt(project.updatedAt)} · {project.currentUserRole}</div>
+                    </div>
+                  </button>
+                )) : <div className="home-empty-note">No cloud projects yet.</div>}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div className="home-section-label">Recent Projects</div>
+            <div className="home-recent-list">
+              {sidebarRecent.map((project, index) => (
+                <button key={`${project.name}-${index}`} className={`home-recent-item ${index === 0 ? 'active' : ''}`} type="button">
+                  <div className="home-thumb">{monogram(project.name)}</div>
+                  <div>
+                    <div className="home-recent-name">{project.name}</div>
+                    <div className="home-recent-meta">{project.shots ?? '—'} shots · {project.scenes ?? '—'} scenes</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {cloudListEnabled && Array.isArray(pendingDeleteProjects) && pendingDeleteProjects.length > 0 ? (
           <div className="home-pending-list">
-            <div className="home-section-label">Pending deletion</div>
-            {pendingDeleteProjects.map((project) => (
+            <button
+              type="button"
+              className="home-section-toggle"
+              onClick={() => setTabViewState('home', { pendingDeletionExpanded: !pendingDeletionExpanded })}
+              aria-expanded={pendingDeletionExpanded}
+            >
+              <span className="home-section-label">Pending deletion</span>
+              <ChevronDown size={12} strokeWidth={1.8} className={`home-section-caret ${pendingDeletionExpanded ? 'is-expanded' : ''}`} />
+            </button>
+            {pendingDeletionExpanded ? pendingDeleteProjects.map((project) => (
               <div key={`pending-${String(project._id)}`} className="home-pending-item">
                 <div className="home-pending-copy">
                   <div className="home-recent-name">{project.name}</div>
@@ -381,7 +413,7 @@ export default function HomeView() {
                   Restore
                 </button>
               </div>
-            ))}
+            )) : null}
           </div>
         ) : null}
 
