@@ -68,7 +68,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_owner_user_id', ['ownerUserId'])
-    .index('by_owner_user_id_updated_at', ['ownerUserId', 'updatedAt']),
+    .index('by_owner_user_id_updated_at', ['ownerUserId', 'updatedAt'])
+    .index('by_delete_after', ['deleteAfter']),
 
   projectScenes: defineTable({
     projectId: v.id('projects'),
@@ -178,6 +179,25 @@ export default defineSchema({
     .index('by_project_id_created_at', ['projectId', 'createdAt'])
     .index('by_created_by_user_id_created_at', ['createdByUserId', 'createdAt']),
 
+  projectSnapshotHeads: defineTable({
+    projectId: v.id('projects'),
+    latestSnapshotId: v.optional(v.id('projectSnapshots')),
+    latestSnapshotCreatedAt: v.optional(v.number()),
+    latestSnapshotSource: v.optional(v.union(
+      v.literal('manual_save'),
+      v.literal('autosave'),
+      v.literal('local_conversion'),
+      v.literal('restore'),
+      v.literal('conflict_recovery'),
+    )),
+    latestSnapshotVersionToken: v.optional(v.string()),
+    latestSnapshotPayloadBytes: v.optional(v.number()),
+    latestSnapshotHasPayload: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index('by_project_id', ['projectId'])
+    .index('by_updated_at', ['updatedAt']),
+
   projectAssets: defineTable({
     projectId: v.id('projects'),
     uploadedByUserId: v.id('users'),
@@ -205,7 +225,10 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index('by_project_id', ['projectId'])
-    .index('by_project_id_shot_id', ['projectId', 'shotId']),
+    .index('by_project_id_shot_id', ['projectId', 'shotId'])
+    .index('by_project_id_kind_created_at', ['projectId', 'kind', 'createdAt'])
+    .index('by_project_id_kind_delete_status_created_at', ['projectId', 'kind', 'deleteStatus', 'createdAt'])
+    .index('by_project_id_delete_status_deleted_at', ['projectId', 'deleteStatus', 'deletedAt']),
 
   shotAssetAssignments: defineTable({
     projectId: v.id('projects'),

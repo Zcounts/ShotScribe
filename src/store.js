@@ -722,6 +722,7 @@ const useStore = create((set, get) => ({
   projectRef: { type: 'local', path: null, browserProjectId: null },
   cloudLineage: null, // { originProjectId, lastKnownSnapshotId }
   liveModelVersion: 0,
+  lastStoryboardEditAt: 0,
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
   projectLogline: '',
@@ -2079,6 +2080,7 @@ const useStore = create((set, get) => ({
   updateScene: (sceneId, updates) => {
     set(state => ({
       scenes: state.scenes.map(s => s.id === sceneId ? { ...s, ...updates } : s),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
@@ -2385,6 +2387,7 @@ const useStore = create((set, get) => ({
         ...s,
         shots: s.shots.map(sh => sh.id === shotId ? { ...sh, ...updates } : sh),
       })),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
@@ -2397,6 +2400,7 @@ const useStore = create((set, get) => ({
           sh.id === shotId ? { ...sh, specs: { ...sh.specs, [specKey]: value } } : sh
         ),
       })),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
@@ -2407,6 +2411,7 @@ const useStore = create((set, get) => ({
         ...s,
         shots: s.shots.map(sh => sh.id === shotId ? { ...sh, notes } : sh),
       })),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },
