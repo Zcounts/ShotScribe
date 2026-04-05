@@ -1,4 +1,5 @@
 import { convertProseMirrorDocumentToLegacyCompatibility } from './legacyBridge.js'
+import { deriveBreakdownListsFromAnnotations } from './breakdownAnnotations.js'
 
 export const SCRIPT_DERIVATION_DEBOUNCE_MS = 320
 
@@ -73,6 +74,10 @@ export function deriveScriptAdapterOutputs({
   const breakdownTags = compatibilityResult?.compatibility?.breakdownTags || []
   const sceneMetadataByScriptSceneId = compatibilityResult?.compatibility?.sceneMetadataByScriptSceneId || {}
   const breakdownAggregates = buildBreakdownAggregates(breakdownTags)
+  const breakdownLists = deriveBreakdownListsFromAnnotations({
+    scriptAnnotations,
+    scriptScenes: compatibilityResult.scriptScenes || [],
+  })
   const shotLinkIndexBySceneId = buildShotLinkIndexByScene(storyboardScenes)
 
   return {
@@ -81,6 +86,7 @@ export function deriveScriptAdapterOutputs({
       sceneMetadataByScriptSceneId,
       breakdownTags,
       breakdownAggregates,
+      breakdownLists,
       shotLinkIndexBySceneId,
     },
   }

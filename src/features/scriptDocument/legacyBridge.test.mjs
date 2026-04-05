@@ -201,3 +201,33 @@ test('normalizeScriptDocumentState can prefer legacy script scenes when canonica
   assert.equal(normalized.scriptScenes[0].slugline, 'EXT. FRESH FIELD - NIGHT')
   assert.equal(normalized.migratedFromLegacyScriptScenes, true)
 })
+
+test('normalizeScriptDocumentState migrates legacy breakdown tags into structured annotations', () => {
+  const normalized = normalizeScriptDocumentState({
+    scriptScenes: [
+      makeLegacyScene({
+        id: 'sc_tag',
+        screenplayElements: [{ id: 'h1', type: 'heading', text: 'INT. STUDIO - DAY' }],
+      }),
+    ],
+    scriptSettings: {
+      breakdownTags: [
+        {
+          id: 'bd_legacy',
+          sceneId: 'sc_tag',
+          start: 0,
+          end: 6,
+          text: 'STUDIO',
+          name: 'Studio',
+          category: 'Locations',
+          quantity: 1,
+        },
+      ],
+    },
+  })
+
+  assert.equal(normalized.scriptAnnotations.order.length, 1)
+  const annotation = normalized.scriptAnnotations.byId[normalized.scriptAnnotations.order[0]]
+  assert.equal(annotation.category, 'Locations')
+  assert.equal(annotation.sceneIdAtCreate, 'sc_tag')
+})

@@ -66,6 +66,8 @@ test('deriveScriptAdapterOutputs derives scenes, metadata, breakdown aggregates,
   assert.equal(result.compatibility.breakdownTags.length, 1)
   assert.equal(result.compatibility.breakdownAggregates.total, 1)
   assert.equal(result.compatibility.breakdownAggregates.byCategory.Props, 1)
+  assert.equal(result.compatibility.breakdownLists.perScene.sc_2.Props.length, 1)
+  assert.equal(result.compatibility.breakdownLists.global.Props['Car keys'], 1)
   assert.equal(result.compatibility.shotLinkIndexBySceneId.sc_2.length, 1)
 })
 

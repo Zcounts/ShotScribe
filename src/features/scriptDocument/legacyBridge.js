@@ -4,6 +4,11 @@ import {
   estimateScreenplayPagination,
   splitScreenplayElementsIntoSceneChunks,
 } from '../../utils/screenplay.js'
+import {
+  BREAKDOWN_ANNOTATION_KIND,
+  migrateLegacyBreakdownTagsToAnnotations,
+  normalizeScriptAnnotations as normalizeAnnotationEntities,
+} from './breakdownAnnotations.js'
 
 export const SCRIPT_ENGINE_PROSEMIRROR = 'prosemirror'
 export const SCRIPT_DOC_VERSION = 1
@@ -234,16 +239,6 @@ function sceneMetadataFromLegacy(scene) {
   }
 }
 
-function normalizeScriptAnnotations(scriptAnnotations) {
-  const byId = (scriptAnnotations && typeof scriptAnnotations.byId === 'object' && scriptAnnotations.byId !== null)
-    ? scriptAnnotations.byId
-    : {}
-  const order = Array.isArray(scriptAnnotations?.order)
-    ? scriptAnnotations.order.filter(id => byId[id])
-    : Object.keys(byId)
-  return { byId, order }
-}
-
 function chunksFromPmContent(content = []) {
   const chunks = []
   let current = { elements: [], sourceSceneId: null }
@@ -298,7 +293,7 @@ export function convertLegacyScriptScenesToProseMirrorDocument(scriptScenes = []
       type: 'doc',
       content: blockNodes,
     },
-    scriptAnnotations: normalizeScriptAnnotations(options?.scriptAnnotations),
+    scriptAnnotations: normalizeAnnotationEntities(options?.scriptAnnotations),
     scriptLayout: layout,
   }
 }
@@ -347,10 +342,10 @@ export function convertProseMirrorDocumentToLegacyCompatibility({
     scriptScenes.map(scene => [scene.id, sceneMetadataFromLegacy(scene)]),
   )
 
-  const normalizedAnnotations = normalizeScriptAnnotations(scriptAnnotations)
+  const normalizedAnnotations = normalizeAnnotationEntities(scriptAnnotations)
   const breakdownTags = normalizedAnnotations.order
     .map((id) => normalizedAnnotations.byId[id])
-    .filter(annotation => annotation?.kind === 'breakdown')
+    .filter(annotation => annotation?.kind === BREAKDOWN_ANNOTATION_KIND || annotation?.kind === 'breakdown')
     .map((annotation) => ({
       id: annotation.id,
       sceneId: annotation.sceneIdAtCreate || null,
@@ -382,11 +377,17 @@ export function normalizeScriptDocumentState({
   scriptAnnotations = null,
   scriptLayout,
   preferLegacyScriptScenes = false,
+  legacyBreakdownTags = null,
 } = {}) {
+  const annotationsWithLegacy = migrateLegacyBreakdownTagsToAnnotations({
+    legacyBreakdownTags: legacyBreakdownTags || scriptSettings?.breakdownTags || [],
+    scriptAnnotations,
+  })
+
   if (preferLegacyScriptScenes && Array.isArray(scriptScenes) && scriptScenes.length > 0) {
     const converted = convertLegacyScriptScenesToProseMirrorDocument(scriptScenes, {
       documentSettings: scriptLayout,
-      scriptAnnotations,
+      scriptAnnotations: annotationsWithLegacy,
     })
     const compatibility = convertProseMirrorDocumentToLegacyCompatibility({
       scriptDocument: converted.scriptDocument,
@@ -412,7 +413,7 @@ export function normalizeScriptDocumentState({
   if (!hasDoc) {
     const converted = convertLegacyScriptScenesToProseMirrorDocument(scriptScenes, {
       documentSettings: scriptLayout,
-      scriptAnnotations,
+      scriptAnnotations: annotationsWithLegacy,
     })
     const compatibility = convertProseMirrorDocumentToLegacyCompatibility({
       scriptDocument: converted.scriptDocument,
@@ -437,7 +438,7 @@ export function normalizeScriptDocumentState({
     scriptDocument,
     previousScriptScenes: scriptScenes,
     scriptSettings,
-    scriptAnnotations,
+    scriptAnnotations: annotationsWithLegacy,
   })
 
   return {
@@ -445,7 +446,7 @@ export function normalizeScriptDocumentState({
     scriptDocVersion: Number.isFinite(scriptDocVersion) ? scriptDocVersion : SCRIPT_DOC_VERSION,
     scriptDerivationVersion: Number.isFinite(scriptDerivationVersion) ? scriptDerivationVersion : SCRIPT_DERIVATION_VERSION,
     scriptDocument,
-    scriptAnnotations: normalizeScriptAnnotations(scriptAnnotations),
+    scriptAnnotations: normalizeAnnotationEntities(annotationsWithLegacy),
     scriptLayout: normalizeDocumentSettings(scriptLayout || DEFAULT_SCRIPT_DOCUMENT_SETTINGS),
     scriptScenes: compatibility.scriptScenes,
     compatibility: compatibility.compatibility,

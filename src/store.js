@@ -35,6 +35,10 @@ import {
   deriveScriptAdapterOutputs,
   SCRIPT_DERIVATION_DEBOUNCE_MS,
 } from './features/scriptDocument/derivationPipeline'
+import {
+  addBreakdownAnnotation,
+  removeBreakdownAnnotation,
+} from './features/scriptDocument/breakdownAnnotations'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -845,6 +849,7 @@ const useStore = create((set, get) => ({
     sceneMetadataByScriptSceneId: {},
     breakdownTags: [],
     breakdownAggregates: { total: 0, byScene: {}, byCategory: {} },
+    breakdownLists: { perScene: {}, global: {} },
     shotLinkIndexBySceneId: {},
   },
   scriptDerivationState: {
@@ -916,7 +921,12 @@ const useStore = create((set, get) => ({
           sceneMetadataByScriptSceneId: derived.compatibility.sceneMetadataByScriptSceneId || {},
           breakdownTags: derived.compatibility.breakdownTags || [],
           breakdownAggregates: derived.compatibility.breakdownAggregates || { total: 0, byScene: {}, byCategory: {} },
+          breakdownLists: derived.compatibility.breakdownLists || { perScene: {}, global: {} },
           shotLinkIndexBySceneId: derived.compatibility.shotLinkIndexBySceneId || {},
+        },
+        scriptSettings: {
+          ...latestState.scriptSettings,
+          breakdownTags: derived.compatibility.breakdownTags || [],
         },
         scriptDerivationState: {
           ...latestState.scriptDerivationState,
@@ -955,6 +965,47 @@ const useStore = create((set, get) => ({
       set({ scriptDocument: state.scriptDocumentLive, scriptDocumentLive: null })
     }
     return get().deriveScriptDocumentNow({ reason, persist })
+  },
+
+  addScriptBreakdownAnnotation: ({
+    sceneId = null,
+    from,
+    to,
+    quote = '',
+    name = '',
+    category = 'Props',
+    quantity = 1,
+  } = {}) => {
+    const state = get()
+    const result = addBreakdownAnnotation({
+      scriptDocument: state.scriptDocumentLive || state.scriptDocument,
+      scriptAnnotations: state.scriptAnnotations,
+      annotationInput: { sceneId, from, to, quote, name, category, quantity },
+    })
+    set({
+      scriptDocument: result.scriptDocument,
+      scriptAnnotations: result.scriptAnnotations,
+      hasUnsavedChanges: true,
+    })
+    get()._updateSaveSyncStateForChange('breakdown_annotation_add')
+    return get().deriveScriptDocumentNow({ reason: 'breakdown_annotation_add', persist: true })
+  },
+
+  removeScriptBreakdownAnnotation: (annotationId) => {
+    if (!annotationId) return { ok: false, reason: 'missing_annotation_id' }
+    const state = get()
+    const result = removeBreakdownAnnotation({
+      scriptDocument: state.scriptDocumentLive || state.scriptDocument,
+      scriptAnnotations: state.scriptAnnotations,
+      annotationId,
+    })
+    set({
+      scriptDocument: result.scriptDocument,
+      scriptAnnotations: result.scriptAnnotations,
+      hasUnsavedChanges: true,
+    })
+    get()._updateSaveSyncStateForChange('breakdown_annotation_remove')
+    return get().deriveScriptDocumentNow({ reason: 'breakdown_annotation_remove', persist: true })
   },
 
   importScriptScenes: (parsedScenes, scriptMeta, mode = 'replace') => {
@@ -3300,6 +3351,7 @@ const useStore = create((set, get) => ({
         sceneMetadataByScriptSceneId: loadedDerivedScript.compatibility?.sceneMetadataByScriptSceneId || {},
         breakdownTags: loadedDerivedScript.compatibility?.breakdownTags || [],
         breakdownAggregates: loadedDerivedScript.compatibility?.breakdownAggregates || { total: 0, byScene: {}, byCategory: {} },
+        breakdownLists: loadedDerivedScript.compatibility?.breakdownLists || { perScene: {}, global: {} },
         shotLinkIndexBySceneId: loadedDerivedScript.compatibility?.shotLinkIndexBySceneId || {},
       },
       scriptDerivationState: {
@@ -3318,6 +3370,7 @@ const useStore = create((set, get) => ({
         scenePaginationMode: 'natural',
         ...(data.scriptSettings || {}),
         documentSettings: normalizeDocumentSettings(normalizedScriptState.scriptLayout || data?.scriptSettings?.documentSettings),
+        breakdownTags: loadedDerivedScript.compatibility?.breakdownTags || data?.scriptSettings?.breakdownTags || [],
       },
       shortcutBindings: getActiveBindings(data.shortcutBindings || loadShortcutBindings() || SHORTCUT_DEFAULTS),
       lastSaved: new Date().toISOString(),
@@ -3510,6 +3563,7 @@ const useStore = create((set, get) => ({
         sceneMetadataByScriptSceneId: {},
         breakdownTags: [],
         breakdownAggregates: { total: 0, byScene: {}, byCategory: {} },
+        breakdownLists: { perScene: {}, global: {} },
         shotLinkIndexBySceneId: {},
       },
       scriptDerivationState: {
