@@ -8,6 +8,22 @@ This phase retires the old Script tab architecture from production defaults and 
 - Legacy Script tab implementation remains in `src/components/ScriptTabLegacy.jsx` and is only activated as full legacy mode by fallback flag.
 - Rollback kill switch is `VITE_ENABLE_LEGACY_SCRIPT_TAB=true`.
 
+## Script tab boot path safety
+
+To prevent Script-tab white-screen regressions, treat boot as two layers:
+
+- **Required for first render (must be crash-safe):**
+  - Script shell/layout and mode state
+  - Local/store-backed script data reads
+  - Unified/legacy document surface render
+- **Optional after first render (must never block boot):**
+  - Collaboration presence and scene-lock subscriptions
+  - Presence heartbeat / polling timers
+  - Snapshot mutations and cloud cleanup mutations
+  - Diagnostics/session metrics helpers
+
+Rule for future changes: **optional cloud/collab systems must be explicitly guarded and fail-safe, never a hard dependency of Script tab mount.**
+
 ## Migration roadmap (active)
 
 ### Current baseline (from latest handoff)

@@ -32,11 +32,16 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import { runtimeConfig } from '../config/runtimeConfig'
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
-import { recordCollabSubscriptionSuspended, recordPresenceHeartbeat } from '../utils/sessionMetrics'
+import {
+  recordCollabSubscriptionSuspended,
+  recordPresenceHeartbeat,
+  recordPresenceSubscriptionMount,
+} from '../utils/sessionMetrics'
 
 const runConvexQueryDiagnostics = typeof useConvexQueryDiagnosticsSafe === 'function'
   ? useConvexQueryDiagnosticsSafe
@@ -47,6 +52,26 @@ const runPresenceHeartbeatMetric = typeof recordPresenceHeartbeat === 'function'
 const runCollabSubscriptionSuspendedMetric = typeof recordCollabSubscriptionSuspended === 'function'
   ? recordCollabSubscriptionSuspended
   : () => {}
+const runPresenceSubscriptionMountMetric = typeof recordPresenceSubscriptionMount === 'function'
+  ? recordPresenceSubscriptionMount
+  : () => {}
+
+function useSafeConvexQuery(queryName, args, { enabled = true } = {}) {
+  try {
+    return useQuery(queryName, enabled ? args : 'skip')
+  } catch {
+    return undefined
+  }
+}
+
+function useSafeConvexMutation(mutationName, { enabled = true } = {}) {
+  try {
+    const mutation = useMutation(mutationName)
+    return enabled ? mutation : null
+  } catch {
+    return null
+  }
+}
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -436,29 +461,31 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
   const storeHasCollaborators = Boolean(cloudSyncContext?.hasActiveCollaborators)
   const hasActiveCollaborators = storeHasCollaborators
-  const presenceArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
-  const locksArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
-  const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
-  const locks = useQuery('screenplayLocks:listProjectLocks', locksArgs)
-  const heartbeatPresence = useMutation('presence:heartbeat')
-  const acquireSceneLock = useMutation('screenplayLocks:acquireSceneLock')
-  const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
-  const createSnapshot = useMutation('projectSnapshots:createSnapshot')
-  const pruneOrphanedAssets = useMutation('assets:pruneOrphanedAssets')
+  const convexRuntimeAvailable = Boolean(runtimeConfig.convexUrl)
+  const shouldEnablePresenceRuntime = Boolean(convexRuntimeAvailable && cloudProjectId && hasActiveCollaborators)
+  const presenceArgs = shouldEnablePresenceRuntime ? { projectId: cloudProjectId } : 'skip'
+  const locksArgs = shouldEnablePresenceRuntime ? { projectId: cloudProjectId } : 'skip'
+  const presenceRows = useSafeConvexQuery('presence:listProjectPresence', presenceArgs, { enabled: convexRuntimeAvailable })
+  const locks = useSafeConvexQuery('screenplayLocks:listProjectLocks', locksArgs, { enabled: convexRuntimeAvailable })
+  const heartbeatPresence = useSafeConvexMutation('presence:heartbeat', { enabled: convexRuntimeAvailable })
+  const acquireSceneLock = useSafeConvexMutation('screenplayLocks:acquireSceneLock', { enabled: convexRuntimeAvailable })
+  const releaseSceneLock = useSafeConvexMutation('screenplayLocks:releaseSceneLock', { enabled: convexRuntimeAvailable })
+  const createSnapshot = useSafeConvexMutation('projectSnapshots:createSnapshot', { enabled: convexRuntimeAvailable })
+  const pruneOrphanedAssets = useSafeConvexMutation('assets:pruneOrphanedAssets', { enabled: convexRuntimeAvailable })
   const cloudAccessPolicy = useCloudAccessPolicy()
   runConvexQueryDiagnostics({
     component: 'ScriptTabLegacy',
     queryName: 'presence:listProjectPresence',
     args: presenceArgs,
     result: presenceRows,
-    active: presenceArgs !== 'skip',
+    active: convexRuntimeAvailable && presenceArgs !== 'skip',
   })
   runConvexQueryDiagnostics({
     component: 'ScriptTabLegacy',
     queryName: 'screenplayLocks:listProjectLocks',
     args: locksArgs,
     result: locks,
-    active: locksArgs !== 'skip',
+    active: convexRuntimeAvailable && locksArgs !== 'skip',
   })
 
   const [view, setView] = useState('write')
@@ -564,20 +591,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, view])
 
   useEffect(() => {
-    if (!cloudProjectId) {
-      setPolledHasCollaborators(false)
-      return undefined
-    }
-    if (storeHasCollaborators) {
-      setPolledHasCollaborators(true)
-      return undefined
-    }
-    setPolledHasCollaborators(false)
-    return undefined
-  }, [cloudProjectId, storeHasCollaborators])
-
-  useEffect(() => {
-    if (!cloudProjectId || !hasActiveCollaborators || typeof heartbeatPresence !== 'function') return
+    if (!convexRuntimeAvailable || !cloudProjectId || !hasActiveCollaborators || typeof heartbeatPresence !== 'function') return
     const tick = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       runPresenceHeartbeatMetric()
@@ -597,17 +611,17 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [activeSceneId, cloudProjectId, hasActiveCollaborators, heartbeatPresence, view])
+  }, [activeSceneId, cloudProjectId, convexRuntimeAvailable, hasActiveCollaborators, heartbeatPresence, view])
 
   useEffect(() => {
-    if (!cloudProjectId || !hasActiveCollaborators) return
-    recordPresenceSubscriptionMount()
-  }, [cloudProjectId, hasActiveCollaborators])
+    if (!convexRuntimeAvailable || !cloudProjectId || !hasActiveCollaborators) return
+    runPresenceSubscriptionMountMetric()
+  }, [cloudProjectId, convexRuntimeAvailable, hasActiveCollaborators])
 
   useEffect(() => {
-    if (!cloudProjectId || hasActiveCollaborators) return
+    if (!convexRuntimeAvailable || !cloudProjectId || hasActiveCollaborators) return
     runCollabSubscriptionSuspendedMetric()
-  }, [cloudProjectId, hasActiveCollaborators])
+  }, [cloudProjectId, convexRuntimeAvailable, hasActiveCollaborators])
 
   useEffect(() => {
     if (!isDesktopDown) {
@@ -1011,7 +1025,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   }, [cycleType, insertBlockAfter, isWriteBlockedByLock, mergeWithPrevious, nextTypeForEnter, view])
 
   const handleAcquireActiveSceneLock = useCallback(async () => {
-    if (!cloudProjectId || !activeSceneId) return
+    if (!convexRuntimeAvailable || typeof acquireSceneLock !== 'function' || !cloudProjectId || !activeSceneId) return
     if (!cloudAccessPolicy.canEditCloudProject) {
       setCollabNotice('Cloud collaboration is read-only while billing is inactive.')
       return
@@ -1022,16 +1036,22 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       return
     }
     setCollabNotice('Scene lock acquired.')
-  }, [acquireSceneLock, activeSceneId, cloudAccessPolicy.canEditCloudProject, cloudProjectId])
+  }, [acquireSceneLock, activeSceneId, cloudAccessPolicy.canEditCloudProject, cloudProjectId, convexRuntimeAvailable])
 
   const handleReleaseActiveSceneLock = useCallback(async () => {
-    if (!cloudProjectId || !activeSceneId) return
+    if (!convexRuntimeAvailable || typeof releaseSceneLock !== 'function' || !cloudProjectId || !activeSceneId) return
     await releaseSceneLock({ projectId: cloudProjectId, sceneId: activeSceneId })
     setCollabNotice('Scene lock released.')
-  }, [activeSceneId, cloudProjectId, releaseSceneLock])
+  }, [activeSceneId, cloudProjectId, convexRuntimeAvailable, releaseSceneLock])
 
   const handleSaveScreenplaySnapshot = useCallback(async () => {
-    if (!cloudProjectId || !currentUserId) return
+    if (
+      !convexRuntimeAvailable
+      || typeof createSnapshot !== 'function'
+      || typeof pruneOrphanedAssets !== 'function'
+      || !cloudProjectId
+      || !currentUserId
+    ) return
     if (!cloudAccessPolicy.canEditCloudProject) {
       setCollabNotice('Cloud saves are blocked while billing is inactive. You can still view this project.')
       return
@@ -1059,7 +1079,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
     } finally {
       setIsSavingSnapshot(false)
     }
-  }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
+  }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, convexRuntimeAvailable, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
 
   const handleUnifiedSetBlockType = useCallback((nextType) => {
     const nodeIndex = unifiedSelectedNode?.nodeIndex
