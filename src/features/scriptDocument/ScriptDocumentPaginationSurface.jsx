@@ -151,6 +151,7 @@ function setCaretOffset(element, offset) {
 
 export default function ScriptDocumentPaginationSurface({
   readOnly = false,
+  writeOptions = null,
   onActiveBlockTypeChange,
   onActiveNodeChange,
 } = {}) {
@@ -314,9 +315,6 @@ export default function ScriptDocumentPaginationSurface({
                     }
                   }}
                   onBlur={() => {
-                    activeNodeIndexRef.current = null
-                    onActiveBlockTypeChange?.('action')
-                    onActiveNodeChange?.({ nodeIndex: null, blockType: 'action' })
                     deriveScriptDocumentNow({ reason: 'script_document_surface_blur', persist: true })
                   }}
                   style={{
@@ -330,6 +328,10 @@ export default function ScriptDocumentPaginationSurface({
                     lineHeight: `${block.style.lineHeightPx}px`,
                     textAlign: block.style.align || 'left',
                     letterSpacing: `${block.style.letterSpacingPx}px`,
+                    fontWeight: ((writeOptions?.boldSlugline && block.nodeType === 'scene_heading')
+                      || (writeOptions?.boldCharacter && block.nodeType === 'character'))
+                      ? 700
+                      : 400,
                     whiteSpace: 'pre-wrap',
                     textTransform: ['scene_heading', 'character', 'transition'].includes(block.nodeType) ? 'uppercase' : 'none',
                     outline: 'none',

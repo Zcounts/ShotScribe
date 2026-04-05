@@ -95,8 +95,8 @@ const SIDEBAR_STORAGE_KEYS = {
 }
 
 const WRITE_OPTIONS_DEFAULTS = {
-  boldSlugline: false,
-  boldCharacter: false,
+  boldSlugline: true,
+  boldCharacter: true,
 }
 
 const BLOCK_TYPE_OPTIONS = [
@@ -192,6 +192,9 @@ function BlockTypeIconSelector({ value, onChange, disabled = false }) {
             title={option.label}
             disabled={disabled}
             className={`script-block-type-btn ${selected ? 'is-selected' : ''}`}
+            onMouseDown={(event) => {
+              event.preventDefault()
+            }}
             onClick={() => onChange(option.value)}
           >
             <img src={BLOCK_TYPE_ICON_MAP[option.value]} alt="" aria-hidden="true" />
@@ -1437,6 +1440,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
               {useUnifiedEditorCore ? (
                 <ScriptDocumentPaginationSurface
                   readOnly={isWriteBlockedByLock}
+                  writeOptions={writeOptions}
                   onActiveBlockTypeChange={(blockType) => {
                     setUnifiedSelectedNode(prev => ({ ...prev, blockType: blockType || 'action' }))
                   }}
