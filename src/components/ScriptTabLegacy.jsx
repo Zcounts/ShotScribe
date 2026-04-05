@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useConvex, useMutation, useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { Lock, Pilcrow, Ruler, Save, Settings2, Unlock } from 'lucide-react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
@@ -36,6 +36,11 @@ import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
+import {
+  recordCollabSubscriptionSuspended,
+  recordPresenceHeartbeat,
+  recordPresenceSubscriptionMount,
+} from '../utils/sessionMetrics'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -425,9 +430,8 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
-  const [polledHasCollaborators, setPolledHasCollaborators] = useState(false)
   const storeHasCollaborators = Boolean(cloudSyncContext?.hasActiveCollaborators)
-  const hasActiveCollaborators = Boolean(storeHasCollaborators || polledHasCollaborators)
+  const hasActiveCollaborators = storeHasCollaborators
   const presenceArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
   const locksArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
   const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
@@ -556,40 +560,6 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, view])
 
   useEffect(() => {
-    if (!cloudProjectId) {
-      setPolledHasCollaborators(false)
-      return undefined
-    }
-    if (storeHasCollaborators) {
-      setPolledHasCollaborators(true)
-      return undefined
-    }
-    let cancelled = false
-    const poll = () => {
-      convex.query('presence:listProjectPresence', { projectId: cloudProjectId })
-        .then((rows) => {
-          if (cancelled) return
-          const hasOthers = Array.isArray(rows) && rows.some((row) => (
-            String(row?.userId || '') !== String(cloudSyncContext?.currentUserId || '')
-          ))
-          setPolledHasCollaborators(hasOthers)
-        })
-        .catch(() => {})
-    }
-    poll()
-    const timer = window.setInterval(poll, 30000)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') poll()
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [cloudProjectId, cloudSyncContext?.currentUserId, convex, storeHasCollaborators])
-
-  useEffect(() => {
     if (!cloudProjectId || !hasActiveCollaborators) return
     const tick = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
@@ -611,6 +581,11 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [activeSceneId, cloudProjectId, hasActiveCollaborators, heartbeatPresence, view])
+
+  useEffect(() => {
+    if (!cloudProjectId || !hasActiveCollaborators) return
+    recordPresenceSubscriptionMount()
+  }, [cloudProjectId, hasActiveCollaborators])
 
   useEffect(() => {
     if (!cloudProjectId || hasActiveCollaborators) return

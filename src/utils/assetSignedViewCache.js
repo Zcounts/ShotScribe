@@ -1,3 +1,4 @@
+import { recordSignedUrlCacheHit, recordSignedUrlCacheMiss } from './sessionMetrics'
 const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
 const DIAG_KEY = 'ss_convex_diag'
 
@@ -41,17 +42,32 @@ export function getCachedSignedView(assetId, { now = Date.now(), ttlMs = SIGNED_
   const key = String(assetId || '')
   if (!key) return null
   const cached = signedViewCache.get(key)
-  if (!cached) return null
-  if (now - Number(cached.cachedAt || 0) >= ttlMs) return null
+  if (!cached) {
+    recordSignedUrlCacheMiss()
+    return null
+  }
+  const expiresAt = Number(cached.expiresAt || 0)
+  const isExpiredByServer = Number.isFinite(expiresAt) && expiresAt > 0 && now >= expiresAt
+  const isExpiredByFallbackTtl = now - Number(cached.cachedAt || 0) >= ttlMs
+  if (isExpiredByServer || isExpiredByFallbackTtl) {
+    signedViewCache.delete(key)
+    recordSignedUrlCacheMiss()
+    return null
+  }
+  recordSignedUrlCacheHit()
   return cached.view || null
 }
 
 export function setCachedSignedView(assetId, view) {
   const key = String(assetId || '')
   if (!key || !view) return
+  const thumbExpiry = Number(view?.thumbExpiresAt || 0)
+  const fullExpiry = Number(view?.fullExpiresAt || 0)
+  const expiresAt = Math.max(thumbExpiry, fullExpiry)
   signedViewCache.set(key, {
     view,
     cachedAt: Date.now(),
+    expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null,
   })
 }
 

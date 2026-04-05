@@ -21,6 +21,7 @@ export function getS3Config() {
 }
 
 function getS3Client() {
+  if (cachedS3Client) return cachedS3Client
   const { region } = getS3Config()
   const accessKeyId = requireEnv('AWS_ACCESS_KEY_ID')
   const secretAccessKey = requireEnv('AWS_SECRET_ACCESS_KEY')
@@ -30,14 +31,16 @@ function getS3Client() {
     'accessKeyId.length=' + accessKeyId.length,
     'secretAccessKey.present=' + (secretAccessKey.length > 0),
   )
-  return new S3Client({
+  cachedS3Client = new S3Client({
     region,
     credentials: {
       accessKeyId,
       secretAccessKey,
     },
   })
+  return cachedS3Client
 }
+let cachedS3Client: S3Client | null = null
 
 function sanitizeObjectKeyPart(value: string) {
   return String(value || '')
@@ -94,7 +97,12 @@ export async function createPresignedReadUrl({
     Key: objectKey,
   })
   const readUrl = await getSignedUrl(s3, command, { expiresIn: expiresInSeconds })
-  return { readUrl, bucket, objectKey }
+  return {
+    readUrl,
+    bucket,
+    objectKey,
+    expiresAt: Date.now() + Math.max(1, Number(expiresInSeconds || DEFAULT_PRESIGN_READ_TTL_SECONDS)) * 1000,
+  }
 }
 
 export async function deleteObjectFromS3({ objectKey }: { objectKey: string }) {

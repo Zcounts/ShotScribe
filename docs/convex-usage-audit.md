@@ -139,6 +139,14 @@ This means the next session should not repeat low-level dedupe work blindly; it 
 
 ## 9) Living-doc map after this consolidation
 
+## 10) 2026-04-05 read-bandwidth hardening pass (confirmed)
+
+- Presence probe now uses a lightweight one-shot query (`presence:getPresenceProbe`) and only mounts `presence:listProjectPresence` after collaborator detection; solo sessions keep presence fully unmounted.
+- CloudSyncCoordinator snapshot hydration now compares `getLatestSnapshotHeadForProject` against the locally known snapshot lineage and skips `getLatestSnapshotForProject` when IDs match.
+- S3 client initialization moved to module-level reuse, and signed-view payloads now expose URL expiry timestamps consumed by the client cache.
+- Client signed URL cache now respects server expiry and tracks cache hit/miss metrics to catch first-load race/miss regressions.
+- Confirmed no active frontend call sites for `projects:listProjectsForCurrentUser` (heavy list query); Lite remains the only list path.
+
 - **Primary source of truth:** `docs/convex-usage-audit.md` (this file)
 - **Architecture options:** `docs/convex-phase3-plan.md` (trimmed to current strategic choices)
 - **Solo/collab runtime notes:** `docs/solo-mode-plan.md` (trimmed, focused)
