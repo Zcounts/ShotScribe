@@ -811,6 +811,10 @@ const useStore = create((set, get) => ({
   scenePropertiesDialog: null, // { source: 'storyboard'|'script', sceneId }
   shotPropertiesDialog: null, // { shotId }
   tabViewState: {
+    home: {
+      cloudProjectsExpanded: true,
+      pendingDeletionExpanded: false,
+    },
     script: {},
     scenes: {},
     storyboard: {},
@@ -2523,6 +2527,10 @@ const useStore = create((set, get) => ({
   },
   resetTabViewState: () => set({
     tabViewState: {
+      home: {
+        cloudProjectsExpanded: true,
+        pendingDeletionExpanded: false,
+      },
       script: {},
       scenes: {},
       storyboard: {},
@@ -2653,6 +2661,10 @@ const useStore = create((set, get) => ({
       undoLastRecordedAt: Date.now(),
     }))
 
+    // Mark the project dirty so that the beforeunload guard fires correctly
+    // if the user tries to leave after undoing past a save point.
+    get()._scheduleAutoSave('undo')
+
     return true
   },
 
@@ -2668,6 +2680,9 @@ const useStore = create((set, get) => ({
       undoFuture: undoFuture.slice(1),
       undoLastRecordedAt: Date.now(),
     }))
+
+    // Mark dirty for the same reason as undo above.
+    get()._scheduleAutoSave('redo')
 
     return true
   },
@@ -3430,6 +3445,10 @@ const useStore = create((set, get) => ({
       personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
+        home: {
+          cloudProjectsExpanded: true,
+          pendingDeletionExpanded: false,
+        },
         script: {},
         scenes: {
           sceneViewMode: loadedScenesTabPreferences.sceneViewMode || 'compactGrid',
@@ -3626,6 +3645,10 @@ const useStore = create((set, get) => ({
       personDialog: null,
       documentSession: get().documentSession + 1,
       tabViewState: {
+        home: {
+          cloudProjectsExpanded: true,
+          pendingDeletionExpanded: false,
+        },
         script: {},
         scenes: {},
         storyboard: {},

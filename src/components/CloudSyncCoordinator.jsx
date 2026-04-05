@@ -265,7 +265,15 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     if (projectRef?.type !== 'cloud') return undefined
     const flush = () => {
-      if (!hasUnsavedChanges) return
+      // Read live state rather than a stale closure so we catch the window
+      // between local autosave clearing hasUnsavedChanges (≈2.5 s) and the
+      // cloud sync debounce firing (≈8 s).
+      const s = useStore.getState()
+      const needsSync =
+        s.hasUnsavedChanges ||
+        (s.saveSyncState?.status === 'saved_locally' &&
+          s.saveSyncState?.mode !== 'cloud_blocked')
+      if (!needsSync) return
       flushCloudSync({ reason: 'manual' })
     }
     window.addEventListener('beforeunload', flush)
@@ -274,7 +282,7 @@ export default function CloudSyncCoordinator() {
       window.removeEventListener('beforeunload', flush)
       window.removeEventListener('pagehide', flush)
     }
-  }, [flushCloudSync, hasUnsavedChanges, projectRef?.type])
+  }, [flushCloudSync, projectRef?.type])
 
   useEffect(() => {
     if (!cloudProjectId || !latestSnapshot?._id || !latestSnapshot?.payload) return
