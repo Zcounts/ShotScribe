@@ -130,6 +130,10 @@ Observability initialization behavior:
 - Clarity initializes only when `import.meta.env.PROD === true` and `VITE_CLARITY_PROJECT_ID` is provided.
 - Development builds skip both tools to avoid noisy local diagnostics.
 
+Convex query diagnostics safety:
+- `src/utils/convexDiagnostics.js` exports both `useConvexQueryDiagnostics` and `useConvexQueryDiagnosticsSafe`.
+- UI components should import/use `useConvexQueryDiagnosticsSafe` so diagnostics remain optional and never block app boot if diagnostics wiring changes.
+
 Post-deploy verification (web + mobile):
 1. Open the deployed app and confirm a Clarity session appears in the Clarity dashboard.
 2. Trigger a controlled client error in browser devtools and verify it appears in Sentry with the expected `environment` and `release`.

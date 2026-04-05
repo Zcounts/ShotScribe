@@ -35,11 +35,7 @@ import useResponsiveViewport from '../hooks/useResponsiveViewport'
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
