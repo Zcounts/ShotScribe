@@ -6,7 +6,7 @@ import { isCloudAuthConfigured } from '../auth/authConfig'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Avatar, AvatarFallback } from './ui/avatar'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
-import { recordCollabSubscriptionSuspended } from '../utils/sessionMetrics'
+import { recordCollabSubscriptionSuspended, recordPresenceSubscriptionMount } from '../utils/sessionMetrics'
 
 function formatTimestamp(iso) {
   if (!iso) return 'Not recorded yet'

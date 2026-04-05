@@ -14,7 +14,6 @@ import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
 import {
   getCachedSignedView as getCachedSignedViewFromCache,
-  getOrCreateSignedViewRequest,
   getOrCreateSignedViewsBatchRequest,
 } from '../utils/assetSignedViewCache'
 
@@ -57,7 +56,6 @@ function ShotCard({
   const projectRef = useStore(s => s.projectRef)
   const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
-  const getAssetSignedView = useAction('assets:getAssetSignedView')
   const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
   const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
@@ -88,15 +86,16 @@ function ShotCard({
   const getSignedViewWithCache = useCallback(async (assetId) => {
     const key = String(assetId || '')
     if (!key || !cloudProjectId) return null
-    return getOrCreateSignedViewRequest({
+    const views = await getOrCreateSignedViewsBatchRequest({
       projectId: cloudProjectId,
-      assetId: key,
-      fetcher: () => getAssetSignedView({
+      assetIds: [key],
+      fetcher: (missingAssetIds) => getAssetSignedViewsBatch({
         projectId: cloudProjectId,
-        assetId: key,
+        assetIds: missingAssetIds,
       }),
     })
-  }, [cloudProjectId, getAssetSignedView])
+    return views?.[key] || null
+  }, [cloudProjectId, getAssetSignedViewsBatch])
 
   useEffect(() => {
     let cancelled = false

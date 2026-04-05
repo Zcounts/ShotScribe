@@ -147,6 +147,13 @@ This means the next session should not repeat low-level dedupe work blindly; it 
 - Client signed URL cache now respects server expiry and tracks cache hit/miss metrics to catch first-load race/miss regressions.
 - Confirmed no active frontend call sites for `projects:listProjectsForCurrentUser` (heavy list query); Lite remains the only list path.
 
+## 11) 2026-04-05 idle-traffic cleanup follow-up (confirmed)
+
+- Presence probe scheduler now enforces a 30s quiet period after project open, then polls at 60s until a collaborator is ever detected in-session; only then does it use the 30s cadence.
+- Live storyboard table reads (`projectScenesLive:listScenesByProject`, `projectShotsLive:listShotsByProject`) now run as one-shot reads in solo mode and switch to reactive subscriptions only when collaborator mode is active.
+- Signed URL client reads now route exclusively through the batch action path in coordinator/card/properties flows; single-item fetches use the batch helper with one asset ID.
+- Periodic checkpoint timer now no-ops when both domains are clean and no domain commits happened since the last snapshot timestamp.
+
 - **Primary source of truth:** `docs/convex-usage-audit.md` (this file)
 - **Architecture options:** `docs/convex-phase3-plan.md` (trimmed to current strategic choices)
 - **Solo/collab runtime notes:** `docs/solo-mode-plan.md` (trimmed, focused)
