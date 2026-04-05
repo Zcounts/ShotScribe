@@ -62,3 +62,31 @@ export const listProjectPresence = query({
     return rows
   },
 })
+
+export const getPresenceProbe = query({
+  args: { projectId: v.id('projects') },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+
+    const now = Date.now()
+    const rows = await ctx.db
+      .query('presence')
+      .withIndex('by_project_id_expires_at', (q: any) => (
+        q
+          .eq('projectId', args.projectId)
+          .gt('expiresAt', now)
+      ))
+      .collect()
+
+    const collaboratorCount = rows.reduce((count, row: any) => {
+      return String(row?.userId || '') === String(currentUserId) ? count : count + 1
+    }, 0)
+
+    return {
+      collaboratorCount,
+      hasCollaborators: collaboratorCount > 0,
+      checkedAt: now,
+    }
+  },
+})
