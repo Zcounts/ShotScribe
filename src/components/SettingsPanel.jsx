@@ -237,7 +237,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsRow>
 
-        <SharingSettingsSection />
+        <SharingSettingsSection settingsOpen={settingsOpen} />
 
         <AdminFeatureGuard
           fallback={null}

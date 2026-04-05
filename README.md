@@ -109,6 +109,8 @@ Reference docs:
 
 Frontend env (root app):
 - `VITE_ENABLE_CLOUD_FEATURES`
+- `VITE_ENABLE_DRAFT_COMMIT_MODE` (optional, default `false`; enables storyboard local-draft → bounded cloud commit mode)
+- `VITE_DRAFT_COMMIT_CHECKPOINT_MINUTES` (optional, default `5`; checkpoint snapshot cadence when draft-commit mode is enabled)
 - `VITE_CONVEX_URL`
 - `VITE_CLERK_PUBLISHABLE_KEY`
 - `VITE_SENTRY_DSN` (optional; enables Sentry in production builds only)
