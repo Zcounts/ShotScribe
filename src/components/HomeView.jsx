@@ -112,7 +112,7 @@ export default function HomeView() {
   )
   const dayCount = Array.isArray(schedule) ? schedule.length : 0
   const firstShootDate = schedule?.[0]?.date || null
-  const hasLoadedProject = Boolean(projectPath || browserProjectId)
+  const hasLoadedProject = Boolean(projectRef?.projectId || projectPath || browserProjectId)
   const cloudEnvEnabled = runtimeConfig.appMode.cloudEnabled
   const cloudAuthConfigured = isCloudAuthConfigured()
   const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
@@ -316,6 +316,7 @@ export default function HomeView() {
   const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
   const resolvedProjectHeroBackground = heroBackgroundImage || defaultHeroBackground
   const heroOverlayColor = projectHeroOverlayColor || '#1f1f27'
+  const projectTitle = String(projectName || '').trim()
   const defaultHeroTitle = (homeHeroDefaults?.headline || '').trim() || 'Build the Shot. Run the Day.'
   const defaultHeroSubhead = (homeHeroDefaults?.subhead || '').trim() || 'Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.'
 
@@ -422,8 +423,8 @@ export default function HomeView() {
           <div>
             <div className="home-hero-kicker">{hasLoadedProject ? '// Active Project' : '// ShotScribe · Production Suite'}</div>
             <div className="home-hero-title">
-              {hasLoadedProject ? (
-                <span className="home-hero-project-title-text">{projectName || 'Untitled Shotlist'}</span>
+              {hasLoadedProject && projectTitle ? (
+                <span className="home-hero-project-title-text">{projectTitle}</span>
               ) : (
                 <>
                   {defaultHeroTitle}
