@@ -32,6 +32,7 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import ScriptDocumentPaginationSurface from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -382,7 +383,7 @@ function ScriptEditableBlock({ block, blockStyle, isSelected, fontWeight, onFocu
   )
 }
 
-export default function ScriptTab() {
+export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const scriptScenes = useStore(s => s.scriptScenes)
   const storyboardScenes = useStore(s => s.scenes)
   const scriptSettings = useStore(s => s.scriptSettings)
@@ -1409,164 +1410,168 @@ export default function ScriptTab() {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={handlePageMouseUp}>
-              <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
-                <div>
-                  <div
-                    style={{
-                      width: pageSettings.widthPx,
-                      height: RULER_HEIGHT_PX,
-                      border: '1px solid rgba(148,163,184,0.45)',
-                      background: '#f8fafc',
-                      borderRadius: 5,
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {Array.from({ length: Math.floor(pageSettings.widthPx / (PX_PER_INCH / 4)) + 1 }).map((_, idx) => {
-                      const x = idx * (PX_PER_INCH / 4)
-                      const isInch = idx % 4 === 0
-                      return (
-                        <div key={idx} style={{ position: 'absolute', left: x, bottom: 0 }}>
-                          <div style={{ width: 1, height: isInch ? 12 : 7, background: 'rgba(51,65,85,0.45)' }} />
-                          {isInch && <div style={{ fontSize: 9, color: '#64748b', marginLeft: 2 }}>{idx / 4}</div>}
-                        </div>
-                      )
-                    })}
-                  </div>
+            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={useUnifiedEditorCore ? undefined : handlePageMouseUp}>
+              {useUnifiedEditorCore ? (
+                <ScriptDocumentPaginationSurface />
+              ) : (
+                <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
+                  <div>
+                    <div
+                      style={{
+                        width: pageSettings.widthPx,
+                        height: RULER_HEIGHT_PX,
+                        border: '1px solid rgba(148,163,184,0.45)',
+                        background: '#f8fafc',
+                        borderRadius: 5,
+                        position: 'relative',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {Array.from({ length: Math.floor(pageSettings.widthPx / (PX_PER_INCH / 4)) + 1 }).map((_, idx) => {
+                        const x = idx * (PX_PER_INCH / 4)
+                        const isInch = idx % 4 === 0
+                        return (
+                          <div key={idx} style={{ position: 'absolute', left: x, bottom: 0 }}>
+                            <div style={{ width: 1, height: isInch ? 12 : 7, background: 'rgba(51,65,85,0.45)' }} />
+                            {isInch && <div style={{ fontSize: 9, color: '#64748b', marginLeft: 2 }}>{idx / 4}</div>}
+                          </div>
+                        )
+                      })}
+                    </div>
 
-                  <div style={{ height: 10 }} />
+                    <div style={{ height: 10 }} />
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: PAGE_GAP_PX }}>
-                    {documentModel.pages.map(page => (
-                      <div
-                        key={page.id}
-                        className="app-panel-shadow"
-                        style={{
-                          width: pageSettings.widthPx,
-                          height: pageSettings.heightPx,
-                          background: '#fff',
-                          border: '1px solid rgba(148,163,184,0.4)',
-                          position: 'relative',
-                          boxSizing: 'border-box',
-                          paddingTop: pageSettings.marginTopPx,
-                          paddingRight: pageSettings.marginRightPx,
-                          paddingBottom: pageSettings.marginBottomPx,
-                          paddingLeft: pageSettings.marginLeftPx,
-                          overflow: 'hidden',
-                        }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', minHeight: pageContentHeightPx }}>
-                          {page.blocks.map((block) => {
-                            const blockStyle = getBlockStyleForType(documentSettings, block.blockType)
-                            const isSelected = selectedBlock?.sceneId === block.sceneId && selectedBlock?.blockId === block.blockId
-                            const blockFontWeight = (writeOptions.boldSlugline && block.blockType === 'heading')
-                              || (writeOptions.boldCharacter && block.blockType === 'character')
-                              ? 700
-                              : 400
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: PAGE_GAP_PX }}>
+                      {documentModel.pages.map(page => (
+                        <div
+                          key={page.id}
+                          className="app-panel-shadow"
+                          style={{
+                            width: pageSettings.widthPx,
+                            height: pageSettings.heightPx,
+                            background: '#fff',
+                            border: '1px solid rgba(148,163,184,0.4)',
+                            position: 'relative',
+                            boxSizing: 'border-box',
+                            paddingTop: pageSettings.marginTopPx,
+                            paddingRight: pageSettings.marginRightPx,
+                            paddingBottom: pageSettings.marginBottomPx,
+                            paddingLeft: pageSettings.marginLeftPx,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', minHeight: pageContentHeightPx }}>
+                            {page.blocks.map((block) => {
+                              const blockStyle = getBlockStyleForType(documentSettings, block.blockType)
+                              const isSelected = selectedBlock?.sceneId === block.sceneId && selectedBlock?.blockId === block.blockId
+                              const blockFontWeight = (writeOptions.boldSlugline && block.blockType === 'heading')
+                                || (writeOptions.boldCharacter && block.blockType === 'character')
+                                ? 700
+                                : 400
 
-                            if (view === 'write') {
+                              if (view === 'write') {
+                                return (
+                                  <ScriptEditableBlock
+                                    key={`${block.sceneId}:${block.blockId}`}
+                                    block={block}
+                                    blockStyle={blockStyle}
+                                    isSelected={isSelected}
+                                    fontWeight={blockFontWeight}
+                                    onFocusBlock={() => {
+                                      setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
+                                      setActiveSceneId(block.sceneId)
+                                    }}
+                                    onCommit={(text) => updateBlockText(block.sceneId, block.blockId, block.blockType, text)}
+                                    onKeyDown={(event) => handleBlockKeyDown(event, block)}
+                                    readOnly={isWriteBlockedByLock}
+                                    onRegisterHeading={(node) => {
+                                      if (!block.isHeading) return
+                                      if (!node) {
+                                        if (sceneHeadingRefs.current[block.sceneId]) delete sceneHeadingRefs.current[block.sceneId]
+                                        return
+                                      }
+                                      if (!sceneHeadingRefs.current[block.sceneId]) sceneHeadingRefs.current[block.sceneId] = node
+                                    }}
+                                  />
+                                )
+                              }
+
                               return (
-                                <ScriptEditableBlock
+                                <div
                                   key={`${block.sceneId}:${block.blockId}`}
-                                  block={block}
-                                  blockStyle={blockStyle}
-                                  isSelected={isSelected}
-                                  fontWeight={blockFontWeight}
-                                  onFocusBlock={() => {
+                                  data-scene-id={block.sceneId}
+                                  data-block-id={block.blockId}
+                                  data-block-type={block.blockType}
+                                  data-scene-heading={block.isHeading ? 'true' : undefined}
+                                  ref={(node) => {
+                                    if (!block.isHeading) return
+                                    if (!node) {
+                                      if (sceneHeadingRefs.current[block.sceneId]) {
+                                        delete sceneHeadingRefs.current[block.sceneId]
+                                      }
+                                      return
+                                    }
+                                    if (!sceneHeadingRefs.current[block.sceneId]) {
+                                      sceneHeadingRefs.current[block.sceneId] = node
+                                    }
+                                  }}
+                                  style={{
+                                    marginLeft: `${blockStyle.marginLeftPx}px`,
+                                    marginRight: `${blockStyle.marginRightPx}px`,
+                                    paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
+                                    paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
+                                    minHeight: `${blockStyle.lineHeightPx}px`,
+                                    fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
+                                    fontSize: `${blockStyle.fontSizePx}px`,
+                                    lineHeight: `${blockStyle.lineHeightPx}px`,
+                                    textAlign: blockStyle.align || 'left',
+                                    letterSpacing: `${blockStyle.letterSpacingPx}px`,
+                                    fontWeight: blockFontWeight,
+                                    whiteSpace: 'pre-wrap',
+                                    textTransform: ['heading', 'character', 'transition'].includes(block.blockType) ? 'uppercase' : 'none',
+                                    borderRadius: 4,
+                                    border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
+                                    background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
+                                    cursor: 'text',
+                                    userSelect: 'text',
+                                    position: 'relative',
+                                  }}
+                                  onClick={() => {
                                     setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
                                     setActiveSceneId(block.sceneId)
                                   }}
-                                  onCommit={(text) => updateBlockText(block.sceneId, block.blockId, block.blockType, text)}
-                                  onKeyDown={(event) => handleBlockKeyDown(event, block)}
-                                  readOnly={isWriteBlockedByLock}
-                                  onRegisterHeading={(node) => {
-                                    if (!block.isHeading) return
-                                    if (!node) {
-                                      if (sceneHeadingRefs.current[block.sceneId]) delete sceneHeadingRefs.current[block.sceneId]
-                                      return
-                                    }
-                                    if (!sceneHeadingRefs.current[block.sceneId]) sceneHeadingRefs.current[block.sceneId] = node
-                                  }}
-                                />
+                                  onDoubleClick={(event) => handleReadBlockDoubleClick(event, block)}
+                                  onContextMenu={(event) => handleReadBlockContextMenu(event, block)}
+                                >
+                                  {block.blockText || ' '}
+                                  {view !== 'write' && (overlayFragmentsByBlock[`${block.sceneId}:${block.blockId}`] || []).map(fragment => (
+                                    <div
+                                      key={fragment.id}
+                                      style={{
+                                        position: 'absolute',
+                                        top: fragment.top,
+                                        left: fragment.left,
+                                        width: fragment.width,
+                                        height: fragment.height,
+                                        borderRadius: 2,
+                                        pointerEvents: 'none',
+                                        background: fragment.type === 'breakdown' ? withAlpha(fragment.color, 0.22) : `${fragment.color}2E`,
+                                        boxShadow: `inset 0 -1px ${fragment.color}`,
+                                      }}
+                                    />
+                                  ))}
+                                </div>
                               )
-                            }
+                            })}
+                          </div>
 
-                            return (
-                              <div
-                                key={`${block.sceneId}:${block.blockId}`}
-                                data-scene-id={block.sceneId}
-                                data-block-id={block.blockId}
-                                data-block-type={block.blockType}
-                                data-scene-heading={block.isHeading ? 'true' : undefined}
-                                ref={(node) => {
-                                  if (!block.isHeading) return
-                                  if (!node) {
-                                    if (sceneHeadingRefs.current[block.sceneId]) {
-                                      delete sceneHeadingRefs.current[block.sceneId]
-                                    }
-                                    return
-                                  }
-                                  if (!sceneHeadingRefs.current[block.sceneId]) {
-                                    sceneHeadingRefs.current[block.sceneId] = node
-                                  }
-                                }}
-                                style={{
-                                  marginLeft: `${blockStyle.marginLeftPx}px`,
-                                  marginRight: `${blockStyle.marginRightPx}px`,
-                                  paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
-                                  paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
-                                  minHeight: `${blockStyle.lineHeightPx}px`,
-                                  fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
-                                  fontSize: `${blockStyle.fontSizePx}px`,
-                                  lineHeight: `${blockStyle.lineHeightPx}px`,
-                                  textAlign: blockStyle.align || 'left',
-                                  letterSpacing: `${blockStyle.letterSpacingPx}px`,
-                                  fontWeight: blockFontWeight,
-                                  whiteSpace: 'pre-wrap',
-                                  textTransform: ['heading', 'character', 'transition'].includes(block.blockType) ? 'uppercase' : 'none',
-                                  borderRadius: 4,
-                                  border: isSelected ? '1px solid rgba(37,99,235,0.45)' : '1px solid transparent',
-                                  background: isSelected ? 'rgba(37,99,235,0.04)' : 'transparent',
-                                  cursor: 'text',
-                                  userSelect: 'text',
-                                  position: 'relative',
-                                }}
-                                onClick={() => {
-                                  setSelectedBlock({ sceneId: block.sceneId, blockId: block.blockId })
-                                  setActiveSceneId(block.sceneId)
-                                }}
-                                onDoubleClick={(event) => handleReadBlockDoubleClick(event, block)}
-                                onContextMenu={(event) => handleReadBlockContextMenu(event, block)}
-                              >
-                                {block.blockText || ' '}
-                                {view !== 'write' && (overlayFragmentsByBlock[`${block.sceneId}:${block.blockId}`] || []).map(fragment => (
-                                  <div
-                                    key={fragment.id}
-                                    style={{
-                                      position: 'absolute',
-                                      top: fragment.top,
-                                      left: fragment.left,
-                                      width: fragment.width,
-                                      height: fragment.height,
-                                      borderRadius: 2,
-                                      pointerEvents: 'none',
-                                      background: fragment.type === 'breakdown' ? withAlpha(fragment.color, 0.22) : `${fragment.color}2E`,
-                                      boxShadow: `inset 0 -1px ${fragment.color}`,
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                            )
-                          })}
+                          <div style={{ position: 'absolute', right: 12, top: 10, fontSize: 11, color: '#64748b' }}>{page.number}</div>
                         </div>
-
-                        <div style={{ position: 'absolute', right: 12, top: 10, fontSize: 11, color: '#64748b' }}>{page.number}</div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
