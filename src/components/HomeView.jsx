@@ -140,7 +140,8 @@ export default function HomeView() {
   const hasBlockingUnsavedChanges = hasUnsavedChanges
     && saveSyncState?.status === 'unsaved_changes'
     && !isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts })
-  const { cloudProjectsExpanded, pendingDeletionExpanded } = homeTabViewState
+  const cloudProjectsExpanded = homeTabViewState.cloudProjectsExpanded
+  const pendingDeletionExpanded = homeTabViewState.pendingDeletionExpanded
 
   useEffect(() => {
     if (!contextMenu && !heroContextMenu) return
