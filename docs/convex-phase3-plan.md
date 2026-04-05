@@ -322,3 +322,30 @@ Success signal for Phase 3B first slice:
 - Restore prior latest-snapshot reactive query in `CloudSyncCoordinator` if remote-update behavior regresses.
 - Disable signed-view caching by removing cache map usage if signed URL freshness issues appear.
 - Revert visibility-gated heartbeat if collaborator presence feels delayed.
+
+---
+
+## Post-slice hotspot pass #2 (live no-op write suppression + asset request dedupe)
+
+### Implemented in this pass
+- Added client-side diff guards in `CloudSyncCoordinator.syncLiveStoryboardState` so live scene/shot upserts only run when normalized payload/order meaningfully changed.
+- Reused mounted live query data for sync comparison before falling back to direct list queries.
+- Added temporary dev diagnostics (`ss_convex_diag`) for live sync operation counts (upsert/skip/delete mix).
+- Added `ShotCard` signed-view in-flight dedupe keyed by asset id.
+- Updated `ShotCard` library preview loading to cache-first and batch only missing asset IDs.
+- Added `ShotGrid` in-flight batch dedupe for identical project+asset signing batches.
+
+### Remaining hotspots
+- Live scene/shot list subscriptions still represent full-project live docs (expected for current collaboration model).
+- Storyboard assets still require re-signing after TTL expiry by design.
+- Some `assets:getAssetView` legacy fallback paths remain for non-S3/legacy providers.
+
+### Manual QA additions
+1. Repeated shot edits should persist correctly without visible regressions.
+2. Repeated scene metadata edits should persist and reflect across collaborators.
+3. Storyboard thumbnail previews should remain stable during fast navigation.
+4. Opening the library picker repeatedly should not degrade preview load behavior.
+
+### Rollback notes
+- Remove diff-skip logic if any stale live row issue is observed.
+- Remove in-flight dedupe maps in `ShotCard`/`ShotGrid` if they mask legitimate refreshes.

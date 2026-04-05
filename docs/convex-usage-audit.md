@@ -315,3 +315,46 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 - Revert `CloudSyncCoordinator` head-based fetch effect to prior reactive latest snapshot query.
 - Remove signed-view caches in `ShotGrid`/`ShotCard` if preview freshness regressions appear.
 - Revert presence heartbeat interval/visibility gating to prior behavior if collaboration UX regresses.
+
+---
+
+## Hotspot pass follow-up #2 (live upsert no-op suppression + asset re-sign dedupe)
+
+### Live-model churn found
+- `syncLiveStoryboardState` was reading live rows then unconditionally issuing upserts for every scene/shot on each local edit-triggered sync call.
+- This created avoidable write-after-read churn even when only one shot changed.
+- Cloud sync runtime already had live query subscriptions mounted, but sync path still re-queried live scenes/shots as a separate read step.
+
+### Asset churn found
+- Shot cards could concurrently request the same `assets:getAssetSignedView` during rerenders/mount overlap.
+- Library preview loading in `ShotCard` could re-request signed views for assets that were already in short-lived cache.
+- Grid prefetches could duplicate batch signing requests for identical in-flight asset id sets.
+
+### Code changed
+- Added live payload normalization parity in `CloudSyncCoordinator` and skipped `upsertScene`/`upsertShot` when normalized payload + ordering already match persisted live rows.
+- Reused existing live query subscription data as first source for sync diffing, with query fallback only when cache data is unavailable.
+- Added dev-only diagnostics logging (`ss_convex_diag`) for live sync op mix (upserts vs skips vs deletes).
+- Added signed-view in-flight dedupe in `ShotCard` so concurrent requests for the same asset ID share one action call.
+- Updated `ShotCard` library preview load to use cache-first + missing-only batch signing.
+- Added in-flight batch dedupe in `ShotGrid` for identical project/asset batch request keys.
+
+### Expected impact
+- **Function calls:** fewer `projectScenesLive:upsertScene` / `projectShotsLive:upsertShot` on no-op sync cycles; fewer duplicate asset signing calls during rapid rerenders/open flows.
+- **Bandwidth:** reduced mutation traffic and lower repeated signed view payload responses.
+- **Storyboard responsiveness:** lower background churn should reduce contention while preserving thumbnail/load behavior.
+
+### Intentionally not changed
+- No collaboration architecture rewrite.
+- No live query granularity redesign by viewport/card visibility for scenes/shots in this slice.
+- No server-side asset provider redesign or signed URL lifetime changes.
+
+### Manual QA for this pass
+1. Edit one shot field repeatedly and confirm only changed shot persists while storyboard remains responsive.
+2. Edit scene metadata (slugline/location/etc.) and confirm updates persist and sync correctly.
+3. Open storyboard image picker library multiple times and verify previews still resolve without visible regressions.
+4. Switch between storyboard pages quickly and ensure thumbnails continue to load.
+5. Validate collaboration, autosave/manual sync, and remote snapshot apply behavior still match current UX.
+
+### Rollback notes
+- Revert diff-skip logic in `CloudSyncCoordinator` if any missed live updates are observed.
+- Revert signed-view in-flight dedupe/cache-first behavior in `ShotCard`/`ShotGrid` if preview freshness issues appear.

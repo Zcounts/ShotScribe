@@ -15,6 +15,25 @@ import useResponsiveViewport from '../hooks/useResponsiveViewport'
 
 const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
 const signedViewCache = new Map()
+const signedViewInFlight = new Map()
+
+function getCachedSignedView(assetId) {
+  const key = String(assetId || '')
+  if (!key) return null
+  const cached = signedViewCache.get(key)
+  if (!cached) return null
+  if (Date.now() - Number(cached.cachedAt || 0) >= SIGNED_VIEW_CACHE_TTL_MS) return null
+  return cached.view || null
+}
+
+function setCachedSignedView(assetId, view) {
+  const key = String(assetId || '')
+  if (!key || !view) return
+  signedViewCache.set(key, {
+    view,
+    cachedAt: Date.now(),
+  })
+}
 
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
@@ -82,6 +101,27 @@ function ShotCard({
     () => ['size', 'type', 'move', 'equip'].filter(key => visibleInfo[key] !== false),
     [visibleInfo]
   )
+  const getSignedViewWithCache = useCallback(async (assetId) => {
+    const key = String(assetId || '')
+    if (!key || projectRef?.type !== 'cloud' || !projectRef?.projectId) return null
+    const cached = getCachedSignedView(key)
+    if (cached) return cached
+    const inFlight = signedViewInFlight.get(key)
+    if (inFlight) return inFlight
+    const request = getAssetSignedView({
+      projectId: projectRef.projectId,
+      assetId: key,
+    })
+      .then((view) => {
+        setCachedSignedView(key, view || null)
+        return view || null
+      })
+      .finally(() => {
+        signedViewInFlight.delete(key)
+      })
+    signedViewInFlight.set(key, request)
+    return request
+  }, [getAssetSignedView, projectRef?.projectId, projectRef?.type])
 
   useEffect(() => {
     let cancelled = false
@@ -95,23 +135,13 @@ function ShotCard({
         return
       }
       const assetId = String(shot.imageAsset.cloud.assetId)
-      const cached = signedViewCache.get(assetId)
-      const now = Date.now()
-      if (cached && now - cached.cachedAt < SIGNED_VIEW_CACHE_TTL_MS) {
-        setCloudAssetView(cached.view)
+      const cached = getCachedSignedView(assetId)
+      if (cached) {
+        setCloudAssetView(cached)
         return
       }
       try {
-        const view = await getAssetSignedView({
-          projectId: projectRef.projectId,
-          assetId,
-        })
-        if (view) {
-          signedViewCache.set(assetId, {
-            view,
-            cachedAt: now,
-          })
-        }
+        const view = await getSignedViewWithCache(assetId)
         if (!cancelled) setCloudAssetView(view || null)
       } catch (err) {
         console.warn('Failed to load signed asset view', err)
@@ -122,7 +152,7 @@ function ShotCard({
     return () => {
       cancelled = true
     }
-  }, [cloudAssetBlocked, getAssetSignedView, prefetchedCloudAssetView, projectRef, shot?.imageAsset?.cloud?.assetId])
+  }, [cloudAssetBlocked, getSignedViewWithCache, prefetchedCloudAssetView, projectRef, shot?.imageAsset?.cloud?.assetId])
 
   useEffect(() => {
     let cancelled = false
@@ -136,11 +166,27 @@ function ShotCard({
       ) return
       setIsLoadingLibraryViews(true)
       try {
+        const cachedViews = {}
+        const missingAssetIds = []
+        for (const asset of libraryAssets) {
+          const assetId = String(asset?.assetId || '')
+          if (!assetId) continue
+          const cached = getCachedSignedView(assetId)
+          if (cached) cachedViews[assetId] = cached
+          else missingAssetIds.push(assetId)
+        }
+        if (missingAssetIds.length === 0) {
+          if (!cancelled) setLibraryAssetViews(cachedViews)
+          return
+        }
         const views = await getAssetSignedViewsBatch({
           projectId: projectRef.projectId,
-          assetIds: libraryAssets.map(asset => asset.assetId),
+          assetIds: missingAssetIds,
         })
-        if (!cancelled) setLibraryAssetViews(views || {})
+        Object.entries(views || {}).forEach(([assetId, view]) => {
+          setCachedSignedView(assetId, view)
+        })
+        if (!cancelled) setLibraryAssetViews({ ...cachedViews, ...(views || {}) })
       } catch (err) {
         console.warn('Failed to load library image previews', err)
       } finally {
@@ -202,10 +248,7 @@ function ShotCard({
         shotId: shot.id,
         assetId,
       })
-      const signedView = await getAssetSignedView({
-        projectId: projectRef.projectId,
-        assetId,
-      })
+      const signedView = await getSignedViewWithCache(assetId)
       const payload = buildShotImageFromLibraryAsset(signedView)
       if (!payload) throw new Error('Could not resolve selected library asset')
       updateShotImage(shot.id, payload)
@@ -213,7 +256,7 @@ function ShotCard({
     } finally {
       setIsAssigningFromLibrary(false)
     }
-  }, [assignShotLibraryAsset, cloudAssetBlocked, getAssetSignedView, projectRef, shot.id, updateShotImage])
+  }, [assignShotLibraryAsset, cloudAssetBlocked, getSignedViewWithCache, projectRef, shot.id, updateShotImage])
 
   const handleImageClick = () => {
     if (projectRef?.type === 'cloud') {
@@ -291,10 +334,7 @@ function ShotCard({
             shotId: shot.id,
             assetId: uploadedAssetId,
           })
-          const signedView = await getAssetSignedView({
-            projectId: projectRef.projectId,
-            assetId: uploadedAssetId,
-          })
+          const signedView = await getSignedViewWithCache(uploadedAssetId)
           const libraryPayload = buildShotImageFromLibraryAsset(signedView)
           updateShotImage(shot.id, libraryPayload || uploaded)
         } else {
@@ -320,7 +360,7 @@ function ShotCard({
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, updateShotImage, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getAssetSignedView])
+  }, [shot.id, updateShotImage, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getSignedViewWithCache])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
