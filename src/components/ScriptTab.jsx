@@ -32,6 +32,8 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import { runtimeConfig } from '../config/runtimeConfig'
+import ScriptDocumentPaginationSurface from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -393,6 +395,7 @@ export default function ScriptTab() {
   const deleteImportedScript = useStore(s => s.deleteImportedScript)
   const openShotDialog = useStore(s => s.openShotDialog)
   const linkShotToScene = useStore(s => s.linkShotToScene)
+  const derivedShotLinksByScene = useStore(s => s.derivedScriptData?.compatibility?.shotLinkIndexBySceneId || {})
   const projectRef = useStore(s => s.projectRef)
   const getProjectData = useStore(s => s.getProjectData)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
@@ -569,33 +572,7 @@ export default function ScriptTab() {
 
   const breakdownTags = Array.isArray(scriptSettings?.breakdownTags) ? scriptSettings.breakdownTags : []
 
-  const shotLinksByScene = useMemo(() => {
-    const result = {}
-    storyboardScenes.forEach((storyScene, sceneIndex) => {
-      ;(storyScene.shots || []).forEach((shot, shotIndex) => {
-        if (!shot.linkedSceneId) return
-        const start = Number.isFinite(shot.linkedScriptRangeStart) ? shot.linkedScriptRangeStart : null
-        const end = Number.isFinite(shot.linkedScriptRangeEnd) ? shot.linkedScriptRangeEnd : null
-        if (start == null || end == null || end <= start) return
-        if (!result[shot.linkedSceneId]) result[shot.linkedSceneId] = []
-        result[shot.linkedSceneId].push({
-          id: `shot_link_${shot.id}`,
-          shotId: shot.id,
-          start,
-          end,
-          color: shot.color || '#E84040',
-          label: shot.displayId || `${sceneIndex + 1}${getShotLetter(shotIndex)}`,
-          type: 'visualize',
-        })
-      })
-    })
-
-    Object.keys(result).forEach(sceneId => {
-      result[sceneId] = result[sceneId].sort((a, b) => a.start - b.start)
-    })
-
-    return result
-  }, [storyboardScenes])
+  const shotLinksByScene = derivedShotLinksByScene
 
   const breakdownByScene = useMemo(() => {
     const result = {}
@@ -1172,6 +1149,10 @@ export default function ScriptTab() {
       window.removeEventListener('resize', computeOverlays)
     }
   }, [activeBreakdownCategory, breakdownByScene, documentModel.blocks, shotLinksByScene, view])
+
+  if (runtimeConfig.scriptDocument?.paginationPhase1Enabled) {
+    return <ScriptDocumentPaginationSurface />
+  }
 
   if (orderedScenes.length === 0) {
     return (
