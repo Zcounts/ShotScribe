@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { useAction, useQuery } from 'convex/react'
+import { useAction } from 'convex/react'
+import useStore from '../../store'
 
 const buttonStyle = {
   border: '1px solid #6B7280',
@@ -13,7 +14,7 @@ const buttonStyle = {
 }
 
 export default function BillingActions({ compact = false }) {
-  const entitlement = useQuery('billing:getMyEntitlement')
+  const entitlement = useStore(s => s.entitlement)
   const createCheckoutSession = useAction('billing:createCheckoutSession')
   const createPortalSession = useAction('billing:createPortalSession')
   const [isLoading, setIsLoading] = useState(false)

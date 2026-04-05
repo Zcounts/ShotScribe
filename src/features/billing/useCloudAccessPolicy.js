@@ -37,13 +37,14 @@ export default function useCloudAccessPolicy(options = {}) {
   const isCloudProject = projectRef?.type === 'cloud'
   const cloudProjectId = isCloudProject ? projectRef.projectId : null
   const roleOverride = typeof options?.projectRole === 'string' ? options.projectRole : null
-  const entitlementQuery = useQuery('billing:getMyEntitlement')
+  const storedEntitlement = useStore(s => s.entitlement)
+  const userDataLoaded = useStore(s => s.userDataLoaded)
   const projectQuery = useQuery(
     'projects:getProjectById',
     cloudProjectId && !roleOverride ? { projectId: cloudProjectId } : 'skip'
   )
-  const entitlement = entitlementQuery || DEFAULT_SUMMARY
-  const isEntitlementLoading = entitlementQuery === undefined
+  const entitlement = storedEntitlement || DEFAULT_SUMMARY
+  const isEntitlementLoading = !userDataLoaded
 
   return useMemo(() => {
     const currentUserRole = isCloudProject ? (roleOverride || projectQuery?.currentUserRole || null) : null
@@ -78,5 +79,5 @@ export default function useCloudAccessPolicy(options = {}) {
       readOnly,
       readOnlyReason: readOnly ? getReadOnlyReason(entitlement, currentUserRole) : '',
     }
-  }, [entitlement, isCloudProject, isEntitlementLoading, projectQuery?.currentUserRole, roleOverride])
+  }, [entitlement, isCloudProject, isEntitlementLoading, projectQuery?.currentUserRole, roleOverride, userDataLoaded])
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useAction, useQuery } from 'convex/react'
+import { useAction } from 'convex/react'
 import { useAuth, useClerk, useUser } from '@clerk/clerk-react'
 import { runtimeConfig } from '../../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../../auth/authConfig'
@@ -43,8 +43,9 @@ export default function AccountPage() {
   const { isSignedIn } = useAuth()
   const { user, isLoaded: userLoaded } = useUser()
   const { signOut, openSignIn } = useClerk()
-  const entitlement = useQuery('billing:getMyEntitlement')
-  const cloudUser = useQuery('users:currentUser')
+  const entitlement = useStore(s => s.entitlement)
+  const cloudUser = useStore(s => s.currentUser)
+  const userDataLoaded = useStore(s => s.userDataLoaded)
   const createCheckoutSession = useAction('billing:createCheckoutSession')
   const createPortalSession = useAction('billing:createPortalSession')
   const syncMyBillingState = useAction('billing:syncMyBillingState')
@@ -131,7 +132,7 @@ export default function AccountPage() {
   }, [])
 
   if (!canUseCloudAuth) return <div style={containerStyle}><div style={{ maxWidth: 860, margin: '0 auto' }}><div style={cardStyle}>Cloud auth is not configured. Local-only workflows remain available.</div></div></div>
-  if (!userLoaded || entitlement === undefined || cloudUser === undefined) return <div style={containerStyle}><div style={{ maxWidth: 860, margin: '0 auto' }}><div style={cardStyle}>Loading account details…</div></div></div>
+  if (!userLoaded || !userDataLoaded) return <div style={containerStyle}><div style={{ maxWidth: 860, margin: '0 auto' }}><div style={cardStyle}>Loading account details…</div></div></div>
 
   if (!isSignedIn) {
     return (
