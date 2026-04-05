@@ -103,6 +103,58 @@ export function mergeWithPreviousNode(scriptDocument, nodeIndex) {
   return { ...base, content: nextContent }
 }
 
+function isCaretOnFirstVisualLine(element) {
+  if (!element || typeof window === 'undefined') return true
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return true
+  const range = sel.getRangeAt(0)
+  if (!range.collapsed) return false
+  const caretRect = range.getBoundingClientRect()
+  if (!caretRect || !caretRect.height) return true
+  const elRect = element.getBoundingClientRect()
+  return caretRect.top < elRect.top + caretRect.height
+}
+
+function isCaretOnLastVisualLine(element) {
+  if (!element || typeof window === 'undefined') return true
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return true
+  const range = sel.getRangeAt(0)
+  if (!range.collapsed) return false
+  const caretRect = range.getBoundingClientRect()
+  if (!caretRect || !caretRect.height) return true
+  const elRect = element.getBoundingClientRect()
+  return caretRect.bottom > elRect.bottom - caretRect.height
+}
+
+function placeCaretInElementAtX(element, x, atBottom) {
+  if (!element || typeof document === 'undefined' || typeof window === 'undefined') return
+  element.focus()
+  const elRect = element.getBoundingClientRect()
+  const targetY = atBottom ? elRect.bottom - (BLOCK_VERTICAL_PADDING + 4) : elRect.top + (BLOCK_VERTICAL_PADDING + 4)
+  let placed = false
+  const caretX = (typeof x === 'number' && x > 0) ? x : elRect.left + 4
+  if (typeof document.caretRangeFromPoint === 'function') {
+    const r = document.caretRangeFromPoint(caretX, targetY)
+    if (r && element.contains(r.startContainer)) {
+      const sel = window.getSelection()
+      if (sel) { sel.removeAllRanges(); sel.addRange(r); placed = true }
+    }
+  } else if (typeof document.caretPositionFromPoint === 'function') {
+    const pos = document.caretPositionFromPoint(caretX, targetY)
+    if (pos && element.contains(pos.offsetNode)) {
+      const r = document.createRange()
+      r.setStart(pos.offsetNode, pos.offset)
+      r.collapse(true)
+      const sel = window.getSelection()
+      if (sel) { sel.removeAllRanges(); sel.addRange(r); placed = true }
+    }
+  }
+  if (!placed) {
+    setCaretOffset(element, atBottom ? (element.textContent || '').length : 0)
+  }
+}
+
 function getCaretOffsetWithinElement(element) {
   if (!element || typeof window === 'undefined') return null
   const selection = window.getSelection()
@@ -280,6 +332,35 @@ export default function ScriptDocumentPaginationSurface({
                     const nodeIndex = block.nodeIndex
                     const caretOffset = getCaretOffsetWithinElement(event.currentTarget)
                     if (readOnly) return
+                    if (event.key === 'ArrowUp') {
+                      if (nodeIndex > 0 && isCaretOnFirstVisualLine(event.currentTarget)) {
+                        const prevElement = nodeElementByIndexRef.current[nodeIndex - 1]
+                        if (prevElement) {
+                          event.preventDefault()
+                          const sel = window.getSelection()
+                          const x = (sel && sel.rangeCount > 0)
+                            ? sel.getRangeAt(0).getBoundingClientRect().left
+                            : event.currentTarget.getBoundingClientRect().left
+                          placeCaretInElementAtX(prevElement, x, true)
+                        }
+                      }
+                      return
+                    }
+                    if (event.key === 'ArrowDown') {
+                      const totalNodes = (documentRef?.content || []).length
+                      if (nodeIndex < totalNodes - 1 && isCaretOnLastVisualLine(event.currentTarget)) {
+                        const nextElement = nodeElementByIndexRef.current[nodeIndex + 1]
+                        if (nextElement) {
+                          event.preventDefault()
+                          const sel = window.getSelection()
+                          const x = (sel && sel.rangeCount > 0)
+                            ? sel.getRangeAt(0).getBoundingClientRect().left
+                            : event.currentTarget.getBoundingClientRect().left
+                          placeCaretInElementAtX(nextElement, x, false)
+                        }
+                      }
+                      return
+                    }
                     if (event.key === 'Tab') {
                       event.preventDefault()
                       const direction = event.shiftKey ? -1 : 1

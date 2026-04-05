@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SignedIn, SignedOut } from '@clerk/clerk-react'
-import { useMutation, useQuery } from 'convex/react'
+import { useConvex, useMutation, useQuery } from 'convex/react'
 import { createMobileSnapshotFromCloudPayload } from './cloudPayloadToMobileSnapshot'
 import type {
   MobileTabKey,
@@ -82,8 +82,10 @@ function CloudModePane({
   onSelectCloudProject: (projectId: string) => void
   onApplyShotEdit: (projectId: string, dayId: string, shotId: string, patch: Partial<Omit<ShotFieldEdit, 'updatedAt'>>) => StoredLibrary
 }) {
-  const cloudEntitlement = useQuery('billing:getMyEntitlement' as any, {}) as any
-  const cloudProjects = useQuery('projects:listProjectsForCurrentUser' as any, {}) as any[] | undefined
+  const convex = useConvex()
+  const [cloudEntitlement, setCloudEntitlement] = useState<any>(null)
+  const cloudProjectsResult = useQuery('projects:listProjectsForCurrentUserLite' as any, {}) as { projects: any[], hasMore: boolean, total: number } | undefined
+  const cloudProjects = cloudProjectsResult?.projects
   const projectId = route.name === 'project' && route.mode === 'cloud' ? route.projectId : 'skip'
   const latestSnapshot = useQuery('projectSnapshots:getLatestSnapshotForProject' as any, projectId === 'skip' ? 'skip' : { projectId }) as any
   const createSnapshot = useMutation('projectSnapshots:createSnapshot' as any)
@@ -101,6 +103,20 @@ function CloudModePane({
 
   const cloudActiveProject = route.name === 'project' && route.mode === 'cloud' ? cloudProjectLibrary?.projects[route.projectId] : null
   const cloudActiveDay = cloudActiveProject && route.name === 'project' ? cloudActiveProject.days[route.dayId] : null
+
+  useEffect(() => {
+    let cancelled = false
+    convex.query('billing:getMyEntitlement' as any)
+      .then((result) => {
+        if (!cancelled) setCloudEntitlement(result ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setCloudEntitlement(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [convex])
 
   useEffect(() => {
     if (route.name !== 'project' || route.mode !== 'cloud') return

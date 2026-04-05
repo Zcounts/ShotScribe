@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import {
@@ -33,6 +33,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog'
+import { recordProjectListPageLoaded } from '../utils/sessionMetrics'
+
+const PROJECT_LIST_PAGE_SIZE = 20
 
 function monogram(name) {
   const raw = String(name || 'Untitled').trim().split(/\s+/).filter(Boolean)
@@ -100,6 +103,7 @@ export default function HomeView() {
   const [contextMenu, setContextMenu] = useState(null)
   const [heroContextMenu, setHeroContextMenu] = useState(null)
   const [deleteConfirmProject, setDeleteConfirmProject] = useState(null)
+  const [projectListLimit, setProjectListLimit] = useState(PROJECT_LIST_PAGE_SIZE)
   const menuRef = useRef(null)
   const heroMenuRef = useRef(null)
 
@@ -120,7 +124,17 @@ export default function HomeView() {
   const cloudAuthConfigured = isCloudAuthConfigured()
   const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
   const cloudListEnabled = cloudEnvEnabled && cloudAuthConfigured && signedInForCloud && cloudAccessPolicy?.paidCloudAccess
-  const cloudProjects = useQuery('projects:listProjectsForCurrentUserLite', cloudListEnabled ? {} : 'skip')
+  const cloudProjectsResult = useQuery(
+    'projects:listProjectsForCurrentUserLite',
+    cloudListEnabled ? { limit: projectListLimit } : 'skip',
+  )
+  const cloudProjects = cloudProjectsResult?.projects || []
+  const cloudProjectsHasMore = Boolean(cloudProjectsResult?.hasMore)
+
+  const handleLoadMoreProjects = useCallback(() => {
+    setProjectListLimit(prev => prev + PROJECT_LIST_PAGE_SIZE)
+    recordProjectListPageLoaded()
+  }, [])
   const homeHeroDefaults = useQuery('admin:getHomeHeroDefaultsPublic', cloudEnvEnabled ? {} : 'skip')
   const pendingDeleteProjects = useQuery('projects:listPendingDeletionProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
   const markProjectPendingDeletion = useMutation('projects:markProjectPendingDeletion')
@@ -350,7 +364,7 @@ export default function HomeView() {
             </button>
             {cloudProjectsExpanded ? (
               <div className="home-recent-list">
-                {Array.isArray(cloudProjects) && cloudProjects.length > 0 ? cloudProjects.map((project) => (
+                {cloudProjects.length > 0 ? cloudProjects.map((project) => (
                   <button
                     key={String(project._id)}
                     className={`home-recent-item ${String(projectRef?.projectId || '') === String(project._id) ? 'active' : ''}`}
@@ -372,6 +386,15 @@ export default function HomeView() {
                     </div>
                   </button>
                 )) : <div className="home-empty-note">No cloud projects yet.</div>}
+                {cloudProjectsHasMore ? (
+                  <button
+                    type="button"
+                    className="home-load-more"
+                    onClick={handleLoadMoreProjects}
+                  >
+                    Load more
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </>

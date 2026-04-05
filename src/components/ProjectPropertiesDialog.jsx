@@ -34,7 +34,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
   const setProjectHeroOverlayColor = useStore(s => s.setProjectHeroOverlayColor)
   const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
-  const getAssetSignedView = useAction('assets:getAssetSignedView')
+  const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
   const cloudAccessPolicy = useCloudAccessPolicy()
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
   const libraryAssetsArgs = (open && projectRef?.type === 'cloud' && !cloudAssetBlocked)
@@ -59,15 +59,16 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
   const [saving, setSaving] = useState(false)
   const getSignedViewWithCache = useCallback(async (assetId) => {
     if (projectRef?.type !== 'cloud' || !projectRef?.projectId || !assetId) return null
-    return getOrCreateSignedViewRequest({
+    const views = await getOrCreateSignedViewsBatchRequest({
       projectId: projectRef.projectId,
-      assetId,
-      fetcher: () => getAssetSignedView({
+      assetIds: [assetId],
+      fetcher: (missingAssetIds) => getAssetSignedViewsBatch({
         projectId: projectRef.projectId,
-        assetId,
+        assetIds: missingAssetIds,
       }),
     })
-  }, [getAssetSignedView, projectRef?.projectId, projectRef?.type])
+    return views?.[String(assetId)] || null
+  }, [getAssetSignedViewsBatch, projectRef?.projectId, projectRef?.type])
 
   useEffect(() => {
     if (!open) return
