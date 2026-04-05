@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useConvex, useMutation, useQuery } from 'convex/react'
 import useStore from '../../store'
 import useCloudAccessPolicy from '../billing/useCloudAccessPolicy'
+import { recordCollabSubscriptionSuspended } from '../../utils/sessionMetrics'
 
 const cardStyle = {
   border: '1px solid #374151',
@@ -10,18 +11,41 @@ const cardStyle = {
   marginTop: 10,
 }
 
-export default function SharingSettingsSection() {
+export default function SharingSettingsSection({ settingsOpen = true }) {
   const projectRef = useStore(s => s.projectRef)
+  const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const projectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
+  const hasActiveCollaborators = Boolean(cloudSyncContext?.hasActiveCollaborators)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('viewer')
   const [lastInviteUrl, setLastInviteUrl] = useState('')
+  const [seededMembersResult, setSeededMembersResult] = useState(null)
+  const convex = useConvex()
   const cloudAccessPolicy = useCloudAccessPolicy()
 
-  const membersResult = useQuery(
+  const liveMembersResult = useQuery(
     'projectMembers:listProjectMembers',
-    projectId ? { projectId } : 'skip',
+    projectId && settingsOpen && hasActiveCollaborators ? { projectId } : 'skip',
   )
+  const membersResult = liveMembersResult || seededMembersResult
+
+  useEffect(() => {
+    setSeededMembersResult(null)
+  }, [projectId])
+
+  useEffect(() => {
+    if (!settingsOpen || !projectId || hasActiveCollaborators) return
+    let cancelled = false
+    convex.query('projectMembers:listProjectMembers', { projectId })
+      .then((result) => {
+        if (!cancelled) setSeededMembersResult(result || null)
+      })
+      .catch(() => {})
+    recordCollabSubscriptionSuspended()
+    return () => {
+      cancelled = true
+    }
+  }, [convex, hasActiveCollaborators, projectId, settingsOpen])
 
   const inviteProjectMember = useMutation('projectMembers:inviteProjectMember')
   const updateProjectMemberRole = useMutation('projectMembers:updateProjectMemberRole')

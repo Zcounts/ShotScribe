@@ -1,14 +1,35 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { runtimeConfig } from '../config/runtimeConfig'
+import {
+  recordCollabSubscriptionSuspended,
+  recordDeferredSurfaceSubscription,
+  startSessionMetrics,
+  stopSessionMetrics,
+} from '../utils/sessionMetrics'
+
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
 const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
+const SOLO_LIVE_SYNC_DEBOUNCE_MS = 1800
+const COLLABORATOR_MODE_HOLD_MS = 30 * 1000
+const LOCAL_TEXT_EDIT_HOT_WINDOW_MS = 900
 const ensureStoryboardFailureCache = new Map()
+const DIAG_LOCAL_STORAGE_KEY = 'ss_convex_diag'
+const DRAFT_COMMIT_MODE = Boolean(runtimeConfig?.sync?.draftCommitModeEnabled)
+const DRAFT_COMMIT_CHECKPOINT_MS = Math.max(
+  60 * 1000,
+  Number(runtimeConfig?.sync?.draftCommitCheckpointMinutes || 5) * 60 * 1000,
+)
 
 function normalizeEnsureErrorMessage(error) {
   const message = String(error?.message || 'unknown_error')
@@ -32,6 +53,74 @@ async function resolveInlineImageBlob(source) {
   return response.blob()
 }
 
+function normalizeLiveScenePayload(scene) {
+  return {
+    sceneLabel: String(scene?.sceneLabel || '').trim() || 'SCENE',
+    slugline: scene?.slugline || '',
+    location: scene?.location || '',
+    intOrExt: scene?.intOrExt || '',
+    dayNight: scene?.dayNight || '',
+    color: scene?.color || undefined,
+    linkedScriptSceneId: scene?.linkedScriptSceneId || undefined,
+    pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes.map((entry) => String(entry || '')) : [''],
+    pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors.map((entry) => String(entry || '')) : [],
+  }
+}
+
+function normalizeLiveShotPayload(shot) {
+  const customFields = Object.fromEntries(
+    Object.entries(shot || {}).filter(([key]) => String(key).startsWith('custom_')),
+  )
+  return {
+    cameraName: shot?.cameraName || 'Camera 1',
+    focalLength: shot?.focalLength || '',
+    color: shot?.color || undefined,
+    image: shot?.image || undefined,
+    imageAsset: shot?.imageAsset || undefined,
+    specs: shot?.specs || { size: '', type: '', move: '', equip: '' },
+    notes: shot?.notes || '',
+    subject: shot?.subject || '',
+    description: shot?.description || '',
+    cast: shot?.cast || '',
+    checked: !!shot?.checked,
+    intOrExt: shot?.intOrExt || '',
+    dayNight: shot?.dayNight || '',
+    scriptTime: shot?.scriptTime || '',
+    setupTime: shot?.setupTime || '',
+    shotAspectRatio: shot?.shotAspectRatio || '',
+    predictedTakes: shot?.predictedTakes || '',
+    shootTime: shot?.shootTime || '',
+    takeNumber: shot?.takeNumber || '',
+    sound: shot?.sound || '',
+    props: shot?.props || '',
+    frameRate: shot?.frameRate || '',
+    linkedSceneId: shot?.linkedSceneId || undefined,
+    linkedDialogueLine: shot?.linkedDialogueLine || undefined,
+    linkedDialogueOffset: Number.isFinite(shot?.linkedDialogueOffset) ? shot.linkedDialogueOffset : undefined,
+    linkedScriptRangeStart: Number.isFinite(shot?.linkedScriptRangeStart) ? shot.linkedScriptRangeStart : undefined,
+    linkedScriptRangeEnd: Number.isFinite(shot?.linkedScriptRangeEnd) ? shot.linkedScriptRangeEnd : undefined,
+    customFields,
+  }
+}
+
+function stableStringify(value) {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
+}
+
+function isConvexDiagEnabled() {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return false
+  try {
+    if (window.__SS_CONVEX_DIAG__ === true) return true
+    return window.localStorage?.getItem(DIAG_LOCAL_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function CloudSyncCoordinator() {
   const projectRef = useStore(s => s.projectRef)
   const setCloudSyncContext = useStore(s => s.setCloudSyncContext)
@@ -43,12 +132,16 @@ export default function CloudSyncCoordinator() {
   const openCloudProject = useStore(s => s.openCloudProject)
   const updateShotImage = useStore(s => s.updateShotImage)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
+  const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
   const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
+  const activeTab = useStore(s => s.activeTab)
+  const commitDomain = useStore(s => s.commitDomain)
   const convex = useConvex()
   const createProject = useMutation('projects:createProject')
   const ensureStoryboardLiveModel = useMutation('projects:ensureStoryboardLiveModel')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
+  const commitScriptDomain = useMutation('projectSnapshots:commitScriptDomain')
   const upsertLiveScene = useMutation('projectScenesLive:upsertScene')
   const deleteLiveScene = useMutation('projectScenesLive:deleteScene')
   const upsertLiveShot = useMutation('projectShotsLive:upsertShot')
@@ -61,19 +154,69 @@ export default function CloudSyncCoordinator() {
   const cloudUser = useQuery('users:currentUser')
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const cloudProject = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const [presenceProbeHasCollaborators, setPresenceProbeHasCollaborators] = useState(false)
+  const [hasActivatedLiveScenesSubscription, setHasActivatedLiveScenesSubscription] = useState(false)
+  const [hasActivatedLiveShotsSubscription, setHasActivatedLiveShotsSubscription] = useState(false)
+  const shouldSubscribePresence = Boolean(cloudProjectId && presenceProbeHasCollaborators)
+  const presenceRows = useQuery(
+    'presence:listProjectPresence',
+    shouldSubscribePresence ? { projectId: cloudProjectId } : 'skip',
+  )
+  const shouldActivateLiveScenesNow = Boolean(
+    cloudProjectId
+    && Number(cloudProject?.liveModelVersion || 0) >= 1
+    && ['storyboard', 'shotlist', 'script', 'scenes'].includes(String(activeTab || '')),
+  )
+  const shouldActivateLiveShotsNow = Boolean(
+    cloudProjectId
+    && Number(cloudProject?.liveModelVersion || 0) >= 1
+    && ['storyboard', 'shotlist', 'script'].includes(String(activeTab || '')),
+  )
+  const shouldSubscribeLiveScenes = shouldActivateLiveScenesNow || hasActivatedLiveScenesSubscription
+  const shouldSubscribeLiveShots = shouldActivateLiveShotsNow || hasActivatedLiveShotsSubscription
   const liveScenes = useQuery(
     'projectScenesLive:listScenesByProject',
-    cloudProjectId && Number(cloudProject?.liveModelVersion || 0) >= 1 ? { projectId: cloudProjectId } : 'skip',
+    shouldSubscribeLiveScenes ? { projectId: cloudProjectId } : 'skip',
   )
   const liveShots = useQuery(
     'projectShotsLive:listShotsByProject',
-    cloudProjectId && Number(cloudProject?.liveModelVersion || 0) >= 1 ? { projectId: cloudProjectId } : 'skip',
+    shouldSubscribeLiveShots ? { projectId: cloudProjectId } : 'skip',
   )
-  const latestSnapshot = useQuery(
-    'projectSnapshots:getLatestSnapshotForProject',
+  const latestSnapshotHead = useQuery(
+    'projectSnapshots:getLatestSnapshotHeadForProject',
     cloudProjectId ? { projectId: cloudProjectId } : 'skip',
   )
-  const cloudAccessPolicy = useCloudAccessPolicy()
+  useConvexQueryDiagnosticsSafe({
+    component: 'CloudSyncCoordinator',
+    queryName: 'users:currentUser',
+    args: {},
+    result: cloudUser,
+    active: true,
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projects:getProjectById',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: cloudProject,
+    active: Boolean(cloudProjectId),
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projectSnapshots:getLatestSnapshotHeadForProject',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: latestSnapshotHead,
+    active: Boolean(cloudProjectId),
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'CloudSyncCoordinator',
+    queryName: 'presence:listProjectPresence',
+    args: shouldSubscribePresence ? { projectId: cloudProjectId } : 'skip',
+    result: presenceRows,
+    active: shouldSubscribePresence,
+  })
+  // Reuse role from cloudProject query so this component does not mount a
+  // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
+  const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })
   const setLiveModelVersion = useStore(s => s.setLiveModelVersion)
   const applyLiveStoryboardState = useStore(s => s.applyLiveStoryboardState)
 
@@ -84,6 +227,318 @@ export default function CloudSyncCoordinator() {
   const localImageUploadCacheRef = useRef(new Map())
   const liveMigrationRequestedRef = useRef(new Set())
   const liveMigrationFailureRef = useRef(ensureStoryboardFailureCache)
+  const fetchedRemoteSnapshotIdsRef = useRef(new Set())
+  const inFlightRemoteSnapshotIdsRef = useRef(new Set())
+  const liveSceneRowsRef = useRef([])
+  const liveShotRowsRef = useRef([])
+  const pendingLiveSyncRef = useRef(null)
+  const soloLiveSyncTimerRef = useRef(null)
+  const liveSyncFlushInFlightRef = useRef(false)
+  const soloModeRef = useRef(false)
+  const lastCollaboratorSeenAtRef = useRef(0)
+  const modeLabelRef = useRef('unknown')
+  const deferredLiveApplyRef = useRef(null)
+  const deferredLiveApplyTimerRef = useRef(null)
+  const loggedCollabSuspendedRef = useRef(false)
+  const loggedDeferredScenesRef = useRef(false)
+  const loggedDeferredShotsRef = useRef(false)
+
+  useEffect(() => {
+    fetchedRemoteSnapshotIdsRef.current.clear()
+    inFlightRemoteSnapshotIdsRef.current.clear()
+    pendingLiveSyncRef.current = null
+    deferredLiveApplyRef.current = null
+    if (soloLiveSyncTimerRef.current) {
+      window.clearTimeout(soloLiveSyncTimerRef.current)
+      soloLiveSyncTimerRef.current = null
+    }
+    if (deferredLiveApplyTimerRef.current) {
+      window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = null
+    }
+    loggedCollabSuspendedRef.current = false
+    loggedDeferredScenesRef.current = false
+    loggedDeferredShotsRef.current = false
+    setPresenceProbeHasCollaborators(false)
+    setHasActivatedLiveScenesSubscription(false)
+    setHasActivatedLiveShotsSubscription(false)
+  }, [cloudProjectId])
+
+  useEffect(() => {
+    liveSceneRowsRef.current = Array.isArray(liveScenes) ? liveScenes : []
+  }, [liveScenes])
+
+  useEffect(() => {
+    liveShotRowsRef.current = Array.isArray(liveShots) ? liveShots : []
+  }, [liveShots])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (shouldActivateLiveScenesNow && !hasActivatedLiveScenesSubscription) {
+      setHasActivatedLiveScenesSubscription(true)
+    }
+  }, [cloudProjectId, hasActivatedLiveScenesSubscription, shouldActivateLiveScenesNow])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (shouldActivateLiveShotsNow && !hasActivatedLiveShotsSubscription) {
+      setHasActivatedLiveShotsSubscription(true)
+    }
+  }, [cloudProjectId, hasActivatedLiveShotsSubscription, shouldActivateLiveShotsNow])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (hasActivatedLiveScenesSubscription) return
+    if (shouldActivateLiveScenesNow) return
+    if (loggedDeferredScenesRef.current) return
+    loggedDeferredScenesRef.current = true
+    recordDeferredSurfaceSubscription()
+  }, [cloudProjectId, hasActivatedLiveScenesSubscription, shouldActivateLiveScenesNow])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (hasActivatedLiveShotsSubscription) return
+    if (shouldActivateLiveShotsNow) return
+    if (loggedDeferredShotsRef.current) return
+    loggedDeferredShotsRef.current = true
+    recordDeferredSurfaceSubscription()
+  }, [cloudProjectId, hasActivatedLiveShotsSubscription, shouldActivateLiveShotsNow])
+
+  const currentUserId = cloudUser?.user?._id ? String(cloudUser.user._id) : null
+  const otherCollaboratorCount = Array.isArray(presenceRows)
+    ? presenceRows.filter((row) => String(row?.userId || '') !== String(currentUserId || '')).length
+    : null
+  const hasOtherCollaborators = Number(otherCollaboratorCount || 0) > 0
+  useEffect(() => {
+    if (hasOtherCollaborators) {
+      lastCollaboratorSeenAtRef.current = Date.now()
+      if (!presenceProbeHasCollaborators) setPresenceProbeHasCollaborators(true)
+    }
+  }, [hasOtherCollaborators, presenceProbeHasCollaborators])
+  const heldCollaboratorMode = (Date.now() - Number(lastCollaboratorSeenAtRef.current || 0)) < COLLABORATOR_MODE_HOLD_MS
+  const isSoloMode = Boolean(
+    cloudProjectId
+    && cloudAccessPolicy.canCollaborateOnCloudProject
+    && !hasOtherCollaborators
+    && !heldCollaboratorMode,
+  )
+  useEffect(() => {
+    soloModeRef.current = isSoloMode
+  }, [isSoloMode])
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (!presenceProbeHasCollaborators && !loggedCollabSuspendedRef.current) {
+      recordCollabSubscriptionSuspended()
+      loggedCollabSuspendedRef.current = true
+    }
+    if (presenceProbeHasCollaborators) {
+      loggedCollabSuspendedRef.current = false
+    }
+  }, [cloudProjectId, presenceProbeHasCollaborators])
+
+  useEffect(() => {
+    if (!cloudProjectId) return undefined
+    if (presenceProbeHasCollaborators) return undefined
+    let cancelled = false
+    const pollPresence = () => {
+      convex.query('presence:listProjectPresence', { projectId: cloudProjectId })
+        .then((rows) => {
+          if (cancelled) return
+          const hasOthers = Array.isArray(rows) && rows.some((row) => (
+            String(row?.userId || '') !== String(currentUserId || '')
+          ))
+          if (hasOthers) setPresenceProbeHasCollaborators(true)
+        })
+        .catch(() => {})
+    }
+    pollPresence()
+    const interval = window.setInterval(pollPresence, 30000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') pollPresence()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [cloudProjectId, convex, currentUserId, presenceProbeHasCollaborators])
+
+  useEffect(() => {
+    if (!presenceProbeHasCollaborators) return
+    if (hasOtherCollaborators || heldCollaboratorMode) return
+    setPresenceProbeHasCollaborators(false)
+  }, [hasOtherCollaborators, heldCollaboratorMode, presenceProbeHasCollaborators])
+  useEffect(() => {
+    const nextLabel = isSoloMode ? 'solo' : 'collaborative'
+    if (modeLabelRef.current === nextLabel) return
+    if (isConvexDiagEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[cloud-sync] live sync mode switched', {
+        projectId: String(cloudProjectId || ''),
+        mode: nextLabel,
+        otherCollaboratorCount: Number(otherCollaboratorCount || 0),
+        heldCollaboratorMode,
+      })
+    }
+    modeLabelRef.current = nextLabel
+  }, [cloudProjectId, heldCollaboratorMode, isSoloMode, otherCollaboratorCount])
+
+  const applyLiveStoryboardSync = useCallback(async ({ projectId, scenes, storyboardSceneOrder }) => {
+    const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
+      ? liveSceneRowsRef.current
+      : await convex.query('projectScenesLive:listScenesByProject', { projectId })
+    const existingShots = Array.isArray(liveShotRowsRef.current) && liveShotRowsRef.current.length > 0
+      ? liveShotRowsRef.current
+      : await convex.query('projectShotsLive:listShotsByProject', { projectId })
+    const sceneOrder = Array.isArray(storyboardSceneOrder) && storyboardSceneOrder.length > 0
+      ? storyboardSceneOrder
+      : (scenes || []).map((scene) => scene.id)
+    const orderBySceneId = new Map(sceneOrder.map((id, index) => [String(id), index]))
+    const existingScenesById = new Map((existingScenes || []).map((scene) => [String(scene.sceneId), scene]))
+    const existingShotsById = new Map((existingShots || []).map((shot) => [String(shot.shotId), shot]))
+    const nextSceneIds = new Set()
+    const nextShotIds = new Set()
+    const ops = {
+      upsertScenes: 0,
+      skipScenes: 0,
+      upsertShots: 0,
+      skipShots: 0,
+      deleteScenes: 0,
+      deleteShots: 0,
+    }
+
+    for (const scene of (scenes || [])) {
+      const sceneId = String(scene.id)
+      nextSceneIds.add(sceneId)
+      const nextOrder = orderBySceneId.has(sceneId) ? orderBySceneId.get(sceneId) : Number.MAX_SAFE_INTEGER
+      const nextPayload = normalizeLiveScenePayload(scene)
+      const existingScene = existingScenesById.get(sceneId)
+      const shouldUpsertScene = !existingScene
+        || Number(existingScene.order) !== Number(nextOrder)
+        || stableStringify(normalizeLiveScenePayload(existingScene)) !== stableStringify(nextPayload)
+      if (shouldUpsertScene) {
+        await upsertLiveScene({
+          projectId,
+          sceneId,
+          order: nextOrder,
+          payload: scene,
+        })
+        ops.upsertScenes += 1
+      } else {
+        ops.skipScenes += 1
+      }
+      for (const [index, shot] of (scene.shots || []).entries()) {
+        const shotId = String(shot.id)
+        nextShotIds.add(shotId)
+        const nextShotPayload = normalizeLiveShotPayload(shot)
+        const existingShot = existingShotsById.get(shotId)
+        const shouldUpsertShot = !existingShot
+          || String(existingShot.sceneId || '') !== sceneId
+          || Number(existingShot.order) !== Number(index)
+          || stableStringify(normalizeLiveShotPayload(existingShot)) !== stableStringify(nextShotPayload)
+        if (!shouldUpsertShot) {
+          ops.skipShots += 1
+          continue
+        }
+        await upsertLiveShot({
+          projectId,
+          sceneId,
+          shotId,
+          order: index,
+          payload: shot,
+        })
+        ops.upsertShots += 1
+      }
+    }
+
+    await Promise.all(
+      (existingScenes || [])
+        .filter((scene) => !nextSceneIds.has(String(scene.sceneId)))
+        .map((scene) => {
+          ops.deleteScenes += 1
+          return deleteLiveScene({ projectId, sceneId: String(scene.sceneId) })
+        }),
+    )
+    await Promise.all(
+      (existingShots || [])
+        .filter((shot) => !nextShotIds.has(String(shot.shotId)))
+        .map((shot) => {
+          ops.deleteShots += 1
+          return deleteLiveShot({ projectId, shotId: String(shot.shotId) })
+        }),
+    )
+
+    if (isConvexDiagEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[cloud-sync] live storyboard sync ops', {
+        projectId: String(projectId),
+        soloMode: soloModeRef.current,
+        ...ops,
+      })
+    }
+  }, [convex, deleteLiveScene, deleteLiveShot, upsertLiveScene, upsertLiveShot])
+
+  const flushPendingLiveStoryboardSync = useCallback(async ({ force = false } = {}) => {
+    if (soloLiveSyncTimerRef.current) {
+      window.clearTimeout(soloLiveSyncTimerRef.current)
+      soloLiveSyncTimerRef.current = null
+    }
+    if (liveSyncFlushInFlightRef.current) return
+    const pending = pendingLiveSyncRef.current
+    if (!pending) return
+    if (!force && soloModeRef.current && Date.now() - Number(pending.enqueuedAt || 0) < SOLO_LIVE_SYNC_DEBOUNCE_MS) return
+    liveSyncFlushInFlightRef.current = true
+    try {
+      pendingLiveSyncRef.current = null
+      await applyLiveStoryboardSync(pending)
+    } catch (error) {
+      pendingLiveSyncRef.current = pending
+      if (isConvexDiagEnabled()) {
+        // eslint-disable-next-line no-console
+        console.warn('[cloud-sync] solo live sync flush failed', {
+          projectId: String(pending?.projectId || ''),
+          message: error?.message || 'unknown_error',
+        })
+      }
+    } finally {
+      liveSyncFlushInFlightRef.current = false
+    }
+  }, [applyLiveStoryboardSync])
+
+  const applyDeferredLiveStoryboardState = useCallback(() => {
+    if (!deferredLiveApplyRef.current) return
+    const now = Date.now()
+    const msSinceLocalStoryboardEdit = now - Number(useStore.getState().lastStoryboardEditAt || 0)
+    if (useStore.getState().hasUnsavedChanges || msSinceLocalStoryboardEdit < LOCAL_TEXT_EDIT_HOT_WINDOW_MS) {
+      const waitMs = Math.max(120, LOCAL_TEXT_EDIT_HOT_WINDOW_MS - msSinceLocalStoryboardEdit + 40)
+      if (deferredLiveApplyTimerRef.current) window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = window.setTimeout(() => {
+        applyDeferredLiveStoryboardState()
+      }, waitMs)
+      return
+    }
+    const payload = deferredLiveApplyRef.current
+    deferredLiveApplyRef.current = null
+    if (deferredLiveApplyTimerRef.current) {
+      window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = null
+    }
+    applyLiveStoryboardState(payload)
+    if (isConvexDiagEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[cloud-sync] replayed deferred live storyboard apply', {
+        projectId: String(cloudProjectId || ''),
+        sceneCount: Array.isArray(payload?.scenes) ? payload.scenes.length : 0,
+        shotCount: Array.isArray(payload?.shots) ? payload.shots.length : 0,
+      })
+    }
+  }, [applyLiveStoryboardState, cloudProjectId])
+
+  useEffect(() => {
+    startSessionMetrics()
+    return () => stopSessionMetrics()
+  }, [])
 
   useEffect(() => {
     setCloudRepositoryAdapter({
@@ -121,63 +576,67 @@ export default function CloudSyncCoordinator() {
       canSync: isCloudProject && cloudAccessPolicy.canEditCloudProject,
       cloudWritesEnabled: cloudAccessPolicy.canEditCloudProject,
       runSnapshotMutation: createSnapshot,
+      runScriptDomainMutation: commitScriptDomain,
       syncLiveStoryboardState: async ({ projectId, scenes, storyboardSceneOrder }) => {
-        const existingScenes = await convex.query('projectScenesLive:listScenesByProject', { projectId })
-        const existingShots = await convex.query('projectShotsLive:listShotsByProject', { projectId })
-        const sceneOrder = Array.isArray(storyboardSceneOrder) && storyboardSceneOrder.length > 0
-          ? storyboardSceneOrder
-          : (scenes || []).map((scene) => scene.id)
-        const orderBySceneId = new Map(sceneOrder.map((id, index) => [String(id), index]))
-
-        for (const scene of (scenes || [])) {
-          const sceneId = String(scene.id)
-          await upsertLiveScene({
-            projectId,
-            sceneId,
-            order: orderBySceneId.has(sceneId) ? orderBySceneId.get(sceneId) : Number.MAX_SAFE_INTEGER,
-            payload: scene,
-          })
-          for (const [index, shot] of (scene.shots || []).entries()) {
-            await upsertLiveShot({
-              projectId,
-              sceneId,
-              shotId: String(shot.id),
-              order: index,
-              payload: shot,
-            })
-          }
+        const payload = {
+          projectId,
+          scenes: scenes || [],
+          storyboardSceneOrder: storyboardSceneOrder || [],
+          enqueuedAt: Date.now(),
         }
-
-        const nextSceneIds = new Set((scenes || []).map((scene) => String(scene.id)))
-        await Promise.all(
-          (existingScenes || [])
-            .filter((scene) => !nextSceneIds.has(String(scene.sceneId)))
-            .map((scene) => deleteLiveScene({ projectId, sceneId: String(scene.sceneId) })),
-        )
-
-        const nextShotIds = new Set((scenes || []).flatMap((scene) => (scene.shots || []).map((shot) => String(shot.id))))
-        await Promise.all(
-          (existingShots || [])
-            .filter((shot) => !nextShotIds.has(String(shot.shotId)))
-            .map((shot) => deleteLiveShot({ projectId, shotId: String(shot.shotId) })),
-        )
+        if (!soloModeRef.current) {
+          pendingLiveSyncRef.current = null
+          await applyLiveStoryboardSync(payload)
+          return
+        }
+        pendingLiveSyncRef.current = payload
+        if (soloLiveSyncTimerRef.current) window.clearTimeout(soloLiveSyncTimerRef.current)
+        soloLiveSyncTimerRef.current = window.setTimeout(() => {
+          flushPendingLiveStoryboardSync({ force: true })
+        }, SOLO_LIVE_SYNC_DEBOUNCE_MS)
       },
-      currentUserId: cloudUser?.user?._id ? String(cloudUser.user._id) : null,
+      currentUserId,
       collaborationMode: isCloudProject && cloudAccessPolicy.canCollaborateOnCloudProject,
+      hasActiveCollaborators: hasOtherCollaborators,
     })
   }, [
+    applyLiveStoryboardSync,
     cloudAccessPolicy.canCollaborateOnCloudProject,
     cloudAccessPolicy.canEditCloudProject,
-    cloudUser?.user?._id,
-    convex,
+    currentUserId,
+    commitScriptDomain,
     createSnapshot,
-    deleteLiveScene,
-    deleteLiveShot,
+    flushPendingLiveStoryboardSync,
+    hasOtherCollaborators,
     projectRef?.type,
     setCloudSyncContext,
-    upsertLiveScene,
-    upsertLiveShot,
   ])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (otherCollaboratorCount == null) return
+    if (otherCollaboratorCount <= 0) return
+    flushPendingLiveStoryboardSync({ force: true })
+    if (DRAFT_COMMIT_MODE) {
+      commitDomain('storyboard', { reason: 'collaborator_join' })
+        .finally(() => flushCloudSync({ reason: 'collaborator_join' }))
+    }
+  }, [cloudProjectId, commitDomain, flushCloudSync, flushPendingLiveStoryboardSync, otherCollaboratorCount])
+
+  useEffect(() => {
+    return () => {
+      if (soloLiveSyncTimerRef.current) {
+        window.clearTimeout(soloLiveSyncTimerRef.current)
+        soloLiveSyncTimerRef.current = null
+      }
+      pendingLiveSyncRef.current = null
+      deferredLiveApplyRef.current = null
+      if (deferredLiveApplyTimerRef.current) {
+        window.clearTimeout(deferredLiveApplyTimerRef.current)
+        deferredLiveApplyTimerRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!cloudProjectId || !cloudProject) return
@@ -259,31 +718,118 @@ export default function CloudSyncCoordinator() {
     if (!cloudProjectId) return
     if (Number(cloudProject?.liveModelVersion || 0) < 1) return
     if (!Array.isArray(liveScenes) || !Array.isArray(liveShots)) return
+    const now = Date.now()
+    const msSinceLocalStoryboardEdit = now - Number(lastStoryboardEditAt || 0)
+    const localEditIsHot = msSinceLocalStoryboardEdit < LOCAL_TEXT_EDIT_HOT_WINDOW_MS
+    if (hasUnsavedChanges || localEditIsHot) {
+      deferredLiveApplyRef.current = { scenes: liveScenes, shots: liveShots }
+      if (isConvexDiagEnabled()) {
+        // eslint-disable-next-line no-console
+        console.debug('[cloud-sync] deferred live storyboard apply while local edits are pending', {
+          projectId: String(cloudProjectId),
+          liveSceneCount: liveScenes.length,
+          liveShotCount: liveShots.length,
+          hasUnsavedChanges,
+          msSinceLocalStoryboardEdit,
+        })
+      }
+      applyDeferredLiveStoryboardState()
+      return
+    }
+    deferredLiveApplyRef.current = null
+    if (deferredLiveApplyTimerRef.current) {
+      window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = null
+    }
     applyLiveStoryboardState({ scenes: liveScenes, shots: liveShots })
-  }, [applyLiveStoryboardState, cloudProject?.liveModelVersion, cloudProjectId, liveScenes, liveShots])
+  }, [
+    applyDeferredLiveStoryboardState,
+    applyLiveStoryboardState,
+    cloudProject?.liveModelVersion,
+    cloudProjectId,
+    hasUnsavedChanges,
+    lastStoryboardEditAt,
+    liveScenes,
+    liveShots,
+  ])
 
   useEffect(() => {
     if (projectRef?.type !== 'cloud') return undefined
     const flush = () => {
-      if (!hasUnsavedChanges) return
-      flushCloudSync({ reason: 'manual' })
+      // Read live state rather than a stale closure so we catch the window
+      // between local autosave clearing hasUnsavedChanges (≈2.5 s) and the
+      // cloud sync debounce firing (≈8 s).
+      const s = useStore.getState()
+      const needsSync =
+        s.hasUnsavedChanges ||
+        (s.saveSyncState?.status === 'saved_locally' &&
+          s.saveSyncState?.mode !== 'cloud_blocked')
+      if (!needsSync) return
+      flushCloudSync({ reason: 'lifecycle' })
+      flushPendingLiveStoryboardSync({ force: true })
     }
     window.addEventListener('beforeunload', flush)
     window.addEventListener('pagehide', flush)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushPendingLiveStoryboardSync({ force: true })
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       window.removeEventListener('beforeunload', flush)
       window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [flushCloudSync, hasUnsavedChanges, projectRef?.type])
+  }, [flushCloudSync, flushPendingLiveStoryboardSync, projectRef?.type])
 
   useEffect(() => {
-    if (!cloudProjectId || !latestSnapshot?._id || !latestSnapshot?.payload) return
-    applyIncomingCloudSnapshot({
-      projectId: cloudProjectId,
-      snapshotId: String(latestSnapshot._id),
-      payload: latestSnapshot.payload,
-    })
-  }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
+    if (!DRAFT_COMMIT_MODE) return undefined
+    if (projectRef?.type !== 'cloud') return undefined
+    const timer = window.setInterval(() => {
+      flushCloudSync({ reason: 'periodic_checkpoint' })
+    }, DRAFT_COMMIT_CHECKPOINT_MS)
+    return () => window.clearInterval(timer)
+  }, [flushCloudSync, projectRef?.type])
+
+  useEffect(() => {
+    const latestSnapshotId = latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null
+    if (!cloudProjectId || !latestSnapshotId) return
+    if (String(projectRef?.snapshotId || '') === latestSnapshotId) return
+    if (fetchedRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
+    if (inFlightRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
+
+    let cancelled = false
+    inFlightRemoteSnapshotIdsRef.current.add(latestSnapshotId)
+
+    convex
+      .query('projectSnapshots:getLatestSnapshotForProject', { projectId: cloudProjectId })
+      .then((snapshot) => {
+        if (cancelled || !snapshot?._id || !snapshot?.payload) return
+        const snapshotId = String(snapshot._id)
+        fetchedRemoteSnapshotIdsRef.current.add(snapshotId)
+        applyIncomingCloudSnapshot({
+          projectId: cloudProjectId,
+          snapshotId,
+          payload: snapshot.payload,
+        })
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn('[cloud-sync] latest snapshot fetch failed', {
+            projectId: cloudProjectId,
+            latestSnapshotId,
+            message: error?.message || 'unknown_error',
+          })
+        }
+      })
+      .finally(() => {
+        inFlightRemoteSnapshotIdsRef.current.delete(latestSnapshotId)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyIncomingCloudSnapshot, cloudProjectId, convex, latestSnapshotHead?.latestSnapshotId, projectRef?.snapshotId])
 
   useEffect(() => {
     if (!cloudProjectId || hasUnsavedChanges) return

@@ -1,10 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useConvex, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Avatar, AvatarFallback } from './ui/avatar'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { recordCollabSubscriptionSuspended } from '../utils/sessionMetrics'
+
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
 
 function formatTimestamp(iso) {
   if (!iso) return 'Not recorded yet'
@@ -42,6 +48,7 @@ export default function SaveSyncStatusControl({
   onSaveToCloudNow,
   onWorkLocalOnly,
   actionBusy = false,
+  onOpenChange,
 }) {
   const projectRef = useStore((state) => state.projectRef)
   const hasUnsavedChanges = useStore((state) => state.hasUnsavedChanges)
@@ -53,6 +60,7 @@ export default function SaveSyncStatusControl({
   const pendingRemoteSnapshot = useStore((state) => state.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore((state) => state.applyPendingRemoteSnapshot)
   const clearPendingRemoteSnapshot = useStore((state) => state.clearPendingRemoteSnapshot)
+  const convex = useConvex()
 
   const [open, setOpen] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -61,6 +69,7 @@ export default function SaveSyncStatusControl({
   const [inviteRole, setInviteRole] = useState('viewer')
   const [shareBusy, setShareBusy] = useState(false)
   const [shareMessage, setShareMessage] = useState('')
+  const [seededMembersResult, setSeededMembersResult] = useState(null)
   const panelRef = useRef(null)
 
   const isCloudProject = projectRef?.type === 'cloud'
@@ -70,10 +79,70 @@ export default function SaveSyncStatusControl({
   const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
   const cloudAvailableButNotEnabled = cloudEnvEnabled && !isCloudProject
 
-  const cloudProjects = useQuery('projects:listProjectsForCurrentUser', cloudEnvEnabled && signedInForCloud ? {} : 'skip')
-  const membersResult = useQuery('projectMembers:listProjectMembers', projectId ? { projectId } : 'skip')
-  const presenceRows = useQuery('presence:listProjectPresence', projectId ? { projectId } : 'skip')
-  const lockRows = useQuery('screenplayLocks:listProjectLocks', projectId ? { projectId } : 'skip')
+  const shouldSubscribeCloudLists = open && cloudEnvEnabled && signedInForCloud
+  const hasActiveCollaborators = Boolean(cloudSyncContext?.hasActiveCollaborators)
+  const shouldSubscribeProjectCollab = open && Boolean(projectId) && hasActiveCollaborators
+  const shouldSeedMembers = open && Boolean(projectId)
+  const cloudProjectsArgs = shouldSubscribeCloudLists ? {} : 'skip'
+  const membersArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
+  const presenceArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
+  const locksArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
+  const cloudProjects = useQuery('projects:listProjectsForCurrentUserLite', cloudProjectsArgs)
+  const liveMembersResult = useQuery('projectMembers:listProjectMembers', membersArgs)
+  const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
+  const lockRows = useQuery('screenplayLocks:listProjectLocks', locksArgs)
+  const membersResult = liveMembersResult || seededMembersResult
+
+  useEffect(() => {
+    if (!shouldSeedMembers || hasActiveCollaborators) return
+    let cancelled = false
+    convex.query('projectMembers:listProjectMembers', { projectId })
+      .then((result) => {
+        if (!cancelled) setSeededMembersResult(result || null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [convex, hasActiveCollaborators, projectId, shouldSeedMembers])
+
+  useEffect(() => {
+    if (!open || !projectId || hasActiveCollaborators) return
+    recordCollabSubscriptionSuspended()
+  }, [hasActiveCollaborators, open, projectId])
+
+  useConvexQueryDiagnosticsSafe({
+    component: 'SaveSyncStatusControl',
+    queryName: 'projects:listProjectsForCurrentUserLite',
+    args: cloudProjectsArgs,
+    result: cloudProjects,
+    active: cloudProjectsArgs !== 'skip',
+    hidden: !open,
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'SaveSyncStatusControl',
+    queryName: 'projectMembers:listProjectMembers',
+    args: membersArgs,
+    result: membersResult,
+    active: membersArgs !== 'skip',
+    hidden: !open,
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'SaveSyncStatusControl',
+    queryName: 'presence:listProjectPresence',
+    args: presenceArgs,
+    result: presenceRows,
+    active: presenceArgs !== 'skip',
+    hidden: !open,
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'SaveSyncStatusControl',
+    queryName: 'screenplayLocks:listProjectLocks',
+    args: locksArgs,
+    result: lockRows,
+    active: locksArgs !== 'skip',
+    hidden: !open,
+  })
 
   const inviteProjectMember = useMutation('projectMembers:inviteProjectMember')
   const updateProjectMemberRole = useMutation('projectMembers:updateProjectMemberRole')
@@ -157,6 +226,14 @@ export default function SaveSyncStatusControl({
       document.removeEventListener('keydown', onEsc)
     }
   }, [open])
+
+  useEffect(() => {
+    onOpenChange?.(open)
+  }, [open, onOpenChange])
+
+  useEffect(() => {
+    setSeededMembersResult(null)
+  }, [projectId])
 
   const handleOpenCloudProject = async (cloudProjectId) => {
     if (!cloudProjectId) return

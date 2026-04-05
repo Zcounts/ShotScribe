@@ -14,6 +14,11 @@ function readOptionalEnv(key, fallback = '') {
 
 const cloudEnabledFromEnv = parseBooleanEnv(readOptionalEnv('VITE_ENABLE_CLOUD_FEATURES', 'false'), false)
 const legacyScriptTabFallbackEnabled = parseBooleanEnv(readOptionalEnv('VITE_ENABLE_LEGACY_SCRIPT_TAB', 'false'), false)
+const draftCommitModeEnabled = parseBooleanEnv(readOptionalEnv('VITE_ENABLE_DRAFT_COMMIT_MODE', 'false'), false)
+const draftCommitCheckpointMinutes = Math.max(
+  1,
+  Number.parseInt(readOptionalEnv('VITE_DRAFT_COMMIT_CHECKPOINT_MINUTES', '5'), 10) || 5,
+)
 
 export const APP_MODE_FLAGS = Object.freeze({
   localOnly: !cloudEnabledFromEnv,
@@ -24,6 +29,10 @@ export const runtimeConfig = Object.freeze({
   appMode: APP_MODE_FLAGS,
   scriptDocument: Object.freeze({
     legacyFallbackEnabled: legacyScriptTabFallbackEnabled,
+  }),
+  sync: Object.freeze({
+    draftCommitModeEnabled,
+    draftCommitCheckpointMinutes,
   }),
   convexUrl: readOptionalEnv('VITE_CONVEX_URL', ''),
   clerkPublishableKey: readOptionalEnv('VITE_CLERK_PUBLISHABLE_KEY', ''),

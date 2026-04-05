@@ -256,16 +256,45 @@ export const listProjectLibraryAssets = query({
     await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
     await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
 
-    const rows = await ctx.db
-      .query('projectAssets')
-      .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
-      .collect()
-
     const kind = args.kind || 'storyboard_image'
-    const items = rows
-      .filter((row: any) => !row.deletedAt && row.kind === kind)
-      .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-      .slice(0, Math.max(1, Math.min(Number(args.limit || 80), 200)))
+    const safeLimit = Math.max(1, Math.min(Number(args.limit || 80), 200))
+
+    // Fast path for current rows (explicitly marked active).
+    const activeRows = await ctx.db
+      .query('projectAssets')
+      .withIndex('by_project_id_kind_delete_status_created_at', (q: any) => (
+        q
+          .eq('projectId', args.projectId)
+          .eq('kind', kind)
+          .eq('deleteStatus', 'active')
+      ))
+      .order('desc')
+      .take(safeLimit)
+
+    // Legacy compatibility: include rows created before deleteStatus was
+    // standardized, while keeping read volume bounded.
+    const needsLegacyRows = activeRows.length < safeLimit
+    const legacyRows = needsLegacyRows
+      ? await ctx.db
+          .query('projectAssets')
+          .withIndex('by_project_id_kind_created_at', (q: any) => (
+            q
+              .eq('projectId', args.projectId)
+              .eq('kind', kind)
+          ))
+          .order('desc')
+          .take(safeLimit * 2)
+      : []
+
+    const rowsById = new Map<string, any>()
+    for (const row of activeRows) rowsById.set(String(row._id), row)
+    for (const row of legacyRows) {
+      if (rowsById.has(String(row._id))) continue
+      if (row.deletedAt || row.deleteStatus === 'soft_deleted' || row.deleteStatus === 'hard_deleted') continue
+      rowsById.set(String(row._id), row)
+      if (rowsById.size >= safeLimit) break
+    }
+    const items = Array.from(rowsById.values()).slice(0, safeLimit)
 
     return items.map((asset: any) => ({
       assetId: asset._id,
@@ -298,33 +327,19 @@ export const getAssetRecordForSignedView = internalQuery({
   },
 })
 
-export const getAssetReadAuthorization = internalQuery({
-  args: {
-    projectId: v.id('projects'),
-  },
-  handler: async (ctx, args) => {
-    const currentUserId = await requireCurrentUserId(ctx)
-    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
-    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
-    return { ok: true }
-  },
-})
-
 export const getAssetSignedViewsBatch = action({
   args: {
     projectId: v.id('projects'),
     assetIds: v.array(v.id('projectAssets')),
   },
   handler: async (ctx, args) => {
-    await ctx.runQuery(internal.assets.getAssetReadAuthorization, {
-      projectId: args.projectId,
-    })
-
-    const requested = new Set(args.assetIds.map((id: any) => String(id)))
+    const dedupedAssetIds = Array.from(new Map(args.assetIds.map((id: any) => [String(id), id])).values())
+    const requested = new Set(dedupedAssetIds.map((id: any) => String(id)))
     if (requested.size === 0) return {}
 
     const rows = await ctx.runQuery(internal.assets.getProjectAssetRowsForBatchRead, {
       projectId: args.projectId,
+      assetIds: dedupedAssetIds,
     })
     const matched = rows.filter((row: any) => requested.has(String(row.assetId)))
 
@@ -356,14 +371,17 @@ export const getAssetSignedViewsBatch = action({
 export const getProjectAssetRowsForBatchRead = internalQuery({
   args: {
     projectId: v.id('projects'),
+    assetIds: v.array(v.id('projectAssets')),
   },
   handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query('projectAssets')
-      .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
-      .collect()
+    const currentUserId = await requireCurrentUserId(ctx)
+    await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
+
+    const dedupedAssetIds = Array.from(new Map(args.assetIds.map((id: any) => [String(id), id])).values())
+    const rows = await Promise.all(dedupedAssetIds.map((assetId) => ctx.db.get(assetId)))
     return rows
-      .filter((row: any) => !row.deletedAt)
+      .filter((row: any) => row && String(row.projectId) === String(args.projectId) && !row.deletedAt)
       .map((row: any) => ({
         assetId: row._id,
         provider: row.provider || 'convex_storage',
@@ -545,15 +563,19 @@ export const getRecentlyDeletedLibraryAssets = query({
     await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
     await assertCanAccessCloudAssets(ctx, currentUserId, args.projectId)
 
+    const safeLimit = Math.max(1, Math.min(Number(args.limit || 20), 100))
     const rows = await ctx.db
       .query('projectAssets')
-      .withIndex('by_project_id', (q: any) => q.eq('projectId', args.projectId))
-      .collect()
+      .withIndex('by_project_id_delete_status_deleted_at', (q: any) => (
+        q
+          .eq('projectId', args.projectId)
+          .eq('deleteStatus', 'soft_deleted')
+      ))
+      .order('desc')
+      .take(safeLimit)
 
     return rows
-      .filter((row: any) => row.deleteStatus === 'soft_deleted' && !!row.deletedAt)
-      .sort((a: any, b: any) => Number(b.deletedAt || 0) - Number(a.deletedAt || 0))
-      .slice(0, Math.max(1, Math.min(Number(args.limit || 20), 100)))
+      .filter((row: any) => !!row.deletedAt)
       .map((asset: any) => ({
         assetId: asset._id,
         sourceName: asset.sourceName || null,

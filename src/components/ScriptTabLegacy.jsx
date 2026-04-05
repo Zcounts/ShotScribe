@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useConvex, useMutation, useQuery } from 'convex/react'
 import { Lock, Pilcrow, Ruler, Save, Settings2, Unlock } from 'lucide-react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
@@ -413,6 +413,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const derivedShotLinksByScene = useStore(s => s.derivedScriptData?.compatibility?.shotLinkIndexBySceneId || {})
   const projectRef = useStore(s => s.projectRef)
+  const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const getProjectData = useStore(s => s.getProjectData)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
   const scriptDocument = useStore(s => s.scriptDocument)
@@ -422,15 +423,33 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
-  const cloudUser = useQuery('users:currentUser')
-  const presenceRows = useQuery('presence:listProjectPresence', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
-  const locks = useQuery('screenplayLocks:listProjectLocks', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const [polledHasCollaborators, setPolledHasCollaborators] = useState(false)
+  const storeHasCollaborators = Boolean(cloudSyncContext?.hasActiveCollaborators)
+  const hasActiveCollaborators = Boolean(storeHasCollaborators || polledHasCollaborators)
+  const presenceArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
+  const locksArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
+  const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
+  const locks = useQuery('screenplayLocks:listProjectLocks', locksArgs)
   const heartbeatPresence = useMutation('presence:heartbeat')
   const acquireSceneLock = useMutation('screenplayLocks:acquireSceneLock')
   const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
   const pruneOrphanedAssets = useMutation('assets:pruneOrphanedAssets')
   const cloudAccessPolicy = useCloudAccessPolicy()
+  useConvexQueryDiagnosticsSafe({
+    component: 'ScriptTabLegacy',
+    queryName: 'presence:listProjectPresence',
+    args: presenceArgs,
+    result: presenceRows,
+    active: presenceArgs !== 'skip',
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'ScriptTabLegacy',
+    queryName: 'screenplayLocks:listProjectLocks',
+    args: locksArgs,
+    result: locks,
+    active: locksArgs !== 'skip',
+  })
 
   const [view, setView] = useState('write')
   const [activeSceneId, setActiveSceneId] = useState(null)
@@ -535,8 +554,44 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, view])
 
   useEffect(() => {
-    if (!cloudProjectId) return
+    if (!cloudProjectId) {
+      setPolledHasCollaborators(false)
+      return undefined
+    }
+    if (storeHasCollaborators) {
+      setPolledHasCollaborators(true)
+      return undefined
+    }
+    let cancelled = false
+    const poll = () => {
+      convex.query('presence:listProjectPresence', { projectId: cloudProjectId })
+        .then((rows) => {
+          if (cancelled) return
+          const hasOthers = Array.isArray(rows) && rows.some((row) => (
+            String(row?.userId || '') !== String(cloudSyncContext?.currentUserId || '')
+          ))
+          setPolledHasCollaborators(hasOthers)
+        })
+        .catch(() => {})
+    }
+    poll()
+    const timer = window.setInterval(poll, 30000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') poll()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [cloudProjectId, cloudSyncContext?.currentUserId, convex, storeHasCollaborators])
+
+  useEffect(() => {
+    if (!cloudProjectId || !hasActiveCollaborators) return
     const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      recordPresenceHeartbeat()
       heartbeatPresence({
         projectId: cloudProjectId,
         sceneId: activeSceneId || undefined,
@@ -544,9 +599,21 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       }).catch(() => {})
     }
     tick()
-    const timer = window.setInterval(tick, 4000)
-    return () => window.clearInterval(timer)
-  }, [activeSceneId, cloudProjectId, heartbeatPresence, view])
+    const timer = window.setInterval(tick, 6000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [activeSceneId, cloudProjectId, hasActiveCollaborators, heartbeatPresence, view])
+
+  useEffect(() => {
+    if (!cloudProjectId || hasActiveCollaborators) return
+    recordCollabSubscriptionSuspended()
+  }, [cloudProjectId, hasActiveCollaborators])
 
   useEffect(() => {
     if (!isDesktopDown) {
@@ -752,7 +819,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
     ? (unifiedSelectedNode.blockType || 'action')
     : (selectedBlockData?.type || 'action')
   const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
-  const currentUserId = cloudUser?.user ? String(cloudUser.user._id) : null
+  const currentUserId = cloudSyncContext?.currentUserId ? String(cloudSyncContext.currentUserId) : null
   const lockBySceneId = useMemo(() => {
     const map = {}
     ;(locks || []).forEach((lock) => {
