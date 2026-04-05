@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useConvex, useMutation, useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { Lock, Pilcrow, Ruler, Save, Settings2, Unlock } from 'lucide-react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
@@ -35,11 +35,7 @@ import useResponsiveViewport from '../hooks/useResponsiveViewport'
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -425,7 +421,6 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
   const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
   const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
-
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
   const [polledHasCollaborators, setPolledHasCollaborators] = useState(false)
@@ -567,30 +562,9 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       setPolledHasCollaborators(true)
       return undefined
     }
-    let cancelled = false
-    const poll = () => {
-      convex.query('presence:listProjectPresence', { projectId: cloudProjectId })
-        .then((rows) => {
-          if (cancelled) return
-          const hasOthers = Array.isArray(rows) && rows.some((row) => (
-            String(row?.userId || '') !== String(cloudSyncContext?.currentUserId || '')
-          ))
-          setPolledHasCollaborators(hasOthers)
-        })
-        .catch(() => {})
-    }
-    poll()
-    const timer = window.setInterval(poll, 30000)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') poll()
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [cloudProjectId, cloudSyncContext?.currentUserId, convex, storeHasCollaborators])
+    setPolledHasCollaborators(false)
+    return undefined
+  }, [cloudProjectId, storeHasCollaborators])
 
   useEffect(() => {
     if (!cloudProjectId || !hasActiveCollaborators) return
