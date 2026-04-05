@@ -612,6 +612,30 @@ function isInlineStoryboardImageRef(value) {
   return trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('file:')
 }
 
+function hasPersistedHeroImage(heroImage) {
+  if (!heroImage || typeof heroImage !== 'object') return false
+  if (typeof heroImage.image === 'string' && heroImage.image.trim()) return true
+  if (typeof heroImage?.imageAsset?.thumb === 'string' && heroImage.imageAsset.thumb.trim()) return true
+  if (typeof heroImage?.imageAsset?.cloud?.assetId === 'string' && heroImage.imageAsset.cloud.assetId.trim()) return true
+  return false
+}
+
+function normalizeProjectHeroImage(heroImagePayload) {
+  if (!hasPersistedHeroImage(heroImagePayload)) return null
+  const image = heroImagePayload?.imageAsset?.thumb || heroImagePayload?.image || null
+  const imageAsset = heroImagePayload?.imageAsset
+    ? {
+        version: heroImagePayload.imageAsset.version || 1,
+        mime: heroImagePayload.imageAsset.mime || 'image/webp',
+        thumb: heroImagePayload.imageAsset.thumb || image || null,
+        full: null,
+        meta: heroImagePayload.imageAsset.meta || null,
+        cloud: heroImagePayload.imageAsset.cloud || null,
+      }
+    : null
+  return { image, imageAsset }
+}
+
 async function materializeCloudImagesForLocalSave({
   payload,
   projectRef,
@@ -2237,22 +2261,7 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave('project_logline')
   },
   setProjectHeroImage: (heroImagePayload) => {
-    const image = heroImagePayload?.imageAsset?.thumb || heroImagePayload?.image || null
-    const imageAsset = heroImagePayload?.imageAsset
-      ? {
-          version: heroImagePayload.imageAsset.version || 1,
-          mime: heroImagePayload.imageAsset.mime || 'image/webp',
-          thumb: heroImagePayload.imageAsset.thumb || image || null,
-          full: null,
-          meta: heroImagePayload.imageAsset.meta || null,
-          cloud: heroImagePayload.imageAsset.cloud || null,
-        }
-      : null
-    set({
-      projectHeroImage: image
-        ? { image, imageAsset }
-        : null,
-    })
+    set({ projectHeroImage: normalizeProjectHeroImage(heroImagePayload) })
     get()._scheduleAutoSave('project_hero_image')
   },
   clearProjectHeroImage: () => {
@@ -2517,21 +2526,7 @@ const useStore = create((set, get) => ({
       projectName,
       projectEmoji: projectEmoji || '🎬',
       projectLogline: projectLogline || '',
-      projectHeroImage: projectHeroImage?.image
-        ? {
-            image: projectHeroImage.imageAsset?.thumb || projectHeroImage.image || null,
-            imageAsset: projectHeroImage?.imageAsset
-              ? {
-                  version: projectHeroImage.imageAsset.version || 1,
-                  mime: projectHeroImage.imageAsset.mime || 'image/webp',
-                  thumb: projectHeroImage.imageAsset.thumb || projectHeroImage.image || null,
-                  full: null,
-                  meta: projectHeroImage.imageAsset.meta || null,
-                  cloud: projectHeroImage.imageAsset.cloud || null,
-                }
-              : null,
-          }
-        : null,
+      projectHeroImage: normalizeProjectHeroImage(projectHeroImage),
       projectHeroOverlayColor: projectHeroOverlayColor || '#1f1f27',
       columnCount,
       defaultFocalLength,
@@ -3026,21 +3021,7 @@ const useStore = create((set, get) => ({
       projectName: projectName || 'Untitled Shotlist',
       projectEmoji: projectEmoji || '🎬',
       projectLogline: typeof projectLogline === 'string' ? projectLogline : '',
-      projectHeroImage: projectHeroImage?.image
-        ? {
-            image: projectHeroImage.imageAsset?.thumb || projectHeroImage.image || null,
-            imageAsset: projectHeroImage?.imageAsset
-              ? {
-                  version: projectHeroImage.imageAsset.version || 1,
-                  mime: projectHeroImage.imageAsset.mime || 'image/webp',
-                  thumb: projectHeroImage.imageAsset.thumb || projectHeroImage.image || null,
-                  full: null,
-                  meta: projectHeroImage.imageAsset.meta || null,
-                  cloud: projectHeroImage.imageAsset.cloud || null,
-                }
-              : null,
-          }
-        : null,
+      projectHeroImage: normalizeProjectHeroImage(projectHeroImage),
       projectHeroOverlayColor: typeof projectHeroOverlayColor === 'string' && projectHeroOverlayColor.trim()
         ? projectHeroOverlayColor
         : '#1f1f27',
