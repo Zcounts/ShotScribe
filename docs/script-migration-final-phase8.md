@@ -8,6 +8,47 @@ This phase retires the old Script tab architecture from production defaults and 
 - Legacy Script tab implementation remains in `src/components/ScriptTabLegacy.jsx` and is only activated as full legacy mode by fallback flag.
 - Rollback kill switch is `VITE_ENABLE_LEGACY_SCRIPT_TAB=true`.
 
+## Migration roadmap (active)
+
+### Current baseline (from latest handoff)
+
+- Restored Script tab shell/layout is active around the unified editor core default.
+- Legacy editor remains rollback-only via `VITE_ENABLE_LEGACY_SCRIPT_TAB=true`.
+- Typing direction/input regressions were reduced with imperative text syncing and caret-safe split/merge handling.
+- Screenplay-aware writing behavior in the unified path is still incomplete and needs parity restoration.
+
+### Roadmap item: Restore screenplay block types, styling, and Tab-cycle writing behavior in the unified Script tab
+
+**In scope now**
+
+- Reintroduce screenplay-aware write modes in unified default path:
+  - scene heading / slug line
+  - action
+  - character
+  - dialogue
+  - parenthetical
+- Restore Tab-forward cycling and Shift+Tab reverse cycling across screenplay block modes.
+- Restore screenplay-aware Enter behavior for character/dialogue flows.
+- Restore current-line block type reflection and block-style rendering parity with prior Script tab behavior.
+
+**Explicitly out of scope now**
+
+- Switching default editor path back to legacy implementation.
+- Broad Script tab redesign, non-script tab changes, or full ProseMirror architecture rewrite.
+- New collaboration features, new export UX work, or unrelated UI refreshes.
+
+**Risks to watch**
+
+- ContentEditable edge cases (IME/composition/caret drift) while parity behavior is layered on.
+- Possible mismatch between unified node types and legacy style controls if type mapping drifts.
+- Lock/read-only states must remain respected while adding keyboard write shortcuts.
+
+**Follow-up work (next phases)**
+
+- Finish forward-delete merge + additional screenplay-smart transitions.
+- Complete visualize/breakdown overlay parity on unified editor coordinates.
+- Replace custom contentEditable editing path with a full editor engine once parity baseline is stable.
+
 ## Removed from active path
 
 - Legacy ScriptTab contenteditable/blur-commit editing code.
