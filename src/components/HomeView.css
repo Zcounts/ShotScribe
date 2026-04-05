@@ -17,6 +17,35 @@
   color: #718096;
 }
 
+.home-section-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: inherit;
+  padding: 0;
+}
+
+.home-section-toggle .home-section-label {
+  padding-right: 4px;
+}
+
+.home-section-caret {
+  margin-right: 14px;
+  color: #718096;
+  transition: transform 120ms ease;
+}
+
+.home-section-caret.is-expanded {
+  transform: rotate(0deg);
+}
+
+.home-section-caret:not(.is-expanded) {
+  transform: rotate(-90deg);
+}
+
 .home-recent-list {
   padding: 0 6px;
 }
