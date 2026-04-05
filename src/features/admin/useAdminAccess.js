@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
-import { useQuery } from 'convex/react'
+import useStore from '../../store'
 
 export function useAdminAccess() {
-  const entitlement = useQuery('billing:getMyEntitlement')
+  const entitlement = useStore(s => s.entitlement)
+  const userDataLoaded = useStore(s => s.userDataLoaded)
 
   return useMemo(() => {
-    if (entitlement === undefined) {
+    if (!userDataLoaded) {
       return {
         loading: true,
         isAdmin: false,
@@ -19,5 +20,5 @@ export function useAdminAccess() {
       isAdmin,
       canAccessAdminFeatures: isAdmin,
     }
-  }, [entitlement])
+  }, [entitlement, userDataLoaded])
 }

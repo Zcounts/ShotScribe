@@ -151,7 +151,15 @@ export default function CloudSyncCoordinator() {
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
   const getAssetSignedView = useAction('assets:getAssetSignedView')
   const getAssetThumbnailBase64 = useAction('assets:getAssetThumbnailBase64')
-  const cloudUser = useQuery('users:currentUser')
+  // Boot-time fetches — these two useQuery calls are the single source of truth
+  // for currentUser and entitlement data. Results are stored in Zustand so all
+  // other components read from the store instead of holding their own subscriptions.
+  const cloudUserQuery = useQuery('users:currentUser')
+  const entitlementQuery = useQuery('billing:getMyEntitlement')
+  const setCurrentUser = useStore(s => s.setCurrentUser)
+  const setEntitlement = useStore(s => s.setEntitlement)
+  const setUserDataLoaded = useStore(s => s.setUserDataLoaded)
+  const cloudUser = useStore(s => s.currentUser)
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const cloudProject = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
   const [presenceProbeHasCollaborators, setPresenceProbeHasCollaborators] = useState(false)
@@ -190,7 +198,7 @@ export default function CloudSyncCoordinator() {
     component: 'CloudSyncCoordinator',
     queryName: 'users:currentUser',
     args: {},
-    result: cloudUser,
+    result: cloudUserQuery,
     active: true,
   })
   useConvexQueryDiagnosticsSafe({
@@ -214,6 +222,29 @@ export default function CloudSyncCoordinator() {
     result: presenceRows,
     active: shouldSubscribePresence,
   })
+  // Populate Zustand store once both boot-time queries resolve.
+  // After this fires, all downstream consumers read from the store.
+  useEffect(() => {
+    if (cloudUserQuery === undefined || entitlementQuery === undefined) return
+    setCurrentUser(cloudUserQuery)
+    setEntitlement(entitlementQuery)
+    setUserDataLoaded(true)
+  }, [cloudUserQuery, entitlementQuery, setCurrentUser, setEntitlement, setUserDataLoaded])
+
+  // Interval-based entitlement re-fetch (10 min). Billing state can change
+  // mid-session if the user upgrades. This is a one-shot imperative call,
+  // not a live subscription, so we use convex.query() directly.
+  const ENTITLEMENT_REFETCH_INTERVAL_MS = 10 * 60 * 1000
+  useEffect(() => {
+    const id = window.setInterval(async () => {
+      try {
+        const fresh = await convex.query('billing:getMyEntitlement')
+        if (fresh !== undefined) setEntitlement(fresh)
+      } catch {}
+    }, ENTITLEMENT_REFETCH_INTERVAL_MS)
+    return () => window.clearInterval(id)
+  }, [convex, setEntitlement]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reuse role from cloudProject query so this component does not mount a
   // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
   const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })

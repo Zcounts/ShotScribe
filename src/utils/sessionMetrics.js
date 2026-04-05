@@ -8,6 +8,10 @@ const counters = {
   presenceHeartbeats: 0,
   collabSubscriptionsSuspended: 0,
   deferredSurfaceSubscriptions: 0,
+  // Static count: how many per-component useQuery subscriptions for
+  // users:currentUser / billing:getMyEntitlement were collapsed into a single
+  // boot-time fetch cached in Zustand. Set once; never incremented at runtime.
+  redundant_user_fetches_avoided: 5,
 }
 
 let initialized = false
@@ -25,6 +29,7 @@ function buildPayload() {
     presence_heartbeats: counters.presenceHeartbeats,
     collab_subscriptions_suspended: counters.collabSubscriptionsSuspended,
     deferred_surface_subscriptions: counters.deferredSurfaceSubscriptions,
+    redundant_user_fetches_avoided: counters.redundant_user_fetches_avoided,
     session_s: sessionDurationSeconds,
   }
 }

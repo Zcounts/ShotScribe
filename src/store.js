@@ -800,6 +800,13 @@ const useStore = create((set, get) => ({
   documentSession: 0,
   appMode: runtimeConfig.appMode,
 
+  // Boot-time user and entitlement cache — populated once at app startup by
+  // CloudSyncCoordinator, then read by all downstream consumers from here
+  // instead of maintaining per-component Convex live subscriptions.
+  currentUser: null,
+  entitlement: null,
+  userDataLoaded: false,
+
   // Scenes (multi-scene support)
   scenes: [initialScene],
   storyboardSceneOrder: [],
@@ -4400,6 +4407,9 @@ const useStore = create((set, get) => ({
     }
     get()._scheduleCloudSync('context_updated')
   },
+  setCurrentUser: (user) => set({ currentUser: user !== undefined ? user : null }),
+  setEntitlement: (entitlement) => set({ entitlement: entitlement !== undefined ? entitlement : null }),
+  setUserDataLoaded: (loaded) => set({ userDataLoaded: !!loaded }),
   flushCloudSync: async ({ reason = 'manual' } = {}) => {
     const state = get()
     if (state.projectRef?.type !== 'cloud') return { skipped: true, reason: 'not_cloud_project' }
