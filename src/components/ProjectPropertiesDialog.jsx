@@ -5,7 +5,7 @@ import { processStoryboardUpload, processStoryboardUploadForCloud } from '../uti
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
-import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+import { getOrCreateSignedViewRequest } from '../utils/assetSignedViewCache'
 
 const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024

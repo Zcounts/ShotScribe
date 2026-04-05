@@ -36,13 +36,6 @@ import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
-import {
-  recordCollabSubscriptionSuspended,
-  recordPresenceHeartbeat,
-  recordPresenceSubscriptionMount,
-} from '../utils/sessionMetrics'
-
-const canUseConvexHook = typeof convexReact.useConvex === 'function'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -428,8 +421,6 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
   const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
   const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
-  const convex = canUseConvexHook ? convexReact.useConvex() : null
-
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
   const storeHasCollaborators = Boolean(cloudSyncContext?.hasActiveCollaborators)
@@ -560,6 +551,19 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       setView('visualize')
     }
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, view])
+
+  useEffect(() => {
+    if (!cloudProjectId) {
+      setPolledHasCollaborators(false)
+      return undefined
+    }
+    if (storeHasCollaborators) {
+      setPolledHasCollaborators(true)
+      return undefined
+    }
+    setPolledHasCollaborators(false)
+    return undefined
+  }, [cloudProjectId, storeHasCollaborators])
 
   useEffect(() => {
     if (!cloudProjectId || !hasActiveCollaborators) return
