@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
+import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
@@ -139,6 +139,7 @@ export default function CloudSyncCoordinator() {
   const activeTab = useStore(s => s.activeTab)
   const commitDomain = useStore(s => s.commitDomain)
   const convex = useConvex()
+  const { isAuthenticated: hasConvexIdentity, isLoading: isConvexAuthLoading } = useConvexAuth()
   const createProject = useMutation('projects:createProject')
   const ensureStoryboardLiveModel = useMutation('projects:ensureStoryboardLiveModel')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
@@ -220,10 +221,27 @@ export default function CloudSyncCoordinator() {
     result: presenceRows,
     active: shouldSubscribePresence,
   })
-  // Boot-time user + entitlement load (one-shot reads).
-  // Zustand is seeded before dependent screens read userDataLoaded.
+  // Auth-aware user + entitlement load (one-shot reads).
+  // IMPORTANT: this must wait for Convex auth to finish bootstrapping.
+  // If we query too early, Convex returns unauthenticated and we would
+  // incorrectly cache null currentUser for the entire session.
   useEffect(() => {
     let cancelled = false
+    if (isConvexAuthLoading) {
+      setUserDataLoaded(false)
+      return () => {
+        cancelled = true
+      }
+    }
+    if (!hasConvexIdentity) {
+      setCurrentUser(null)
+      setEntitlement(null)
+      setUserDataLoaded(true)
+      return () => {
+        cancelled = true
+      }
+    }
+
     setUserDataLoaded(false)
     Promise.all([
       convex.query('users:currentUser'),
@@ -244,7 +262,14 @@ export default function CloudSyncCoordinator() {
     return () => {
       cancelled = true
     }
-  }, [convex, setCurrentUser, setEntitlement, setUserDataLoaded])
+  }, [
+    convex,
+    hasConvexIdentity,
+    isConvexAuthLoading,
+    setCurrentUser,
+    setEntitlement,
+    setUserDataLoaded,
+  ])
 
   // Interval-based entitlement re-fetch (10 min). Billing state can change
   // mid-session if the user upgrades. This is a one-shot imperative call,
