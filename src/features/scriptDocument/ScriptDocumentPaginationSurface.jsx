@@ -3,6 +3,21 @@ import useStore from '../../store'
 import { paginateScriptDocument } from './scriptPagination'
 
 const BLOCK_VERTICAL_PADDING = 2
+const TAB_CYCLE_TYPES = ['scene_heading', 'action', 'character', 'dialogue', 'parenthetical']
+
+function normalizeNodeType(type) {
+  return type === 'heading' ? 'scene_heading' : (type || 'action')
+}
+
+function editorTypeToStyleType(nodeType) {
+  return nodeType === 'scene_heading' ? 'heading' : (nodeType || 'action')
+}
+
+function nextTypeForEnter(nodeType) {
+  if (nodeType === 'character' || nodeType === 'parenthetical') return 'dialogue'
+  if (nodeType === 'dialogue') return 'action'
+  return nodeType || 'action'
+}
 
 function textFromNode(node) {
   if (!node || typeof node !== 'object' || !Array.isArray(node.content)) return ''
@@ -50,6 +65,28 @@ export function splitNodeAtOffset(scriptDocument, nodeIndex, offset) {
   nextContent[nodeIndex] = withNodeText(node, leftText)
   nextContent.splice(nodeIndex + 1, 0, nextNode)
   return { ...base, content: nextContent }
+}
+
+export function updateNodeType(scriptDocument, nodeIndex, nodeType) {
+  const base = (scriptDocument && scriptDocument.type === 'doc' && Array.isArray(scriptDocument.content))
+    ? scriptDocument
+    : { type: 'doc', content: [] }
+  const nextContent = base.content.map((node, idx) => (
+    idx === nodeIndex ? { ...node, type: normalizeNodeType(nodeType) } : node
+  ))
+  return { ...base, content: nextContent }
+}
+
+export function cycleNodeType(scriptDocument, nodeIndex, direction = 1) {
+  const base = (scriptDocument && scriptDocument.type === 'doc' && Array.isArray(scriptDocument.content))
+    ? scriptDocument
+    : { type: 'doc', content: [] }
+  const node = base.content[nodeIndex]
+  if (!node) return base
+  const currentType = normalizeNodeType(node.type)
+  const currentIdx = Math.max(0, TAB_CYCLE_TYPES.indexOf(currentType))
+  const nextIdx = (currentIdx + direction + TAB_CYCLE_TYPES.length) % TAB_CYCLE_TYPES.length
+  return updateNodeType(base, nodeIndex, TAB_CYCLE_TYPES[nextIdx])
 }
 
 export function mergeWithPreviousNode(scriptDocument, nodeIndex) {
@@ -112,7 +149,12 @@ function setCaretOffset(element, offset) {
   selection.addRange(range)
 }
 
-export default function ScriptDocumentPaginationSurface() {
+export default function ScriptDocumentPaginationSurface({
+  readOnly = false,
+  writeOptions = null,
+  onActiveBlockTypeChange,
+  onActiveNodeChange,
+} = {}) {
   const scriptDocument = useStore(s => s.scriptDocument)
   const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
   const scriptSettings = useStore(s => s.scriptSettings)
@@ -157,6 +199,15 @@ export default function ScriptDocumentPaginationSurface() {
     element.focus()
     setCaretOffset(element, pending.offset)
   }, [paginated.blocks])
+
+  useEffect(() => {
+    const activeIndex = activeNodeIndexRef.current
+    if (!Number.isInteger(activeIndex)) return
+    const node = (documentRef?.content || [])[activeIndex]
+    const activeType = editorTypeToStyleType(node?.type || 'action')
+    onActiveBlockTypeChange?.(activeType)
+    onActiveNodeChange?.({ nodeIndex: activeIndex, blockType: activeType })
+  }, [documentRef, onActiveBlockTypeChange, onActiveNodeChange])
 
   return (
     <div
@@ -210,12 +261,16 @@ export default function ScriptDocumentPaginationSurface() {
                       if (element.textContent !== nextText) element.textContent = nextText
                     }
                   }}
-                  contentEditable
+                  contentEditable={!readOnly}
+                  aria-readonly={readOnly}
                   suppressContentEditableWarning
                   dir="ltr"
                   data-node-index={block.nodeIndex}
                   onFocus={() => {
                     activeNodeIndexRef.current = block.nodeIndex
+                    const activeType = editorTypeToStyleType(block.nodeType)
+                    onActiveBlockTypeChange?.(activeType)
+                    onActiveNodeChange?.({ nodeIndex: block.nodeIndex, blockType: activeType })
                   }}
                   onInput={(event) => {
                     const next = updateNodeText(documentRef, block.nodeIndex, event.currentTarget.textContent || '')
@@ -224,11 +279,29 @@ export default function ScriptDocumentPaginationSurface() {
                   onKeyDown={(event) => {
                     const nodeIndex = block.nodeIndex
                     const caretOffset = getCaretOffsetWithinElement(event.currentTarget)
+                    if (readOnly) return
+                    if (event.key === 'Tab') {
+                      event.preventDefault()
+                      const direction = event.shiftKey ? -1 : 1
+                      const nextDocument = cycleNodeType(documentRef, nodeIndex, direction)
+                      updateScriptDocumentLive(nextDocument, { reason: 'script_document_surface_tab_cycle_type' })
+                      const updatedNode = (nextDocument?.content || [])[nodeIndex]
+                      const activeType = editorTypeToStyleType(updatedNode?.type || 'action')
+                      onActiveBlockTypeChange?.(activeType)
+                      onActiveNodeChange?.({ nodeIndex, blockType: activeType })
+                      deriveScriptDocumentNow({ reason: 'script_document_surface_tab_cycle_type', persist: true })
+                      return
+                    }
                     if (event.key === 'Enter') {
                       event.preventDefault()
                       const nextDocument = splitNodeAtOffset(documentRef, nodeIndex, caretOffset)
+                      const currentNodeType = normalizeNodeType(((documentRef?.content || [])[nodeIndex] || {}).type)
+                      const enterType = nextTypeForEnter(currentNodeType)
+                      const withType = updateNodeType(nextDocument, nodeIndex + 1, enterType)
                       pendingCaretRef.current = { nodeIndex: nodeIndex + 1, offset: 0 }
-                      updateScriptDocumentLive(nextDocument, { reason: 'script_document_surface_enter_split' })
+                      updateScriptDocumentLive(withType, { reason: 'script_document_surface_enter_split' })
+                      onActiveBlockTypeChange?.(editorTypeToStyleType(enterType))
+                      onActiveNodeChange?.({ nodeIndex: nodeIndex + 1, blockType: editorTypeToStyleType(enterType) })
                       deriveScriptDocumentNow({ reason: 'script_document_surface_enter_split', persist: true })
                       return
                     }
@@ -242,7 +315,6 @@ export default function ScriptDocumentPaginationSurface() {
                     }
                   }}
                   onBlur={() => {
-                    activeNodeIndexRef.current = null
                     deriveScriptDocumentNow({ reason: 'script_document_surface_blur', persist: true })
                   }}
                   style={{
@@ -256,11 +328,16 @@ export default function ScriptDocumentPaginationSurface() {
                     lineHeight: `${block.style.lineHeightPx}px`,
                     textAlign: block.style.align || 'left',
                     letterSpacing: `${block.style.letterSpacingPx}px`,
+                    fontWeight: ((writeOptions?.boldSlugline && block.nodeType === 'scene_heading')
+                      || (writeOptions?.boldCharacter && block.nodeType === 'character'))
+                      ? 700
+                      : 400,
                     whiteSpace: 'pre-wrap',
-                    textTransform: ['scene_heading'].includes(block.nodeType) ? 'uppercase' : 'none',
+                    textTransform: ['scene_heading', 'character', 'transition'].includes(block.nodeType) ? 'uppercase' : 'none',
                     outline: 'none',
                     borderRadius: 4,
                     border: '1px solid transparent',
+                    background: activeNodeIndexRef.current === block.nodeIndex ? 'rgba(37,99,235,0.04)' : 'transparent',
                     direction: 'ltr',
                     unicodeBidi: 'plaintext',
                     writingMode: 'horizontal-tb',
