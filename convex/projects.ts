@@ -362,8 +362,13 @@ export const listProjectsForCurrentUser = query({
 })
 
 export const listProjectsForCurrentUserLite = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    // When provided, return only the first `limit` projects (sorted by updatedAt
+    // desc) and include a `hasMore` flag. When omitted the full list is returned
+    // — existing callers that pass `{}` are unaffected until they opt in.
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     const currentUserFlags = await getUserPolicyFlags(ctx, currentUserId)
     const hasPaidAccess = hasPaidCloudAccess({
@@ -403,38 +408,58 @@ export const listProjectsForCurrentUserLite = query({
     const candidates = Array.from(deduped.values())
       .filter((project: any) => !project.pendingDeleteAt && !project.deleteAfter)
 
-    const headsByProjectId = new Map<string, any>()
-    await Promise.all(candidates.map(async (project: any) => {
+    // Single-pass: fetch snapshot head and determine usability in one loop,
+    // eliminating the previous two-pass Promise.all pattern. Head metadata
+    // is included inline on each returned project row so callers do not need
+    // a separate per-project head subscription for list display.
+    const resolvedProjects = await Promise.all(candidates.map(async (project: any) => {
       const head = await ctx.db
         .query('projectSnapshotHeads')
         .withIndex('by_project_id', (q: any) => q.eq('projectId', project._id))
         .unique()
-      headsByProjectId.set(String(project._id), head || null)
-    }))
 
-    // Migration compatibility: use snapshot pointers (or one lightweight id
-    // fallback query) to determine whether a project is cloud-openable without
-    // touching full snapshot payloads for each list row.
-    const usableProjects = await Promise.all(candidates.map(async (project: any) => {
-      const head = headsByProjectId.get(String(project._id))
+      let latestSnapshotId = project.latestSnapshotId || null
+      let isUsable = false
+
       if (head?.latestSnapshotHasPayload) {
-        return {
-          ...project,
-          latestSnapshotId: head.latestSnapshotId || project.latestSnapshotId || null,
-        }
+        isUsable = true
+        latestSnapshotId = head.latestSnapshotId || latestSnapshotId
+      } else if (project.latestSnapshotId) {
+        // Legacy project with no head row — pointer is on the project row.
+        isUsable = true
+      } else {
+        // Oldest legacy fallback: check whether any snapshot record exists at
+        // all (ID-only check; does not load the payload).
+        const fallbackSnapshot = await ctx.db
+          .query('projectSnapshots')
+          .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', project._id))
+          .order('desc')
+          .take(1)
+        isUsable = fallbackSnapshot.length > 0
       }
-      if (project.latestSnapshotId) return project
-      const fallbackSnapshot = await ctx.db
-        .query('projectSnapshots')
-        .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', project._id))
-        .order('desc')
-        .take(1)
-      return fallbackSnapshot[0] ? project : null
+
+      if (!isUsable) return null
+
+      return {
+        ...project,
+        latestSnapshotId,
+        // Inline head metadata for list-row display (avoids a separate
+        // per-project subscription for "last saved" timestamps and versions).
+        snapshotHeadCreatedAt: head?.latestSnapshotCreatedAt ?? null,
+        snapshotVersionToken: head?.latestSnapshotVersionToken ?? null,
+      }
     }))
 
-    return usableProjects
+    const sorted = resolvedProjects
       .filter(Boolean)
       .sort((a: any, b: any) => b.updatedAt - a.updatedAt)
+
+    const total = sorted.length
+    const safeLimit = args.limit && args.limit > 0 ? Math.min(args.limit, 200) : null
+    const projects = safeLimit !== null ? sorted.slice(0, safeLimit) : sorted
+    const hasMore = safeLimit !== null ? total > safeLimit : false
+
+    return { projects, hasMore, total }
   },
 })
 

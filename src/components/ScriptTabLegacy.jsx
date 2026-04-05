@@ -423,9 +423,8 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
-  const [polledHasCollaborators, setPolledHasCollaborators] = useState(false)
   const storeHasCollaborators = Boolean(cloudSyncContext?.hasActiveCollaborators)
-  const hasActiveCollaborators = Boolean(storeHasCollaborators || polledHasCollaborators)
+  const hasActiveCollaborators = storeHasCollaborators
   const presenceArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
   const locksArgs = cloudProjectId && hasActiveCollaborators ? { projectId: cloudProjectId } : 'skip'
   const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
@@ -588,6 +587,11 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [activeSceneId, cloudProjectId, hasActiveCollaborators, heartbeatPresence, view])
+
+  useEffect(() => {
+    if (!cloudProjectId || !hasActiveCollaborators) return
+    recordPresenceSubscriptionMount()
+  }, [cloudProjectId, hasActiveCollaborators])
 
   useEffect(() => {
     if (!cloudProjectId || hasActiveCollaborators) return

@@ -241,6 +241,8 @@ export const getAssetSignedView = action({
       ...asset,
       thumbUrl: signed.readUrl,
       fullUrl: signed.readUrl,
+      thumbExpiresAt: signed.expiresAt,
+      fullExpiresAt: signed.expiresAt,
     }
   },
 })
@@ -352,6 +354,8 @@ export const getAssetSignedViewsBatch = action({
           provider: row.provider,
           thumbUrl: signed.readUrl,
           fullUrl: signed.readUrl,
+          thumbExpiresAt: signed.expiresAt,
+          fullExpiresAt: signed.expiresAt,
           mime: row.mime,
           meta: row.meta || null,
         }
