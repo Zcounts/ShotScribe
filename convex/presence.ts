@@ -53,9 +53,12 @@ export const listProjectPresence = query({
     const now = Date.now()
     const rows = await ctx.db
       .query('presence')
-      .withIndex('by_project_id_expires_at', (q: any) => q.eq('projectId', args.projectId))
+      .withIndex('by_project_id_expires_at', (q: any) => (
+        q
+          .eq('projectId', args.projectId)
+          .gt('expiresAt', now)
+      ))
       .collect()
-
-    return rows.filter((row: any) => row.expiresAt > now)
+    return rows
   },
 })

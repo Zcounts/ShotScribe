@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useAction, useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation } from 'convex/react'
 import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
@@ -11,8 +11,10 @@ import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
-import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+
+const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
+const signedViewCache = new Map()
 
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
@@ -37,7 +39,17 @@ function sanitizeNumericInput(value) {
   return `${integerPart}${decimalPart}`
 }
 
-function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig, prefetchedCloudAssetView = null }) {
+function ShotCard({
+  shot,
+  displayId,
+  useDropdowns,
+  sceneId,
+  storyboardDisplayConfig,
+  prefetchedCloudAssetView = null,
+  cloudAccessPolicy = { canAccessCloudAssets: true, canEditCloudProject: true },
+  libraryAssets = null,
+  recentlyDeletedAssets = null,
+}) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
   const projectRef = useStore(s => s.projectRef)
@@ -49,20 +61,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
   const softDeleteLibraryAsset = useMutation('assets:softDeleteLibraryAsset')
   const undoSoftDeleteLibraryAsset = useMutation('assets:undoSoftDeleteLibraryAsset')
-  const cloudAccessPolicy = useCloudAccessPolicy()
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const libraryAssets = useQuery(
-    'assets:listProjectLibraryAssets',
-    (projectRef?.type === 'cloud' && !cloudAssetBlocked)
-      ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
-      : 'skip'
-  )
-  const recentlyDeletedAssets = useQuery(
-    'assets:getRecentlyDeletedLibraryAssets',
-    (projectRef?.type === 'cloud' && !cloudAssetBlocked)
-      ? { projectId: projectRef.projectId, limit: 10 }
-      : 'skip'
-  )
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
   const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
@@ -91,11 +90,28 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
         setCloudAssetView(null)
         return
       }
+      if (prefetchedCloudAssetView) {
+        setCloudAssetView(prefetchedCloudAssetView)
+        return
+      }
+      const assetId = String(shot.imageAsset.cloud.assetId)
+      const cached = signedViewCache.get(assetId)
+      const now = Date.now()
+      if (cached && now - cached.cachedAt < SIGNED_VIEW_CACHE_TTL_MS) {
+        setCloudAssetView(cached.view)
+        return
+      }
       try {
         const view = await getAssetSignedView({
           projectId: projectRef.projectId,
-          assetId: shot.imageAsset.cloud.assetId,
+          assetId,
         })
+        if (view) {
+          signedViewCache.set(assetId, {
+            view,
+            cachedAt: now,
+          })
+        }
         if (!cancelled) setCloudAssetView(view || null)
       } catch (err) {
         console.warn('Failed to load signed asset view', err)
@@ -106,7 +122,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     return () => {
       cancelled = true
     }
-  }, [cloudAssetBlocked, getAssetSignedView, projectRef, shot?.imageAsset?.cloud?.assetId])
+  }, [cloudAssetBlocked, getAssetSignedView, prefetchedCloudAssetView, projectRef, shot?.imageAsset?.cloud?.assetId])
 
   useEffect(() => {
     let cancelled = false

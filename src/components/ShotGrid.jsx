@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useAction } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import ShotCard from './ShotCard'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+
+const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
+const signedViewCache = new Map()
 
 function AddShotButton({ onClick }) {
   return (
@@ -41,6 +45,30 @@ function ShotGrid({
   const cloudAccessPolicy = useCloudAccessPolicy()
   const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
   const [prefetchedAssetViews, setPrefetchedAssetViews] = useState({})
+  const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
+  const libraryQueryArgs = (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+    ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
+    : 'skip'
+  const recentDeletedQueryArgs = (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+    ? { projectId: projectRef.projectId, limit: 10 }
+    : 'skip'
+  const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryQueryArgs)
+  const recentlyDeletedAssets = useQuery('assets:getRecentlyDeletedLibraryAssets', recentDeletedQueryArgs)
+
+  useConvexQueryDiagnostics({
+    component: 'ShotGrid',
+    queryName: 'assets:listProjectLibraryAssets',
+    args: libraryQueryArgs,
+    result: libraryAssets,
+    active: libraryQueryArgs !== 'skip',
+  })
+  useConvexQueryDiagnostics({
+    component: 'ShotGrid',
+    queryName: 'assets:getRecentlyDeletedLibraryAssets',
+    args: recentDeletedQueryArgs,
+    result: recentlyDeletedAssets,
+    active: recentDeletedQueryArgs !== 'skip',
+  })
 
   const cloudAssetIds = useMemo(() => {
     if (projectRef?.type !== 'cloud') return []
@@ -64,12 +92,34 @@ function ShotGrid({
         setPrefetchedAssetViews({})
         return
       }
+      const now = Date.now()
+      const cachedViews = {}
+      const missingAssetIds = []
+      for (const assetId of cloudAssetIds) {
+        const cached = signedViewCache.get(assetId)
+        if (cached && now - cached.cachedAt < SIGNED_VIEW_CACHE_TTL_MS) {
+          cachedViews[assetId] = cached.view
+        } else {
+          missingAssetIds.push(assetId)
+        }
+      }
+      if (missingAssetIds.length === 0) {
+        setPrefetchedAssetViews(cachedViews)
+        return
+      }
       try {
         const batch = await getAssetSignedViewsBatch({
           projectId: projectRef.projectId,
-          assetIds: cloudAssetIds,
+          assetIds: missingAssetIds,
         })
-        if (!cancelled) setPrefetchedAssetViews(batch || {})
+        const merged = { ...cachedViews, ...(batch || {}) }
+        Object.entries(batch || {}).forEach(([assetId, view]) => {
+          signedViewCache.set(String(assetId), {
+            view,
+            cachedAt: now,
+          })
+        })
+        if (!cancelled) setPrefetchedAssetViews(merged)
       } catch (err) {
         console.warn('Failed to prefetch cloud asset views', err)
         if (!cancelled) setPrefetchedAssetViews({})
@@ -99,6 +149,9 @@ function ShotGrid({
           storyboardDisplayConfig={storyboardDisplayConfig}
           sceneId={sceneId}
           prefetchedCloudAssetView={prefetchedAssetViews[String(shot?.imageAsset?.cloud?.assetId || '')] || null}
+          cloudAccessPolicy={cloudAccessPolicy}
+          libraryAssets={libraryAssets}
+          recentlyDeletedAssets={recentlyDeletedAssets}
         />
       ))}
       {showAddBtn && <AddShotButton onClick={onAddShot} />}

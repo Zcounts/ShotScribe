@@ -4,6 +4,7 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
@@ -69,11 +70,34 @@ export default function CloudSyncCoordinator() {
     'projectShotsLive:listShotsByProject',
     cloudProjectId && Number(cloudProject?.liveModelVersion || 0) >= 1 ? { projectId: cloudProjectId } : 'skip',
   )
-  const latestSnapshot = useQuery(
-    'projectSnapshots:getLatestSnapshotForProject',
+  const latestSnapshotHead = useQuery(
+    'projectSnapshots:getLatestSnapshotHeadForProject',
     cloudProjectId ? { projectId: cloudProjectId } : 'skip',
   )
-  const cloudAccessPolicy = useCloudAccessPolicy()
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'users:currentUser',
+    args: {},
+    result: cloudUser,
+    active: true,
+  })
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projects:getProjectById',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: cloudProject,
+    active: Boolean(cloudProjectId),
+  })
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projectSnapshots:getLatestSnapshotHeadForProject',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: latestSnapshotHead,
+    active: Boolean(cloudProjectId),
+  })
+  // Reuse role from cloudProject query so this component does not mount a
+  // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
+  const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })
   const setLiveModelVersion = useStore(s => s.setLiveModelVersion)
   const applyLiveStoryboardState = useStore(s => s.applyLiveStoryboardState)
 
@@ -84,6 +108,13 @@ export default function CloudSyncCoordinator() {
   const localImageUploadCacheRef = useRef(new Map())
   const liveMigrationRequestedRef = useRef(new Set())
   const liveMigrationFailureRef = useRef(ensureStoryboardFailureCache)
+  const fetchedRemoteSnapshotIdsRef = useRef(new Set())
+  const inFlightRemoteSnapshotIdsRef = useRef(new Set())
+
+  useEffect(() => {
+    fetchedRemoteSnapshotIdsRef.current.clear()
+    inFlightRemoteSnapshotIdsRef.current.clear()
+  }, [cloudProjectId])
 
   useEffect(() => {
     setCloudRepositoryAdapter({
@@ -285,13 +316,45 @@ export default function CloudSyncCoordinator() {
   }, [flushCloudSync, projectRef?.type])
 
   useEffect(() => {
-    if (!cloudProjectId || !latestSnapshot?._id || !latestSnapshot?.payload) return
-    applyIncomingCloudSnapshot({
-      projectId: cloudProjectId,
-      snapshotId: String(latestSnapshot._id),
-      payload: latestSnapshot.payload,
-    })
-  }, [applyIncomingCloudSnapshot, cloudProjectId, latestSnapshot?._id, latestSnapshot?.payload])
+    const latestSnapshotId = latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null
+    if (!cloudProjectId || !latestSnapshotId) return
+    if (String(projectRef?.snapshotId || '') === latestSnapshotId) return
+    if (fetchedRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
+    if (inFlightRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
+
+    let cancelled = false
+    inFlightRemoteSnapshotIdsRef.current.add(latestSnapshotId)
+
+    convex
+      .query('projectSnapshots:getLatestSnapshotForProject', { projectId: cloudProjectId })
+      .then((snapshot) => {
+        if (cancelled || !snapshot?._id || !snapshot?.payload) return
+        const snapshotId = String(snapshot._id)
+        fetchedRemoteSnapshotIdsRef.current.add(snapshotId)
+        applyIncomingCloudSnapshot({
+          projectId: cloudProjectId,
+          snapshotId,
+          payload: snapshot.payload,
+        })
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn('[cloud-sync] latest snapshot fetch failed', {
+            projectId: cloudProjectId,
+            latestSnapshotId,
+            message: error?.message || 'unknown_error',
+          })
+        }
+      })
+      .finally(() => {
+        inFlightRemoteSnapshotIdsRef.current.delete(latestSnapshotId)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyIncomingCloudSnapshot, cloudProjectId, convex, latestSnapshotHead?.latestSnapshotId, projectRef?.snapshotId])
 
   useEffect(() => {
     if (!cloudProjectId || hasUnsavedChanges) return

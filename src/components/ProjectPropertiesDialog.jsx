@@ -4,6 +4,7 @@ import useStore from '../store'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
 const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
@@ -35,12 +36,18 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
   const getAssetSignedView = useAction('assets:getAssetSignedView')
   const cloudAccessPolicy = useCloudAccessPolicy()
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const libraryAssets = useQuery(
-    'assets:listProjectLibraryAssets',
-    (projectRef?.type === 'cloud' && !cloudAssetBlocked)
-      ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
-      : 'skip'
-  )
+  const libraryAssetsArgs = (open && projectRef?.type === 'cloud' && !cloudAssetBlocked)
+    ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
+    : 'skip'
+  const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryAssetsArgs)
+  useConvexQueryDiagnostics({
+    component: 'ProjectPropertiesDialog',
+    queryName: 'assets:listProjectLibraryAssets',
+    args: libraryAssetsArgs,
+    result: libraryAssets,
+    active: libraryAssetsArgs !== 'skip',
+    hidden: !open,
+  })
 
   const fileInputRef = useRef(null)
   const [title, setTitle] = useState(projectName || '')
