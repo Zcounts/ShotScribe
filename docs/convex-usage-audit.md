@@ -460,3 +460,42 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 ### Rollback notes
 - Revert `hasUnsavedChanges` apply guard if any delayed-remote-visibility regression is unacceptable.
 - Revert collaborator hold window constant/logic if mode transitions need to be immediate again.
+
+---
+
+## Final polish: one-letter collaboration misfire edge case
+
+### Final root cause
+- The prior `hasUnsavedChanges` guard removed most clobbers, but an edge remained in the tiny window right after local state briefly cleared unsaved status between keystrokes.
+- In that narrow timing, a deferred live apply could replay immediately and touch the same field path too soon, causing a rare one-letter misfire.
+
+### Exact fix
+- Added a short local-edit hot window (`LOCAL_TEXT_EDIT_HOT_WINDOW_MS`) based on `lastStoryboardEditAt`.
+- `updateScene`, `updateShot`, `updateShotSpec`, and `updateShotNotes` now stamp `lastStoryboardEditAt` on each local storyboard text edit.
+- Live storyboard applies are deferred not only while unsaved edits exist, but also while local edits are still “hot” for this short grace window.
+- Deferred live payloads are replayed through a small safe-timer loop instead of immediate replay at the first possible tick.
+- Added dev-only diagnostics for deferred/replayed live applies including hot-window timing.
+
+### Performance work preserved
+- No-op upsert suppression unchanged.
+- Asset fetch/sign dedupe + cache unchanged.
+- Snapshot-head usage unchanged.
+- Solo-mode buffering architecture unchanged.
+- Presence/heartbeat optimization unchanged.
+
+### Tiny tradeoff
+- Remote storyboard updates for the exact same path can be delayed by a sub-second grace period during active local typing, then converge automatically.
+
+### Expected UX impact
+- Eliminates the remaining occasional one-letter misfire without making collaboration globally sluggish.
+- Cursor/typing stability should now remain consistent even during rapid shared typing bursts.
+
+### Manual QA
+1. Two-user rapid typing in the same shot/scene text fields for >2 minutes; verify no one-letter drops.
+2. Alternate turns quickly while both users remain on same card; verify no backwards typing/cursor jumps.
+3. Confirm remote updates still appear promptly when typing pauses.
+4. Verify solo mode behavior and collaborator-join transitions still work.
+5. Verify autosave/manual sync and general storyboard editing remain unchanged.
+
+### Rollback notes
+- Revert hot-window guard (`LOCAL_TEXT_EDIT_HOT_WINDOW_MS`) and deferred replay timer path if any unacceptable remote-delay behavior appears.

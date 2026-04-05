@@ -11,6 +11,7 @@ const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
 const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
 const SOLO_LIVE_SYNC_DEBOUNCE_MS = 1800
 const COLLABORATOR_MODE_HOLD_MS = 30 * 1000
+const LOCAL_TEXT_EDIT_HOT_WINDOW_MS = 900
 const ensureStoryboardFailureCache = new Map()
 const DIAG_LOCAL_STORAGE_KEY = 'ss_convex_diag'
 
@@ -115,6 +116,7 @@ export default function CloudSyncCoordinator() {
   const openCloudProject = useStore(s => s.openCloudProject)
   const updateShotImage = useStore(s => s.updateShotImage)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
+  const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
   const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
   const convex = useConvex()
@@ -200,14 +202,21 @@ export default function CloudSyncCoordinator() {
   const soloModeRef = useRef(false)
   const lastCollaboratorSeenAtRef = useRef(0)
   const modeLabelRef = useRef('unknown')
+  const deferredLiveApplyRef = useRef(null)
+  const deferredLiveApplyTimerRef = useRef(null)
 
   useEffect(() => {
     fetchedRemoteSnapshotIdsRef.current.clear()
     inFlightRemoteSnapshotIdsRef.current.clear()
     pendingLiveSyncRef.current = null
+    deferredLiveApplyRef.current = null
     if (soloLiveSyncTimerRef.current) {
       window.clearTimeout(soloLiveSyncTimerRef.current)
       soloLiveSyncTimerRef.current = null
+    }
+    if (deferredLiveApplyTimerRef.current) {
+      window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = null
     }
   }, [cloudProjectId])
 
@@ -376,6 +385,35 @@ export default function CloudSyncCoordinator() {
     }
   }, [applyLiveStoryboardSync])
 
+  const applyDeferredLiveStoryboardState = useCallback(() => {
+    if (!deferredLiveApplyRef.current) return
+    const now = Date.now()
+    const msSinceLocalStoryboardEdit = now - Number(useStore.getState().lastStoryboardEditAt || 0)
+    if (useStore.getState().hasUnsavedChanges || msSinceLocalStoryboardEdit < LOCAL_TEXT_EDIT_HOT_WINDOW_MS) {
+      const waitMs = Math.max(120, LOCAL_TEXT_EDIT_HOT_WINDOW_MS - msSinceLocalStoryboardEdit + 40)
+      if (deferredLiveApplyTimerRef.current) window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = window.setTimeout(() => {
+        applyDeferredLiveStoryboardState()
+      }, waitMs)
+      return
+    }
+    const payload = deferredLiveApplyRef.current
+    deferredLiveApplyRef.current = null
+    if (deferredLiveApplyTimerRef.current) {
+      window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = null
+    }
+    applyLiveStoryboardState(payload)
+    if (isConvexDiagEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[cloud-sync] replayed deferred live storyboard apply', {
+        projectId: String(cloudProjectId || ''),
+        sceneCount: Array.isArray(payload?.scenes) ? payload.scenes.length : 0,
+        shotCount: Array.isArray(payload?.shots) ? payload.shots.length : 0,
+      })
+    }
+  }, [applyLiveStoryboardState, cloudProjectId])
+
   useEffect(() => {
     setCloudRepositoryAdapter({
       runMutation: async (name, args) => {
@@ -458,6 +496,11 @@ export default function CloudSyncCoordinator() {
         soloLiveSyncTimerRef.current = null
       }
       pendingLiveSyncRef.current = null
+      deferredLiveApplyRef.current = null
+      if (deferredLiveApplyTimerRef.current) {
+        window.clearTimeout(deferredLiveApplyTimerRef.current)
+        deferredLiveApplyTimerRef.current = null
+      }
     }
   }, [])
 
@@ -541,19 +584,40 @@ export default function CloudSyncCoordinator() {
     if (!cloudProjectId) return
     if (Number(cloudProject?.liveModelVersion || 0) < 1) return
     if (!Array.isArray(liveScenes) || !Array.isArray(liveShots)) return
-    if (hasUnsavedChanges) {
+    const now = Date.now()
+    const msSinceLocalStoryboardEdit = now - Number(lastStoryboardEditAt || 0)
+    const localEditIsHot = msSinceLocalStoryboardEdit < LOCAL_TEXT_EDIT_HOT_WINDOW_MS
+    if (hasUnsavedChanges || localEditIsHot) {
+      deferredLiveApplyRef.current = { scenes: liveScenes, shots: liveShots }
       if (isConvexDiagEnabled()) {
         // eslint-disable-next-line no-console
         console.debug('[cloud-sync] deferred live storyboard apply while local edits are pending', {
           projectId: String(cloudProjectId),
           liveSceneCount: liveScenes.length,
           liveShotCount: liveShots.length,
+          hasUnsavedChanges,
+          msSinceLocalStoryboardEdit,
         })
       }
+      applyDeferredLiveStoryboardState()
       return
     }
+    deferredLiveApplyRef.current = null
+    if (deferredLiveApplyTimerRef.current) {
+      window.clearTimeout(deferredLiveApplyTimerRef.current)
+      deferredLiveApplyTimerRef.current = null
+    }
     applyLiveStoryboardState({ scenes: liveScenes, shots: liveShots })
-  }, [applyLiveStoryboardState, cloudProject?.liveModelVersion, cloudProjectId, hasUnsavedChanges, liveScenes, liveShots])
+  }, [
+    applyDeferredLiveStoryboardState,
+    applyLiveStoryboardState,
+    cloudProject?.liveModelVersion,
+    cloudProjectId,
+    hasUnsavedChanges,
+    lastStoryboardEditAt,
+    liveScenes,
+    liveShots,
+  ])
 
   useEffect(() => {
     if (projectRef?.type !== 'cloud') return undefined
