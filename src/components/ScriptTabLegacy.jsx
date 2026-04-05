@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useConvex, useMutation, useQuery } from 'convex/react'
+import * as convexReact from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { Lock, Pilcrow, Ruler, Save, Settings2, Unlock } from 'lucide-react'
 import useStore, { getShotLetter } from '../store'
 import ImportScriptModal from './ImportScriptModal'
@@ -35,11 +36,9 @@ import useResponsiveViewport from '../hooks/useResponsiveViewport'
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
+const canUseConvexHook = typeof convexReact.useConvex === 'function'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -425,6 +424,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
   const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
   const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
+  const convex = canUseConvexHook ? convexReact.useConvex() : null
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
@@ -559,6 +559,10 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, view])
 
   useEffect(() => {
+    if (!convex || typeof convex.query !== 'function') {
+      setPolledHasCollaborators(false)
+      return undefined
+    }
     if (!cloudProjectId) {
       setPolledHasCollaborators(false)
       return undefined
