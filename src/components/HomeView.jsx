@@ -438,7 +438,7 @@ export default function HomeView() {
           </div>
           <div className="home-hero-actions">
             {hasLoadedProject ? (
-              <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => setProjectPropertiesOpen(true)}>
+              <button type="button" className="ss-btn ghost home-btn-inline home-hero-project-props-btn" onClick={() => setProjectPropertiesOpen(true)}>
                 <Settings2 size={14} strokeWidth={1.6} />
                 Project Properties
               </button>

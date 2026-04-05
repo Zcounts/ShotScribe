@@ -53,6 +53,20 @@ Expected:
 - No full page refresh or project reopen is required to observe new snapshot data.
 - Save/sync status stays valid after inbound collaborator updates.
 
+### 1d. Hero background image survives collaborator edits
+
+1. Owner sets a custom Hero background image in Project Properties and saves.
+2. Collaborator (role: `editor`) opens the same cloud project.
+3. Collaborator makes unrelated edits (for example shot notes/script text) and waits for autosave.
+4. Owner refreshes/reopens project and checks Home tab hero background.
+5. Collaborator opens Project Properties and clicks **Save** without changing Hero image.
+
+Expected:
+- Hero background metadata remains intact after collaborator autosave/manual save.
+- Unrelated collaborator edits never clear an existing Hero background.
+- Project Properties save without Hero changes does not remove Hero image.
+- Hero image is only removed when a user explicitly clicks **Remove** and saves.
+
 ---
 
 ## 2) Collaborator loses paid access
