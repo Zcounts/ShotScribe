@@ -25,6 +25,12 @@ import { runtimeConfig } from './config/runtimeConfig'
 import { logTelemetry } from './utils/telemetry'
 import { createCloudProjectAdapter, createProjectRepository } from './data/repository'
 import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
+import {
+  normalizeScriptDocumentState,
+  SCRIPT_DERIVATION_VERSION,
+  SCRIPT_DOC_VERSION,
+  SCRIPT_ENGINE_PROSEMIRROR,
+} from './features/scriptDocument/legacyBridge'
 
 export const CARD_COLORS = [
   '#4ade80', // green
@@ -825,6 +831,11 @@ const useStore = create((set, get) => ({
     scenePaginationMode: 'natural', // natural | newPagePerScene
     documentSettings: DEFAULT_SCRIPT_DOCUMENT_SETTINGS,
   },
+  scriptEngine: SCRIPT_ENGINE_PROSEMIRROR,
+  scriptDocVersion: SCRIPT_DOC_VERSION,
+  scriptDerivationVersion: SCRIPT_DERIVATION_VERSION,
+  scriptDocument: { type: 'doc', content: [] },
+  scriptAnnotations: { byId: {}, order: [] },
 
   // ── Script scene actions ──────────────────────────────────────────────
 
@@ -2514,6 +2525,7 @@ const useStore = create((set, get) => ({
       castRoster, crewRoster,
       castCrewNotes,
       scriptScenes, importedScripts, scriptSettings,
+      scriptEngine, scriptDocVersion, scriptDerivationVersion, scriptDocument, scriptAnnotations,
       shortcutBindings,
       storyboardSceneOrder,
       storyboardDisplayConfig,
@@ -2521,6 +2533,16 @@ const useStore = create((set, get) => ({
       tabViewState,
       cloudLineage,
     } = get()
+    const normalizedScriptState = normalizeScriptDocumentState({
+      scriptEngine,
+      scriptDocVersion,
+      scriptDerivationVersion,
+      scriptDocument,
+      scriptScenes,
+      scriptSettings,
+      scriptAnnotations,
+      scriptLayout: scriptSettings?.documentSettings,
+    })
     const payload = {
       version: 2,
       projectName,
@@ -2651,8 +2673,13 @@ const useStore = create((set, get) => ({
       castRoster: (castRoster || []).map(normalizeCastEntry),
       crewRoster: (crewRoster || []).map(normalizeCrewEntry),
       castCrewNotes: castCrewNotes || '',
+      scriptEngine: normalizedScriptState.scriptEngine,
+      scriptDocVersion: normalizedScriptState.scriptDocVersion,
+      scriptDerivationVersion: normalizedScriptState.scriptDerivationVersion,
+      scriptDocument: normalizedScriptState.scriptDocument,
+      scriptAnnotations: normalizedScriptState.scriptAnnotations,
       // Script import state
-      scriptScenes: (scriptScenes || []).map(s => ({
+      scriptScenes: (normalizedScriptState.scriptScenes || []).map(s => ({
         id: s.id,
         sceneNumber: s.sceneNumber != null ? String(s.sceneNumber) : '',
         slugline: s.slugline,
@@ -3016,6 +3043,16 @@ const useStore = create((set, get) => ({
     const loadedScenesTabPreferences = (typeof data.scenesTabPreferences === 'object' && data.scenesTabPreferences !== null)
       ? data.scenesTabPreferences
       : {}
+    const normalizedScriptState = normalizeScriptDocumentState({
+      scriptEngine: data.scriptEngine,
+      scriptDocVersion: data.scriptDocVersion,
+      scriptDerivationVersion: data.scriptDerivationVersion,
+      scriptDocument: data.scriptDocument,
+      scriptScenes: Array.isArray(data.scriptScenes) ? data.scriptScenes : [],
+      scriptSettings: data.scriptSettings || null,
+      scriptAnnotations: data.scriptAnnotations,
+      scriptLayout: data.scriptSettings?.documentSettings,
+    })
 
     set({
       projectName: projectName || 'Untitled Shotlist',
@@ -3067,7 +3104,7 @@ const useStore = create((set, get) => ({
       customDropdownOptions: loadedCustomDropdownOptions,
       scenes: scenes.map((scene, idx) => {
         if (scene.linkedScriptSceneId) return scene
-        const fallbackScriptScene = Array.isArray(data.scriptScenes) ? data.scriptScenes[idx] : null
+        const fallbackScriptScene = Array.isArray(normalizedScriptState.scriptScenes) ? normalizedScriptState.scriptScenes[idx] : null
         if (!fallbackScriptScene?.id) return scene
         return {
           ...scene,
@@ -3109,8 +3146,8 @@ const useStore = create((set, get) => ({
       })(),
       callsheetColumnConfig: normalizeCallsheetColumnConfig(data.callsheetColumnConfig),
       // Script import state — default to empty for older project files
-      scriptScenes: Array.isArray(data.scriptScenes)
-        ? data.scriptScenes.map(s => {
+      scriptScenes: Array.isArray(normalizedScriptState.scriptScenes)
+        ? normalizedScriptState.scriptScenes.map(s => {
           const derived = deriveScriptSceneFromElements(
             { ...s, sceneNumber: s?.sceneNumber != null ? String(s.sceneNumber) : '' },
             s.screenplayElements,
@@ -3127,6 +3164,11 @@ const useStore = create((set, get) => ({
           }
         })
         : [],
+      scriptEngine: normalizedScriptState.scriptEngine,
+      scriptDocVersion: normalizedScriptState.scriptDocVersion,
+      scriptDerivationVersion: normalizedScriptState.scriptDerivationVersion,
+      scriptDocument: normalizedScriptState.scriptDocument,
+      scriptAnnotations: normalizedScriptState.scriptAnnotations,
       importedScripts: Array.isArray(data.importedScripts) ? data.importedScripts : [],
       scriptSettings: {
         baseMinutesPerPage: 5,
@@ -3135,7 +3177,7 @@ const useStore = create((set, get) => ({
         defaultSceneColor: null,
         scenePaginationMode: 'natural',
         ...(data.scriptSettings || {}),
-        documentSettings: normalizeDocumentSettings(data?.scriptSettings?.documentSettings),
+        documentSettings: normalizeDocumentSettings(normalizedScriptState.scriptLayout || data?.scriptSettings?.documentSettings),
       },
       shortcutBindings: getActiveBindings(data.shortcutBindings || loadShortcutBindings() || SHORTCUT_DEFAULTS),
       lastSaved: new Date().toISOString(),
@@ -3318,6 +3360,11 @@ const useStore = create((set, get) => ({
       crewRoster: [],
       castCrewNotes: '',
       scriptScenes: [],
+      scriptEngine: SCRIPT_ENGINE_PROSEMIRROR,
+      scriptDocVersion: SCRIPT_DOC_VERSION,
+      scriptDerivationVersion: SCRIPT_DERIVATION_VERSION,
+      scriptDocument: { type: 'doc', content: [] },
+      scriptAnnotations: { byId: {}, order: [] },
       importedScripts: [],
       projectPath: null,
       browserProjectId,
