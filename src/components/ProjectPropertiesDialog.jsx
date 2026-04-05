@@ -6,6 +6,10 @@ import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '..
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
+
 const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -40,7 +44,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
     ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
     : 'skip'
   const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryAssetsArgs)
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'ProjectPropertiesDialog',
     queryName: 'assets:listProjectLibraryAssets',
     args: libraryAssetsArgs,

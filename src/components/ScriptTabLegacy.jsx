@@ -32,6 +32,11 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
@@ -421,14 +426,14 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
   const pruneOrphanedAssets = useMutation('assets:pruneOrphanedAssets')
   const cloudAccessPolicy = useCloudAccessPolicy()
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'ScriptTabLegacy',
     queryName: 'presence:listProjectPresence',
     args: presenceArgs,
     result: presenceRows,
     active: presenceArgs !== 'skip',
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'ScriptTabLegacy',
     queryName: 'screenplayLocks:listProjectLocks',
     args: locksArgs,

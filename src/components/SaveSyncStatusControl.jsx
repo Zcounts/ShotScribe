@@ -7,6 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Avatar, AvatarFallback } from './ui/avatar'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
+
 function formatTimestamp(iso) {
   if (!iso) return 'Not recorded yet'
   const date = new Date(iso)
@@ -83,7 +87,7 @@ export default function SaveSyncStatusControl({
   const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
   const lockRows = useQuery('screenplayLocks:listProjectLocks', locksArgs)
 
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'SaveSyncStatusControl',
     queryName: 'projects:listProjectsForCurrentUserLite',
     args: cloudProjectsArgs,
@@ -91,7 +95,7 @@ export default function SaveSyncStatusControl({
     active: cloudProjectsArgs !== 'skip',
     hidden: !open,
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'SaveSyncStatusControl',
     queryName: 'projectMembers:listProjectMembers',
     args: membersArgs,
@@ -99,7 +103,7 @@ export default function SaveSyncStatusControl({
     active: membersArgs !== 'skip',
     hidden: !open,
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'SaveSyncStatusControl',
     queryName: 'presence:listProjectPresence',
     args: presenceArgs,
@@ -107,7 +111,7 @@ export default function SaveSyncStatusControl({
     active: presenceArgs !== 'skip',
     hidden: !open,
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'SaveSyncStatusControl',
     queryName: 'screenplayLocks:listProjectLocks',
     args: locksArgs,

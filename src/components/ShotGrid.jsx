@@ -5,6 +5,10 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
+
 const SIGNED_VIEW_CACHE_TTL_MS = 60 * 1000
 const signedViewCache = new Map()
 const signedViewBatchInFlight = new Map()
@@ -56,14 +60,14 @@ function ShotGrid({
   const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryQueryArgs)
   const recentlyDeletedAssets = useQuery('assets:getRecentlyDeletedLibraryAssets', recentDeletedQueryArgs)
 
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'ShotGrid',
     queryName: 'assets:listProjectLibraryAssets',
     args: libraryQueryArgs,
     result: libraryAssets,
     active: libraryQueryArgs !== 'skip',
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'ShotGrid',
     queryName: 'assets:getRecentlyDeletedLibraryAssets',
     args: recentDeletedQueryArgs,

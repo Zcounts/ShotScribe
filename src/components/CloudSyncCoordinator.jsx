@@ -6,6 +6,10 @@ import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '..
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
+
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
 const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
@@ -151,28 +155,28 @@ export default function CloudSyncCoordinator() {
     'projectSnapshots:getLatestSnapshotHeadForProject',
     cloudProjectId ? { projectId: cloudProjectId } : 'skip',
   )
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'CloudSyncCoordinator',
     queryName: 'users:currentUser',
     args: {},
     result: cloudUser,
     active: true,
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'CloudSyncCoordinator',
     queryName: 'projects:getProjectById',
     args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
     result: cloudProject,
     active: Boolean(cloudProjectId),
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'CloudSyncCoordinator',
     queryName: 'projectSnapshots:getLatestSnapshotHeadForProject',
     args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
     result: latestSnapshotHead,
     active: Boolean(cloudProjectId),
   })
-  useConvexQueryDiagnostics({
+  useConvexQueryDiagnosticsSafe({
     component: 'CloudSyncCoordinator',
     queryName: 'presence:listProjectPresence',
     args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
