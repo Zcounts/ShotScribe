@@ -100,8 +100,6 @@ export default function HomeView() {
   const [contextMenu, setContextMenu] = useState(null)
   const [heroContextMenu, setHeroContextMenu] = useState(null)
   const [deleteConfirmProject, setDeleteConfirmProject] = useState(null)
-  const [cloudProjectsExpanded, setCloudProjectsExpanded] = useState(true)
-  const [pendingDeletionExpanded, setPendingDeletionExpanded] = useState(true)
   const menuRef = useRef(null)
   const heroMenuRef = useRef(null)
 
