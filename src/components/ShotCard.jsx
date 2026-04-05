@@ -81,6 +81,7 @@ function ShotCard({
   const softDeleteLibraryAsset = useMutation('assets:softDeleteLibraryAsset')
   const undoSoftDeleteLibraryAsset = useMutation('assets:undoSoftDeleteLibraryAsset')
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
+  const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
   const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
@@ -103,13 +104,13 @@ function ShotCard({
   )
   const getSignedViewWithCache = useCallback(async (assetId) => {
     const key = String(assetId || '')
-    if (!key || projectRef?.type !== 'cloud' || !projectRef?.projectId) return null
+    if (!key || !cloudProjectId) return null
     const cached = getCachedSignedView(key)
     if (cached) return cached
     const inFlight = signedViewInFlight.get(key)
     if (inFlight) return inFlight
     const request = getAssetSignedView({
-      projectId: projectRef.projectId,
+      projectId: cloudProjectId,
       assetId: key,
     })
       .then((view) => {
@@ -121,12 +122,12 @@ function ShotCard({
       })
     signedViewInFlight.set(key, request)
     return request
-  }, [getAssetSignedView, projectRef?.projectId, projectRef?.type])
+  }, [cloudProjectId, getAssetSignedView])
 
   useEffect(() => {
     let cancelled = false
     async function loadAssetView() {
-      if (projectRef?.type !== 'cloud' || cloudAssetBlocked || !shot?.imageAsset?.cloud?.assetId) {
+      if (!cloudProjectId || cloudAssetBlocked || !shot?.imageAsset?.cloud?.assetId) {
         setCloudAssetView(null)
         return
       }
@@ -152,14 +153,14 @@ function ShotCard({
     return () => {
       cancelled = true
     }
-  }, [cloudAssetBlocked, getSignedViewWithCache, prefetchedCloudAssetView, projectRef, shot?.imageAsset?.cloud?.assetId])
+  }, [cloudAssetBlocked, cloudProjectId, getSignedViewWithCache, prefetchedCloudAssetView, shot?.imageAsset?.cloud?.assetId])
 
   useEffect(() => {
     let cancelled = false
     async function loadLibraryViews() {
       if (
         imagePickerStep !== 'library'
-        || projectRef?.type !== 'cloud'
+        || !cloudProjectId
         || cloudAssetBlocked
         || !Array.isArray(libraryAssets)
         || libraryAssets.length === 0
@@ -180,7 +181,7 @@ function ShotCard({
           return
         }
         const views = await getAssetSignedViewsBatch({
-          projectId: projectRef.projectId,
+          projectId: cloudProjectId,
           assetIds: missingAssetIds,
         })
         Object.entries(views || {}).forEach(([assetId, view]) => {
@@ -197,7 +198,7 @@ function ShotCard({
     return () => {
       cancelled = true
     }
-  }, [cloudAssetBlocked, getAssetSignedViewsBatch, imagePickerStep, libraryAssets, projectRef])
+  }, [cloudAssetBlocked, cloudProjectId, getAssetSignedViewsBatch, imagePickerStep, libraryAssets])
 
   const {
     attributes,

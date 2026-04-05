@@ -358,3 +358,56 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 ### Rollback notes
 - Revert diff-skip logic in `CloudSyncCoordinator` if any missed live updates are observed.
 - Revert signed-view in-flight dedupe/cache-first behavior in `ShotCard`/`ShotGrid` if preview freshness issues appear.
+
+---
+
+## Solo mode pass (collaborator-aware live sync throttling + asset tightening)
+
+### What solo mode means here
+- Solo mode is **not offline mode** and **not a second source of truth**.
+- Solo mode means: if project presence indicates no other active collaborator, live storyboard upserts are buffered briefly in memory and flushed on a short timer or safety triggers.
+- As soon as another collaborator is detected, buffered live edits flush immediately and normal real-time cadence resumes.
+
+### What stayed live in solo mode
+- Auth/user identity and project access checks.
+- Project identity and snapshot-head freshness subscriptions.
+- Presence subscription used as collaborator signal.
+- Existing save/sync snapshot behavior.
+
+### What became quieter
+- `projectScenesLive:upsertScene` / `projectShotsLive:upsertShot` cadence is collaborator-aware:
+  - collaborative mode: immediate write path
+  - solo mode: short debounce buffer in-memory, latest payload wins
+- Existing no-op upsert suppression still applies inside flush execution.
+- Storyboard asset batch prefetch now uses a stable visible-set key to avoid harmless rerender refetches.
+- Shot card asset fetch effects now key off stable cloud project id, reducing object-identity-triggered reruns.
+
+### Buffering + collaborator-join flush behavior
+- Pending live storyboard sync payload is held in-memory only (`pendingLiveSyncRef`).
+- Flush triggers:
+  1. solo debounce timer
+  2. collaborator count rises above zero
+  3. tab hidden / pagehide / beforeunload
+- Failed flush keeps pending payload in memory for a later retry path.
+- Project switch/unmount clears pending timer/buffer.
+
+### Risks / limitations
+- Presence is the current “working alone” signal; if collaborators are inactive in presence, mode can remain solo longer (safe because snapshot sync path remains intact).
+- Buffer is in-memory only (no IndexedDB durability in this pass), chosen to keep risk low and behavior reversible.
+- This pass intentionally does not redesign lock/presence architecture or full domain sync model.
+
+### Expected impact
+- **Function calls:** fewer live upsert calls during solo editing bursts.
+- **Bandwidth:** lower repetitive live mutation traffic while alone.
+- **Collaboration safety:** immediate flush on collaborator detection keeps shared editing behavior intact.
+
+### Manual QA for this pass
+1. Open cloud project in one tab, edit shots/scenes rapidly, verify normal UX and persisted edits.
+2. While pending solo edits may exist, open second collaborator session and verify buffered changes flush and real-time behavior continues.
+3. Trigger tab hide/pagehide and confirm no lost edits.
+4. Verify manual save/autosave behavior still matches existing UX.
+5. Verify storyboard thumbnails and library previews still load correctly.
+
+### Rollback notes
+- Remove solo debounce buffering branch in `CloudSyncCoordinator.syncLiveStoryboardState` and always call immediate flush path.
+- Keep no-op suppression and asset cache tightening independently if needed.

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
@@ -9,6 +9,7 @@ import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
 const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
+const SOLO_LIVE_SYNC_DEBOUNCE_MS = 1800
 const ensureStoryboardFailureCache = new Map()
 const DIAG_LOCAL_STORAGE_KEY = 'ss_convex_diag'
 
@@ -131,6 +132,10 @@ export default function CloudSyncCoordinator() {
   const cloudUser = useQuery('users:currentUser')
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const cloudProject = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const presenceRows = useQuery(
+    'presence:listProjectPresence',
+    cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+  )
   const liveScenes = useQuery(
     'projectScenesLive:listScenesByProject',
     cloudProjectId && Number(cloudProject?.liveModelVersion || 0) >= 1 ? { projectId: cloudProjectId } : 'skip',
@@ -164,6 +169,13 @@ export default function CloudSyncCoordinator() {
     result: latestSnapshotHead,
     active: Boolean(cloudProjectId),
   })
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'presence:listProjectPresence',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: presenceRows,
+    active: Boolean(cloudProjectId),
+  })
   // Reuse role from cloudProject query so this component does not mount a
   // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
   const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })
@@ -181,10 +193,19 @@ export default function CloudSyncCoordinator() {
   const inFlightRemoteSnapshotIdsRef = useRef(new Set())
   const liveSceneRowsRef = useRef([])
   const liveShotRowsRef = useRef([])
+  const pendingLiveSyncRef = useRef(null)
+  const soloLiveSyncTimerRef = useRef(null)
+  const liveSyncFlushInFlightRef = useRef(false)
+  const soloModeRef = useRef(false)
 
   useEffect(() => {
     fetchedRemoteSnapshotIdsRef.current.clear()
     inFlightRemoteSnapshotIdsRef.current.clear()
+    pendingLiveSyncRef.current = null
+    if (soloLiveSyncTimerRef.current) {
+      window.clearTimeout(soloLiveSyncTimerRef.current)
+      soloLiveSyncTimerRef.current = null
+    }
   }, [cloudProjectId])
 
   useEffect(() => {
@@ -194,6 +215,141 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     liveShotRowsRef.current = Array.isArray(liveShots) ? liveShots : []
   }, [liveShots])
+
+  const currentUserId = cloudUser?.user?._id ? String(cloudUser.user._id) : null
+  const otherCollaboratorCount = Array.isArray(presenceRows)
+    ? presenceRows.filter((row) => String(row?.userId || '') !== String(currentUserId || '')).length
+    : null
+  const isSoloMode = Boolean(
+    cloudProjectId
+    && cloudAccessPolicy.canCollaborateOnCloudProject
+    && Number(otherCollaboratorCount || 0) === 0,
+  )
+  useEffect(() => {
+    soloModeRef.current = isSoloMode
+  }, [isSoloMode])
+
+  const applyLiveStoryboardSync = useCallback(async ({ projectId, scenes, storyboardSceneOrder }) => {
+    const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
+      ? liveSceneRowsRef.current
+      : await convex.query('projectScenesLive:listScenesByProject', { projectId })
+    const existingShots = Array.isArray(liveShotRowsRef.current) && liveShotRowsRef.current.length > 0
+      ? liveShotRowsRef.current
+      : await convex.query('projectShotsLive:listShotsByProject', { projectId })
+    const sceneOrder = Array.isArray(storyboardSceneOrder) && storyboardSceneOrder.length > 0
+      ? storyboardSceneOrder
+      : (scenes || []).map((scene) => scene.id)
+    const orderBySceneId = new Map(sceneOrder.map((id, index) => [String(id), index]))
+    const existingScenesById = new Map((existingScenes || []).map((scene) => [String(scene.sceneId), scene]))
+    const existingShotsById = new Map((existingShots || []).map((shot) => [String(shot.shotId), shot]))
+    const nextSceneIds = new Set()
+    const nextShotIds = new Set()
+    const ops = {
+      upsertScenes: 0,
+      skipScenes: 0,
+      upsertShots: 0,
+      skipShots: 0,
+      deleteScenes: 0,
+      deleteShots: 0,
+    }
+
+    for (const scene of (scenes || [])) {
+      const sceneId = String(scene.id)
+      nextSceneIds.add(sceneId)
+      const nextOrder = orderBySceneId.has(sceneId) ? orderBySceneId.get(sceneId) : Number.MAX_SAFE_INTEGER
+      const nextPayload = normalizeLiveScenePayload(scene)
+      const existingScene = existingScenesById.get(sceneId)
+      const shouldUpsertScene = !existingScene
+        || Number(existingScene.order) !== Number(nextOrder)
+        || stableStringify(normalizeLiveScenePayload(existingScene)) !== stableStringify(nextPayload)
+      if (shouldUpsertScene) {
+        await upsertLiveScene({
+          projectId,
+          sceneId,
+          order: nextOrder,
+          payload: scene,
+        })
+        ops.upsertScenes += 1
+      } else {
+        ops.skipScenes += 1
+      }
+      for (const [index, shot] of (scene.shots || []).entries()) {
+        const shotId = String(shot.id)
+        nextShotIds.add(shotId)
+        const nextShotPayload = normalizeLiveShotPayload(shot)
+        const existingShot = existingShotsById.get(shotId)
+        const shouldUpsertShot = !existingShot
+          || String(existingShot.sceneId || '') !== sceneId
+          || Number(existingShot.order) !== Number(index)
+          || stableStringify(normalizeLiveShotPayload(existingShot)) !== stableStringify(nextShotPayload)
+        if (!shouldUpsertShot) {
+          ops.skipShots += 1
+          continue
+        }
+        await upsertLiveShot({
+          projectId,
+          sceneId,
+          shotId,
+          order: index,
+          payload: shot,
+        })
+        ops.upsertShots += 1
+      }
+    }
+
+    await Promise.all(
+      (existingScenes || [])
+        .filter((scene) => !nextSceneIds.has(String(scene.sceneId)))
+        .map((scene) => {
+          ops.deleteScenes += 1
+          return deleteLiveScene({ projectId, sceneId: String(scene.sceneId) })
+        }),
+    )
+    await Promise.all(
+      (existingShots || [])
+        .filter((shot) => !nextShotIds.has(String(shot.shotId)))
+        .map((shot) => {
+          ops.deleteShots += 1
+          return deleteLiveShot({ projectId, shotId: String(shot.shotId) })
+        }),
+    )
+
+    if (isConvexDiagEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[cloud-sync] live storyboard sync ops', {
+        projectId: String(projectId),
+        soloMode: soloModeRef.current,
+        ...ops,
+      })
+    }
+  }, [convex, deleteLiveScene, deleteLiveShot, upsertLiveScene, upsertLiveShot])
+
+  const flushPendingLiveStoryboardSync = useCallback(async ({ force = false } = {}) => {
+    if (soloLiveSyncTimerRef.current) {
+      window.clearTimeout(soloLiveSyncTimerRef.current)
+      soloLiveSyncTimerRef.current = null
+    }
+    if (liveSyncFlushInFlightRef.current) return
+    const pending = pendingLiveSyncRef.current
+    if (!pending) return
+    if (!force && soloModeRef.current && Date.now() - Number(pending.enqueuedAt || 0) < SOLO_LIVE_SYNC_DEBOUNCE_MS) return
+    liveSyncFlushInFlightRef.current = true
+    try {
+      pendingLiveSyncRef.current = null
+      await applyLiveStoryboardSync(pending)
+    } catch (error) {
+      pendingLiveSyncRef.current = pending
+      if (isConvexDiagEnabled()) {
+        // eslint-disable-next-line no-console
+        console.warn('[cloud-sync] solo live sync flush failed', {
+          projectId: String(pending?.projectId || ''),
+          message: error?.message || 'unknown_error',
+        })
+      }
+    } finally {
+      liveSyncFlushInFlightRef.current = false
+    }
+  }, [applyLiveStoryboardSync])
 
   useEffect(() => {
     setCloudRepositoryAdapter({
@@ -232,116 +388,53 @@ export default function CloudSyncCoordinator() {
       cloudWritesEnabled: cloudAccessPolicy.canEditCloudProject,
       runSnapshotMutation: createSnapshot,
       syncLiveStoryboardState: async ({ projectId, scenes, storyboardSceneOrder }) => {
-        const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
-          ? liveSceneRowsRef.current
-          : await convex.query('projectScenesLive:listScenesByProject', { projectId })
-        const existingShots = Array.isArray(liveShotRowsRef.current) && liveShotRowsRef.current.length > 0
-          ? liveShotRowsRef.current
-          : await convex.query('projectShotsLive:listShotsByProject', { projectId })
-        const sceneOrder = Array.isArray(storyboardSceneOrder) && storyboardSceneOrder.length > 0
-          ? storyboardSceneOrder
-          : (scenes || []).map((scene) => scene.id)
-        const orderBySceneId = new Map(sceneOrder.map((id, index) => [String(id), index]))
-        const existingScenesById = new Map((existingScenes || []).map((scene) => [String(scene.sceneId), scene]))
-        const existingShotsById = new Map((existingShots || []).map((shot) => [String(shot.shotId), shot]))
-        const nextSceneIds = new Set()
-        const nextShotIds = new Set()
-        const ops = {
-          upsertScenes: 0,
-          skipScenes: 0,
-          upsertShots: 0,
-          skipShots: 0,
-          deleteScenes: 0,
-          deleteShots: 0,
+        const payload = {
+          projectId,
+          scenes: scenes || [],
+          storyboardSceneOrder: storyboardSceneOrder || [],
+          enqueuedAt: Date.now(),
         }
-
-        for (const scene of (scenes || [])) {
-          const sceneId = String(scene.id)
-          nextSceneIds.add(sceneId)
-          const nextOrder = orderBySceneId.has(sceneId) ? orderBySceneId.get(sceneId) : Number.MAX_SAFE_INTEGER
-          const nextPayload = normalizeLiveScenePayload(scene)
-          const existingScene = existingScenesById.get(sceneId)
-          const shouldUpsertScene = !existingScene
-            || Number(existingScene.order) !== Number(nextOrder)
-            || stableStringify(normalizeLiveScenePayload(existingScene)) !== stableStringify(nextPayload)
-          if (shouldUpsertScene) {
-            await upsertLiveScene({
-              projectId,
-              sceneId,
-              order: nextOrder,
-              payload: scene,
-            })
-            ops.upsertScenes += 1
-          } else {
-            ops.skipScenes += 1
-          }
-          for (const [index, shot] of (scene.shots || []).entries()) {
-            const shotId = String(shot.id)
-            nextShotIds.add(shotId)
-            const nextShotPayload = normalizeLiveShotPayload(shot)
-            const existingShot = existingShotsById.get(shotId)
-            const shouldUpsertShot = !existingShot
-              || String(existingShot.sceneId || '') !== sceneId
-              || Number(existingShot.order) !== Number(index)
-              || stableStringify(normalizeLiveShotPayload(existingShot)) !== stableStringify(nextShotPayload)
-            if (!shouldUpsertShot) {
-              ops.skipShots += 1
-              continue
-            }
-            await upsertLiveShot({
-              projectId,
-              sceneId,
-              shotId,
-              order: index,
-              payload: shot,
-            })
-            ops.upsertShots += 1
-          }
+        if (!soloModeRef.current) {
+          pendingLiveSyncRef.current = null
+          await applyLiveStoryboardSync(payload)
+          return
         }
-
-        await Promise.all(
-          (existingScenes || [])
-            .filter((scene) => !nextSceneIds.has(String(scene.sceneId)))
-            .map((scene) => {
-              ops.deleteScenes += 1
-              return deleteLiveScene({ projectId, sceneId: String(scene.sceneId) })
-            }),
-        )
-
-        await Promise.all(
-          (existingShots || [])
-            .filter((shot) => !nextShotIds.has(String(shot.shotId)))
-            .map((shot) => {
-              ops.deleteShots += 1
-              return deleteLiveShot({ projectId, shotId: String(shot.shotId) })
-            }),
-        )
-
-        if (isConvexDiagEnabled()) {
-          // eslint-disable-next-line no-console
-          console.debug('[cloud-sync] live storyboard sync ops', {
-            projectId: String(projectId),
-            ...ops,
-            usedLiveQueryCache: Array.isArray(liveSceneRowsRef.current) && Array.isArray(liveShotRowsRef.current),
-          })
-        }
+        pendingLiveSyncRef.current = payload
+        if (soloLiveSyncTimerRef.current) window.clearTimeout(soloLiveSyncTimerRef.current)
+        soloLiveSyncTimerRef.current = window.setTimeout(() => {
+          flushPendingLiveStoryboardSync({ force: true })
+        }, SOLO_LIVE_SYNC_DEBOUNCE_MS)
       },
-      currentUserId: cloudUser?.user?._id ? String(cloudUser.user._id) : null,
+      currentUserId,
       collaborationMode: isCloudProject && cloudAccessPolicy.canCollaborateOnCloudProject,
     })
   }, [
+    applyLiveStoryboardSync,
     cloudAccessPolicy.canCollaborateOnCloudProject,
     cloudAccessPolicy.canEditCloudProject,
-    cloudUser?.user?._id,
-    convex,
+    currentUserId,
     createSnapshot,
-    deleteLiveScene,
-    deleteLiveShot,
+    flushPendingLiveStoryboardSync,
     projectRef?.type,
     setCloudSyncContext,
-    upsertLiveScene,
-    upsertLiveShot,
   ])
+
+  useEffect(() => {
+    if (!cloudProjectId) return
+    if (otherCollaboratorCount == null) return
+    if (otherCollaboratorCount <= 0) return
+    flushPendingLiveStoryboardSync({ force: true })
+  }, [cloudProjectId, flushPendingLiveStoryboardSync, otherCollaboratorCount])
+
+  useEffect(() => {
+    return () => {
+      if (soloLiveSyncTimerRef.current) {
+        window.clearTimeout(soloLiveSyncTimerRef.current)
+        soloLiveSyncTimerRef.current = null
+      }
+      pendingLiveSyncRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (!cloudProjectId || !cloudProject) return
@@ -439,14 +532,20 @@ export default function CloudSyncCoordinator() {
           s.saveSyncState?.mode !== 'cloud_blocked')
       if (!needsSync) return
       flushCloudSync({ reason: 'manual' })
+      flushPendingLiveStoryboardSync({ force: true })
     }
     window.addEventListener('beforeunload', flush)
     window.addEventListener('pagehide', flush)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushPendingLiveStoryboardSync({ force: true })
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       window.removeEventListener('beforeunload', flush)
       window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [flushCloudSync, projectRef?.type])
+  }, [flushCloudSync, flushPendingLiveStoryboardSync, projectRef?.type])
 
   useEffect(() => {
     const latestSnapshotId = latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null

@@ -349,3 +349,41 @@ Success signal for Phase 3B first slice:
 ### Rollback notes
 - Remove diff-skip logic if any stale live row issue is observed.
 - Remove in-flight dedupe maps in `ShotCard`/`ShotGrid` if they mask legitimate refreshes.
+
+---
+
+## Solo mode runtime pass (phase 3 controlled optimization)
+
+### Implemented
+- Added collaborator-aware live storyboard sync mode switching in `CloudSyncCoordinator`:
+  - **Collaborative mode:** immediate live sync writes.
+  - **Solo mode:** short in-memory debounce queue, latest payload flush.
+- Presence rows are now consumed as the primary “alone vs collaborative” runtime signal.
+- Added safety flush triggers for pending solo writes:
+  - collaborator joins
+  - `visibilitychange` -> hidden
+  - `pagehide` / `beforeunload`
+- Retained existing no-op upsert suppression during flush execution.
+- Tightened storyboard asset effects:
+  - stable visible-asset set key in `ShotGrid`
+  - stable cloud project id keyed effects in `ShotCard`
+
+### Intentionally deferred
+- Durable local queue (IndexedDB) for crash recovery.
+- Presence/lock system redesign.
+- Any broader shift away from snapshot-centric save flow.
+
+### Expected impact
+- Reduced live mutation chatter during solo edit bursts.
+- Maintained collaboration correctness by immediate flush on collaborator detection.
+- Reduced unnecessary asset refetch from benign rerenders.
+
+### Manual QA additions
+1. Solo edit burst: verify no visible behavior change and successful persistence.
+2. Join collaborator mid-edit: verify pending writes flush and live behavior continues.
+3. Hide tab / close tab while editing: verify pending writes flush path runs.
+4. Storyboard previews and library picker remain stable.
+
+### Rollback
+- Revert collaborator-aware debounce branch in `CloudSyncCoordinator`.
+- Keep or rollback asset effect stabilization independently.

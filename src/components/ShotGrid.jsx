@@ -80,6 +80,10 @@ function ShotGrid({
     }
     return Array.from(new Set(ids.map(String)))
   }, [projectRef?.type, shots])
+  const cloudAssetIdKey = useMemo(
+    () => cloudAssetIds.slice().sort().join(','),
+    [cloudAssetIds],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -88,7 +92,7 @@ function ShotGrid({
         projectRef?.type !== 'cloud'
         || !projectRef?.projectId
         || !cloudAccessPolicy.canAccessCloudAssets
-        || cloudAssetIds.length === 0
+        || cloudAssetIdKey.length === 0
       ) {
         setPrefetchedAssetViews({})
         return
@@ -138,7 +142,7 @@ function ShotGrid({
     return () => {
       cancelled = true
     }
-  }, [cloudAccessPolicy.canAccessCloudAssets, cloudAssetIds, getAssetSignedViewsBatch, projectRef?.projectId, projectRef?.type])
+  }, [cloudAccessPolicy.canAccessCloudAssets, cloudAssetIdKey, cloudAssetIds, getAssetSignedViewsBatch, projectRef?.projectId, projectRef?.type])
 
   const gridStyle = {
     display: 'grid',
