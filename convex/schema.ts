@@ -68,7 +68,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_owner_user_id', ['ownerUserId'])
-    .index('by_owner_user_id_updated_at', ['ownerUserId', 'updatedAt']),
+    .index('by_owner_user_id_updated_at', ['ownerUserId', 'updatedAt'])
+    .index('by_delete_after', ['deleteAfter']),
 
   projectScenes: defineTable({
     projectId: v.id('projects'),
@@ -205,7 +206,10 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index('by_project_id', ['projectId'])
-    .index('by_project_id_shot_id', ['projectId', 'shotId']),
+    .index('by_project_id_shot_id', ['projectId', 'shotId'])
+    .index('by_project_id_kind_created_at', ['projectId', 'kind', 'createdAt'])
+    .index('by_project_id_kind_delete_status_created_at', ['projectId', 'kind', 'deleteStatus', 'createdAt'])
+    .index('by_project_id_delete_status_deleted_at', ['projectId', 'deleteStatus', 'deletedAt']),
 
   shotAssetAssignments: defineTable({
     projectId: v.id('projects'),

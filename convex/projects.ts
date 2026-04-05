@@ -502,11 +502,12 @@ export const listDueProjectDeletes = internalQuery({
   },
   handler: async (ctx, args) => {
     const now = Date.now()
-    const rows = await ctx.db.query('projects').collect()
+    const safeLimit = Math.max(1, Math.min(Number(args.limit || 20), 100))
+    const rows = await ctx.db
+      .query('projects')
+      .withIndex('by_delete_after', (q: any) => q.lte('deleteAfter', now))
+      .take(safeLimit)
     return rows
-      .filter((row: any) => !!row.deleteAfter && Number(row.deleteAfter) <= now)
-      .sort((a: any, b: any) => Number(a.deleteAfter || 0) - Number(b.deleteAfter || 0))
-      .slice(0, Math.max(1, Math.min(Number(args.limit || 20), 100)))
       .map((row: any) => ({ projectId: row._id }))
   },
 })

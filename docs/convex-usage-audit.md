@@ -203,3 +203,37 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 - `convex/projectSnapshots.ts` logs approximate snapshot payload bytes for read/write operations.
 - Enable with env var: `CONVEX_USAGE_DIAGNOSTICS=1`
 
+---
+
+## Phase 2 follow-up
+
+### What was changed
+- Replaced presence/lock read patterns to use indexed range queries (`expiresAt > now`, `leaseExpiresAt > now`) and indexed cleanup of expired locks.
+- Replaced project delete worker scan with indexed `projects.by_delete_after` lookup.
+- Added new `projectAssets` indexes and narrowed library/deleted asset reads to index-backed queries.
+- Changed batch asset signed-view pre-read from project-wide scan to targeted `db.get` reads for requested asset IDs only.
+- Added optional role override support to `useCloudAccessPolicy` and used it in `CloudSyncCoordinator` to avoid duplicate `projects:getProjectById` subscription in that component.
+
+### Why it was changed
+- These were the highest-impact remaining low-risk paths where `.collect()` or duplicate subscriptions still caused avoidable read bandwidth and query churn.
+- All changes keep existing feature behavior (collaboration, save/sync, asset flows, billing/admin checks) while narrowing read scope.
+
+### Expected impact
+- Lower read bandwidth for presence/locks in active collaboration projects (expired rows no longer fetched and filtered client-side in Convex functions).
+- Lower background internal read cost for delete worker scheduling path.
+- Lower bandwidth/function work for asset library + recently deleted lists, especially on projects with large asset histories.
+- Lower function work for `assets:getAssetSignedViewsBatch` because it no longer reads every asset row in a project.
+- One fewer duplicate `projects:getProjectById` subscription inside cloud sync coordinator flow.
+
+### What still remains
+- `projectSnapshots` remains monolithic payload storage/read model.
+- `projects:listProjectsForCurrentUser` still performs per-project snapshot validation reads and can get chatty at scale.
+- `billing:getMyEntitlement` is still subscribed from multiple surfaces; a shared route-level entitlement source is still pending.
+- Admin overview queries still intentionally read broad table sets (acceptable for admin route, but heavy).
+
+### Recommended Phase 3 priorities
+1. Introduce lightweight snapshot metadata table/query path and keep heavy payload reads only on explicit open/apply actions.
+2. Implement snapshot retention/pruning policy (autosave thinning, capped history, safe restore checkpoints).
+3. Split home/project listing into light summary endpoints (no payload touches in hot path).
+4. Add an app-shell entitlement/user context provider to fully dedupe repeated global policy queries.
+5. Evaluate collaboration read model refinements (presence/locks summaries vs full rows) if live churn remains high after Phase 2.

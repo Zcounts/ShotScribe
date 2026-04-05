@@ -96,7 +96,9 @@ export default function CloudSyncCoordinator() {
     active: Boolean(cloudProjectId),
     largePayloadBytes: 80 * 1024,
   })
-  const cloudAccessPolicy = useCloudAccessPolicy()
+  // Reuse role from cloudProject query so this component does not mount a
+  // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
+  const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })
   const setLiveModelVersion = useStore(s => s.setLiveModelVersion)
   const applyLiveStoryboardState = useStore(s => s.applyLiveStoryboardState)
 
