@@ -36,6 +36,17 @@ import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
+import { recordCollabSubscriptionSuspended, recordPresenceHeartbeat } from '../utils/sessionMetrics'
+
+const runConvexQueryDiagnostics = typeof useConvexQueryDiagnosticsSafe === 'function'
+  ? useConvexQueryDiagnosticsSafe
+  : () => {}
+const runPresenceHeartbeatMetric = typeof recordPresenceHeartbeat === 'function'
+  ? recordPresenceHeartbeat
+  : () => {}
+const runCollabSubscriptionSuspendedMetric = typeof recordCollabSubscriptionSuspended === 'function'
+  ? recordCollabSubscriptionSuspended
+  : () => {}
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -435,14 +446,14 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
   const pruneOrphanedAssets = useMutation('assets:pruneOrphanedAssets')
   const cloudAccessPolicy = useCloudAccessPolicy()
-  useConvexQueryDiagnosticsSafe({
+  runConvexQueryDiagnostics({
     component: 'ScriptTabLegacy',
     queryName: 'presence:listProjectPresence',
     args: presenceArgs,
     result: presenceRows,
     active: presenceArgs !== 'skip',
   })
-  useConvexQueryDiagnosticsSafe({
+  runConvexQueryDiagnostics({
     component: 'ScriptTabLegacy',
     queryName: 'screenplayLocks:listProjectLocks',
     args: locksArgs,
@@ -566,10 +577,10 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   }, [cloudProjectId, storeHasCollaborators])
 
   useEffect(() => {
-    if (!cloudProjectId || !hasActiveCollaborators) return
+    if (!cloudProjectId || !hasActiveCollaborators || typeof heartbeatPresence !== 'function') return
     const tick = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-      recordPresenceHeartbeat()
+      runPresenceHeartbeatMetric()
       heartbeatPresence({
         projectId: cloudProjectId,
         sceneId: activeSceneId || undefined,
@@ -595,7 +606,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   useEffect(() => {
     if (!cloudProjectId || hasActiveCollaborators) return
-    recordCollabSubscriptionSuspended()
+    runCollabSubscriptionSuspendedMetric()
   }, [cloudProjectId, hasActiveCollaborators])
 
   useEffect(() => {
