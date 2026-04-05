@@ -728,6 +728,21 @@ function buildStoryboardDomainToken(state) {
   }
 }
 
+function buildScriptDomainPayloadFromProjectData(data = {}) {
+  return {
+    scriptScenes: data.scriptScenes || [],
+    importedScripts: data.importedScripts || [],
+    scriptSettings: data.scriptSettings || {},
+    scriptDocument: data.scriptDocument || { type: 'doc', content: [] },
+    scriptDocumentLive: data.scriptDocumentLive || null,
+    scriptDocVersion: data.scriptDocVersion || null,
+    scriptDerivationVersion: data.scriptDerivationVersion || null,
+    scriptEngine: data.scriptEngine || null,
+    scriptAnnotations: data.scriptAnnotations || { byId: {}, order: [] },
+    scriptDerivedCache: data.scriptDerivedCache || {},
+  }
+}
+
 let projectRepository = createProjectRepository()
 
 function devCloudBackupLog(event, details = {}) {
@@ -760,6 +775,7 @@ const useStore = create((set, get) => ({
     canSync: false,
     cloudWritesEnabled: false,
     runSnapshotMutation: null,
+    runScriptDomainMutation: null,
     currentUserId: null,
     collaborationMode: false,
     hasActiveCollaborators: false,
@@ -4253,41 +4269,86 @@ const useStore = create((set, get) => ({
     const state = get()
     if (state.projectRef?.type !== 'cloud') return { skipped: true, reason: 'not_cloud_project' }
     if (!state.cloudSyncContext?.canSync || !state.cloudSyncContext?.cloudWritesEnabled) return { skipped: true, reason: 'sync_blocked' }
-    if (domain === 'script') return { skipped: true, reason: 'script_not_enabled' }
-    if (!state.domainDraftState?.dirty?.storyboard) return { skipped: true, reason: 'domain_clean' }
-    const syncFn = state.cloudSyncContext?.syncLiveStoryboardState
-    if (typeof syncFn !== 'function') return { skipped: true, reason: 'missing_domain_sync' }
+    if (!state.domainDraftState?.dirty?.[domain]) return { skipped: true, reason: 'domain_clean' }
 
-    const tokenBeforeCommit = buildStoryboardDomainToken(state)
+    if (domain === 'storyboard') {
+      const syncFn = state.cloudSyncContext?.syncLiveStoryboardState
+      if (typeof syncFn !== 'function') return { skipped: true, reason: 'missing_domain_sync' }
+      const tokenBeforeCommit = buildStoryboardDomainToken(state)
+      try {
+        await syncFn({
+          projectId: state.projectRef.projectId,
+          scenes: state.scenes || [],
+          storyboardSceneOrder: state.storyboardSceneOrder || [],
+        })
+        const committedAt = Date.now()
+        set((latest) => ({
+          domainDraftState: {
+            ...latest.domainDraftState,
+            dirty: {
+              ...latest.domainDraftState.dirty,
+              storyboard: false,
+            },
+            lastCommittedAt: {
+              ...latest.domainDraftState.lastCommittedAt,
+              storyboard: committedAt,
+            },
+          },
+          saveSyncState: buildSyncState({
+            mode: latest.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+            status: 'saved_locally',
+            message: 'Saved on device · uploading soon',
+            pendingReason: reason,
+            lastSyncedAt: latest.saveSyncState.lastSyncedAt,
+          }),
+        }))
+        if (tokenBeforeCommit) recordDomainCommit()
+        return { ok: true, domain, committedAt }
+      } catch (error) {
+        return { ok: false, reason: 'domain_commit_failed', error: error?.message || 'domain_commit_failed' }
+      }
+    }
+
+    const runScriptDomainMutation = state.cloudSyncContext?.runScriptDomainMutation
+    const currentUserId = state.cloudSyncContext?.currentUserId
+    if (!currentUserId || typeof runScriptDomainMutation !== 'function') {
+      return { skipped: true, reason: 'missing_script_domain_sync' }
+    }
     try {
-      await syncFn({
-        projectId: state.projectRef.projectId,
-        scenes: state.scenes || [],
-        storyboardSceneOrder: state.storyboardSceneOrder || [],
+      const latest = get()
+      const scriptPayload = buildScriptDomainPayloadFromProjectData(latest.getProjectData())
+      const result = await runScriptDomainMutation({
+        projectId: latest.projectRef.projectId,
+        createdByUserId: currentUserId,
+        scriptPayload,
+        expectedLatestSnapshotId: latest.projectRef.snapshotId || undefined,
       })
+      if (!result?.ok) return { ok: false, reason: result?.reason || 'script_commit_failed' }
       const committedAt = Date.now()
-      set((latest) => ({
+      set((nextState) => ({
+        projectRef: nextState.projectRef?.type === 'cloud'
+          ? { ...nextState.projectRef, snapshotId: String(result.snapshotId) }
+          : nextState.projectRef,
+        cloudLineage: nextState.cloudLineage?.originProjectId
+          ? {
+              ...nextState.cloudLineage,
+              lastKnownSnapshotId: String(result.snapshotId),
+            }
+          : nextState.cloudLineage,
         domainDraftState: {
-          ...latest.domainDraftState,
+          ...nextState.domainDraftState,
           dirty: {
-            ...latest.domainDraftState.dirty,
-            storyboard: false,
+            ...nextState.domainDraftState.dirty,
+            script: false,
           },
           lastCommittedAt: {
-            ...latest.domainDraftState.lastCommittedAt,
-            storyboard: committedAt,
+            ...nextState.domainDraftState.lastCommittedAt,
+            script: committedAt,
           },
         },
-        saveSyncState: buildSyncState({
-          mode: latest.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
-          status: 'saved_locally',
-          message: 'Saved on device · uploading soon',
-          pendingReason: reason,
-          lastSyncedAt: latest.saveSyncState.lastSyncedAt,
-        }),
       }))
-      if (tokenBeforeCommit) recordDomainCommit()
-      return { ok: true, domain, committedAt }
+      recordDomainCommit()
+      return { ok: true, domain, committedAt, snapshotId: result.snapshotId }
     } catch (error) {
       return { ok: false, reason: 'domain_commit_failed', error: error?.message || 'domain_commit_failed' }
     }
@@ -4306,6 +4367,7 @@ const useStore = create((set, get) => ({
     canSync = false,
     cloudWritesEnabled = false,
     runSnapshotMutation = null,
+    runScriptDomainMutation = null,
     currentUserId = null,
     collaborationMode = false,
     hasActiveCollaborators = false,
@@ -4316,6 +4378,7 @@ const useStore = create((set, get) => ({
         canSync: !!canSync,
         cloudWritesEnabled: !!cloudWritesEnabled,
         runSnapshotMutation: runSnapshotMutation || null,
+        runScriptDomainMutation: runScriptDomainMutation || null,
         currentUserId: currentUserId ? String(currentUserId) : null,
         collaborationMode: !!collaborationMode,
         hasActiveCollaborators: !!hasActiveCollaborators,
@@ -4364,7 +4427,15 @@ const useStore = create((set, get) => ({
     }
     const shouldWriteCheckpointSnapshot = !DRAFT_COMMIT_MODE || CHECKPOINT_REASONS.has(reason)
     if (!shouldWriteCheckpointSnapshot) {
-      return get().commitDomain('storyboard', { reason })
+      const dirtyDomains = get().domainDraftState?.dirty || {}
+      const results = []
+      if (dirtyDomains.storyboard) {
+        results.push(await get().commitDomain('storyboard', { reason }))
+      }
+      if (dirtyDomains.script) {
+        results.push(await get().commitDomain('script', { reason }))
+      }
+      return { ok: results.some((entry) => entry?.ok), results }
     }
     if (state._cloudSyncTimeout) {
       clearTimeout(state._cloudSyncTimeout)
@@ -4480,7 +4551,9 @@ const useStore = create((set, get) => ({
     set({ hasUnsavedChanges: true })
     get()._updateSaveSyncStateForChange(reason)
     if (DRAFT_COMMIT_MODE && get().projectRef?.type === 'cloud') {
-      get().markDomainDirty('storyboard')
+      const activeTab = get().activeTab
+      if (activeTab === 'script') get().markDomainDirty('script')
+      else get().markDomainDirty('storyboard')
     }
     get()._scheduleCloudSync(reason)
     get()._syncLiveStoryboardIfEnabled()

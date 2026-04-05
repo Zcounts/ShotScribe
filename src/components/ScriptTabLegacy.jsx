@@ -36,7 +36,7 @@ import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
-import { recordPresenceHeartbeat } from '../utils/sessionMetrics'
+import { recordCollabSubscriptionSuspended, recordPresenceHeartbeat } from '../utils/sessionMetrics'
 
 const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
   ? useConvexQueryDiagnostics
@@ -604,6 +604,11 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [activeSceneId, cloudProjectId, hasActiveCollaborators, heartbeatPresence, view])
+
+  useEffect(() => {
+    if (!cloudProjectId || hasActiveCollaborators) return
+    recordCollabSubscriptionSuspended()
+  }, [cloudProjectId, hasActiveCollaborators])
 
   useEffect(() => {
     if (!isDesktopDown) {

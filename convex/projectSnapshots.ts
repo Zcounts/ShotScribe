@@ -49,6 +49,76 @@ async function upsertSnapshotHead(ctx: any, args: {
   })
 }
 
+async function writeSnapshot(ctx: any, args: {
+  projectId: any,
+  createdByUserId: any,
+  source: 'manual_save' | 'autosave' | 'local_conversion' | 'restore' | 'conflict_recovery',
+  payload: any,
+  currentUserId: any,
+}) {
+  const now = Date.now()
+  const versionToken = `${args.projectId}:${now}:${Math.random().toString(36).slice(2, 8)}`
+  const payloadBytes = estimatePayloadBytes(args.payload)
+  const snapshotId = await ctx.db.insert('projectSnapshots', {
+    projectId: args.projectId,
+    createdByUserId: args.createdByUserId,
+    source: args.source,
+    payload: args.payload,
+    versionToken,
+    createdAt: now,
+  })
+
+  const payloadProjectName = typeof args.payload?.projectName === 'string'
+    ? args.payload.projectName.trim()
+    : ''
+  const payloadProjectEmoji = typeof args.payload?.projectEmoji === 'string'
+    ? args.payload.projectEmoji.trim()
+    : ''
+
+  await ctx.db.patch(args.projectId, {
+    latestSnapshotId: snapshotId,
+    ...(payloadProjectName ? { name: payloadProjectName } : {}),
+    ...(payloadProjectEmoji ? { emoji: payloadProjectEmoji } : {}),
+    updatedAt: now,
+  })
+  await upsertSnapshotHead(ctx, {
+    projectId: args.projectId,
+    latestSnapshotId: snapshotId,
+    latestSnapshotCreatedAt: now,
+    latestSnapshotSource: args.source,
+    latestSnapshotVersionToken: versionToken,
+    latestSnapshotPayloadBytes: payloadBytes,
+  })
+
+  await writeOperationalEvent(ctx, {
+    event: 'project.snapshot.created',
+    details: {
+      projectId: String(args.projectId),
+      snapshotId: String(snapshotId),
+      source: args.source,
+      userId: String(args.currentUserId),
+      payloadBytes,
+    },
+  })
+
+  if (usageDiagnosticsEnabled) {
+    // eslint-disable-next-line no-console
+    console.info('[convex-usage] snapshot.write', {
+      projectId: String(args.projectId),
+      snapshotId: String(snapshotId),
+      source: args.source,
+      payloadBytes,
+    })
+  }
+
+  return {
+    ok: true,
+    snapshotId,
+    versionToken,
+    createdAt: now,
+  }
+}
+
 export const createSnapshot = mutation({
   args: {
     projectId: v.id('projects'),
@@ -73,7 +143,6 @@ export const createSnapshot = mutation({
     await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
     await requireCloudWritesEnabled(ctx)
 
-    const now = Date.now()
     const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
     const currentLatestSnapshotId = project.latestSnapshotId || null
     if (
@@ -87,66 +156,73 @@ export const createSnapshot = mutation({
       }
     }
 
-    const versionToken = `${args.projectId}:${now}:${Math.random().toString(36).slice(2, 8)}`
-    const payloadBytes = estimatePayloadBytes(args.payload)
-    const snapshotId = await ctx.db.insert('projectSnapshots', {
+    return writeSnapshot(ctx, {
       projectId: args.projectId,
       createdByUserId: args.createdByUserId,
       source: args.source,
       payload: args.payload,
-      versionToken,
-      createdAt: now,
+      currentUserId,
     })
+  },
+})
 
-    const payloadProjectName = typeof args.payload?.projectName === 'string'
-      ? args.payload.projectName.trim()
-      : ''
-    const payloadProjectEmoji = typeof args.payload?.projectEmoji === 'string'
-      ? args.payload.projectEmoji.trim()
-      : ''
+export const commitScriptDomain = mutation({
+  args: {
+    projectId: v.id('projects'),
+    createdByUserId: v.id('users'),
+    scriptPayload: v.any(),
+    expectedLatestSnapshotId: v.optional(v.id('projectSnapshots')),
+    conflictStrategy: v.optional(v.union(v.literal('fail_on_conflict'), v.literal('last_write_wins'))),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    if (String(currentUserId) !== String(args.createdByUserId)) {
+      throw new Error('Forbidden')
+    }
 
-    await ctx.db.patch(args.projectId, {
-      latestSnapshotId: snapshotId,
-      ...(payloadProjectName ? { name: payloadProjectName } : {}),
-      ...(payloadProjectEmoji ? { emoji: payloadProjectEmoji } : {}),
-      updatedAt: now,
-    })
-    await upsertSnapshotHead(ctx, {
+    await assertCanEditCloudProject(ctx, currentUserId, args.projectId)
+    await requireCloudWritesEnabled(ctx)
+
+    const { project } = await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
+    const currentLatestSnapshotId = project.latestSnapshotId || null
+    if (
+      args.expectedLatestSnapshotId !== undefined
+      && String(args.expectedLatestSnapshotId || '') !== String(currentLatestSnapshotId || '')
+    ) {
+      return {
+        ok: false,
+        reason: 'version_conflict',
+        latestSnapshotId: currentLatestSnapshotId,
+      }
+    }
+
+    let latestPayload: any = {}
+    if (project.latestSnapshotId) {
+      const latestSnapshot = await ctx.db.get(project.latestSnapshotId)
+      latestPayload = (latestSnapshot?.payload && typeof latestSnapshot.payload === 'object')
+        ? latestSnapshot.payload
+        : {}
+    } else {
+      const fallback = await ctx.db
+        .query('projectSnapshots')
+        .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', args.projectId))
+        .order('desc')
+        .take(1)
+      latestPayload = (fallback[0]?.payload && typeof fallback[0].payload === 'object') ? fallback[0].payload : {}
+    }
+
+    const mergedPayload = {
+      ...latestPayload,
+      ...(args.scriptPayload && typeof args.scriptPayload === 'object' ? args.scriptPayload : {}),
+    }
+
+    return writeSnapshot(ctx, {
       projectId: args.projectId,
-      latestSnapshotId: snapshotId,
-      latestSnapshotCreatedAt: now,
-      latestSnapshotSource: args.source,
-      latestSnapshotVersionToken: versionToken,
-      latestSnapshotPayloadBytes: payloadBytes,
+      createdByUserId: args.createdByUserId,
+      source: 'autosave',
+      payload: mergedPayload,
+      currentUserId,
     })
-
-    await writeOperationalEvent(ctx, {
-      event: 'project.snapshot.created',
-      details: {
-        projectId: String(args.projectId),
-        snapshotId: String(snapshotId),
-        source: args.source,
-        userId: String(currentUserId),
-        payloadBytes,
-      },
-    })
-
-    if (usageDiagnosticsEnabled) {
-      // eslint-disable-next-line no-console
-      console.info('[convex-usage] snapshot.write', {
-        projectId: String(args.projectId),
-        snapshotId: String(snapshotId),
-        source: args.source,
-        payloadBytes,
-      })
-    }
-
-    return {
-      ok: true,
-      snapshotId,
-      versionToken,
-      createdAt: now,
-    }
   },
 })
 

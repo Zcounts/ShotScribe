@@ -6,6 +6,8 @@ const counters = {
   domainCommits: 0,
   snapshotBytesLastWrite: 0,
   presenceHeartbeats: 0,
+  collabSubscriptionsSuspended: 0,
+  deferredSurfaceSubscriptions: 0,
 }
 
 let initialized = false
@@ -21,6 +23,8 @@ function buildPayload() {
     domain_commits: counters.domainCommits,
     snapshot_bytes: counters.snapshotBytesLastWrite,
     presence_heartbeats: counters.presenceHeartbeats,
+    collab_subscriptions_suspended: counters.collabSubscriptionsSuspended,
+    deferred_surface_subscriptions: counters.deferredSurfaceSubscriptions,
     session_s: sessionDurationSeconds,
   }
 }
@@ -62,6 +66,18 @@ export function recordPresenceHeartbeat() {
   ensureInitialized()
   if (!isSessionMetricsEnabled) return
   counters.presenceHeartbeats += 1
+}
+
+export function recordCollabSubscriptionSuspended() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.collabSubscriptionsSuspended += 1
+}
+
+export function recordDeferredSurfaceSubscription() {
+  ensureInitialized()
+  if (!isSessionMetricsEnabled) return
+  counters.deferredSurfaceSubscriptions += 1
 }
 
 export function startSessionMetrics() {
