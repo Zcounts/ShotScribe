@@ -110,6 +110,39 @@ This phase retires the old Script tab architecture from production defaults and 
 - Move overlay anchoring to shared range-position utilities reused by both read/write surfaces.
 - Add stronger integration tests for breakdown and visualize overlay/selection behaviors across imports and reloads.
 
+### Roadmap item: Fix duplicate script rendering and restore mode-specific highlight overlays in Breakdown/Visualize
+
+**Current problem summary**
+
+- Breakdown/Visualize modes can show what looks like duplicated script content in the active surface.
+- Highlight parity is inconsistent by mode (Breakdown overlays missing or leaking into Visualize expectations).
+
+**Scope for this phase**
+
+- Ensure one active script render surface per mode (no accidental dual render paths).
+- Restore strict mode gating for overlays:
+  - Breakdown mode => breakdown category highlights only.
+  - Visualize mode => shot-link highlights only.
+  - Write mode => no breakdown/visualize overlays.
+- Keep restored right-click custom flow intact.
+
+**Risks**
+
+- Non-write render path changes can affect existing link/tag selection offsets.
+- Unifying non-write rendering source with unified document data may expose node metadata gaps.
+- Overlay anchor calculations can drift if block-id/scene-id mapping changes.
+
+**Must not regress**
+
+- Write typing quality, Tab cycling, block-type buttons, bold toggles.
+- Existing working tag/link creation and right-click behavior.
+- Save/load/cloud/lock behavior and current shell/layout.
+
+**Follow-up if needed**
+
+- Add explicit integration coverage for multi-scene imports where sourceSceneId metadata is incomplete.
+- Consolidate non-write overlay anchoring utilities with unified write-surface mapping for long-term parity.
+
 ## Removed from active path
 
 - Legacy ScriptTab contenteditable/blur-commit editing code.
