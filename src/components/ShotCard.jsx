@@ -149,7 +149,7 @@ function ShotCard({
             assetIds: missingAssetIds,
           }),
         })
-        if (!cancelled) setLibraryAssetViews(views || {})
+        if (!cancelled) setLibraryAssetViews({ ...cachedViews, ...(views || {}) })
       } catch (err) {
         console.warn('Failed to load library image previews', err)
       } finally {

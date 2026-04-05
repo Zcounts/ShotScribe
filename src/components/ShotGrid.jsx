@@ -98,6 +98,21 @@ function ShotGrid({
         setPrefetchedAssetViews({})
         return
       }
+      const now = Date.now()
+      const cachedViews = {}
+      const missingAssetIds = []
+      for (const assetId of cloudAssetIds) {
+        const cached = signedViewCache.get(assetId)
+        if (cached && now - cached.cachedAt < SIGNED_VIEW_CACHE_TTL_MS) {
+          cachedViews[assetId] = cached.view
+        } else {
+          missingAssetIds.push(assetId)
+        }
+      }
+      if (missingAssetIds.length === 0) {
+        setPrefetchedAssetViews(cachedViews)
+        return
+      }
       try {
         const mergedViews = await getOrCreateSignedViewsBatchRequest({
           projectId: projectRef.projectId,
