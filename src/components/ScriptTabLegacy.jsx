@@ -32,7 +32,9 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
-import ScriptDocumentPaginationSurface from '../features/scriptDocument/ScriptDocumentPaginationSurface'
+import ScriptDocumentPaginationSurface, {
+  updateNodeType as updateScriptDocumentNodeType,
+} from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -93,8 +95,8 @@ const SIDEBAR_STORAGE_KEYS = {
 }
 
 const WRITE_OPTIONS_DEFAULTS = {
-  boldSlugline: false,
-  boldCharacter: false,
+  boldSlugline: true,
+  boldCharacter: true,
 }
 
 const BLOCK_TYPE_OPTIONS = [
@@ -190,6 +192,9 @@ function BlockTypeIconSelector({ value, onChange, disabled = false }) {
             title={option.label}
             disabled={disabled}
             className={`script-block-type-btn ${selected ? 'is-selected' : ''}`}
+            onMouseDown={(event) => {
+              event.preventDefault()
+            }}
             onClick={() => onChange(option.value)}
           >
             <img src={BLOCK_TYPE_ICON_MAP[option.value]} alt="" aria-hidden="true" />
@@ -398,6 +403,10 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const projectRef = useStore(s => s.projectRef)
   const getProjectData = useStore(s => s.getProjectData)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
+  const scriptDocument = useStore(s => s.scriptDocument)
+  const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
+  const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
+  const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
@@ -422,6 +431,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const [scriptDeleteConfirm, setScriptDeleteConfirm] = useState(null)
   const [collabNotice, setCollabNotice] = useState('')
   const [isSavingSnapshot, setIsSavingSnapshot] = useState(false)
+  const [unifiedSelectedNode, setUnifiedSelectedNode] = useState({ nodeIndex: null, blockType: 'action' })
   const baseMinutesPerPage = Number.isFinite(scriptSettings?.baseMinutesPerPage) && scriptSettings.baseMinutesPerPage > 0
     ? scriptSettings.baseMinutesPerPage
     : 5
@@ -558,6 +568,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
+  const shouldUseUnifiedWriteSurface = useUnifiedEditorCore && view === 'write'
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
   const pageContentHeightPx = Math.max(120, pageSettings.heightPx - pageSettings.marginTopPx - pageSettings.marginBottomPx)
 
@@ -688,7 +699,9 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const selectedBlockData = selectedScene
     ? (screenplayByScene[selectedScene.id] || []).find(block => block.id === selectedBlock?.blockId)
     : null
-  const selectedStyleType = selectedBlockData?.type || 'action'
+  const selectedStyleType = useUnifiedEditorCore
+    ? (unifiedSelectedNode.blockType || 'action')
+    : (selectedBlockData?.type || 'action')
   const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
   const currentUserId = cloudUser?.user ? String(cloudUser.user._id) : null
   const lockBySceneId = useMemo(() => {
@@ -937,6 +950,16 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       setIsSavingSnapshot(false)
     }
   }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
+
+  const handleUnifiedSetBlockType = useCallback((nextType) => {
+    const nodeIndex = unifiedSelectedNode?.nodeIndex
+    if (!useUnifiedEditorCore || !Number.isInteger(nodeIndex) || !nextType) return
+    const documentRef = scriptDocumentLive || scriptDocument
+    const nextDocument = updateScriptDocumentNodeType(documentRef, nodeIndex, nextType)
+    updateScriptDocumentLive(nextDocument, { reason: 'script_document_surface_block_type_select' })
+    setUnifiedSelectedNode({ nodeIndex, blockType: nextType })
+    deriveScriptDocumentNow({ reason: 'script_document_surface_block_type_select', persist: true })
+  }, [deriveScriptDocumentNow, scriptDocument, scriptDocumentLive, unifiedSelectedNode, updateScriptDocumentLive, useUnifiedEditorCore])
 
   const resolveStackHeights = useCallback(() => {
     const stackHeight = sidebarStackRef.current?.clientHeight || 0
@@ -1279,10 +1302,14 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
                       <BlockTypeIconSelector
                         value={selectedStyleType}
                         onChange={(nextType) => {
+                          if (useUnifiedEditorCore) {
+                            handleUnifiedSetBlockType(nextType)
+                            return
+                          }
                           if (!selectedBlock) return
                           setBlockType(selectedBlock.sceneId, selectedBlock.blockId, nextType)
                         }}
-                        disabled={!selectedBlock}
+                        disabled={useUnifiedEditorCore ? !Number.isInteger(unifiedSelectedNode?.nodeIndex) : !selectedBlock}
                       />
 
                     </>
@@ -1410,9 +1437,21 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={useUnifiedEditorCore ? undefined : handlePageMouseUp}>
-              {useUnifiedEditorCore ? (
-                <ScriptDocumentPaginationSurface />
+            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={shouldUseUnifiedWriteSurface ? undefined : handlePageMouseUp}>
+              {shouldUseUnifiedWriteSurface ? (
+                <ScriptDocumentPaginationSurface
+                  readOnly={isWriteBlockedByLock}
+                  writeOptions={writeOptions}
+                  onActiveBlockTypeChange={(blockType) => {
+                    setUnifiedSelectedNode(prev => ({ ...prev, blockType: blockType || 'action' }))
+                  }}
+                  onActiveNodeChange={({ nodeIndex, blockType }) => {
+                    setUnifiedSelectedNode({
+                      nodeIndex: Number.isInteger(nodeIndex) ? nodeIndex : null,
+                      blockType: blockType || 'action',
+                    })
+                  }}
+                />
               ) : (
                 <div ref={pageCanvasRef} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: 14 }}>
                   <div>

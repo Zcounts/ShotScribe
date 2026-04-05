@@ -8,6 +8,77 @@ This phase retires the old Script tab architecture from production defaults and 
 - Legacy Script tab implementation remains in `src/components/ScriptTabLegacy.jsx` and is only activated as full legacy mode by fallback flag.
 - Rollback kill switch is `VITE_ENABLE_LEGACY_SCRIPT_TAB=true`.
 
+## Migration roadmap (active)
+
+### Current baseline (from latest handoff)
+
+- Restored Script tab shell/layout is active around the unified editor core default.
+- Legacy editor remains rollback-only via `VITE_ENABLE_LEGACY_SCRIPT_TAB=true`.
+- Typing direction/input regressions were reduced with imperative text syncing and caret-safe split/merge handling.
+- Screenplay-aware writing behavior in the unified path is still incomplete and needs parity restoration.
+
+### Roadmap item: Restore screenplay block types, styling, and Tab-cycle writing behavior in the unified Script tab
+
+**In scope now**
+
+- Reintroduce screenplay-aware write modes in unified default path:
+  - scene heading / slug line
+  - action
+  - character
+  - dialogue
+  - parenthetical
+- Restore Tab-forward cycling and Shift+Tab reverse cycling across screenplay block modes.
+- Restore screenplay-aware Enter behavior for character/dialogue flows.
+- Restore current-line block type reflection and block-style rendering parity with prior Script tab behavior.
+
+**Explicitly out of scope now**
+
+- Switching default editor path back to legacy implementation.
+- Broad Script tab redesign, non-script tab changes, or full ProseMirror architecture rewrite.
+- New collaboration features, new export UX work, or unrelated UI refreshes.
+
+**Risks to watch**
+
+- ContentEditable edge cases (IME/composition/caret drift) while parity behavior is layered on.
+- Possible mismatch between unified node types and legacy style controls if type mapping drifts.
+- Lock/read-only states must remain respected while adding keyboard write shortcuts.
+
+**Follow-up work (next phases)**
+
+- Finish forward-delete merge + additional screenplay-smart transitions.
+- Complete visualize/breakdown overlay parity on unified editor coordinates.
+- Replace custom contentEditable editing path with a full editor engine once parity baseline is stable.
+
+### Roadmap item: Restore Breakdown and Visualize right-click interaction/dialog flows in the unified Script tab
+
+**Current problem summary**
+
+- Unified default Script tab path restored write/edit parity, but Breakdown and Visualize right-click flows are not parity-complete.
+- Context-driven actions (selection tagging, contextual delete/link dialogs, mode-specific right-click behavior) are inconsistent vs legacy behavior.
+
+**Scope for this phase**
+
+- Restore Breakdown/Visualize interaction flow parity (especially right-click/context-menu driven actions) while keeping unified write path active.
+- Reuse existing legacy Breakdown/Visualize menu/dialog behavior and handlers where safe, adapted into unified-default runtime path.
+- Keep Script tab shell/layout/sidebar/configure wiring intact.
+
+**Risks**
+
+- Selection/range offsets can diverge between unified document nodes and legacy compatibility overlays.
+- Right-click handling may conflict with browser defaults if mode guards are incomplete.
+- Cloud lock/read-only constraints must remain enforced while restoring mode interactions.
+
+**Must not regress**
+
+- Write-mode typing stability, Tab/Shift+Tab type cycling, sidebar block-type controls, and bold toggles.
+- Save/load/cloud snapshot behavior and rollback flag semantics.
+- Restored Script tab shell/layout/sidebar behavior.
+
+**Follow-up if parity is partial in this pass**
+
+- Unify selection/range anchoring between unified nodes and annotation overlays.
+- Migrate remaining context/dialog behavior to shared interaction layer that supports both write and read modes without legacy assumptions.
+
 ## Removed from active path
 
 - Legacy ScriptTab contenteditable/blur-commit editing code.
