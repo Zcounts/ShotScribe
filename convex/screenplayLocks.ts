@@ -7,14 +7,14 @@ const LOCK_LEASE_MS = 30000
 async function clearExpiredProjectLocks(ctx: any, projectId: any, now: number) {
   const rows = await ctx.db
     .query('screenplayLocks')
-    .withIndex('by_project_id_lease_expires_at', (q: any) => q.eq('projectId', projectId))
+    .withIndex('by_project_id_lease_expires_at', (q: any) => (
+      q
+        .eq('projectId', projectId)
+        .lte('leaseExpiresAt', now)
+    ))
     .collect()
 
-  await Promise.all(
-    rows
-      .filter((row: any) => row.leaseExpiresAt <= now)
-      .map((row: any) => ctx.db.delete(row._id)),
-  )
+  await Promise.all(rows.map((row: any) => ctx.db.delete(row._id)))
 }
 
 export const listProjectLocks = query({
@@ -26,10 +26,13 @@ export const listProjectLocks = query({
     const now = Date.now()
     const rows = await ctx.db
       .query('screenplayLocks')
-      .withIndex('by_project_id_lease_expires_at', (q: any) => q.eq('projectId', args.projectId))
+      .withIndex('by_project_id_lease_expires_at', (q: any) => (
+        q
+          .eq('projectId', args.projectId)
+          .gt('leaseExpiresAt', now)
+      ))
       .collect()
-
-    return rows.filter((row: any) => row.leaseExpiresAt > now)
+    return rows
   },
 })
 
