@@ -89,6 +89,8 @@ export default function HomeView() {
   const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const recentProjects = useStore(s => s.recentProjects)
   const setActiveTab = useStore(s => s.setActiveTab)
+  const setTabViewState = useStore(s => s.setTabViewState)
+  const homeTabViewState = useStore(s => s.tabViewState?.home || {})
   const newProject = useStore(s => s.newProject)
   const openProject = useStore(s => s.openProject)
   const openCloudProject = useStore(s => s.openCloudProject)
@@ -138,6 +140,8 @@ export default function HomeView() {
   const hasBlockingUnsavedChanges = hasUnsavedChanges
     && saveSyncState?.status === 'unsaved_changes'
     && !isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts })
+  const cloudProjectsExpanded = homeTabViewState.cloudProjectsExpanded ?? true
+  const pendingDeletionExpanded = homeTabViewState.pendingDeletionExpanded ?? false
 
   useEffect(() => {
     if (!contextMenu && !heroContextMenu) return
@@ -340,7 +344,7 @@ export default function HomeView() {
             <button
               type="button"
               className="home-section-toggle"
-              onClick={() => setCloudProjectsExpanded(prev => !prev)}
+              onClick={() => setTabViewState('home', { cloudProjectsExpanded: !cloudProjectsExpanded })}
               aria-expanded={cloudProjectsExpanded}
             >
               <span className="home-section-label">Cloud Projects</span>
@@ -395,7 +399,7 @@ export default function HomeView() {
             <button
               type="button"
               className="home-section-toggle"
-              onClick={() => setPendingDeletionExpanded(prev => !prev)}
+              onClick={() => setTabViewState('home', { pendingDeletionExpanded: !pendingDeletionExpanded })}
               aria-expanded={pendingDeletionExpanded}
             >
               <span className="home-section-label">Pending deletion</span>
