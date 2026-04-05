@@ -32,6 +32,7 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
@@ -401,6 +402,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const derivedShotLinksByScene = useStore(s => s.derivedScriptData?.compatibility?.shotLinkIndexBySceneId || {})
   const projectRef = useStore(s => s.projectRef)
+  const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const getProjectData = useStore(s => s.getProjectData)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
   const scriptDocument = useStore(s => s.scriptDocument)
@@ -410,15 +412,30 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null
-  const cloudUser = useQuery('users:currentUser')
-  const presenceRows = useQuery('presence:listProjectPresence', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
-  const locks = useQuery('screenplayLocks:listProjectLocks', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const presenceArgs = cloudProjectId ? { projectId: cloudProjectId } : 'skip'
+  const locksArgs = cloudProjectId ? { projectId: cloudProjectId } : 'skip'
+  const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
+  const locks = useQuery('screenplayLocks:listProjectLocks', locksArgs)
   const heartbeatPresence = useMutation('presence:heartbeat')
   const acquireSceneLock = useMutation('screenplayLocks:acquireSceneLock')
   const releaseSceneLock = useMutation('screenplayLocks:releaseSceneLock')
   const createSnapshot = useMutation('projectSnapshots:createSnapshot')
   const pruneOrphanedAssets = useMutation('assets:pruneOrphanedAssets')
   const cloudAccessPolicy = useCloudAccessPolicy()
+  useConvexQueryDiagnostics({
+    component: 'ScriptTabLegacy',
+    queryName: 'presence:listProjectPresence',
+    args: presenceArgs,
+    result: presenceRows,
+    active: presenceArgs !== 'skip',
+  })
+  useConvexQueryDiagnostics({
+    component: 'ScriptTabLegacy',
+    queryName: 'screenplayLocks:listProjectLocks',
+    args: locksArgs,
+    result: locks,
+    active: locksArgs !== 'skip',
+  })
 
   const [view, setView] = useState('write')
   const [activeSceneId, setActiveSceneId] = useState(null)
@@ -703,7 +720,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
     ? (unifiedSelectedNode.blockType || 'action')
     : (selectedBlockData?.type || 'action')
   const selectedStyle = getBlockStyleForType(documentSettings, selectedStyleType)
-  const currentUserId = cloudUser?.user ? String(cloudUser.user._id) : null
+  const currentUserId = cloudSyncContext?.currentUserId ? String(cloudSyncContext.currentUserId) : null
   const lockBySceneId = useMemo(() => {
     const map = {}
     ;(locks || []).forEach((lock) => {
