@@ -4,6 +4,7 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
@@ -73,7 +74,31 @@ export default function CloudSyncCoordinator() {
     'projectSnapshots:getLatestSnapshotForProject',
     cloudProjectId ? { projectId: cloudProjectId } : 'skip',
   )
-  const cloudAccessPolicy = useCloudAccessPolicy()
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'users:currentUser',
+    args: {},
+    result: cloudUser,
+    active: true,
+  })
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projects:getProjectById',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: cloudProject,
+    active: Boolean(cloudProjectId),
+  })
+  useConvexQueryDiagnostics({
+    component: 'CloudSyncCoordinator',
+    queryName: 'projectSnapshots:getLatestSnapshotForProject',
+    args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    result: latestSnapshot,
+    active: Boolean(cloudProjectId),
+    largePayloadBytes: 80 * 1024,
+  })
+  // Reuse role from cloudProject query so this component does not mount a
+  // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
+  const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })
   const setLiveModelVersion = useStore(s => s.setLiveModelVersion)
   const applyLiveStoryboardState = useStore(s => s.applyLiveStoryboardState)
 

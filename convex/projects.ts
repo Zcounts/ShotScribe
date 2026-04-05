@@ -361,6 +361,83 @@ export const listProjectsForCurrentUser = query({
   },
 })
 
+export const listProjectsForCurrentUserLite = query({
+  args: {},
+  handler: async (ctx) => {
+    const currentUserId = await requireCurrentUserId(ctx)
+    const currentUserFlags = await getUserPolicyFlags(ctx, currentUserId)
+    const hasPaidAccess = hasPaidCloudAccess({
+      isAuthenticated: true,
+      ...currentUserFlags,
+    })
+
+    const ownedProjects = await ctx.db
+      .query('projects')
+      .withIndex('by_owner_user_id_updated_at', (q: any) => q.eq('ownerUserId', currentUserId))
+      .order('desc')
+      .collect()
+
+    const memberRows = await ctx.db
+      .query('projectMembers')
+      .withIndex('by_user_id', (q: any) => q.eq('userId', currentUserId))
+      .collect()
+    const activeMemberRows = memberRows.filter((row: any) => !row.revokedAt)
+
+    const sharedProjects = await Promise.all(
+      activeMemberRows.map(async (row: any) => {
+        if (!hasPaidAccess) return null
+        const project = await ctx.db.get(row.projectId)
+        if (!project) return null
+        return { ...project, currentUserRole: row.role }
+      }),
+    )
+
+    const merged = [
+      ...ownedProjects.map(project => ({ ...project, currentUserRole: 'owner' })),
+      ...sharedProjects.filter(Boolean) as any[],
+    ]
+
+    const deduped = new Map<string, any>()
+    for (const project of merged) deduped.set(String(project._id), project)
+
+    const candidates = Array.from(deduped.values())
+      .filter((project: any) => !project.pendingDeleteAt && !project.deleteAfter)
+
+    const headsByProjectId = new Map<string, any>()
+    await Promise.all(candidates.map(async (project: any) => {
+      const head = await ctx.db
+        .query('projectSnapshotHeads')
+        .withIndex('by_project_id', (q: any) => q.eq('projectId', project._id))
+        .unique()
+      headsByProjectId.set(String(project._id), head || null)
+    }))
+
+    // Migration compatibility: use snapshot pointers (or one lightweight id
+    // fallback query) to determine whether a project is cloud-openable without
+    // touching full snapshot payloads for each list row.
+    const usableProjects = await Promise.all(candidates.map(async (project: any) => {
+      const head = headsByProjectId.get(String(project._id))
+      if (head?.latestSnapshotHasPayload) {
+        return {
+          ...project,
+          latestSnapshotId: head.latestSnapshotId || project.latestSnapshotId || null,
+        }
+      }
+      if (project.latestSnapshotId) return project
+      const fallbackSnapshot = await ctx.db
+        .query('projectSnapshots')
+        .withIndex('by_project_id_created_at', (q: any) => q.eq('projectId', project._id))
+        .order('desc')
+        .take(1)
+      return fallbackSnapshot[0] ? project : null
+    }))
+
+    return usableProjects
+      .filter(Boolean)
+      .sort((a: any, b: any) => b.updatedAt - a.updatedAt)
+  },
+})
+
 export const listPendingDeletionProjectsForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
@@ -502,11 +579,12 @@ export const listDueProjectDeletes = internalQuery({
   },
   handler: async (ctx, args) => {
     const now = Date.now()
-    const rows = await ctx.db.query('projects').collect()
+    const safeLimit = Math.max(1, Math.min(Number(args.limit || 20), 100))
+    const rows = await ctx.db
+      .query('projects')
+      .withIndex('by_delete_after', (q: any) => q.lte('deleteAfter', now))
+      .take(safeLimit)
     return rows
-      .filter((row: any) => !!row.deleteAfter && Number(row.deleteAfter) <= now)
-      .sort((a: any, b: any) => Number(a.deleteAfter || 0) - Number(b.deleteAfter || 0))
-      .slice(0, Math.max(1, Math.min(Number(args.limit || 20), 100)))
       .map((row: any) => ({ projectId: row._id }))
   },
 })
