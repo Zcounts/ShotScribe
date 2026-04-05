@@ -24,6 +24,8 @@ To prevent Script-tab white-screen regressions, treat boot as two layers:
 
 Rule for future changes: **optional cloud/collab systems must be explicitly guarded and fail-safe, never a hard dependency of Script tab mount.**
 
+Blank-document editing safety: when unified Script surface has zero script nodes, it must still render an editable empty-state line that bootstraps the first `action` node on first input.
+
 ## Migration roadmap (active)
 
 ### Current baseline (from latest handoff)

@@ -33,6 +33,30 @@ function withNodeText(node, text) {
   }
 }
 
+function normalizeEditableText(value) {
+  return String(value || '').replace(/\r/g, '')
+}
+
+function bootstrapBlankDocument(scriptDocument, initialText = '') {
+  const base = (scriptDocument && scriptDocument.type === 'doc' && Array.isArray(scriptDocument.content))
+    ? scriptDocument
+    : { type: 'doc', content: [] }
+  if (base.content.length > 0) return base
+  const normalizedText = normalizeEditableText(initialText)
+  return {
+    ...base,
+    content: [
+      {
+        type: 'action',
+        attrs: {
+          id: `pm_bootstrap_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        },
+        content: normalizedText ? [{ type: 'text', text: normalizedText }] : [],
+      },
+    ],
+  }
+}
+
 export function updateNodeText(scriptDocument, nodeIndex, text) {
   const base = (scriptDocument && scriptDocument.type === 'doc' && Array.isArray(scriptDocument.content))
     ? scriptDocument
@@ -299,7 +323,41 @@ export default function ScriptDocumentPaginationSurface({
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: paginated.pageContentHeightPx }}>
-              {page.blocks.map((block) => (
+              {page.blocks.length === 0 ? (
+                <div
+                  contentEditable={!readOnly}
+                  aria-readonly={readOnly}
+                  suppressContentEditableWarning
+                  dir="ltr"
+                  onFocus={() => {
+                    if (readOnly) return
+                    onActiveBlockTypeChange?.('action')
+                    onActiveNodeChange?.({ nodeIndex: 0, blockType: 'action' })
+                  }}
+                  onInput={(event) => {
+                    if (readOnly) return
+                    const typedText = normalizeEditableText(event.currentTarget.textContent || '')
+                    const nextDocument = bootstrapBlankDocument(documentRef, typedText)
+                    pendingCaretRef.current = { nodeIndex: 0, offset: typedText.length }
+                    updateScriptDocumentLive(nextDocument, { reason: 'script_document_surface_blank_bootstrap' })
+                  }}
+                  style={{
+                    minHeight: 28,
+                    paddingTop: `${BLOCK_VERTICAL_PADDING}px`,
+                    paddingBottom: `${BLOCK_VERTICAL_PADDING}px`,
+                    fontFamily: '"Courier Prime", "Courier New", Courier, monospace',
+                    fontSize: 12,
+                    lineHeight: '18px',
+                    outline: 'none',
+                    borderRadius: 4,
+                    border: '1px solid transparent',
+                    direction: 'ltr',
+                    unicodeBidi: 'plaintext',
+                    writingMode: 'horizontal-tb',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                />
+              ) : page.blocks.map((block) => (
                 <div
                   key={block.id}
                   ref={(element) => {
