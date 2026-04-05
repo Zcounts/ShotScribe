@@ -6,6 +6,7 @@ import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '..
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { runtimeConfig } from '../config/runtimeConfig'
+import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
 import {
   recordCollabSubscriptionSuspended,
   recordDeferredSurfaceSubscription,
