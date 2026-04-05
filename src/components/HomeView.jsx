@@ -89,6 +89,8 @@ export default function HomeView() {
   const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const recentProjects = useStore(s => s.recentProjects)
   const setActiveTab = useStore(s => s.setActiveTab)
+  const setTabViewState = useStore(s => s.setTabViewState)
+  const homeTabViewState = useStore(s => s.tabViewState.home)
   const newProject = useStore(s => s.newProject)
   const openProject = useStore(s => s.openProject)
   const openCloudProject = useStore(s => s.openCloudProject)
@@ -98,8 +100,6 @@ export default function HomeView() {
   const [contextMenu, setContextMenu] = useState(null)
   const [heroContextMenu, setHeroContextMenu] = useState(null)
   const [deleteConfirmProject, setDeleteConfirmProject] = useState(null)
-  const [cloudProjectsExpanded, setCloudProjectsExpanded] = useState(true)
-  const [pendingDeletionExpanded, setPendingDeletionExpanded] = useState(true)
   const menuRef = useRef(null)
   const heroMenuRef = useRef(null)
 
@@ -138,6 +138,8 @@ export default function HomeView() {
   const hasBlockingUnsavedChanges = hasUnsavedChanges
     && saveSyncState?.status === 'unsaved_changes'
     && !isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts })
+  const cloudProjectsExpanded = homeTabViewState.cloudProjectsExpanded
+  const pendingDeletionExpanded = homeTabViewState.pendingDeletionExpanded
 
   useEffect(() => {
     if (!contextMenu && !heroContextMenu) return
@@ -340,7 +342,7 @@ export default function HomeView() {
             <button
               type="button"
               className="home-section-toggle"
-              onClick={() => setCloudProjectsExpanded(prev => !prev)}
+              onClick={() => setTabViewState('home', { cloudProjectsExpanded: !cloudProjectsExpanded })}
               aria-expanded={cloudProjectsExpanded}
             >
               <span className="home-section-label">Cloud Projects</span>
@@ -395,7 +397,7 @@ export default function HomeView() {
             <button
               type="button"
               className="home-section-toggle"
-              onClick={() => setPendingDeletionExpanded(prev => !prev)}
+              onClick={() => setTabViewState('home', { pendingDeletionExpanded: !pendingDeletionExpanded })}
               aria-expanded={pendingDeletionExpanded}
             >
               <span className="home-section-label">Pending deletion</span>

@@ -42,6 +42,7 @@ export default function SaveSyncStatusControl({
   onSaveToCloudNow,
   onWorkLocalOnly,
   actionBusy = false,
+  onOpenChange,
 }) {
   const projectRef = useStore((state) => state.projectRef)
   const hasUnsavedChanges = useStore((state) => state.hasUnsavedChanges)
@@ -157,6 +158,10 @@ export default function SaveSyncStatusControl({
       document.removeEventListener('keydown', onEsc)
     }
   }, [open])
+
+  useEffect(() => {
+    onOpenChange?.(open)
+  }, [open, onOpenChange])
 
   const handleOpenCloudProject = async (cloudProjectId) => {
     if (!cloudProjectId) return
