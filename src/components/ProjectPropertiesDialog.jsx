@@ -100,7 +100,17 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
           createAssetUploadIntent,
           finalizeAssetUpload,
         })
-        setHeroImageDraft(uploaded)
+        const uploadedAssetId = uploaded?.imageAsset?.cloud?.assetId
+        if (uploadedAssetId) {
+          const signedView = await getAssetSignedView({
+            projectId: projectRef.projectId,
+            assetId: uploadedAssetId,
+          })
+          const signedPayload = buildShotImageFromLibraryAsset(signedView)
+          setHeroImageDraft(signedPayload || uploaded)
+        } else {
+          setHeroImageDraft(uploaded)
+        }
       } else {
         const processed = await processStoryboardUpload(file, {
           thumbnailWidth: 1600,

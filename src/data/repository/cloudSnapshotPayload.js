@@ -11,23 +11,23 @@ function isUnsafeInlineImage(value) {
   )
 }
 
-function sanitizeImageAsset(asset) {
+function sanitizeImageAsset(asset, { keepThumbForCloudAsset = false } = {}) {
   if (!asset || typeof asset !== 'object') return null
   const hasCloudAsset = typeof asset?.cloud?.assetId === 'string' && asset.cloud.assetId.trim().length > 0
   const safeThumb = isUnsafeInlineImage(asset.thumb) ? null : (asset.thumb || null)
   return {
     version: asset.version || 1,
     mime: asset.mime || 'image/webp',
-    thumb: hasCloudAsset ? null : safeThumb,
+    thumb: hasCloudAsset ? (keepThumbForCloudAsset ? safeThumb : null) : safeThumb,
     full: null,
     meta: asset.meta || null,
     cloud: hasCloudAsset ? asset.cloud : null,
   }
 }
 
-function sanitizeImageNode(node) {
+function sanitizeImageNode(node, { keepThumbForCloudAsset = false } = {}) {
   if (!node || typeof node !== 'object') return node
-  const imageAsset = sanitizeImageAsset(node.imageAsset)
+  const imageAsset = sanitizeImageAsset(node.imageAsset, { keepThumbForCloudAsset })
   const safeImage = isUnsafeInlineImage(node.image) ? null : (node.image || null)
   return {
     ...node,
@@ -51,7 +51,9 @@ function normalizeForCloudSnapshot(payload) {
   if (!Array.isArray(payload.scenes)) return payload
   return {
     ...payload,
-    projectHeroImage: sanitizeImageNode(payload.projectHeroImage),
+    // Keep a non-inline hero thumb URL when available so Home can render the
+    // custom hero after collaborator snapshot sync/reload.
+    projectHeroImage: sanitizeImageNode(payload.projectHeroImage, { keepThumbForCloudAsset: true }),
     scenes: payload.scenes.map((scene) => ({
       ...scene,
       shots: Array.isArray(scene?.shots) ? scene.shots.map(stripDuplicatedShotThumb) : [],
