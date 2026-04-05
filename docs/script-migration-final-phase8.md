@@ -79,6 +79,37 @@ This phase retires the old Script tab architecture from production defaults and 
 - Unify selection/range anchoring between unified nodes and annotation overlays.
 - Migrate remaining context/dialog behavior to shared interaction layer that supports both write and read modes without legacy assumptions.
 
+### Roadmap item: Restore Breakdown/Visualize highlight overlays and section-targeted right-click behavior in the unified Script tab
+
+**Current problem summary**
+
+- Breakdown/Visualize linking and tagging now work again, but visual highlight parity is incomplete after actions complete.
+- Tagged/linked overlays are not consistently visible/anchored to expected text ranges while navigating paginated content.
+- Right-click targeting is not section-scoped parity yet (should behave like triple-click full block targeting with mode-aware dialog flow).
+
+**Scope for this phase**
+
+- Restore visible category/shot-color overlay rendering parity for Breakdown and Visualize modes.
+- Ensure highlight overlays stay attached to block text during paginated scrolling/navigation.
+- Restore section-targeted right-click behavior (full block targeting) and mode-aware dialog/menu flow.
+
+**Risks**
+
+- Overlay fragment computation can become stale if DOM geometry changes without recomputation hooks.
+- Selection normalization for right-click/triple-click may conflict with existing word-level selection behavior.
+- Existing working link/tag actions must remain intact while changing context targeting semantics.
+
+**Non-regression requirements**
+
+- Do not regress write-mode typing, Tab cycling, sidebar block-type controls, bold toggles, or current link/tag success flows.
+- Do not regress save/load/cloud/lock behavior or rollback flag behavior.
+- Keep shell/layout/sidebar/configure wiring unchanged.
+
+**Follow-up work if parity remains partial**
+
+- Move overlay anchoring to shared range-position utilities reused by both read/write surfaces.
+- Add stronger integration tests for breakdown and visualize overlay/selection behaviors across imports and reloads.
+
 ## Removed from active path
 
 - Legacy ScriptTab contenteditable/blur-commit editing code.
