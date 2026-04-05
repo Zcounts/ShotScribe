@@ -4,7 +4,7 @@ import ShotCard from './ShotCard'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
-import { getCachedSignedView, getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
 
 function AddShotButton({ onClick }) {
   return (

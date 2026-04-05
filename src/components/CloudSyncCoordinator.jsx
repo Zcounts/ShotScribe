@@ -4,7 +4,6 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
-import { getOrCreateSignedViewRequest } from '../utils/assetSignedViewCache'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { runtimeConfig } from '../config/runtimeConfig'
 import {
