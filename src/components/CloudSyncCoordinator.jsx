@@ -5,6 +5,8 @@ import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { runtimeConfig } from '../config/runtimeConfig'
+import { startSessionMetrics, stopSessionMetrics } from '../utils/sessionMetrics'
 
 const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
   ? useConvexQueryDiagnostics
@@ -18,6 +20,11 @@ const COLLABORATOR_MODE_HOLD_MS = 30 * 1000
 const LOCAL_TEXT_EDIT_HOT_WINDOW_MS = 900
 const ensureStoryboardFailureCache = new Map()
 const DIAG_LOCAL_STORAGE_KEY = 'ss_convex_diag'
+const DRAFT_COMMIT_MODE = Boolean(runtimeConfig?.sync?.draftCommitModeEnabled)
+const DRAFT_COMMIT_CHECKPOINT_MS = Math.max(
+  60 * 1000,
+  Number(runtimeConfig?.sync?.draftCommitCheckpointMinutes || 5) * 60 * 1000,
+)
 
 function normalizeEnsureErrorMessage(error) {
   const message = String(error?.message || 'unknown_error')
@@ -123,6 +130,7 @@ export default function CloudSyncCoordinator() {
   const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
   const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
+  const commitDomain = useStore(s => s.commitDomain)
   const convex = useConvex()
   const createProject = useMutation('projects:createProject')
   const ensureStoryboardLiveModel = useMutation('projects:ensureStoryboardLiveModel')
@@ -419,6 +427,11 @@ export default function CloudSyncCoordinator() {
   }, [applyLiveStoryboardState, cloudProjectId])
 
   useEffect(() => {
+    startSessionMetrics()
+    return () => stopSessionMetrics()
+  }, [])
+
+  useEffect(() => {
     setCloudRepositoryAdapter({
       runMutation: async (name, args) => {
         if (name === 'projects:createProject') return createProject(args)
@@ -474,6 +487,7 @@ export default function CloudSyncCoordinator() {
       },
       currentUserId,
       collaborationMode: isCloudProject && cloudAccessPolicy.canCollaborateOnCloudProject,
+      hasActiveCollaborators: hasOtherCollaborators,
     })
   }, [
     applyLiveStoryboardSync,
@@ -482,6 +496,7 @@ export default function CloudSyncCoordinator() {
     currentUserId,
     createSnapshot,
     flushPendingLiveStoryboardSync,
+    hasOtherCollaborators,
     projectRef?.type,
     setCloudSyncContext,
   ])
@@ -491,7 +506,11 @@ export default function CloudSyncCoordinator() {
     if (otherCollaboratorCount == null) return
     if (otherCollaboratorCount <= 0) return
     flushPendingLiveStoryboardSync({ force: true })
-  }, [cloudProjectId, flushPendingLiveStoryboardSync, otherCollaboratorCount])
+    if (DRAFT_COMMIT_MODE) {
+      commitDomain('storyboard', { reason: 'collaborator_join' })
+        .finally(() => flushCloudSync({ reason: 'collaborator_join' }))
+    }
+  }, [cloudProjectId, commitDomain, flushCloudSync, flushPendingLiveStoryboardSync, otherCollaboratorCount])
 
   useEffect(() => {
     return () => {
@@ -635,7 +654,7 @@ export default function CloudSyncCoordinator() {
         (s.saveSyncState?.status === 'saved_locally' &&
           s.saveSyncState?.mode !== 'cloud_blocked')
       if (!needsSync) return
-      flushCloudSync({ reason: 'manual' })
+      flushCloudSync({ reason: 'lifecycle' })
       flushPendingLiveStoryboardSync({ force: true })
     }
     window.addEventListener('beforeunload', flush)
@@ -650,6 +669,15 @@ export default function CloudSyncCoordinator() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [flushCloudSync, flushPendingLiveStoryboardSync, projectRef?.type])
+
+  useEffect(() => {
+    if (!DRAFT_COMMIT_MODE) return undefined
+    if (projectRef?.type !== 'cloud') return undefined
+    const timer = window.setInterval(() => {
+      flushCloudSync({ reason: 'periodic_checkpoint' })
+    }, DRAFT_COMMIT_CHECKPOINT_MS)
+    return () => window.clearInterval(timer)
+  }, [flushCloudSync, projectRef?.type])
 
   useEffect(() => {
     const latestSnapshotId = latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null
