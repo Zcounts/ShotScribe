@@ -83,7 +83,9 @@ export default function SaveSyncStatusControl({
   const membersArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
   const presenceArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
   const locksArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
-  const cloudProjects = useQuery('projects:listProjectsForCurrentUserLite', cloudProjectsArgs)
+  const cloudProjectsResult = useQuery('projects:listProjectsForCurrentUserLite', cloudProjectsArgs)
+  const cloudProjects = cloudProjectsResult?.projects || []
+  const cloudProjectsTotal = cloudProjectsResult?.total || 0
   const liveMembersResult = useQuery('projectMembers:listProjectMembers', membersArgs)
   const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
   const lockRows = useQuery('screenplayLocks:listProjectLocks', locksArgs)
@@ -111,7 +113,7 @@ export default function SaveSyncStatusControl({
     component: 'SaveSyncStatusControl',
     queryName: 'projects:listProjectsForCurrentUserLite',
     args: cloudProjectsArgs,
-    result: cloudProjects,
+    result: cloudProjectsResult,
     active: cloudProjectsArgs !== 'skip',
     hidden: !open,
   })
@@ -373,10 +375,10 @@ export default function SaveSyncStatusControl({
             </div>
           ) : null}
 
-          {cloudEnvEnabled && signedInForCloud && (cloudProjects?.length || 0) > 0 ? (
+          {cloudEnvEnabled && signedInForCloud && cloudProjects.length > 0 ? (
             <div style={{ marginTop: 12, borderTop: '1px solid rgba(74,85,104,0.35)', paddingTop: 10 }}>
               <button type="button" onClick={() => setOpenCloudList((prev) => !prev)} style={{ border: '1px solid rgba(96,165,250,0.35)', background: 'rgba(30,58,138,0.25)', color: '#BFDBFE', borderRadius: 6, fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}>
-                {openCloudList ? 'Hide cloud projects' : `Open cloud project (${cloudProjects.length})`}
+                {openCloudList ? 'Hide cloud projects' : `Open cloud project (${cloudProjectsTotal})`}
               </button>
               {openCloudList ? (
                 <div style={{ marginTop: 8, display: 'grid', gap: 6, maxHeight: 140, overflowY: 'auto' }}>

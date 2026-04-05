@@ -126,6 +126,8 @@ export default function CloudSyncCoordinator() {
   const flushCloudSync = useStore(s => s.flushCloudSync)
   const applyIncomingCloudSnapshot = useStore(s => s.applyIncomingCloudSnapshot)
   const openCloudProject = useStore(s => s.openCloudProject)
+  const snapshotHydrationState = useStore(s => s.snapshotHydrationState)
+  const hydrateProjectSnapshot = useStore(s => s.hydrateProjectSnapshot)
   const updateShotImage = useStore(s => s.updateShotImage)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
   const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
@@ -596,6 +598,25 @@ export default function CloudSyncCoordinator() {
       } catch {}
     }
   }, [convex, createProject, createSnapshot, openCloudProject, setCloudRepositoryAdapter])
+
+  // Trigger deferred snapshot hydration as soon as the cloud adapter is ready
+  // and openCloudProject has set snapshotHydrationState to 'deferred'.
+  // This fires in the background immediately after project open — the UI is
+  // already responsive from the metadata-only open, and surface data arrives
+  // as the snapshot resolves (~200–500ms later).
+  useEffect(() => {
+    if (snapshotHydrationState?.status !== 'deferred') return
+    if (!cloudProjectId) return
+    hydrateProjectSnapshot().catch((err) => {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn('[cloud-sync] snapshot hydration failed', {
+          projectId: String(cloudProjectId || ''),
+          message: err?.message || 'unknown_error',
+        })
+      }
+    })
+  }, [snapshotHydrationState?.status, cloudProjectId, hydrateProjectSnapshot])
 
   useEffect(() => {
     const isCloudProject = projectRef?.type === 'cloud'

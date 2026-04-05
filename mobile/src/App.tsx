@@ -83,7 +83,8 @@ function CloudModePane({
   onApplyShotEdit: (projectId: string, dayId: string, shotId: string, patch: Partial<Omit<ShotFieldEdit, 'updatedAt'>>) => StoredLibrary
 }) {
   const cloudEntitlement = useQuery('billing:getMyEntitlement' as any, {}) as any
-  const cloudProjects = useQuery('projects:listProjectsForCurrentUser' as any, {}) as any[] | undefined
+  const cloudProjectsResult = useQuery('projects:listProjectsForCurrentUserLite' as any, {}) as { projects: any[], hasMore: boolean, total: number } | undefined
+  const cloudProjects = cloudProjectsResult?.projects
   const projectId = route.name === 'project' && route.mode === 'cloud' ? route.projectId : 'skip'
   const latestSnapshot = useQuery('projectSnapshots:getLatestSnapshotForProject' as any, projectId === 'skip' ? 'skip' : { projectId }) as any
   const createSnapshot = useMutation('projectSnapshots:createSnapshot' as any)
