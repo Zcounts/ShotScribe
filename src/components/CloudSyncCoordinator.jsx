@@ -9,6 +9,9 @@ import { runtimeConfig } from '../config/runtimeConfig'
 import {
   recordCollabSubscriptionSuspended,
   recordDeferredSurfaceSubscription,
+  recordPresenceSubscriptionMount,
+  recordSnapshotFullRead,
+  recordSnapshotHeadRead,
   startSessionMetrics,
   stopSessionMetrics,
 } from '../utils/sessionMetrics'
@@ -126,6 +129,8 @@ export default function CloudSyncCoordinator() {
   const flushCloudSync = useStore(s => s.flushCloudSync)
   const applyIncomingCloudSnapshot = useStore(s => s.applyIncomingCloudSnapshot)
   const openCloudProject = useStore(s => s.openCloudProject)
+  const snapshotHydrationState = useStore(s => s.snapshotHydrationState)
+  const hydrateProjectSnapshot = useStore(s => s.hydrateProjectSnapshot)
   const updateShotImage = useStore(s => s.updateShotImage)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
   const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
@@ -147,15 +152,11 @@ export default function CloudSyncCoordinator() {
   const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
   const getAssetSignedView = useAction('assets:getAssetSignedView')
   const getAssetThumbnailBase64 = useAction('assets:getAssetThumbnailBase64')
-  // Boot-time fetches — these two useQuery calls are the single source of truth
-  // for currentUser and entitlement data. Results are stored in Zustand so all
-  // other components read from the store instead of holding their own subscriptions.
-  const cloudUserQuery = useQuery('users:currentUser')
-  const entitlementQuery = useQuery('billing:getMyEntitlement')
   const setCurrentUser = useStore(s => s.setCurrentUser)
   const setEntitlement = useStore(s => s.setEntitlement)
   const setUserDataLoaded = useStore(s => s.setUserDataLoaded)
   const cloudUser = useStore(s => s.currentUser)
+  const cloudLineageLastKnownSnapshotId = useStore(s => s.cloudLineage?.lastKnownSnapshotId || null)
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const cloudProject = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
   const [presenceProbeHasCollaborators, setPresenceProbeHasCollaborators] = useState(false)
@@ -192,13 +193,6 @@ export default function CloudSyncCoordinator() {
   )
   useConvexQueryDiagnosticsSafe({
     component: 'CloudSyncCoordinator',
-    queryName: 'users:currentUser',
-    args: {},
-    result: cloudUserQuery,
-    active: true,
-  })
-  useConvexQueryDiagnosticsSafe({
-    component: 'CloudSyncCoordinator',
     queryName: 'projects:getProjectById',
     args: cloudProjectId ? { projectId: cloudProjectId } : 'skip',
     result: cloudProject,
@@ -218,14 +212,31 @@ export default function CloudSyncCoordinator() {
     result: presenceRows,
     active: shouldSubscribePresence,
   })
-  // Populate Zustand store once both boot-time queries resolve.
-  // After this fires, all downstream consumers read from the store.
+  // Boot-time user + entitlement load (one-shot reads).
+  // Zustand is seeded before dependent screens read userDataLoaded.
   useEffect(() => {
-    if (cloudUserQuery === undefined || entitlementQuery === undefined) return
-    setCurrentUser(cloudUserQuery)
-    setEntitlement(entitlementQuery)
-    setUserDataLoaded(true)
-  }, [cloudUserQuery, entitlementQuery, setCurrentUser, setEntitlement, setUserDataLoaded])
+    let cancelled = false
+    setUserDataLoaded(false)
+    Promise.all([
+      convex.query('users:currentUser'),
+      convex.query('billing:getMyEntitlement'),
+    ])
+      .then(([userResult, entitlementResult]) => {
+        if (cancelled) return
+        setCurrentUser(userResult)
+        setEntitlement(entitlementResult)
+        setUserDataLoaded(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setCurrentUser(null)
+        setEntitlement(null)
+        setUserDataLoaded(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [convex, setCurrentUser, setEntitlement, setUserDataLoaded])
 
   // Interval-based entitlement re-fetch (10 min). Billing state can change
   // mid-session if the user upgrades. This is a one-shot imperative call,
@@ -269,6 +280,14 @@ export default function CloudSyncCoordinator() {
   const loggedCollabSuspendedRef = useRef(false)
   const loggedDeferredScenesRef = useRef(false)
   const loggedDeferredShotsRef = useRef(false)
+  const getSignedViewWithCache = useCallback(async (projectId, assetId) => {
+    if (!projectId || !assetId) return null
+    return getOrCreateSignedViewRequest({
+      projectId,
+      assetId,
+      fetcher: () => getAssetSignedView({ projectId, assetId }),
+    })
+  }, [getAssetSignedView])
 
   useEffect(() => {
     fetchedRemoteSnapshotIdsRef.current.clear()
@@ -364,16 +383,19 @@ export default function CloudSyncCoordinator() {
   }, [cloudProjectId, presenceProbeHasCollaborators])
 
   useEffect(() => {
+    if (!shouldSubscribePresence) return
+    recordPresenceSubscriptionMount()
+  }, [shouldSubscribePresence])
+
+  useEffect(() => {
     if (!cloudProjectId) return undefined
     if (presenceProbeHasCollaborators) return undefined
     let cancelled = false
     const pollPresence = () => {
-      convex.query('presence:listProjectPresence', { projectId: cloudProjectId })
-        .then((rows) => {
+      convex.query('presence:getPresenceProbe', { projectId: cloudProjectId })
+        .then((probe) => {
           if (cancelled) return
-          const hasOthers = Array.isArray(rows) && rows.some((row) => (
-            String(row?.userId || '') !== String(currentUserId || '')
-          ))
+          const hasOthers = Boolean(probe?.hasCollaborators)
           if (hasOthers) setPresenceProbeHasCollaborators(true)
         })
         .catch(() => {})
@@ -389,7 +411,7 @@ export default function CloudSyncCoordinator() {
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [cloudProjectId, convex, currentUserId, presenceProbeHasCollaborators])
+  }, [cloudProjectId, convex, presenceProbeHasCollaborators])
 
   useEffect(() => {
     if (!presenceProbeHasCollaborators) return
@@ -596,6 +618,25 @@ export default function CloudSyncCoordinator() {
       } catch {}
     }
   }, [convex, createProject, createSnapshot, openCloudProject, setCloudRepositoryAdapter])
+
+  // Trigger deferred snapshot hydration as soon as the cloud adapter is ready
+  // and openCloudProject has set snapshotHydrationState to 'deferred'.
+  // This fires in the background immediately after project open — the UI is
+  // already responsive from the metadata-only open, and surface data arrives
+  // as the snapshot resolves (~200–500ms later).
+  useEffect(() => {
+    if (snapshotHydrationState?.status !== 'deferred') return
+    if (!cloudProjectId) return
+    hydrateProjectSnapshot().catch((err) => {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn('[cloud-sync] snapshot hydration failed', {
+          projectId: String(cloudProjectId || ''),
+          message: err?.message || 'unknown_error',
+        })
+      }
+    })
+  }, [snapshotHydrationState?.status, cloudProjectId, hydrateProjectSnapshot])
 
   useEffect(() => {
     const isCloudProject = projectRef?.type === 'cloud'
@@ -820,12 +861,21 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     const latestSnapshotId = latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null
     if (!cloudProjectId || !latestSnapshotId) return
-    if (String(projectRef?.snapshotId || '') === latestSnapshotId) return
+    const localSnapshotId = String(
+      projectRef?.snapshotId
+      || cloudLineageLastKnownSnapshotId
+      || '',
+    )
+    if (localSnapshotId === latestSnapshotId) {
+      recordSnapshotHeadRead()
+      return
+    }
     if (fetchedRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
     if (inFlightRemoteSnapshotIdsRef.current.has(latestSnapshotId)) return
 
     let cancelled = false
     inFlightRemoteSnapshotIdsRef.current.add(latestSnapshotId)
+    recordSnapshotFullRead()
 
     convex
       .query('projectSnapshots:getLatestSnapshotForProject', { projectId: cloudProjectId })
@@ -856,7 +906,14 @@ export default function CloudSyncCoordinator() {
     return () => {
       cancelled = true
     }
-  }, [applyIncomingCloudSnapshot, cloudProjectId, convex, latestSnapshotHead?.latestSnapshotId, projectRef?.snapshotId])
+  }, [
+    applyIncomingCloudSnapshot,
+    cloudLineageLastKnownSnapshotId,
+    cloudProjectId,
+    convex,
+    latestSnapshotHead?.latestSnapshotId,
+    projectRef?.snapshotId,
+  ])
 
   useEffect(() => {
     if (!cloudProjectId || hasUnsavedChanges) return
@@ -884,7 +941,7 @@ export default function CloudSyncCoordinator() {
       const assetId = uploaded?.imageAsset?.cloud?.assetId
       if (assetId) {
         await assignShotLibraryAsset({ projectId, shotId, assetId })
-        const signedView = await getAssetSignedView({ projectId, assetId })
+        const signedView = await getSignedViewWithCache(projectId, assetId)
         return buildShotImageFromLibraryAsset(signedView) || uploaded
       }
       return uploaded
@@ -896,7 +953,7 @@ export default function CloudSyncCoordinator() {
     assignShotLibraryAsset,
     createAssetUploadIntent,
     finalizeAssetUpload,
-    getAssetSignedView,
+    getSignedViewWithCache,
     setCloudImageUploader,
   ])
 
@@ -960,10 +1017,7 @@ export default function CloudSyncCoordinator() {
             })
             const assetId = uploaded?.imageAsset?.cloud?.assetId
             if (assetId) {
-              const signedView = await getAssetSignedView({
-                projectId: cloudProjectId,
-                assetId,
-              })
+              const signedView = await getSignedViewWithCache(cloudProjectId, assetId)
               payload = buildShotImageFromLibraryAsset(signedView) || uploaded
             } else {
               payload = uploaded
@@ -1012,7 +1066,7 @@ export default function CloudSyncCoordinator() {
     cloudProjectId,
     createAssetUploadIntent,
     finalizeAssetUpload,
-    getAssetSignedView,
+    getSignedViewWithCache,
     projectRef?.type,
     updateShotImage,
   ])
