@@ -14,6 +14,7 @@ function editorTypeToStyleType(nodeType) {
 }
 
 function nextTypeForEnter(nodeType) {
+  if (nodeType === 'scene_heading') return 'action'
   if (nodeType === 'character' || nodeType === 'parenthetical') return 'dialogue'
   if (nodeType === 'dialogue') return 'action'
   return nodeType || 'action'
@@ -47,7 +48,7 @@ function bootstrapBlankDocument(scriptDocument, initialText = '') {
     ...base,
     content: [
       {
-        type: 'action',
+        type: 'scene_heading',
         attrs: {
           id: `pm_bootstrap_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         },
@@ -331,8 +332,8 @@ export default function ScriptDocumentPaginationSurface({
                   dir="ltr"
                   onFocus={() => {
                     if (readOnly) return
-                    onActiveBlockTypeChange?.('action')
-                    onActiveNodeChange?.({ nodeIndex: 0, blockType: 'action' })
+                    onActiveBlockTypeChange?.('heading')
+                    onActiveNodeChange?.({ nodeIndex: 0, blockType: 'heading' })
                   }}
                   onInput={(event) => {
                     if (readOnly) return
