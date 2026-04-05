@@ -32,6 +32,8 @@ import { collectCloudAssetIdsFromProjectData } from '../services/assetService'
 import { buildConvexSafeSnapshotPayload } from '../data/repository/cloudSnapshotPayload'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import { runtimeConfig } from '../config/runtimeConfig'
+import ScriptDocumentPaginationSurface from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -1172,6 +1174,10 @@ export default function ScriptTab() {
       window.removeEventListener('resize', computeOverlays)
     }
   }, [activeBreakdownCategory, breakdownByScene, documentModel.blocks, shotLinksByScene, view])
+
+  if (runtimeConfig.scriptDocument?.paginationPhase1Enabled) {
+    return <ScriptDocumentPaginationSurface />
+  }
 
   if (orderedScenes.length === 0) {
     return (
