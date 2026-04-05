@@ -90,7 +90,7 @@ export default function HomeView() {
   const recentProjects = useStore(s => s.recentProjects)
   const setActiveTab = useStore(s => s.setActiveTab)
   const setTabViewState = useStore(s => s.setTabViewState)
-  const homeTabViewState = useStore(s => s.tabViewState?.home || {})
+  const homeTabViewState = useStore(s => s.tabViewState.home)
   const newProject = useStore(s => s.newProject)
   const openProject = useStore(s => s.openProject)
   const openCloudProject = useStore(s => s.openCloudProject)
@@ -140,8 +140,7 @@ export default function HomeView() {
   const hasBlockingUnsavedChanges = hasUnsavedChanges
     && saveSyncState?.status === 'unsaved_changes'
     && !isEffectivelyBlankProject({ projectName, scenes, schedule, castRoster, crewRoster, scriptScenes, importedScripts })
-  const cloudProjectsExpanded = homeTabViewState.cloudProjectsExpanded ?? true
-  const pendingDeletionExpanded = homeTabViewState.pendingDeletionExpanded ?? false
+  const { cloudProjectsExpanded, pendingDeletionExpanded } = homeTabViewState
 
   useEffect(() => {
     if (!contextMenu && !heroContextMenu) return
