@@ -568,6 +568,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
   const pageSettings = documentSettings.page
   const writeOptions = { ...WRITE_OPTIONS_DEFAULTS, ...(scriptSettings?.writeOptions || {}) }
+  const shouldUseUnifiedWriteSurface = useUnifiedEditorCore && view === 'write'
   const pageContentWidthPx = Math.max(120, pageSettings.widthPx - pageSettings.marginLeftPx - pageSettings.marginRightPx)
   const pageContentHeightPx = Math.max(120, pageSettings.heightPx - pageSettings.marginTopPx - pageSettings.marginBottomPx)
 
@@ -1436,8 +1437,8 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={useUnifiedEditorCore ? undefined : handlePageMouseUp}>
-              {useUnifiedEditorCore ? (
+            <div ref={documentScrollerRef} style={{ flex: 1, overflowY: 'auto', overflowX: isDesktopDown ? 'auto' : 'hidden', padding: '12px 0 24px' }} onMouseUp={shouldUseUnifiedWriteSurface ? undefined : handlePageMouseUp}>
+              {shouldUseUnifiedWriteSurface ? (
                 <ScriptDocumentPaginationSurface
                   readOnly={isWriteBlockedByLock}
                   writeOptions={writeOptions}

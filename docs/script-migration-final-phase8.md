@@ -49,6 +49,36 @@ This phase retires the old Script tab architecture from production defaults and 
 - Complete visualize/breakdown overlay parity on unified editor coordinates.
 - Replace custom contentEditable editing path with a full editor engine once parity baseline is stable.
 
+### Roadmap item: Restore Breakdown and Visualize right-click interaction/dialog flows in the unified Script tab
+
+**Current problem summary**
+
+- Unified default Script tab path restored write/edit parity, but Breakdown and Visualize right-click flows are not parity-complete.
+- Context-driven actions (selection tagging, contextual delete/link dialogs, mode-specific right-click behavior) are inconsistent vs legacy behavior.
+
+**Scope for this phase**
+
+- Restore Breakdown/Visualize interaction flow parity (especially right-click/context-menu driven actions) while keeping unified write path active.
+- Reuse existing legacy Breakdown/Visualize menu/dialog behavior and handlers where safe, adapted into unified-default runtime path.
+- Keep Script tab shell/layout/sidebar/configure wiring intact.
+
+**Risks**
+
+- Selection/range offsets can diverge between unified document nodes and legacy compatibility overlays.
+- Right-click handling may conflict with browser defaults if mode guards are incomplete.
+- Cloud lock/read-only constraints must remain enforced while restoring mode interactions.
+
+**Must not regress**
+
+- Write-mode typing stability, Tab/Shift+Tab type cycling, sidebar block-type controls, and bold toggles.
+- Save/load/cloud snapshot behavior and rollback flag semantics.
+- Restored Script tab shell/layout/sidebar behavior.
+
+**Follow-up if parity is partial in this pass**
+
+- Unify selection/range anchoring between unified nodes and annotation overlays.
+- Migrate remaining context/dialog behavior to shared interaction layer that supports both write and read modes without legacy assumptions.
+
 ## Removed from active path
 
 - Legacy ScriptTab contenteditable/blur-commit editing code.
