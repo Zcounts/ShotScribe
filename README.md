@@ -24,11 +24,7 @@ This monorepo currently contains:
 - Home tab left sidebar now supports lightweight expand/collapse toggles for the Cloud Projects and Pending Deletion sections, with session-scoped state that survives tab switches (Cloud defaults expanded, Pending Deletion defaults collapsed) without changing project card behavior.
 - Main app responsive header now uses clearer row stacking at narrower widths across tabs (project identity row, actions row, menu/configure row, then tabs) and keeps the legacy Quick actions launcher removed from the main toolbar.
 - Schedule tab left sidebar now keeps the Selected Day and Summary accordions visually consistent with the dark sidebar theme (no light background blocks, light-muted text tokens only).
-<<<<<<< codex/fix-left-sidebar-height-on-storyboard-tab
 - Storyboard desktop left outline sidebar now stretches to the same full-height content area behavior used by other tabs, eliminating a short sidebar gap when storyboard content is sparse.
-=======
-- Storyboard shot cards now keep cloud “Add image” actions inside the existing image area and open the Project Media Library as a large overlay picker with thumbnails (title/date metadata retained) to avoid card layout shifts while selecting media.
->>>>>>> main
 
 ---
 

@@ -100,6 +100,8 @@ export default function HomeView() {
   const [contextMenu, setContextMenu] = useState(null)
   const [heroContextMenu, setHeroContextMenu] = useState(null)
   const [deleteConfirmProject, setDeleteConfirmProject] = useState(null)
+  const [cloudProjectsExpanded, setCloudProjectsExpanded] = useState(true)
+  const [pendingDeletionExpanded, setPendingDeletionExpanded] = useState(true)
   const menuRef = useRef(null)
   const heroMenuRef = useRef(null)
 
@@ -471,7 +473,7 @@ export default function HomeView() {
           </div>
           <div className="home-hero-actions">
             {hasLoadedProject ? (
-              <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => setProjectPropertiesOpen(true)}>
+              <button type="button" className="ss-btn ghost home-btn-inline home-hero-project-props-btn" onClick={() => setProjectPropertiesOpen(true)}>
                 <Settings2 size={14} strokeWidth={1.6} />
                 Project Properties
               </button>

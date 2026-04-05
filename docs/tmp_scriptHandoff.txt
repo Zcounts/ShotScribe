@@ -1,0 +1,78 @@
+Script Tab Migration Handoff (Current State)
+1) What changed in this session
+The Script tab now routes through the restored shell component and toggles unified-vs-legacy behavior by prop (useUnifiedEditorCore) instead of switching to a simplified standalone surface. Default is unified core unless rollback flag is enabled. 
+
+Typing/input layer in ScriptDocumentPaginationSurface was repaired:
+
+removed React-controlled text child behavior for focused contentEditable blocks,
+
+added imperative text sync for non-focused blocks,
+
+added explicit LTR/bidi-safe styles,
+
+added Enter split + Backspace-at-start merge + caret restore. 
+
+2) Current architecture/state
+Entry point: ScriptTab.jsx is a thin router.
+
+Shell/layout: ScriptTabLegacy.jsx provides the existing UI shell/sidebars/config wiring.
+
+Editor core (default): ScriptDocumentPaginationSurface inside that shell when useUnifiedEditorCore=true.
+
+Rollback mode: full legacy editor path when VITE_ENABLE_LEGACY_SCRIPT_TAB=true. 
+
+3) Files changed
+src/components/ScriptTab.jsx 
+
+src/components/ScriptTabLegacy.jsx 
+
+src/features/scriptDocument/ScriptDocumentPaginationSurface.jsx 
+
+docs/script-migration-final-phase8.md 
+
+4) What is working now
+Unified editor remains default path (no default rollback).
+
+Script shell parity is restored (left/right sidebars + overall layout path preserved).
+
+Typing direction is explicitly LTR in the editor surface.
+
+Enter now creates a new block via split logic.
+
+Backspace at block start merges with previous block.
+
+Derivation/save hooks are still wired through existing store actions. 
+
+5) What is still broken / incomplete
+This is still a custom contentEditable integration (not full ProseMirror editor instance/keymap/schema flow).
+
+Delete-at-end forward-merge is not implemented yet.
+
+Enter behavior is generic split; screenplay-type-aware transitions (e.g., character/dialogue smart behavior) are not implemented yet.
+
+Visualize/breakdown overlay interactions on the unified surface are still not parity-complete. 
+
+6) Known risks
+ContentEditable edge cases can still appear under heavy editing/IME/composition scenarios.
+
+Unified core inside legacy shell may leave some shell controls semantically tied to legacy assumptions.
+
+Rollback path exists and could mask issues if accidentally enabled in env. 
+
+7) Current rollback / legacy fallback status
+Rollback switch is active and explicit: VITE_ENABLE_LEGACY_SCRIPT_TAB.
+
+false/unset => unified core in restored shell.
+
+true => full legacy editor mode. 
+
+8) Recommended next task
+Implement a real ProseMirror editing surface (schema/keymap/plugins) behind the same restored shell:
+
+replace block-wise contentEditable with PM EditorView,
+
+implement screenplay-aware Enter rules in PM commands,
+
+keep adapter outputs and save/load/lock paths unchanged.
+
+Then finish overlay parity (breakdown/visualize interactions) on top of PM positions.
