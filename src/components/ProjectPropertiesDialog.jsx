@@ -4,12 +4,8 @@ import useStore from '../store'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { getOrCreateSignedViewRequest } from '../utils/assetSignedViewCache'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
 
 const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024

@@ -5,12 +5,8 @@ import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Avatar, AvatarFallback } from './ui/avatar'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { recordCollabSubscriptionSuspended } from '../utils/sessionMetrics'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
 
 function formatTimestamp(iso) {
   if (!iso) return 'Not recorded yet'

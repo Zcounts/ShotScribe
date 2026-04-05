@@ -130,3 +130,11 @@ export function useConvexQueryDiagnostics({
   }, [active, component, enabled, hidden, largePayloadBytes, queryName, result, routeLabel])
 }
 
+/**
+ * App-safe diagnostics hook for production stability.
+ * Diagnostics are optional; this wrapper guarantees a callable hook even if
+ * callers import the safe symbol only.
+ */
+export const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
