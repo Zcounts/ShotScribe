@@ -35,11 +35,7 @@ import useResponsiveViewport from '../hooks/useResponsiveViewport'
 import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 
 const VIEW_OPTIONS = [
   { id: 'write', label: 'Write', icon: writeIcon },
@@ -425,6 +421,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
   const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
   const deriveScriptDocumentNow = useStore(s => s.deriveScriptDocumentNow)
+  const convex = useConvex()
 
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const currentSnapshotId = projectRef?.type === 'cloud' ? projectRef.snapshotId : null

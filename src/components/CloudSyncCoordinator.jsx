@@ -4,7 +4,7 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
-import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { runtimeConfig } from '../config/runtimeConfig'
 import {
   recordCollabSubscriptionSuspended,
@@ -12,10 +12,6 @@ import {
   startSessionMetrics,
   stopSessionMetrics,
 } from '../utils/sessionMetrics'
-
-const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
-  ? useConvexQueryDiagnostics
-  : () => {}
 
 const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
