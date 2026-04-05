@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useAction, useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation } from 'convex/react'
 import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
@@ -11,8 +11,12 @@ import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
-import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import {
+  getCachedSignedView as getCachedSignedViewFromCache,
+  getOrCreateSignedViewRequest,
+  getOrCreateSignedViewsBatchRequest,
+} from '../utils/assetSignedViewCache'
 
 function parseAspectRatioValue(value) {
   if (value === '2.39:1') return '239 / 100'
@@ -37,7 +41,17 @@ function sanitizeNumericInput(value) {
   return `${integerPart}${decimalPart}`
 }
 
-function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayConfig, prefetchedCloudAssetView = null }) {
+function ShotCard({
+  shot,
+  displayId,
+  useDropdowns,
+  sceneId,
+  storyboardDisplayConfig,
+  prefetchedCloudAssetView = null,
+  cloudAccessPolicy = { canAccessCloudAssets: true, canEditCloudProject: true },
+  libraryAssets = null,
+  recentlyDeletedAssets = null,
+}) {
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
   const projectRef = useStore(s => s.projectRef)
@@ -49,20 +63,8 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
   const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
   const softDeleteLibraryAsset = useMutation('assets:softDeleteLibraryAsset')
   const undoSoftDeleteLibraryAsset = useMutation('assets:undoSoftDeleteLibraryAsset')
-  const cloudAccessPolicy = useCloudAccessPolicy()
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const libraryAssets = useQuery(
-    'assets:listProjectLibraryAssets',
-    (projectRef?.type === 'cloud' && !cloudAssetBlocked)
-      ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
-      : 'skip'
-  )
-  const recentlyDeletedAssets = useQuery(
-    'assets:getRecentlyDeletedLibraryAssets',
-    (projectRef?.type === 'cloud' && !cloudAssetBlocked)
-      ? { projectId: projectRef.projectId, limit: 10 }
-      : 'skip'
-  )
+  const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
   const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
@@ -83,19 +85,38 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     () => ['size', 'type', 'move', 'equip'].filter(key => visibleInfo[key] !== false),
     [visibleInfo]
   )
+  const getSignedViewWithCache = useCallback(async (assetId) => {
+    const key = String(assetId || '')
+    if (!key || !cloudProjectId) return null
+    return getOrCreateSignedViewRequest({
+      projectId: cloudProjectId,
+      assetId: key,
+      fetcher: () => getAssetSignedView({
+        projectId: cloudProjectId,
+        assetId: key,
+      }),
+    })
+  }, [cloudProjectId, getAssetSignedView])
 
   useEffect(() => {
     let cancelled = false
     async function loadAssetView() {
-      if (projectRef?.type !== 'cloud' || cloudAssetBlocked || !shot?.imageAsset?.cloud?.assetId) {
+      if (!cloudProjectId || cloudAssetBlocked || !shot?.imageAsset?.cloud?.assetId) {
         setCloudAssetView(null)
         return
       }
+      if (prefetchedCloudAssetView) {
+        setCloudAssetView(prefetchedCloudAssetView)
+        return
+      }
+      const assetId = String(shot.imageAsset.cloud.assetId)
+      const cached = getCachedSignedViewFromCache(assetId)
+      if (cached) {
+        setCloudAssetView(cached)
+        return
+      }
       try {
-        const view = await getAssetSignedView({
-          projectId: projectRef.projectId,
-          assetId: shot.imageAsset.cloud.assetId,
-        })
+        const view = await getSignedViewWithCache(assetId)
         if (!cancelled) setCloudAssetView(view || null)
       } catch (err) {
         console.warn('Failed to load signed asset view', err)
@@ -106,23 +127,27 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     return () => {
       cancelled = true
     }
-  }, [cloudAssetBlocked, getAssetSignedView, projectRef, shot?.imageAsset?.cloud?.assetId])
+  }, [cloudAssetBlocked, cloudProjectId, getSignedViewWithCache, prefetchedCloudAssetView, shot?.imageAsset?.cloud?.assetId])
 
   useEffect(() => {
     let cancelled = false
     async function loadLibraryViews() {
       if (
         imagePickerStep !== 'library'
-        || projectRef?.type !== 'cloud'
+        || !cloudProjectId
         || cloudAssetBlocked
         || !Array.isArray(libraryAssets)
         || libraryAssets.length === 0
       ) return
       setIsLoadingLibraryViews(true)
       try {
-        const views = await getAssetSignedViewsBatch({
-          projectId: projectRef.projectId,
+        const views = await getOrCreateSignedViewsBatchRequest({
+          projectId: cloudProjectId,
           assetIds: libraryAssets.map(asset => asset.assetId),
+          fetcher: (missingAssetIds) => getAssetSignedViewsBatch({
+            projectId: cloudProjectId,
+            assetIds: missingAssetIds,
+          }),
         })
         if (!cancelled) setLibraryAssetViews(views || {})
       } catch (err) {
@@ -135,7 +160,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     return () => {
       cancelled = true
     }
-  }, [cloudAssetBlocked, getAssetSignedViewsBatch, imagePickerStep, libraryAssets, projectRef])
+  }, [cloudAssetBlocked, cloudProjectId, getAssetSignedViewsBatch, imagePickerStep, libraryAssets])
 
   const {
     attributes,
@@ -186,10 +211,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
         shotId: shot.id,
         assetId,
       })
-      const signedView = await getAssetSignedView({
-        projectId: projectRef.projectId,
-        assetId,
-      })
+      const signedView = await getSignedViewWithCache(assetId)
       const payload = buildShotImageFromLibraryAsset(signedView)
       if (!payload) throw new Error('Could not resolve selected library asset')
       updateShotImage(shot.id, payload)
@@ -197,7 +219,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     } finally {
       setIsAssigningFromLibrary(false)
     }
-  }, [assignShotLibraryAsset, cloudAssetBlocked, getAssetSignedView, projectRef, shot.id, updateShotImage])
+  }, [assignShotLibraryAsset, cloudAssetBlocked, getSignedViewWithCache, projectRef, shot.id, updateShotImage])
 
   const handleImageClick = () => {
     if (projectRef?.type === 'cloud') {
@@ -275,10 +297,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
             shotId: shot.id,
             assetId: uploadedAssetId,
           })
-          const signedView = await getAssetSignedView({
-            projectId: projectRef.projectId,
-            assetId: uploadedAssetId,
-          })
+          const signedView = await getSignedViewWithCache(uploadedAssetId)
           const libraryPayload = buildShotImageFromLibraryAsset(signedView)
           updateShotImage(shot.id, libraryPayload || uploaded)
         } else {
@@ -304,7 +323,7 @@ function ShotCard({ shot, displayId, useDropdowns, sceneId, storyboardDisplayCon
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, updateShotImage, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getAssetSignedView])
+  }, [shot.id, updateShotImage, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getSignedViewWithCache])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })

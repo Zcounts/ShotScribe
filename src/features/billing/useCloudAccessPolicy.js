@@ -32,17 +32,21 @@ export function getReadOnlyReason(entitlement, currentUserRole = null) {
   return `Billing is currently ${entitlement.subscriptionStatus}. This cloud project is read-only until billing is reactivated.`
 }
 
-export default function useCloudAccessPolicy() {
+export default function useCloudAccessPolicy(options = {}) {
   const projectRef = useStore(s => s.projectRef)
   const isCloudProject = projectRef?.type === 'cloud'
   const cloudProjectId = isCloudProject ? projectRef.projectId : null
+  const roleOverride = typeof options?.projectRole === 'string' ? options.projectRole : null
   const entitlementQuery = useQuery('billing:getMyEntitlement')
-  const projectQuery = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const projectQuery = useQuery(
+    'projects:getProjectById',
+    cloudProjectId && !roleOverride ? { projectId: cloudProjectId } : 'skip'
+  )
   const entitlement = entitlementQuery || DEFAULT_SUMMARY
   const isEntitlementLoading = entitlementQuery === undefined
 
   return useMemo(() => {
-    const currentUserRole = isCloudProject ? (projectQuery?.currentUserRole || null) : null
+    const currentUserRole = isCloudProject ? (roleOverride || projectQuery?.currentUserRole || null) : null
     const hasEditorRole = !isCloudProject || ROLE_RANK[currentUserRole] >= ROLE_RANK.editor
     const context = {
       isAuthenticated: true,
@@ -74,5 +78,5 @@ export default function useCloudAccessPolicy() {
       readOnly,
       readOnlyReason: readOnly ? getReadOnlyReason(entitlement, currentUserRole) : '',
     }
-  }, [entitlement, isCloudProject, isEntitlementLoading, projectQuery?.currentUserRole])
+  }, [entitlement, isCloudProject, isEntitlementLoading, projectQuery?.currentUserRole, roleOverride])
 }

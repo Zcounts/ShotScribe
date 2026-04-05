@@ -1,8 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useAction } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import ShotCard from './ShotCard'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
+import { useConvexQueryDiagnostics } from '../utils/convexDiagnostics'
+import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+
+const useConvexQueryDiagnosticsSafe = typeof useConvexQueryDiagnostics === 'function'
+  ? useConvexQueryDiagnostics
+  : () => {}
 
 function AddShotButton({ onClick }) {
   return (
@@ -41,6 +47,30 @@ function ShotGrid({
   const cloudAccessPolicy = useCloudAccessPolicy()
   const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
   const [prefetchedAssetViews, setPrefetchedAssetViews] = useState({})
+  const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
+  const libraryQueryArgs = (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+    ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
+    : 'skip'
+  const recentDeletedQueryArgs = (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+    ? { projectId: projectRef.projectId, limit: 10 }
+    : 'skip'
+  const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryQueryArgs)
+  const recentlyDeletedAssets = useQuery('assets:getRecentlyDeletedLibraryAssets', recentDeletedQueryArgs)
+
+  useConvexQueryDiagnosticsSafe({
+    component: 'ShotGrid',
+    queryName: 'assets:listProjectLibraryAssets',
+    args: libraryQueryArgs,
+    result: libraryAssets,
+    active: libraryQueryArgs !== 'skip',
+  })
+  useConvexQueryDiagnosticsSafe({
+    component: 'ShotGrid',
+    queryName: 'assets:getRecentlyDeletedLibraryAssets',
+    args: recentDeletedQueryArgs,
+    result: recentlyDeletedAssets,
+    active: recentDeletedQueryArgs !== 'skip',
+  })
 
   const cloudAssetIds = useMemo(() => {
     if (projectRef?.type !== 'cloud') return []
@@ -51,6 +81,10 @@ function ShotGrid({
     }
     return Array.from(new Set(ids.map(String)))
   }, [projectRef?.type, shots])
+  const cloudAssetIdKey = useMemo(
+    () => cloudAssetIds.slice().sort().join(','),
+    [cloudAssetIds],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -59,17 +93,21 @@ function ShotGrid({
         projectRef?.type !== 'cloud'
         || !projectRef?.projectId
         || !cloudAccessPolicy.canAccessCloudAssets
-        || cloudAssetIds.length === 0
+        || cloudAssetIdKey.length === 0
       ) {
         setPrefetchedAssetViews({})
         return
       }
       try {
-        const batch = await getAssetSignedViewsBatch({
+        const mergedViews = await getOrCreateSignedViewsBatchRequest({
           projectId: projectRef.projectId,
           assetIds: cloudAssetIds,
+          fetcher: (missingAssetIds) => getAssetSignedViewsBatch({
+            projectId: projectRef.projectId,
+            assetIds: missingAssetIds,
+          }),
         })
-        if (!cancelled) setPrefetchedAssetViews(batch || {})
+        if (!cancelled) setPrefetchedAssetViews(mergedViews || {})
       } catch (err) {
         console.warn('Failed to prefetch cloud asset views', err)
         if (!cancelled) setPrefetchedAssetViews({})
@@ -79,7 +117,7 @@ function ShotGrid({
     return () => {
       cancelled = true
     }
-  }, [cloudAccessPolicy.canAccessCloudAssets, cloudAssetIds, getAssetSignedViewsBatch, projectRef])
+  }, [cloudAccessPolicy.canAccessCloudAssets, cloudAssetIdKey, cloudAssetIds, getAssetSignedViewsBatch, projectRef?.projectId, projectRef?.type])
 
   const gridStyle = {
     display: 'grid',
@@ -99,6 +137,9 @@ function ShotGrid({
           storyboardDisplayConfig={storyboardDisplayConfig}
           sceneId={sceneId}
           prefetchedCloudAssetView={prefetchedAssetViews[String(shot?.imageAsset?.cloud?.assetId || '')] || null}
+          cloudAccessPolicy={cloudAccessPolicy}
+          libraryAssets={libraryAssets}
+          recentlyDeletedAssets={recentlyDeletedAssets}
         />
       ))}
       {showAddBtn && <AddShotButton onClick={onAddShot} />}
