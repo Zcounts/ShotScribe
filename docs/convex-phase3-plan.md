@@ -387,3 +387,21 @@ Success signal for Phase 3B first slice:
 ### Rollback
 - Revert collaborator-aware debounce branch in `CloudSyncCoordinator`.
 - Keep or rollback asset effect stabilization independently.
+
+---
+
+## Follow-up fix: collaborative typing stability
+
+### Issue found
+- Shared typing experienced skipped letters/input jitter due to live storyboard apply clobbering local unsaved edits.
+- Transient presence drops could also trigger mode flapping around solo/collaborative boundaries.
+
+### Targeted fix
+- Defer `applyLiveStoryboardState` while local unsaved edits are active.
+- Add collaborator hold window before re-entering solo mode after collaborators were recently present.
+
+### Preserved optimizations
+- Snapshot-head usage, no-op upsert suppression, asset dedupe/cache, and solo buffering architecture remain intact.
+
+### Tradeoff
+- Remote storyboard updates can be delayed briefly while a user is actively typing locally, then converge once unsaved edits clear.

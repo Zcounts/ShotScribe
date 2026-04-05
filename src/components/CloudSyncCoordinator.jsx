@@ -10,6 +10,7 @@ const CLOUD_PROJECT_SESSION_KEY = 'ss_active_cloud_project_id'
 const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
 const ENSURE_STORYBOARD_LIVE_MODEL_COOLDOWN_MS = 2 * 60 * 1000
 const SOLO_LIVE_SYNC_DEBOUNCE_MS = 1800
+const COLLABORATOR_MODE_HOLD_MS = 30 * 1000
 const ensureStoryboardFailureCache = new Map()
 const DIAG_LOCAL_STORAGE_KEY = 'ss_convex_diag'
 
@@ -197,6 +198,8 @@ export default function CloudSyncCoordinator() {
   const soloLiveSyncTimerRef = useRef(null)
   const liveSyncFlushInFlightRef = useRef(false)
   const soloModeRef = useRef(false)
+  const lastCollaboratorSeenAtRef = useRef(0)
+  const modeLabelRef = useRef('unknown')
 
   useEffect(() => {
     fetchedRemoteSnapshotIdsRef.current.clear()
@@ -220,14 +223,36 @@ export default function CloudSyncCoordinator() {
   const otherCollaboratorCount = Array.isArray(presenceRows)
     ? presenceRows.filter((row) => String(row?.userId || '') !== String(currentUserId || '')).length
     : null
+  const hasOtherCollaborators = Number(otherCollaboratorCount || 0) > 0
+  useEffect(() => {
+    if (hasOtherCollaborators) {
+      lastCollaboratorSeenAtRef.current = Date.now()
+    }
+  }, [hasOtherCollaborators])
+  const heldCollaboratorMode = (Date.now() - Number(lastCollaboratorSeenAtRef.current || 0)) < COLLABORATOR_MODE_HOLD_MS
   const isSoloMode = Boolean(
     cloudProjectId
     && cloudAccessPolicy.canCollaborateOnCloudProject
-    && Number(otherCollaboratorCount || 0) === 0,
+    && !hasOtherCollaborators
+    && !heldCollaboratorMode,
   )
   useEffect(() => {
     soloModeRef.current = isSoloMode
   }, [isSoloMode])
+  useEffect(() => {
+    const nextLabel = isSoloMode ? 'solo' : 'collaborative'
+    if (modeLabelRef.current === nextLabel) return
+    if (isConvexDiagEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[cloud-sync] live sync mode switched', {
+        projectId: String(cloudProjectId || ''),
+        mode: nextLabel,
+        otherCollaboratorCount: Number(otherCollaboratorCount || 0),
+        heldCollaboratorMode,
+      })
+    }
+    modeLabelRef.current = nextLabel
+  }, [cloudProjectId, heldCollaboratorMode, isSoloMode, otherCollaboratorCount])
 
   const applyLiveStoryboardSync = useCallback(async ({ projectId, scenes, storyboardSceneOrder }) => {
     const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
@@ -516,8 +541,19 @@ export default function CloudSyncCoordinator() {
     if (!cloudProjectId) return
     if (Number(cloudProject?.liveModelVersion || 0) < 1) return
     if (!Array.isArray(liveScenes) || !Array.isArray(liveShots)) return
+    if (hasUnsavedChanges) {
+      if (isConvexDiagEnabled()) {
+        // eslint-disable-next-line no-console
+        console.debug('[cloud-sync] deferred live storyboard apply while local edits are pending', {
+          projectId: String(cloudProjectId),
+          liveSceneCount: liveScenes.length,
+          liveShotCount: liveShots.length,
+        })
+      }
+      return
+    }
     applyLiveStoryboardState({ scenes: liveScenes, shots: liveShots })
-  }, [applyLiveStoryboardState, cloudProject?.liveModelVersion, cloudProjectId, liveScenes, liveShots])
+  }, [applyLiveStoryboardState, cloudProject?.liveModelVersion, cloudProjectId, hasUnsavedChanges, liveScenes, liveShots])
 
   useEffect(() => {
     if (projectRef?.type !== 'cloud') return undefined

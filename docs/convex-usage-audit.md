@@ -411,3 +411,52 @@ I implemented only low-risk, behavior-preserving changes to reduce call count an
 ### Rollback notes
 - Remove solo debounce buffering branch in `CloudSyncCoordinator.syncLiveStoryboardState` and always call immediate flush path.
 - Keep no-op suppression and asset cache tightening independently if needed.
+
+---
+
+## Collaboration typing regression fix (skipped letters / clobber during shared edits)
+
+### Root cause
+- Live storyboard subscription updates were being applied into local store even while the local user had unsaved in-progress edits.
+- During two-user typing, this created a write→live-read→local-overwrite loop that could refresh controlled input values too aggressively and feel like skipped/backwards letters.
+- Solo/collaborative mode switching could also flap on transient presence drops; collaborator count briefly hitting zero could enable solo buffering too early.
+
+### Code fix
+- Added a guard to defer `applyLiveStoryboardState` while `hasUnsavedChanges` is true.
+  - This prevents incoming live state from clobbering actively edited local text fields.
+  - Live state still applies automatically after local unsaved edits clear.
+- Added collaborator-mode hold window (`COLLABORATOR_MODE_HOLD_MS`) so brief presence dips do not immediately flip to solo mode.
+- Added dev-only diagnostics for:
+  - mode transitions (`solo`/`collaborative`)
+  - deferred live-apply events while local edits are pending
+
+### What was preserved
+- Snapshot-head metadata read path and freshness behavior.
+- Live scene/shot no-op upsert suppression.
+- Solo-mode buffering architecture (narrowed only by mode hold + clobber guard).
+- Asset signed-view caching / dedupe improvements.
+- Presence heartbeat behavior remains unchanged from prior optimization pass.
+
+### Narrowed behavior (targeted)
+- Incoming live storyboard state is no longer applied while local unsaved edits are active.
+- Solo mode activation is delayed briefly after collaborator presence to prevent rapid mode flapping.
+
+### Expected UX impact
+- Typing should no longer feel like fields are being forcibly refreshed mid-entry.
+- Remote collaborator updates still arrive promptly, but local active typing is protected from overwrite jitter.
+- Reduced chance of skipped letters/caret jump behavior in shared edit sessions.
+
+### Expected usage impact
+- Very small increase in temporary local/remote divergence while user is actively typing (until unsaved state clears).
+- Core usage wins remain: reduced no-op writes and cached asset request behavior stay intact.
+
+### Manual QA
+1. Two-user collaborative shot/scene text editing: verify no skipped letters or backwards typing.
+2. Confirm remote updates still appear on collaborator screen quickly.
+3. Confirm local edits are not overwritten during active typing.
+4. Verify solo mode still engages when truly alone and exits correctly when collaborator appears.
+5. Verify autosave/manual sync and cloud snapshot behavior remain normal.
+
+### Rollback notes
+- Revert `hasUnsavedChanges` apply guard if any delayed-remote-visibility regression is unacceptable.
+- Revert collaborator hold window constant/logic if mode transitions need to be immediate again.
