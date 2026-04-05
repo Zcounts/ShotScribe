@@ -10,8 +10,8 @@ function normalizeScenePayload(scene: any) {
     location: scene?.location || '',
     intOrExt: scene?.intOrExt || '',
     dayNight: scene?.dayNight || '',
-    color: scene?.color || null,
-    linkedScriptSceneId: scene?.linkedScriptSceneId || null,
+    color: scene?.color || undefined,
+    linkedScriptSceneId: scene?.linkedScriptSceneId || undefined,
     pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes.map((entry: any) => String(entry || '')) : [''],
     pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors.map((entry: any) => String(entry || '')) : [],
   }
