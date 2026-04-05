@@ -21,6 +21,7 @@ This monorepo currently contains:
 - Shotlist and Schedule desktop views collapse secondary side panels at smaller viewports to preserve laptop usability without changing core workflows.
 - Shotlist drag-and-drop now preserves each shot's existing SHOT# label (for example, 1A stays 1A) while only changing row order.
 - Home tab hero now stays visible for loaded projects and can be edited via Project Properties (title/icon/logline + hero background image + hero overlay color) with local/cloud persistence parity; default no-project headline/subhead are admin-editable with safe fallbacks.
+- Home tab left sidebar now supports lightweight expand/collapse toggles for the Cloud Projects and Pending Deletion sections to reduce visual noise without changing project card behavior.
 - Main app responsive header now uses clearer row stacking at narrower widths across tabs (project identity row, actions row, menu/configure row, then tabs) and keeps the legacy Quick actions launcher removed from the main toolbar.
 - Schedule tab left sidebar now keeps the Selected Day and Summary accordions visually consistent with the dark sidebar theme (no light background blocks, light-muted text tokens only).
 <<<<<<< codex/fix-left-sidebar-height-on-storyboard-tab
