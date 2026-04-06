@@ -39,6 +39,7 @@
 | `syncing_to_cloud` | Convex snapshot mutation in-flight | "Uploading to cloud…" |
 | `synced_to_cloud` | Snapshot write confirmed | "Saved on device · backed up to cloud" |
 | `cloud_sync_failed` | Snapshot write threw or returned an error | "Saved on device · cloud backup failed" |
+| `cloud_blocked_local_assets` | Cloud save preflight found local inline image assets without cloud IDs | "Cloud backup is paused — uploads required first" |
 | `cloud_blocked` | Paid access unavailable or cloud writes disabled | "Saved on device · cloud backup unavailable" |
 
 ### Mode values
@@ -69,6 +70,9 @@
 8. On success: status is `synced_to_cloud`; `projectRef.snapshotId` is updated.
 9. On failure: status is `cloud_sync_failed`; the error is surfaced in the toolbar tooltip.
     The local copy is safe — the next edit will queue another cloud attempt.
+10. If inline local assets are still pending cloud migration, preflight sets
+    `cloud_blocked_local_assets` with an actionable upload message instead of
+    reporting a generic payload-size failure.
 
 ### Convex auth bootstrap guard (regression note)
 

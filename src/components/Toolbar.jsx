@@ -156,7 +156,9 @@ export default function Toolbar({
       setSaveMenuOpen(false)
       notifySuccess('Cloud backup is now enabled for this project.')
     } catch (error) {
-      notifyError(error?.message || 'Could not enable cloud backup for this project.')
+      const message = error?.message || 'Could not enable cloud backup for this project.'
+      if (message.includes('Cloud backup is paused')) notifyWarning(message)
+      else notifyError(message)
     } finally {
       setSaveActionBusy(false)
     }
@@ -168,7 +170,11 @@ export default function Toolbar({
     try {
       const result = await flushCloudSync({ reason: 'manual' })
       if (result?.ok === false) {
-        notifyError(result.error || 'Cloud backup failed.')
+        if (result?.reason === 'local_assets_pending') {
+          notifyWarning(result?.error || 'Cloud backup is paused until local image uploads complete.')
+        } else {
+          notifyError(result.error || 'Cloud backup failed.')
+        }
       } else if (result?.ok) {
         notifySuccess('Cloud backup completed.')
       } else if (result?.skipped) {

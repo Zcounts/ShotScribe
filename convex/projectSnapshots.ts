@@ -6,6 +6,9 @@ import { requireCloudWritesEnabled } from './ops'
 import { writeOperationalEvent } from './opsLog'
 
 const usageDiagnosticsEnabled = process.env.CONVEX_USAGE_DIAGNOSTICS === '1'
+const MAX_CLOUD_SNAPSHOT_BYTES = 900_000
+const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
+const SNAPSHOT_TOO_LARGE_ERROR = 'Cloud backup could not be enabled because this project is too large to snapshot right now (usually due to embedded local images).'
 
 function estimatePayloadBytes(value: any) {
   try {
@@ -13,6 +16,81 @@ function estimatePayloadBytes(value: any) {
   } catch {
     return -1
   }
+}
+
+function isUnsafeInlineImage(value: any) {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed) return false
+  return INLINE_IMAGE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+}
+
+function sanitizeImageAsset(asset: any, { keepThumbForCloudAsset = false }: { keepThumbForCloudAsset?: boolean } = {}) {
+  if (!asset || typeof asset !== 'object') return null
+  const hasCloudAsset = typeof asset?.cloud?.assetId === 'string' && asset.cloud.assetId.trim().length > 0
+  const safeThumb = isUnsafeInlineImage(asset.thumb) ? null : (asset.thumb || null)
+  return {
+    version: asset.version || 1,
+    mime: asset.mime || 'image/webp',
+    thumb: hasCloudAsset ? (keepThumbForCloudAsset ? safeThumb : null) : safeThumb,
+    full: null,
+    meta: asset.meta || null,
+    cloud: hasCloudAsset ? asset.cloud : null,
+  }
+}
+
+function sanitizeImageNode(node: any, { keepThumbForCloudAsset = false }: { keepThumbForCloudAsset?: boolean } = {}) {
+  if (!node || typeof node !== 'object') return node
+  const imageAsset = sanitizeImageAsset(node.imageAsset, { keepThumbForCloudAsset })
+  const safeImage = isUnsafeInlineImage(node.image) ? null : (node.image || null)
+  return {
+    ...node,
+    image: imageAsset?.cloud?.assetId ? null : safeImage,
+    imageAsset,
+  }
+}
+
+function stripDuplicatedShotThumb(shot: any) {
+  if (!shot || typeof shot !== 'object') return shot
+  const nextShot = sanitizeImageNode(shot)
+  if (
+    typeof nextShot.image === 'string'
+    && typeof nextShot.imageAsset?.thumb === 'string'
+    && nextShot.image === nextShot.imageAsset.thumb
+  ) {
+    nextShot.image = null
+  }
+  return nextShot
+}
+
+function normalizeForCloudSnapshot(payload: any) {
+  if (!payload || typeof payload !== 'object') return payload
+  if (!Array.isArray(payload.scenes)) return payload
+  return {
+    ...payload,
+    projectHeroImage: sanitizeImageNode(payload.projectHeroImage, { keepThumbForCloudAsset: true }),
+    scenes: payload.scenes.map((scene: any) => ({
+      ...scene,
+      shots: Array.isArray(scene?.shots) ? scene.shots.map(stripDuplicatedShotThumb) : [],
+    })),
+  }
+}
+
+function snapshotReplacer(_key: string, value: any) {
+  if (typeof value === 'number' && !Number.isFinite(value)) return null
+  if (typeof value === 'function' || typeof value === 'symbol') return undefined
+  if (value instanceof Date) return value.toISOString()
+  return value
+}
+
+function sanitizeAndAssertSnapshotPayload(payload: any) {
+  const normalized = normalizeForCloudSnapshot(payload)
+  const serialized = JSON.stringify(normalized, snapshotReplacer)
+  const size = serialized ? new TextEncoder().encode(serialized).length : 0
+  if (size > MAX_CLOUD_SNAPSHOT_BYTES) {
+    throw new Error(SNAPSHOT_TOO_LARGE_ERROR)
+  }
+  return JSON.parse(serialized || '{}')
 }
 
 async function upsertSnapshotHead(ctx: any, args: {
@@ -216,11 +294,13 @@ export const commitScriptDomain = mutation({
       ...(args.scriptPayload && typeof args.scriptPayload === 'object' ? args.scriptPayload : {}),
     }
 
+    const safeMergedPayload = sanitizeAndAssertSnapshotPayload(mergedPayload)
+
     return writeSnapshot(ctx, {
       projectId: args.projectId,
       createdByUserId: args.createdByUserId,
       source: 'autosave',
-      payload: mergedPayload,
+      payload: safeMergedPayload,
       currentUserId,
     })
   },
