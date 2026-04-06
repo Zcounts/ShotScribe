@@ -812,6 +812,8 @@ const useStore = create((set, get) => ({
   },
   _cloudSyncTimeout: null,
   _cloudSyncInFlight: false,
+  _cloudDirtyRevision: null,
+  _lastAckedSnapshotId: null,
   pendingRemoteSnapshot: null, // { projectId, snapshotId, payload, detectedAt }
   // Tracks whether the full snapshot payload has been loaded for the current
   // cloud project. 'deferred' = project opened with metadata only; 'loading' =
@@ -3521,6 +3523,8 @@ const useStore = create((set, get) => ({
         message: 'Saved locally on this device',
       }),
       pendingRemoteSnapshot: null,
+      _cloudDirtyRevision: null,
+      _lastAckedSnapshotId: null,
       cloudLineage: loadedCloudLineage,
       liveModelVersion: 0,
       browserProjectId: platformService.isDesktop() ? null : get().browserProjectId,
@@ -4028,6 +4032,8 @@ const useStore = create((set, get) => ({
         lastSyncedAt: new Date().toISOString(),
       }),
       pendingRemoteSnapshot: null,
+      _cloudDirtyRevision: null,
+      _lastAckedSnapshotId: cloudProject?.latestSnapshotId ? String(cloudProject.latestSnapshotId) : null,
       snapshotHydrationState: { status: 'deferred', projectId },
       undoPast: [],
       undoFuture: [],
@@ -4113,6 +4119,8 @@ const useStore = create((set, get) => ({
           message: 'Saved on device · backed up to cloud',
           lastSyncedAt: syncedAt,
         }),
+        _cloudDirtyRevision: null,
+        _lastAckedSnapshotId: String(snapshot.id),
         snapshotHydrationState: { status: 'loaded', projectId },
       }))
 
@@ -4223,10 +4231,10 @@ const useStore = create((set, get) => ({
     if (state.projectRef?.type !== 'cloud' || state.projectRef.projectId !== projectId) {
       return { applied: false, reason: 'different_project' }
     }
-    if (state.projectRef.snapshotId === snapshotId) {
+    if (state.projectRef.snapshotId === snapshotId || state._lastAckedSnapshotId === snapshotId) {
       return { applied: false, reason: 'already_current' }
     }
-    if (state.hasUnsavedChanges || state._cloudSyncInFlight) {
+    if (state._cloudDirtyRevision !== null || state._cloudSyncInFlight) {
       set((latestState) => ({
         pendingRemoteSnapshot: {
           projectId,
@@ -4278,6 +4286,8 @@ const useStore = create((set, get) => ({
         lastSyncedAt: syncedAt,
       }),
       pendingRemoteSnapshot: null,
+      _lastAckedSnapshotId: String(snapshotId),
+      _cloudDirtyRevision: null,
       // If a snapshot arrived during the deferred hydration window (e.g. from a
       // collaborator push), mark hydration as complete so hydrateProjectSnapshot
       // does not fire a duplicate fetch afterward.
@@ -4301,6 +4311,35 @@ const useStore = create((set, get) => ({
 
   clearPendingRemoteSnapshot: () => {
     set({ pendingRemoteSnapshot: null })
+  },
+  acknowledgeCloudSnapshot: (snapshotId) => {
+    const ackId = snapshotId ? String(snapshotId) : null
+    if (!ackId) return { ok: false, reason: 'invalid_snapshot_id' }
+
+    set((state) => {
+      const pending = state.pendingRemoteSnapshot
+      const pendingSnapshotId = pending?.snapshotId ? String(pending.snapshotId) : null
+      const shouldClearPending = pendingSnapshotId === ackId
+      return {
+        _cloudDirtyRevision: null,
+        _lastAckedSnapshotId: ackId,
+        pendingRemoteSnapshot: shouldClearPending ? null : state.pendingRemoteSnapshot,
+      }
+    })
+
+    const latest = get()
+    const pending = latest.pendingRemoteSnapshot
+    if (!pending) return { ok: true, acknowledged: ackId, appliedPending: false }
+    if (String(pending.snapshotId || '') === ackId) {
+      set({ pendingRemoteSnapshot: null })
+      return { ok: true, acknowledged: ackId, appliedPending: false, discardedPending: true }
+    }
+    const applied = get().applyIncomingCloudSnapshot({
+      projectId: pending.projectId,
+      snapshotId: pending.snapshotId,
+      payload: pending.payload,
+    })
+    return { ok: true, acknowledged: ackId, appliedPending: Boolean(applied?.applied) }
   },
 
   disableCloudBackupForCurrentProject: () => {
@@ -4328,6 +4367,8 @@ const useStore = create((set, get) => ({
       _cloudSyncTimeout: null,
       _cloudSyncInFlight: false,
       pendingRemoteSnapshot: null,
+      _cloudDirtyRevision: null,
+      _lastAckedSnapshotId: null,
       liveModelVersion: 0,
       saveSyncState: buildSyncState({
         mode: 'local_only',
@@ -4509,6 +4550,7 @@ const useStore = create((set, get) => ({
           },
         },
       }))
+      get().acknowledgeCloudSnapshot(String(result.snapshotId))
       recordDomainCommit()
       return { ok: true, domain, committedAt, snapshotId: result.snapshotId }
     } catch (error) {
@@ -4523,7 +4565,12 @@ const useStore = create((set, get) => ({
     const timeout = setTimeout(() => {
       get().flushCloudSync({ reason })
     }, CLOUD_SYNC_DEBOUNCE_MS)
-    set({ _cloudSyncTimeout: timeout })
+    set((latestState) => ({
+      _cloudSyncTimeout: timeout,
+      _cloudDirtyRevision: reason === 'context_updated'
+        ? latestState._cloudDirtyRevision
+        : (latestState._cloudDirtyRevision == null ? 1 : Number(latestState._cloudDirtyRevision) + 1),
+    }))
   },
   setCloudSyncContext: ({
     canSync = false,
@@ -4724,7 +4771,10 @@ const useStore = create((set, get) => ({
           },
         },
         pendingRemoteSnapshot: null,
+        _cloudDirtyRevision: null,
+        _lastAckedSnapshotId: String(result.snapshotId),
       }))
+      get().acknowledgeCloudSnapshot(String(result.snapshotId))
       return { ok: true, snapshotId: result.snapshotId }
     } catch (error) {
       devCloudBackupLog('sync:failed', {
