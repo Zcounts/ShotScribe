@@ -814,7 +814,7 @@ const useStore = create((set, get) => ({
   _cloudSyncInFlight: false,
   _cloudDirtyRevision: null,
   _lastAckedSnapshotId: null,
-  pendingRemoteSnapshot: null, // { projectId, snapshotId, payload, detectedAt }
+  pendingRemoteSnapshot: null, // { projectId, snapshotId, payload, detectedAt, queuedWhileDirtyRevision? }
   // Tracks whether the full snapshot payload has been loaded for the current
   // cloud project. 'deferred' = project opened with metadata only; 'loading' =
   // fetch in flight; 'loaded' = loadProject() has been called with full payload;
@@ -4108,6 +4108,7 @@ const useStore = create((set, get) => ({
             snapshotId: String(snapshot.id),
             payload: snapshot.payload,
             detectedAt: new Date().toISOString(),
+            queuedWhileDirtyRevision: currentState._cloudDirtyRevision,
           },
           saveSyncState: buildSyncState({
             mode: latestState.cloudSyncContext?.collaborationMode ? 'cloud_collab' : 'cloud_solo',
@@ -4262,6 +4263,7 @@ const useStore = create((set, get) => ({
           snapshotId,
           payload,
           detectedAt: new Date().toISOString(),
+          queuedWhileDirtyRevision: state._cloudDirtyRevision,
         },
         saveSyncState: buildSyncState({
           mode: latestState.cloudSyncContext?.collaborationMode ? 'cloud_collab' : 'cloud_solo',

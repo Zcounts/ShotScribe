@@ -125,3 +125,11 @@ In practice this requires a stable causal token per local write cycle (e.g., wri
 ## Cleanup confirmation
 - All temporary `[PENDING_SNAPSHOT_AUDIT]` logging was removed.
 - No permanent runtime behavior change was made in source code.
+<<<<<<< codex/audit-cloudsynccoordinator-for-snapshot-handling-lbfyuw
+
+## Follow-up implementation (2026-04-06)
+- Added causal pending metadata (`queuedWhileDirtyRevision`) when queuing remote snapshots during a local dirty window.
+- Updated the coordinator pending-snapshot effect to discard any pending snapshot queued during a dirty window once a local snapshot ack exists.
+- This prevents stale pre-ack payloads from being applied after sync transitions to ready.
+=======
+>>>>>>> main
