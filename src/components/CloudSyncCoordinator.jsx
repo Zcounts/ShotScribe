@@ -138,6 +138,8 @@ export default function CloudSyncCoordinator() {
   const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
   const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
+  const cloudDirtyRevision = useStore(s => s._cloudDirtyRevision)
+  const acknowledgeCloudSnapshot = useStore(s => s.acknowledgeCloudSnapshot)
   const localAssetBackfillRequestedAt = useStore(s => Number(s.localAssetBackfillRequestedAt || 0))
   const activeTab = useStore(s => s.activeTab)
   const commitDomain = useStore(s => s.commitDomain)
@@ -978,6 +980,7 @@ export default function CloudSyncCoordinator() {
       || '',
     )
     if (localSnapshotId === latestSnapshotId) {
+      acknowledgeCloudSnapshot(latestSnapshotId)
       recordSnapshotHeadRead()
       return
     }
@@ -1019,6 +1022,7 @@ export default function CloudSyncCoordinator() {
     }
   }, [
     applyIncomingCloudSnapshot,
+    acknowledgeCloudSnapshot,
     cloudLineageLastKnownSnapshotId,
     cloudProjectId,
     convex,
@@ -1027,11 +1031,11 @@ export default function CloudSyncCoordinator() {
   ])
 
   useEffect(() => {
-    if (!cloudProjectId || hasUnsavedChanges) return
+    if (!cloudProjectId || cloudDirtyRevision !== null) return
     if (!pendingRemoteSnapshot) return
     if (pendingRemoteSnapshot.projectId !== cloudProjectId) return
     applyPendingRemoteSnapshot()
-  }, [applyPendingRemoteSnapshot, cloudProjectId, hasUnsavedChanges, pendingRemoteSnapshot])
+  }, [applyPendingRemoteSnapshot, cloudDirtyRevision, cloudProjectId, pendingRemoteSnapshot])
 
   // ── Cloud image uploader ───────────────────────────────────────────────
   // Registers a function that the store can call during createCloudProjectFromLocal
@@ -1092,6 +1096,7 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     if (projectRef?.type !== 'cloud' || !cloudProjectId) return
     if (!cloudAccessPolicy.canEditCloudProject || !cloudAccessPolicy.canAccessCloudAssets) return
+    if (cloudDirtyRevision !== null) return
     if (localImageBackfillInFlightRef.current) return
 
     const preflight = detectUnmigratedLocalAssets()
@@ -1175,6 +1180,7 @@ export default function CloudSyncCoordinator() {
     assignShotLibraryAsset,
     cloudAccessPolicy.canAccessCloudAssets,
     cloudAccessPolicy.canEditCloudProject,
+    cloudDirtyRevision,
     cloudProjectId,
     createAssetUploadIntent,
     detectUnmigratedLocalAssets,
