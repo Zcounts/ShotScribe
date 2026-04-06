@@ -138,7 +138,9 @@ export default function CloudSyncCoordinator() {
   const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
   const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
+  const clearPendingRemoteSnapshot = useStore(s => s.clearPendingRemoteSnapshot)
   const cloudDirtyRevision = useStore(s => s._cloudDirtyRevision)
+  const lastAckedSnapshotId = useStore(s => s._lastAckedSnapshotId)
   const acknowledgeCloudSnapshot = useStore(s => s.acknowledgeCloudSnapshot)
   const localAssetBackfillRequestedAt = useStore(s => Number(s.localAssetBackfillRequestedAt || 0))
   const activeTab = useStore(s => s.activeTab)
@@ -1034,8 +1036,27 @@ export default function CloudSyncCoordinator() {
     if (!cloudProjectId || cloudDirtyRevision !== null) return
     if (!pendingRemoteSnapshot) return
     if (pendingRemoteSnapshot.projectId !== cloudProjectId) return
+    const pendingSnapshotId = String(pendingRemoteSnapshot.snapshotId || '')
+    const ackedSnapshotId = String(lastAckedSnapshotId || '')
+    const latestHeadSnapshotId = String(latestSnapshotHead?.latestSnapshotId || '')
+    if (pendingSnapshotId && ackedSnapshotId && pendingSnapshotId === ackedSnapshotId) {
+      clearPendingRemoteSnapshot()
+      return
+    }
+    if (pendingSnapshotId && latestHeadSnapshotId && pendingSnapshotId !== latestHeadSnapshotId) {
+      clearPendingRemoteSnapshot()
+      return
+    }
     applyPendingRemoteSnapshot()
-  }, [applyPendingRemoteSnapshot, cloudDirtyRevision, cloudProjectId, pendingRemoteSnapshot])
+  }, [
+    applyPendingRemoteSnapshot,
+    clearPendingRemoteSnapshot,
+    cloudDirtyRevision,
+    cloudProjectId,
+    lastAckedSnapshotId,
+    latestSnapshotHead?.latestSnapshotId,
+    pendingRemoteSnapshot,
+  ])
 
   // ── Cloud image uploader ───────────────────────────────────────────────
   // Registers a function that the store can call during createCloudProjectFromLocal

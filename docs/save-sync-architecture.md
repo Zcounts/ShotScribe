@@ -73,6 +73,8 @@
    `_cloudDirtyRevision` is cleared. `_lastAckedSnapshotId` records the acked snapshot.
    This ack now runs consistently for checkpoint saves, script-domain saves,
    local→cloud conversion initial snapshot writes, and legacy Script tab manual saves.
+   Any deferred `pendingRemoteSnapshot` that is not the current head is discarded
+   before apply, preventing stale pre-ack payloads from replaying at sync-complete.
 9. On failure: status is `cloud_sync_failed`; the error is surfaced in the toolbar tooltip.
     The local copy is safe — the next edit will queue another cloud attempt.
 10. If inline local assets are still pending cloud migration, preflight sets
