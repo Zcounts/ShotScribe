@@ -1038,6 +1038,13 @@ export default function CloudSyncCoordinator() {
     if (pendingRemoteSnapshot.projectId !== cloudProjectId) return
     const pendingSnapshotId = String(pendingRemoteSnapshot.snapshotId || '')
     const ackedSnapshotId = String(lastAckedSnapshotId || '')
+    const queuedWhileDirtyRevision = pendingRemoteSnapshot.queuedWhileDirtyRevision
+    // Causal boundary: once our local dirty cycle is acknowledged, never apply a
+    // pending snapshot that was queued while that dirty cycle was active.
+    if (queuedWhileDirtyRevision !== null && queuedWhileDirtyRevision !== undefined && ackedSnapshotId) {
+      clearPendingRemoteSnapshot()
+      return
+    }
     const latestHeadSnapshotId = String(latestSnapshotHead?.latestSnapshotId || '')
     if (pendingSnapshotId && ackedSnapshotId && pendingSnapshotId === ackedSnapshotId) {
       clearPendingRemoteSnapshot()
