@@ -252,6 +252,9 @@ function getUndoableSnapshot(state) {
     customColumns: state.customColumns,
     customDropdownOptions: state.customDropdownOptions,
     scriptSettings: state.scriptSettings,
+    scriptDocument: state.scriptDocument,
+    scriptDocumentLive: state.scriptDocumentLive,
+    scriptAnnotations: state.scriptAnnotations,
   })
 }
 
