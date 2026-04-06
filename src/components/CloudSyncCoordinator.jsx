@@ -32,6 +32,8 @@ const DRAFT_COMMIT_CHECKPOINT_MS = Math.max(
   Number(runtimeConfig?.sync?.draftCommitCheckpointMinutes || 5) * 60 * 1000,
 )
 const DISABLE_POST_ACK_PENDING_REMOTE_APPLY = import.meta.env.DEV
+const OVERWRITE_TRACE_BUFFER_KEY = '__SS_OVERWRITE_TRACE__'
+const OVERWRITE_TRACE_HEAD_KEY = '__SS_TRACE_LATEST_HEAD__'
 
 function normalizeEnsureErrorMessage(error) {
   const message = String(error?.message || 'unknown_error')
@@ -121,6 +123,22 @@ function isConvexDiagEnabled() {
   } catch {
     return false
   }
+}
+
+function emitCoordinatorOverwriteTrace(event, payload = {}) {
+  if (!import.meta.env.DEV) return
+  const entry = {
+    event,
+    ts: new Date().toISOString(),
+    ...payload,
+  }
+  if (typeof window !== 'undefined') {
+    const list = Array.isArray(window[OVERWRITE_TRACE_BUFFER_KEY]) ? window[OVERWRITE_TRACE_BUFFER_KEY] : []
+    list.push(entry)
+    window[OVERWRITE_TRACE_BUFFER_KEY] = list.slice(-400)
+  }
+  // eslint-disable-next-line no-console
+  console.info('[OVERWRITE_TRACE]', entry)
 }
 
 export default function CloudSyncCoordinator() {
@@ -215,6 +233,13 @@ export default function CloudSyncCoordinator() {
     result: cloudProject,
     active: Boolean(cloudProjectId),
   })
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return
+    window[OVERWRITE_TRACE_HEAD_KEY] = latestSnapshotHead?.latestSnapshotId
+      ? String(latestSnapshotHead.latestSnapshotId)
+      : null
+  }, [latestSnapshotHead?.latestSnapshotId])
   useConvexQueryDiagnosticsSafe({
     component: 'CloudSyncCoordinator',
     queryName: 'projectSnapshots:getLatestSnapshotHeadForProject',
@@ -667,7 +692,7 @@ export default function CloudSyncCoordinator() {
       window.clearTimeout(deferredLiveApplyTimerRef.current)
       deferredLiveApplyTimerRef.current = null
     }
-    applyLiveStoryboardState(payload)
+    applyLiveStoryboardState(payload, { sourceLabel: 'live_storyboard_deferred_apply' })
     if (isConvexDiagEnabled()) {
       // eslint-disable-next-line no-console
       console.debug('[cloud-sync] replayed deferred live storyboard apply', {
@@ -729,6 +754,12 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     if (snapshotHydrationState?.status !== 'deferred') return
     if (!cloudProjectId) return
+    emitCoordinatorOverwriteTrace('OVERWRITE_PATH_ENTER', {
+      sourceLabel: 'hydrate_project_snapshot',
+      functionName: 'CloudSyncCoordinator:hydrate-trigger',
+      projectId: cloudProjectId,
+      latestSnapshotHeadId: latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null,
+    })
     hydrateProjectSnapshot().catch((err) => {
       if (import.meta.env.DEV) {
         // eslint-disable-next-line no-console
@@ -738,7 +769,7 @@ export default function CloudSyncCoordinator() {
         })
       }
     })
-  }, [snapshotHydrationState?.status, cloudProjectId, hydrateProjectSnapshot])
+  }, [cloudProjectId, hydrateProjectSnapshot, latestSnapshotHead?.latestSnapshotId, snapshotHydrationState?.status])
 
   useEffect(() => {
     const isCloudProject = projectRef?.type === 'cloud'
@@ -913,7 +944,10 @@ export default function CloudSyncCoordinator() {
       window.clearTimeout(deferredLiveApplyTimerRef.current)
       deferredLiveApplyTimerRef.current = null
     }
-    applyLiveStoryboardState({ scenes: effectiveLiveScenes, shots: effectiveLiveShots })
+    applyLiveStoryboardState(
+      { scenes: effectiveLiveScenes, shots: effectiveLiveShots },
+      { sourceLabel: 'live_storyboard_subscription_apply' },
+    )
   }, [
     applyDeferredLiveStoryboardState,
     applyLiveStoryboardState,
@@ -976,6 +1010,17 @@ export default function CloudSyncCoordinator() {
 
   useEffect(() => {
     const latestSnapshotId = latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null
+    emitCoordinatorOverwriteTrace('OVERWRITE_PATH_ENTER', {
+      sourceLabel: 'head_alignment',
+      functionName: 'CloudSyncCoordinator:latestSnapshotHeadEffect',
+      projectId: cloudProjectId || null,
+      latestSnapshotHeadId: latestSnapshotId,
+      localSnapshotId: projectRef?.snapshotId ? String(projectRef.snapshotId) : null,
+      cloudDirtyRevision,
+      lastAckedSnapshotId: lastAckedSnapshotId || null,
+      hasPendingRemoteSnapshot: Boolean(pendingRemoteSnapshot),
+      pendingRemoteSnapshotId: pendingRemoteSnapshot?.snapshotId ? String(pendingRemoteSnapshot.snapshotId) : null,
+    })
     if (!cloudProjectId || !latestSnapshotId) return
     const localSnapshotId = String(
       projectRef?.snapshotId
@@ -983,6 +1028,13 @@ export default function CloudSyncCoordinator() {
       || '',
     )
     if (localSnapshotId === latestSnapshotId) {
+      emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+        sourceLabel: 'head_alignment',
+        functionName: 'CloudSyncCoordinator:latestSnapshotHeadEffect',
+        projectId: cloudProjectId,
+        latestSnapshotHeadId: latestSnapshotId,
+        exitReason: 'head_matches_local_acknowledge',
+      })
       acknowledgeCloudSnapshot(latestSnapshotId)
       recordSnapshotHeadRead()
       return
@@ -1000,6 +1052,14 @@ export default function CloudSyncCoordinator() {
         if (cancelled || !snapshot?._id || !snapshot?.payload) return
         const snapshotId = String(snapshot._id)
         fetchedRemoteSnapshotIdsRef.current.add(snapshotId)
+        emitCoordinatorOverwriteTrace('OVERWRITE_PATH_ENTER', {
+          sourceLabel: 'incoming_cloud_snapshot',
+          functionName: 'CloudSyncCoordinator:latestSnapshotHeadEffect:queryThenApply',
+          projectId: cloudProjectId,
+          snapshotId,
+          latestSnapshotHeadId: latestSnapshotId,
+          stack: (new Error().stack || '').split('\n').slice(1, 7).map(line => line.trim()).join(' | '),
+        })
         applyIncomingCloudSnapshot({
           projectId: cloudProjectId,
           snapshotId,
@@ -1018,6 +1078,13 @@ export default function CloudSyncCoordinator() {
       })
       .finally(() => {
         inFlightRemoteSnapshotIdsRef.current.delete(latestSnapshotId)
+        emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+          sourceLabel: 'head_alignment',
+          functionName: 'CloudSyncCoordinator:latestSnapshotHeadEffect',
+          projectId: cloudProjectId || null,
+          latestSnapshotHeadId: latestSnapshotId,
+          exitReason: 'fetch_complete',
+        })
       })
 
     return () => {
@@ -1026,17 +1093,51 @@ export default function CloudSyncCoordinator() {
   }, [
     applyIncomingCloudSnapshot,
     acknowledgeCloudSnapshot,
+    cloudDirtyRevision,
     cloudLineageLastKnownSnapshotId,
     cloudProjectId,
     convex,
+    lastAckedSnapshotId,
     latestSnapshotHead?.latestSnapshotId,
+    pendingRemoteSnapshot,
     projectRef?.snapshotId,
   ])
 
   useEffect(() => {
-    if (!cloudProjectId || cloudDirtyRevision !== null) return
-    if (!pendingRemoteSnapshot) return
-    if (pendingRemoteSnapshot.projectId !== cloudProjectId) return
+    emitCoordinatorOverwriteTrace('OVERWRITE_PATH_ENTER', {
+      sourceLabel: 'pending_remote_snapshot',
+      functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+      projectId: cloudProjectId || null,
+      latestSnapshotHeadId: latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null,
+      cloudDirtyRevision,
+      lastAckedSnapshotId: lastAckedSnapshotId || null,
+      hasPendingRemoteSnapshot: Boolean(pendingRemoteSnapshot),
+      pendingRemoteSnapshotId: pendingRemoteSnapshot?.snapshotId ? String(pendingRemoteSnapshot.snapshotId) : null,
+    })
+    if (!cloudProjectId || cloudDirtyRevision !== null) {
+      emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+        sourceLabel: 'pending_remote_snapshot',
+        functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+        exitReason: 'cloud_project_missing_or_dirty_not_clear',
+      })
+      return
+    }
+    if (!pendingRemoteSnapshot) {
+      emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+        sourceLabel: 'pending_remote_snapshot',
+        functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+        exitReason: 'no_pending_snapshot',
+      })
+      return
+    }
+    if (pendingRemoteSnapshot.projectId !== cloudProjectId) {
+      emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+        sourceLabel: 'pending_remote_snapshot',
+        functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+        exitReason: 'pending_project_mismatch',
+      })
+      return
+    }
     const pendingSnapshotId = String(pendingRemoteSnapshot.snapshotId || '')
     const ackedSnapshotId = String(lastAckedSnapshotId || '')
     const hasDirtyQueueProvenance = pendingRemoteSnapshot.queuedWhileDirtyRevision !== undefined
@@ -1056,18 +1157,46 @@ export default function CloudSyncCoordinator() {
         queuedWhileDirtyRevision: pendingRemoteSnapshot.queuedWhileDirtyRevision ?? null,
       })
       clearPendingRemoteSnapshot()
+      emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+        sourceLabel: 'pending_remote_snapshot',
+        functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+        exitReason: 'dev_experiment_skipped_apply',
+      })
       return
     }
     const latestHeadSnapshotId = String(latestSnapshotHead?.latestSnapshotId || '')
     if (pendingSnapshotId && ackedSnapshotId && pendingSnapshotId === ackedSnapshotId) {
       clearPendingRemoteSnapshot()
+      emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+        sourceLabel: 'pending_remote_snapshot',
+        functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+        exitReason: 'pending_equals_acked',
+      })
       return
     }
     if (pendingSnapshotId && latestHeadSnapshotId && pendingSnapshotId !== latestHeadSnapshotId) {
       clearPendingRemoteSnapshot()
+      emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+        sourceLabel: 'pending_remote_snapshot',
+        functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+        exitReason: 'pending_not_latest_head',
+      })
       return
     }
+    emitCoordinatorOverwriteTrace('OVERWRITE_PATH_ENTER', {
+      sourceLabel: 'pending_remote_snapshot',
+      functionName: 'CloudSyncCoordinator:pendingSnapshotEffect:applyPendingRemoteSnapshot',
+      projectId: cloudProjectId,
+      snapshotId: pendingSnapshotId || null,
+      latestSnapshotHeadId: latestSnapshotHead?.latestSnapshotId ? String(latestSnapshotHead.latestSnapshotId) : null,
+      stack: (new Error().stack || '').split('\n').slice(1, 7).map(line => line.trim()).join(' | '),
+    })
     applyPendingRemoteSnapshot()
+    emitCoordinatorOverwriteTrace('OVERWRITE_PATH_EXIT', {
+      sourceLabel: 'pending_remote_snapshot',
+      functionName: 'CloudSyncCoordinator:pendingSnapshotEffect',
+      exitReason: 'apply_pending_called',
+    })
   }, [
     applyPendingRemoteSnapshot,
     clearPendingRemoteSnapshot,
