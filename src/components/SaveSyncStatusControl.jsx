@@ -22,6 +22,9 @@ function getStatusTheme(status, isCloudProject) {
   if (status === 'cloud_sync_failed') {
     return { toneLabel: 'Cloud backup failed', pillBg: 'rgba(127,29,29,0.34)', border: 'rgba(248,113,113,0.52)', text: '#FCA5A5', dot: '#FCA5A5' }
   }
+  if (status === 'cloud_blocked_local_assets') {
+    return { toneLabel: 'Uploads required', pillBg: 'rgba(120,53,15,0.36)', border: 'rgba(251,191,36,0.52)', text: '#FCD34D', dot: '#FCD34D' }
+  }
   if (status === 'syncing_to_cloud' || status === 'unsaved_changes') {
     return { toneLabel: 'Syncing', pillBg: 'rgba(30,58,138,0.32)', border: 'rgba(96,165,250,0.52)', text: '#BFDBFE', dot: '#93C5FD' }
   }
@@ -166,6 +169,7 @@ export default function SaveSyncStatusControl({
     if (saveSyncState?.status === 'syncing_to_cloud') return 'Syncing to cloud'
     if (saveSyncState?.status === 'synced_to_cloud') return 'Backed up to cloud'
     if (saveSyncState?.status === 'cloud_sync_failed') return 'Cloud backup failed'
+    if (saveSyncState?.status === 'cloud_blocked_local_assets') return 'Local images must upload first'
     if (saveSyncState?.status === 'cloud_sync_conflict') return 'Conflict requires reload'
     if (saveSyncState?.status === 'remote_update_pending') return 'Remote update pending'
     if (saveSyncState?.status === 'saved_locally') return 'Saved locally, cloud sync pending'
@@ -177,6 +181,9 @@ export default function SaveSyncStatusControl({
     if (!isCloudProject) return `Saved locally at ${formatTimestamp(lastSaved)}`
     if (saveSyncState?.status === 'cloud_sync_failed') {
       return saveSyncState?.error || 'Cloud backup failed. Local copy is still safe on this device.'
+    }
+    if (saveSyncState?.status === 'cloud_blocked_local_assets') {
+      return saveSyncState?.error || 'Cloud backup is paused until local image uploads complete.'
     }
     if (saveSyncState?.status === 'cloud_sync_conflict') {
       return saveSyncState?.error || 'Conflict detected. Reload collaborator updates before saving again.'

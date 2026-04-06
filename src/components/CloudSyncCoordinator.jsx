@@ -7,6 +7,7 @@ import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipelin
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+import { detectUnmigratedLocalAssetsFromProjectData } from '../utils/localAssetPreflight'
 import {
   recordCollabSubscriptionSuspended,
   recordDeferredSurfaceSubscription,
@@ -137,6 +138,7 @@ export default function CloudSyncCoordinator() {
   const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
   const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
+  const localAssetBackfillRequestedAt = useStore(s => Number(s.localAssetBackfillRequestedAt || 0))
   const activeTab = useStore(s => s.activeTab)
   const commitDomain = useStore(s => s.commitDomain)
   const convex = useConvex()
@@ -671,6 +673,14 @@ export default function CloudSyncCoordinator() {
     }
   }, [applyLiveStoryboardState, cloudProjectId])
 
+  const detectUnmigratedLocalAssets = useCallback(() => {
+    const state = useStore.getState()
+    return detectUnmigratedLocalAssetsFromProjectData({
+      scenes: state.scenes || [],
+      projectHeroImage: state.projectHeroImage || null,
+    })
+  }, [])
+
   useEffect(() => {
     startSessionMetrics()
     return () => stopSessionMetrics()
@@ -1084,12 +1094,13 @@ export default function CloudSyncCoordinator() {
     if (!cloudAccessPolicy.canEditCloudProject || !cloudAccessPolicy.canAccessCloudAssets) return
     if (localImageBackfillInFlightRef.current) return
 
+    const preflight = detectUnmigratedLocalAssets()
+    if (preflight.pendingShotCount === 0) return
     const state = useStore.getState()
     const shotsToBackfill = []
     for (const scene of (state.scenes || [])) {
       for (const shot of (scene?.shots || [])) {
-        const hasCloudAsset = typeof shot?.imageAsset?.cloud?.assetId === 'string' && shot.imageAsset.cloud.assetId.trim().length > 0
-        if (hasCloudAsset) continue
+        if (!preflight.pendingShotIds.includes(String(shot?.id || ''))) continue
         const sourceRef = shot?.imageAsset?.thumb || shot?.image || null
         if (!isInlineImageRef(sourceRef)) continue
         shotsToBackfill.push({ shotId: shot.id, sourceRef, meta: shot?.imageAsset?.meta || null })
@@ -1166,8 +1177,10 @@ export default function CloudSyncCoordinator() {
     cloudAccessPolicy.canEditCloudProject,
     cloudProjectId,
     createAssetUploadIntent,
+    detectUnmigratedLocalAssets,
     finalizeAssetUpload,
     getSignedViewWithCache,
+    localAssetBackfillRequestedAt,
     projectRef?.type,
     updateShotImage,
   ])

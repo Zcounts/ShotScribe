@@ -32,6 +32,7 @@ import {
 } from './utils/sessionMetrics'
 import { createCloudProjectAdapter, createProjectRepository } from './data/repository'
 import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
+import { detectUnmigratedLocalAssetsFromProjectData } from './utils/localAssetPreflight'
 import {
   normalizeScriptDocumentState,
   SCRIPT_DERIVATION_VERSION,
@@ -644,6 +645,16 @@ function isInlineStoryboardImageRef(value) {
   return trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('file:')
 }
 
+function buildLocalAssetPendingMessage(preflight) {
+  const shotCount = Number(preflight?.pendingShotCount || 0)
+  const heroCount = Number(preflight?.pendingHeroCount || 0)
+  const parts = []
+  if (shotCount > 0) parts.push(`${shotCount} shot image${shotCount === 1 ? '' : 's'}`)
+  if (heroCount > 0) parts.push('project hero image')
+  const assetSummary = parts.length > 0 ? parts.join(' and ') : 'local image assets'
+  return `Cloud backup is paused — ${assetSummary} haven't been uploaded yet. Open the project to complete upload, then try again.`
+}
+
 function hasPersistedHeroImage(heroImage) {
   if (!heroImage || typeof heroImage !== 'object') return false
   if (typeof heroImage.image === 'string' && heroImage.image.trim()) return true
@@ -745,7 +756,6 @@ function buildScriptDomainPayloadFromProjectData(data = {}) {
     scriptDerivationVersion: data.scriptDerivationVersion || null,
     scriptEngine: data.scriptEngine || null,
     scriptAnnotations: data.scriptAnnotations || { byId: {}, order: [] },
-    scriptDerivedCache: data.scriptDerivedCache || {},
   }
 }
 
@@ -808,6 +818,7 @@ const useStore = create((set, get) => ({
   cloudRepositoryReady: false,
   cloudImageUploader: null,
   cloudImageResolver: null,
+  localAssetBackfillRequestedAt: 0,
   documentSession: 0,
   appMode: runtimeConfig.appMode,
 
@@ -2968,6 +2979,9 @@ const useStore = create((set, get) => ({
       scriptEngine: normalizedScriptState.scriptEngine,
       scriptDocVersion: normalizedScriptState.scriptDocVersion,
       scriptDerivationVersion: normalizedScriptState.scriptDerivationVersion,
+      // NOTE(payload-bloat): scriptDocument and scriptScenes both persist for
+      // compatibility right now; this duplicates screenplay content and should
+      // be deduped in a future, script-safe migration pass.
       scriptDocument: normalizedScriptState.scriptDocument,
       scriptAnnotations: normalizedScriptState.scriptAnnotations,
       // Script import state
@@ -3758,6 +3772,7 @@ const useStore = create((set, get) => ({
     }
 
     const payload = get().getProjectData()
+    const localAssetPreflight = detectUnmigratedLocalAssetsFromProjectData(payload)
     const payloadWithCloudAssets = JSON.parse(JSON.stringify(payload || {}))
     const uploader = get().cloudImageUploader
     const uploadCache = new Map()
@@ -3783,8 +3798,11 @@ const useStore = create((set, get) => ({
       localImagesToMigrate,
     })
 
+    if (localAssetPreflight.pendingHeroCount > 0) {
+      throw new Error(buildLocalAssetPendingMessage(localAssetPreflight))
+    }
     if (localImagesToMigrate > 0 && typeof uploader !== 'function') {
-      throw new Error('Cloud image migration is not ready yet. Please wait a moment and try again.')
+      throw new Error(buildLocalAssetPendingMessage(localAssetPreflight))
     }
 
     const lineageProjectId = payload?.cloudLineage?.originProjectId
@@ -4607,7 +4625,33 @@ const useStore = create((set, get) => ({
     })
     try {
       const latest = get()
-      const safePayload = buildConvexSafeSnapshotPayload(latest.getProjectData())
+      const latestProjectData = latest.getProjectData()
+      const localAssetPreflight = detectUnmigratedLocalAssetsFromProjectData(latestProjectData)
+      if (localAssetPreflight.totalPendingCount > 0) {
+        const pendingMessage = buildLocalAssetPendingMessage(localAssetPreflight)
+        set((nextState) => ({
+          _cloudSyncInFlight: false,
+          localAssetBackfillRequestedAt: localAssetPreflight.pendingShotCount > 0
+            ? Date.now()
+            : nextState.localAssetBackfillRequestedAt,
+          saveSyncState: buildSyncState({
+            mode: nextState.cloudSyncContext.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+            status: 'cloud_blocked_local_assets',
+            message: pendingMessage,
+            pendingReason: reason,
+            error: pendingMessage,
+            lastSyncedAt: nextState.saveSyncState.lastSyncedAt,
+          }),
+        }))
+        return {
+          ok: false,
+          reason: 'local_assets_pending',
+          pendingShotCount: localAssetPreflight.pendingShotCount,
+          pendingHeroCount: localAssetPreflight.pendingHeroCount,
+          error: pendingMessage,
+        }
+      }
+      const safePayload = buildConvexSafeSnapshotPayload(latestProjectData)
       const payloadBytes = isSessionMetricsEnabled
         ? (() => {
           try {
