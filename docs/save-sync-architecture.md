@@ -65,9 +65,16 @@
 ### Cloud sync path (paid users, cloud projects)
 
 5. `_scheduleCloudSync` debounces an additional 8 s after the last edit.
+   Each cloud-eligible edit increments an internal `_cloudDirtyRevision` marker so
+   incoming Convex snapshots are deferred until server ack confirms durability.
 6. When the timeout fires, `flushCloudSync` writes a full project snapshot to Convex.
 7. During write: status is `syncing_to_cloud` (dot pulses in toolbar).
-8. On success: status is `synced_to_cloud`; `projectRef.snapshotId` is updated.
+8. On success: status is `synced_to_cloud`; `projectRef.snapshotId` is updated and
+   `_cloudDirtyRevision` is cleared. `_lastAckedSnapshotId` records the acked snapshot.
+   This ack now runs consistently for checkpoint saves, script-domain saves,
+   local→cloud conversion initial snapshot writes, and legacy Script tab manual saves.
+   Any deferred `pendingRemoteSnapshot` that is not the current head is discarded
+   before apply, preventing stale pre-ack payloads from replaying at sync-complete.
 9. On failure: status is `cloud_sync_failed`; the error is surfaced in the toolbar tooltip.
     The local copy is safe — the next edit will queue another cloud attempt.
 10. If inline local assets are still pending cloud migration, preflight sets
@@ -83,6 +90,9 @@
   `createdByUserId`.
 - This guard preserves the cache optimization while preventing a session-long false unauthenticated
   state that disables cloud saves.
+- Snapshot hydration for cloud opens defers into `pendingRemoteSnapshot` when
+  `_cloudDirtyRevision` is non-null, so a late hydration payload cannot overwrite
+  in-flight local edits.
 
 ### Local → cloud storyboard image backfill
 
@@ -97,6 +107,8 @@ backfill pass for storyboard shots that still reference inline local image URLs 
 4. Rewrite shot image payloads to cloud-backed `imageAsset.cloud.assetId` references.
 5. Flush one cloud snapshot after migration so collaborators and reopened sessions load
    the migrated images.
+   Backfill-triggered checkpoint writes are deferred while `_cloudDirtyRevision` is set,
+   so incoming snapshot echoes cannot overwrite in-flight local edits.
 
 This keeps local-first behavior intact while making local → cloud conversion seamless for
 existing storyboard images.
