@@ -226,6 +226,10 @@ function setCaretOffset(element, offset) {
   selection.addRange(range)
 }
 
+function hasSelectionModifier(event) {
+  return event.shiftKey || event.altKey || event.metaKey || event.ctrlKey
+}
+
 export default function ScriptDocumentPaginationSurface({
   readOnly = false,
   writeOptions = null,
@@ -391,6 +395,29 @@ export default function ScriptDocumentPaginationSurface({
                     const nodeIndex = block.nodeIndex
                     const caretOffset = getCaretOffsetWithinElement(event.currentTarget)
                     if (readOnly) return
+                    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                      if (hasSelectionModifier(event)) return
+                      if (!Number.isInteger(caretOffset)) return
+                      const totalNodes = (documentRef?.content || []).length
+                      const currentTextLength = textFromNode((documentRef?.content || [])[nodeIndex]).length
+                      if (event.key === 'ArrowRight' && caretOffset === currentTextLength && nodeIndex < totalNodes - 1) {
+                        const nextElement = nodeElementByIndexRef.current[nodeIndex + 1]
+                        if (nextElement) {
+                          event.preventDefault()
+                          nextElement.focus()
+                          setCaretOffset(nextElement, 0)
+                        }
+                      } else if (event.key === 'ArrowLeft' && caretOffset === 0 && nodeIndex > 0) {
+                        const prevElement = nodeElementByIndexRef.current[nodeIndex - 1]
+                        if (prevElement) {
+                          event.preventDefault()
+                          prevElement.focus()
+                          const prevLength = textFromNode((documentRef?.content || [])[nodeIndex - 1]).length
+                          setCaretOffset(prevElement, prevLength)
+                        }
+                      }
+                      return
+                    }
                     if (event.key === 'ArrowUp') {
                       if (nodeIndex > 0 && isCaretOnFirstVisualLine(event.currentTarget)) {
                         const prevElement = nodeElementByIndexRef.current[nodeIndex - 1]
