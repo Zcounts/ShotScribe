@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { downloadScriptAsTxt } from '../utils/scriptTxtSerializer'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
@@ -2959,6 +2960,20 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               sub="Produces one callsheet page per shoot day."
               disabled={exporting}
               onClick={() => run('callsheet', () => exportCallsheetPDF(projectName))}
+            />
+          </div>
+
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>Script</SectionLabel>
+            <ExportBtn
+              label={busy('script-txt') ? 'Exporting…' : 'Script TXT'}
+              sub="Downloads the current script as a plain text screenplay file."
+              disabled={exporting}
+              onClick={() => run('script-txt', async () => {
+                const state = useStore.getState()
+                const doc = state.scriptDocumentLive || state.scriptDocument
+                downloadScriptAsTxt(doc, state.projectName)
+              })}
             />
           </div>
 

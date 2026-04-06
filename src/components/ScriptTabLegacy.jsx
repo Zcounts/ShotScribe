@@ -37,6 +37,7 @@ import ScriptDocumentPaginationSurface, {
   updateNodeType as updateScriptDocumentNodeType,
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
+import { downloadScriptAsTxt } from '../utils/scriptTxtSerializer'
 import {
   recordCollabSubscriptionSuspended,
   recordPresenceHeartbeat,
@@ -2005,6 +2006,33 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
                 )}
               </section>
             ))}
+
+            <section className="ss-module script-inspector-section">
+              <button
+                onClick={() => setInspectorSections(prev => ({ ...prev, scriptExport: !prev.scriptExport }))}
+                className="ss-module-header script-inspector-header"
+                style={{ width: '100%', borderBottom: inspectorSections.scriptExport ? '1px solid rgba(148,163,184,0.2)' : 'none', textAlign: 'left', fontSize: 12, fontWeight: 700 }}
+              >
+                {inspectorSections.scriptExport ? '▾' : '▸'} Export
+              </button>
+              {inspectorSections.scriptExport && (
+                <div style={{ padding: 10 }}>
+                  <button
+                    className="ss-btn secondary"
+                    style={{ width: '100%' }}
+                    onClick={() => {
+                      const doc = scriptDocumentLive || scriptDocument
+                      downloadScriptAsTxt(doc, projectName)
+                    }}
+                  >
+                    Export Script as TXT
+                  </button>
+                  <div style={{ fontSize: 10, color: '#64748b', marginTop: 6 }}>
+                    Downloads the current script as a plain text file.
+                  </div>
+                </div>
+              )}
+            </section>
 
             <section className="ss-module script-inspector-section">
               <div className="ss-module-header script-inspector-header" style={{ width: '100%', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
