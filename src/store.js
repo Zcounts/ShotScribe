@@ -3948,6 +3948,7 @@ const useStore = create((set, get) => ({
         lastSyncedAt: new Date().toISOString(),
       }),
     })
+    get().acknowledgeCloudSnapshot(String(snapshot.id))
     return { project: cloudProject, snapshot }
   },
 
@@ -4100,6 +4101,25 @@ const useStore = create((set, get) => ({
       // and projectRef to local, same as with collaborator snapshot application.
       const preservedProjectRef = currentState.projectRef
       const preservedActiveTab = currentState.activeTab
+      if (currentState._cloudDirtyRevision !== null) {
+        set((latestState) => ({
+          pendingRemoteSnapshot: {
+            projectId,
+            snapshotId: String(snapshot.id),
+            payload: snapshot.payload,
+            detectedAt: new Date().toISOString(),
+          },
+          saveSyncState: buildSyncState({
+            mode: latestState.cloudSyncContext?.collaborationMode ? 'cloud_collab' : 'cloud_solo',
+            status: 'remote_update_pending',
+            message: 'Remote collaborator changes are available',
+            pendingReason: 'snapshot_hydration_pending',
+            lastSyncedAt: latestState.saveSyncState.lastSyncedAt,
+          }),
+          snapshotHydrationState: { status: 'loaded', projectId },
+        }))
+        return { ok: true, deferred: true, snapshotId: snapshot.id }
+      }
 
       get().loadProject(snapshot.payload)
 
@@ -4123,6 +4143,7 @@ const useStore = create((set, get) => ({
         _lastAckedSnapshotId: String(snapshot.id),
         snapshotHydrationState: { status: 'loaded', projectId },
       }))
+      get().acknowledgeCloudSnapshot(String(snapshot.id))
 
       if (isSessionMetricsEnabled) recordSnapshotHydrationTriggered()
       return { ok: true, snapshotId: snapshot.id }

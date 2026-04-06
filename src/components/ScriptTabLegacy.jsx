@@ -454,7 +454,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const getProjectData = useStore(s => s.getProjectData)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
-  const projectName = useStore(s => s.projectName)
+  const acknowledgeCloudSnapshot = useStore(s => s.acknowledgeCloudSnapshot)
   const scriptDocument = useStore(s => s.scriptDocument)
   const scriptDocumentLive = useStore(s => s.scriptDocumentLive)
   const updateScriptDocumentLive = useStore(s => s.updateScriptDocumentLive)
@@ -1077,11 +1077,12 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
       const keepAssetIds = collectCloudAssetIdsFromProjectData(payload)
       await pruneOrphanedAssets({ projectId: cloudProjectId, keepAssetIds })
       setCloudSnapshotId(String(result.snapshotId))
+      acknowledgeCloudSnapshot(String(result.snapshotId))
       setCollabNotice('Screenplay snapshot saved.')
     } finally {
       setIsSavingSnapshot(false)
     }
-  }, [cloudAccessPolicy.canEditCloudProject, cloudProjectId, convexRuntimeAvailable, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
+  }, [acknowledgeCloudSnapshot, cloudAccessPolicy.canEditCloudProject, cloudProjectId, convexRuntimeAvailable, createSnapshot, currentSnapshotId, currentUserId, getProjectData, pruneOrphanedAssets, setCloudSnapshotId])
 
   const handleUnifiedSetBlockType = useCallback((nextType) => {
     const nodeIndex = unifiedSelectedNode?.nodeIndex
