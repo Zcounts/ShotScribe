@@ -4351,7 +4351,7 @@ const useStore = create((set, get) => ({
     const latest = get()
     const pending = latest.pendingRemoteSnapshot
     if (!pending) return { ok: true, acknowledged: ackId, appliedPending: false }
-    if (String(pending.snapshotId || '') === ackId) {
+    if (String(pending.snapshotId || '') === String(snapshotId || '')) {
       set({ pendingRemoteSnapshot: null })
       return { ok: true, acknowledged: ackId, appliedPending: false, discardedPending: true }
     }
