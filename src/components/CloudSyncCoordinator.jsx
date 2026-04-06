@@ -31,6 +31,7 @@ const DRAFT_COMMIT_CHECKPOINT_MS = Math.max(
   60 * 1000,
   Number(runtimeConfig?.sync?.draftCommitCheckpointMinutes || 5) * 60 * 1000,
 )
+const DISABLE_POST_ACK_PENDING_REMOTE_APPLY = import.meta.env.DEV
 
 function normalizeEnsureErrorMessage(error) {
   const message = String(error?.message || 'unknown_error')
@@ -1038,10 +1039,22 @@ export default function CloudSyncCoordinator() {
     if (pendingRemoteSnapshot.projectId !== cloudProjectId) return
     const pendingSnapshotId = String(pendingRemoteSnapshot.snapshotId || '')
     const ackedSnapshotId = String(lastAckedSnapshotId || '')
-    const queuedWhileDirtyRevision = pendingRemoteSnapshot.queuedWhileDirtyRevision
-    // Causal boundary: once our local dirty cycle is acknowledged, never apply a
-    // pending snapshot that was queued while that dirty cycle was active.
-    if (queuedWhileDirtyRevision !== null && queuedWhileDirtyRevision !== undefined && ackedSnapshotId) {
+    const hasDirtyQueueProvenance = pendingRemoteSnapshot.queuedWhileDirtyRevision !== undefined
+    const queuedWhileDirty = pendingRemoteSnapshot.queuedWhileDirtyRevision !== null
+      && pendingRemoteSnapshot.queuedWhileDirtyRevision !== undefined
+    // DEV-ONLY experiment: skip post-ack pending replay to validate whether this
+    // branch is the source of storyboard media reverts after sync completion.
+    if (
+      DISABLE_POST_ACK_PENDING_REMOTE_APPLY
+      && ackedSnapshotId
+      && (!hasDirtyQueueProvenance || queuedWhileDirty)
+    ) {
+      // eslint-disable-next-line no-console
+      console.info('[cloud-sync:experiment] skipped pending remote snapshot apply after local ack', {
+        pendingSnapshotId,
+        ackedSnapshotId,
+        queuedWhileDirtyRevision: pendingRemoteSnapshot.queuedWhileDirtyRevision ?? null,
+      })
       clearPendingRemoteSnapshot()
       return
     }
