@@ -4348,19 +4348,8 @@ const useStore = create((set, get) => ({
       }
     })
 
-    const latest = get()
-    const pending = latest.pendingRemoteSnapshot
-    if (!pending) return { ok: true, acknowledged: ackId, appliedPending: false }
-    if (String(pending.snapshotId || '') === String(snapshotId || '')) {
-      set({ pendingRemoteSnapshot: null })
-      return { ok: true, acknowledged: ackId, appliedPending: false, discardedPending: true }
-    }
-    const applied = get().applyIncomingCloudSnapshot({
-      projectId: pending.projectId,
-      snapshotId: pending.snapshotId,
-      payload: pending.payload,
-    })
-    return { ok: true, acknowledged: ackId, appliedPending: Boolean(applied?.applied) }
+    set({ pendingRemoteSnapshot: null })
+    return { ok: true, acknowledged: ackId, appliedPending: false, discardedPending: true }
   },
 
   disableCloudBackupForCurrentProject: () => {
