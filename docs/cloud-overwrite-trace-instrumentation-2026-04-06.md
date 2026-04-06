@@ -3,6 +3,16 @@
 ## Purpose
 Temporary DEV-only tracing to identify the exact runtime caller/path that triggers storyboard overwrite/revert during cloud sync transitions.
 
+## In-app viewer (DEV only)
+- When `STORYBOARD_REVERT_DETECTED` fires, the app now shows:
+  - banner: **“Storyboard revert detected. Debug trace captured.”**
+  - auto-open modal: **Cloud Debug Trace**
+- Modal actions:
+  - **Copy Trace**
+  - **Clear Trace**
+  - **Close**
+- This removes the need to open DevTools just to access trace payloads.
+
 ## Trace buffer
 - Global buffer key: `window.__SS_OVERWRITE_TRACE__`
 - Latest head key: `window.__SS_TRACE_LATEST_HEAD__`

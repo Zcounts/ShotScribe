@@ -185,6 +185,7 @@ const OVERWRITE_TRACE_PREFIX = '[OVERWRITE_TRACE]'
 const OVERWRITE_TRACE_BUFFER_KEY = '__SS_OVERWRITE_TRACE__'
 const OVERWRITE_TRACE_HEAD_KEY = '__SS_TRACE_LATEST_HEAD__'
 const OVERWRITE_REVERT_SEEN_KEY = '__SS_TRACE_REVERT_SEEN__'
+const OVERWRITE_TRACE_EVENT_NAME = '__SS_OVERWRITE_TRACE_EVENT__'
 
 function isOverwriteTraceEnabled() {
   return import.meta.env.DEV
@@ -252,6 +253,9 @@ function emitOverwriteTrace(event, payload = {}) {
     const list = Array.isArray(window[OVERWRITE_TRACE_BUFFER_KEY]) ? window[OVERWRITE_TRACE_BUFFER_KEY] : []
     list.push(entry)
     window[OVERWRITE_TRACE_BUFFER_KEY] = list.slice(-400)
+    try {
+      window.dispatchEvent(new CustomEvent(OVERWRITE_TRACE_EVENT_NAME, { detail: entry }))
+    } catch {}
   }
   // eslint-disable-next-line no-console
   console.info(OVERWRITE_TRACE_PREFIX, entry)

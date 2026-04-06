@@ -34,6 +34,17 @@ const DRAFT_COMMIT_CHECKPOINT_MS = Math.max(
 const DISABLE_POST_ACK_PENDING_REMOTE_APPLY = import.meta.env.DEV
 const OVERWRITE_TRACE_BUFFER_KEY = '__SS_OVERWRITE_TRACE__'
 const OVERWRITE_TRACE_HEAD_KEY = '__SS_TRACE_LATEST_HEAD__'
+const OVERWRITE_REVERT_SEEN_KEY = '__SS_TRACE_REVERT_SEEN__'
+const OVERWRITE_TRACE_EVENT_NAME = '__SS_OVERWRITE_TRACE_EVENT__'
+const TRACE_EVENT_FILTER = new Set([
+  'OVERWRITE_PATH_ENTER',
+  'OVERWRITE_PATH_EXIT',
+  'LOAD_PROJECT_ENTER',
+  'LOAD_PROJECT_EXIT',
+  'SHOT_IMAGE_DIFF_BEFORE_APPLY',
+  'SHOT_IMAGE_DIFF_AFTER_APPLY',
+  'STORYBOARD_REVERT_DETECTED',
+])
 
 function normalizeEnsureErrorMessage(error) {
   const message = String(error?.message || 'unknown_error')
@@ -136,6 +147,9 @@ function emitCoordinatorOverwriteTrace(event, payload = {}) {
     const list = Array.isArray(window[OVERWRITE_TRACE_BUFFER_KEY]) ? window[OVERWRITE_TRACE_BUFFER_KEY] : []
     list.push(entry)
     window[OVERWRITE_TRACE_BUFFER_KEY] = list.slice(-400)
+    try {
+      window.dispatchEvent(new CustomEvent(OVERWRITE_TRACE_EVENT_NAME, { detail: entry }))
+    } catch {}
   }
   // eslint-disable-next-line no-console
   console.info('[OVERWRITE_TRACE]', entry)
@@ -347,6 +361,73 @@ export default function CloudSyncCoordinator() {
   const loggedDeferredScenesRef = useRef(false)
   const loggedDeferredShotsRef = useRef(false)
   const collaboratorSeenInSessionRef = useRef(false)
+  const [cloudDebugTraceOpen, setCloudDebugTraceOpen] = useState(false)
+  const [cloudDebugTraceNotice, setCloudDebugTraceNotice] = useState('')
+  const [cloudDebugTracePayload, setCloudDebugTracePayload] = useState(null)
+  const [copyTraceStatus, setCopyTraceStatus] = useState('')
+
+  const captureFocusedOverwriteTrace = useCallback(() => {
+    if (typeof window === 'undefined') return []
+    const rows = Array.isArray(window[OVERWRITE_TRACE_BUFFER_KEY]) ? window[OVERWRITE_TRACE_BUFFER_KEY] : []
+    return rows
+      .filter((entry) => TRACE_EVENT_FILTER.has(String(entry?.event || '')))
+      .slice(-50)
+      .map((entry, idx) => ({
+        seq: idx + 1,
+        ts: entry?.ts || null,
+        event: entry?.event || null,
+        sourceLabel: entry?.sourceLabel || null,
+        functionName: entry?.functionName || null,
+        projectId: entry?.projectId || null,
+        snapshotId: entry?.snapshotId || entry?.incomingSnapshotId || null,
+        cloudDirtyRevision: entry?.cloudDirtyRevision ?? null,
+        lastAckedSnapshotId: entry?.lastAckedSnapshotId || null,
+        latestSnapshotHeadId: entry?.latestSnapshotHeadId || null,
+        pendingRemoteSnapshotId: entry?.pendingRemoteSnapshotId || null,
+        imageChangedShotIds: entry?.imageChangedShotIds || [],
+        imageAssetChangedShotIds: entry?.imageAssetChangedShotIds || [],
+        thumbSamples: entry?.thumbSamples || [],
+      }))
+  }, [])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return
+    const onTrace = (event) => {
+      const entry = event?.detail || null
+      if (!entry || entry.event !== 'STORYBOARD_REVERT_DETECTED') return
+      const focused = captureFocusedOverwriteTrace()
+      setCloudDebugTracePayload({
+        capturedAt: new Date().toISOString(),
+        trigger: entry,
+        focusedTrace: focused,
+      })
+      setCloudDebugTraceNotice('Storyboard revert detected. Debug trace captured.')
+      setCloudDebugTraceOpen(true)
+    }
+    window.addEventListener(OVERWRITE_TRACE_EVENT_NAME, onTrace)
+    return () => window.removeEventListener(OVERWRITE_TRACE_EVENT_NAME, onTrace)
+  }, [captureFocusedOverwriteTrace])
+
+  const handleCopyCloudTrace = useCallback(async () => {
+    if (!cloudDebugTracePayload) return
+    const text = JSON.stringify(cloudDebugTracePayload, null, 2)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyTraceStatus('Trace copied.')
+    } catch {
+      setCopyTraceStatus('Copy failed. Select and copy manually.')
+    }
+  }, [cloudDebugTracePayload])
+
+  const handleClearCloudTrace = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window[OVERWRITE_TRACE_BUFFER_KEY] = []
+      window[OVERWRITE_REVERT_SEEN_KEY] = new Set()
+    }
+    setCloudDebugTracePayload(null)
+    setCloudDebugTraceNotice('Cloud debug trace cleared.')
+    setCopyTraceStatus('')
+  }, [])
   const getSignedViewWithCache = useCallback(async (projectId, assetId) => {
     if (!projectId || !assetId) return null
     const batch = await getOrCreateSignedViewsBatchRequest({
@@ -1361,5 +1442,81 @@ export default function CloudSyncCoordinator() {
     updateShotImage,
   ])
 
-  return null
+  if (!import.meta.env.DEV) return null
+
+  return (
+    <>
+      {cloudDebugTraceNotice ? (
+        <div
+          style={{
+            position: 'fixed',
+            right: 12,
+            bottom: 12,
+            zIndex: 10000,
+            background: 'rgba(20, 20, 30, 0.92)',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 8,
+            padding: '8px 10px',
+            fontSize: 12,
+            maxWidth: 420,
+          }}
+        >
+          {cloudDebugTraceNotice}
+        </div>
+      ) : null}
+      {cloudDebugTraceOpen ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10001,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 'min(980px, 100%)',
+              maxHeight: '85vh',
+              overflow: 'auto',
+              background: '#10131a',
+              color: '#fff',
+              borderRadius: 10,
+              border: '1px solid rgba(255,255,255,0.18)',
+              padding: 16,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <strong>Cloud Debug Trace</strong>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={handleCopyCloudTrace}>Copy Trace</button>
+                <button type="button" onClick={handleClearCloudTrace}>Clear Trace</button>
+                <button type="button" onClick={() => setCloudDebugTraceOpen(false)}>Close</button>
+              </div>
+            </div>
+            {copyTraceStatus ? <div style={{ marginBottom: 8, fontSize: 12 }}>{copyTraceStatus}</div> : null}
+            <pre
+              style={{
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontSize: 12,
+                lineHeight: 1.4,
+                background: '#0a0d13',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.12)',
+                padding: 12,
+              }}
+            >
+              {JSON.stringify(cloudDebugTracePayload || { message: 'No trace captured yet.' }, null, 2)}
+            </pre>
+          </div>
+        </div>
+      ) : null}
+    </>
+  )
 }
