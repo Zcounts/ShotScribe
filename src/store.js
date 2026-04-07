@@ -181,170 +181,6 @@ const SCREENPLAY_DIALOGUE_TYPE = 'dialogue'
 const SCREENPLAY_ACTION_TYPE = 'action'
 const UNDO_HISTORY_LIMIT = 120
 const UNDO_GROUP_WINDOW_MS = 600
-const OVERWRITE_TRACE_PREFIX = '[OVERWRITE_TRACE]'
-const OVERWRITE_TRACE_BUFFER_KEY = '__SS_OVERWRITE_TRACE__'
-const OVERWRITE_TRACE_HEAD_KEY = '__SS_TRACE_LATEST_HEAD__'
-const OVERWRITE_REVERT_SEEN_KEY = '__SS_TRACE_REVERT_SEEN__'
-const OVERWRITE_TRACE_EVENT_NAME = '__SS_OVERWRITE_TRACE_EVENT__'
-
-function isOverwriteTraceEnabled() {
-  if (import.meta.env.DEV) return true
-  if (typeof window === 'undefined') return false
-  try {
-    const params = new URLSearchParams(window.location?.search || '')
-    if (params.get('ssCloudDebug') === '1') return true
-    return window.localStorage?.getItem('ssCloudDebug') === '1'
-  } catch {
-    return false
-  }
-}
-
-function getCompactTraceStack() {
-  const stack = new Error().stack || ''
-  return stack.split('\n').slice(1, 7).map(line => line.trim()).join(' | ')
-}
-
-function getShotImageMapFromScenes(scenes = []) {
-  const map = new Map()
-  ;(Array.isArray(scenes) ? scenes : []).forEach((scene) => {
-    ;(scene?.shots || []).forEach((shot) => {
-      const shotId = String(shot?.id || '')
-      if (!shotId) return
-      map.set(shotId, {
-        image: shot?.image || null,
-        thumb: shot?.imageAsset?.thumb || null,
-        assetId: shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null,
-      })
-    })
-  })
-  return map
-}
-
-function summarizeShotImageDiff(beforeScenes = [], afterScenes = []) {
-  const beforeMap = getShotImageMapFromScenes(beforeScenes)
-  const afterMap = getShotImageMapFromScenes(afterScenes)
-  const allIds = new Set([...beforeMap.keys(), ...afterMap.keys()])
-  const imageChanged = []
-  const imageAssetChanged = []
-  const assetIdChanged = []
-  const potentialRegressionShotIds = []
-  const thumbSamples = []
-  for (const shotId of allIds) {
-    const before = beforeMap.get(shotId) || { image: null, thumb: null, assetId: null }
-    const after = afterMap.get(shotId) || { image: null, thumb: null, assetId: null }
-    const beforeHasUsableImage = Boolean(
-      (typeof before.image === 'string' && before.image.trim())
-      || (typeof before.thumb === 'string' && before.thumb.trim())
-      || (typeof before.assetId === 'string' && before.assetId.trim()),
-    )
-    const afterHasUsableImage = Boolean(
-      (typeof after.image === 'string' && after.image.trim())
-      || (typeof after.thumb === 'string' && after.thumb.trim())
-      || (typeof after.assetId === 'string' && after.assetId.trim()),
-    )
-    if (before.image !== after.image) imageChanged.push(shotId)
-    if (before.thumb !== after.thumb) imageAssetChanged.push(shotId)
-    if (before.assetId !== after.assetId) assetIdChanged.push(shotId)
-    const possibleRegression = beforeHasUsableImage
-      && (
-        !afterHasUsableImage
-        || before.assetId !== after.assetId
-        || (before.assetId === after.assetId && before.thumb !== after.thumb && before.image !== after.image)
-      )
-    if (possibleRegression) potentialRegressionShotIds.push(shotId)
-    if (thumbSamples.length < 5 && (before.image !== after.image || before.thumb !== after.thumb || before.assetId !== after.assetId)) {
-      thumbSamples.push({
-        shotId,
-        beforeImage: before.image,
-        afterImage: after.image,
-        beforeThumb: before.thumb,
-        afterThumb: after.thumb,
-        beforeAssetId: before.assetId,
-        afterAssetId: after.assetId,
-        beforeHasUsableImage,
-        afterHasUsableImage,
-        possibleRegression,
-      })
-    }
-  }
-  return {
-    imageChangedCount: imageChanged.length,
-    imageAssetChangedCount: imageAssetChanged.length,
-    imageChangedShotIds: imageChanged.slice(0, 10),
-    imageAssetChangedShotIds: imageAssetChanged.slice(0, 10),
-    assetIdChangedCount: assetIdChanged.length,
-    assetIdChangedShotIds: assetIdChanged.slice(0, 10),
-    potentialRegressionCount: potentialRegressionShotIds.length,
-    potentialRegressionShotIds: potentialRegressionShotIds.slice(0, 10),
-    thumbSamples,
-  }
-}
-
-function emitOverwriteTrace(event, payload = {}) {
-  if (!isOverwriteTraceEnabled()) return
-  const entry = {
-    event,
-    ts: new Date().toISOString(),
-    ...payload,
-  }
-  if (typeof window !== 'undefined') {
-    const list = Array.isArray(window[OVERWRITE_TRACE_BUFFER_KEY]) ? window[OVERWRITE_TRACE_BUFFER_KEY] : []
-    list.push(entry)
-    window[OVERWRITE_TRACE_BUFFER_KEY] = list.slice(-400)
-    try {
-      window.dispatchEvent(new CustomEvent(OVERWRITE_TRACE_EVENT_NAME, { detail: entry }))
-    } catch {}
-  }
-  // eslint-disable-next-line no-console
-  console.info(OVERWRITE_TRACE_PREFIX, entry)
-}
-
-function getOverwriteStateContext(state = {}, extra = {}) {
-  const latestHeadSnapshotId = typeof window !== 'undefined'
-    ? String(window[OVERWRITE_TRACE_HEAD_KEY] || '')
-    : ''
-  return {
-    projectId: state?.projectRef?.type === 'cloud' ? state?.projectRef?.projectId || null : null,
-    snapshotId: state?.projectRef?.snapshotId || null,
-    cloudDirtyRevision: state?._cloudDirtyRevision ?? null,
-    lastAckedSnapshotId: state?._lastAckedSnapshotId ?? null,
-    latestSnapshotHeadId: latestHeadSnapshotId || null,
-    hasPendingRemoteSnapshot: Boolean(state?.pendingRemoteSnapshot),
-    pendingRemoteSnapshotId: state?.pendingRemoteSnapshot?.snapshotId
-      ? String(state.pendingRemoteSnapshot.snapshotId)
-      : null,
-    syncStatus: state?.saveSyncState?.status || null,
-    ...extra,
-  }
-}
-
-function maybeEmitStoryboardRevertDetected({ diff, sourceLabel, stateContext, stack }) {
-  if (!isOverwriteTraceEnabled()) return
-  if (!diff?.potentialRegressionCount) return
-  const shouldFlag = String(stateContext?.syncStatus || '') === 'synced_to_cloud'
-    || Boolean(stateContext?.lastAckedSnapshotId)
-  if (!shouldFlag) return
-  const signature = `${sourceLabel}|${diff.potentialRegressionShotIds.join(',')}`
-  if (typeof window !== 'undefined') {
-    const seen = window[OVERWRITE_REVERT_SEEN_KEY] instanceof Set
-      ? window[OVERWRITE_REVERT_SEEN_KEY]
-      : new Set()
-    if (seen.has(signature)) return
-    seen.add(signature)
-    window[OVERWRITE_REVERT_SEEN_KEY] = seen
-  }
-  emitOverwriteTrace('STORYBOARD_REVERT_DETECTED', {
-    sourceLabel,
-    changedShotIds: diff.potentialRegressionShotIds || [],
-    imageChangedCount: diff.imageChangedCount,
-    imageAssetChangedCount: diff.imageAssetChangedCount,
-    assetIdChangedCount: diff.assetIdChangedCount,
-    potentialRegressionCount: diff.potentialRegressionCount,
-    thumbSamples: diff.thumbSamples,
-    stack,
-    ...stateContext,
-  })
-}
 
 function cloneUndoSnapshot(snapshot) {
   return JSON.parse(JSON.stringify(snapshot))
@@ -2696,30 +2532,6 @@ const useStore = create((set, get) => ({
       return null
     })()
     const newAssetId = cloud?.assetId ? String(cloud.assetId) : null
-    if (isOverwriteTraceEnabled()) {
-      const visibleWithSameAsset = (() => {
-        if (!newAssetId || typeof document === 'undefined' || typeof window === 'undefined') return []
-        const viewportHeight = window.innerHeight || 0
-        return Array.from(document.querySelectorAll('.shot-card[data-entity-type="shot"]'))
-          .filter((node) => {
-            const rect = node.getBoundingClientRect()
-            return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.top <= viewportHeight
-          })
-          .filter((node) => String(node.getAttribute('data-debug-asset-id') || '') === newAssetId)
-          .map((node) => String(node.getAttribute('data-entity-id') || ''))
-          .filter((id) => id && id !== editedShotId)
-      })()
-      // eslint-disable-next-line no-console
-      console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
-        phase: 'before_write',
-        functionName: 'store:updateShotImage',
-        writeMode: get()?.projectRef?.type === 'cloud' ? 'cloud-backed' : 'local-only',
-        editedShotId,
-        oldAssetId,
-        newAssetId,
-        otherVisibleShotIdsWithSameAssetId: visibleWithSameAsset,
-      })
-    }
     set(state => ({
       storyboardImageCache: {
         ...state.storyboardImageCache,
@@ -2748,36 +2560,6 @@ const useStore = create((set, get) => ({
         }),
       })),
     }))
-    if (isOverwriteTraceEnabled()) {
-      const next = get()
-      const finalEditedAssetId = (() => {
-        for (const scene of (next?.scenes || [])) {
-          for (const shot of (scene?.shots || [])) {
-            if (String(shot?.id || '') !== editedShotId) continue
-            return shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
-          }
-        }
-        return null
-      })()
-      const changedShotIds = []
-      for (const scene of (next?.scenes || [])) {
-        for (const shot of (scene?.shots || [])) {
-          const id = String(shot?.id || '')
-          if (!id || id === editedShotId) continue
-          const shotAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
-          if (shotAssetId === newAssetId) changedShotIds.push(id)
-        }
-      }
-      // eslint-disable-next-line no-console
-      console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
-        phase: 'after_write_settled',
-        functionName: 'store:updateShotImage',
-        writeMode: next?.projectRef?.type === 'cloud' ? 'cloud-backed' : 'local-only',
-        editedShotId,
-        finalEditedAssetId,
-        otherVisibleShotIdsWithSameAssetId: changedShotIds.slice(0, 20),
-      })
-    }
     get()._scheduleAutoSave()
   },
 
@@ -3425,25 +3207,7 @@ const useStore = create((set, get) => ({
     }
   },
 
-  loadProject: (data, traceMeta = {}) => {
-    const beforeState = get()
-    const sourceLabel = traceMeta?.sourceLabel || 'other_load_project'
-    const stack = traceMeta?.stack || getCompactTraceStack()
-    emitOverwriteTrace('LOAD_PROJECT_ENTER', getOverwriteStateContext(beforeState, {
-      sourceLabel,
-      functionName: 'loadProject',
-      overwritePathLabel: sourceLabel,
-      incomingSnapshotId: traceMeta?.snapshotId || null,
-      stack,
-    }))
-    emitOverwriteTrace('SHOT_IMAGE_DIFF_BEFORE_APPLY', {
-      sourceLabel,
-      functionName: 'loadProject',
-      ...summarizeShotImageDiff(beforeState?.scenes || [], data?.scenes || []),
-      ...getOverwriteStateContext(beforeState, {
-        incomingSnapshotId: traceMeta?.snapshotId || null,
-      }),
-    })
+  loadProject: (data) => {
     const {
       projectName, projectEmoji, projectLogline, projectHeroImage, projectHeroOverlayColor, columnCount, defaultFocalLength,
       theme, autoSave, useDropdowns,
@@ -3828,31 +3592,6 @@ const useStore = create((set, get) => ({
       storyboardImageCache: {},
     })
     saveShortcutBindings(get().shortcutBindings)
-    const afterState = get()
-    const afterDiff = summarizeShotImageDiff(beforeState?.scenes || [], afterState?.scenes || [])
-    emitOverwriteTrace('SHOT_IMAGE_DIFF_AFTER_APPLY', {
-      sourceLabel,
-      functionName: 'loadProject',
-      ...afterDiff,
-      ...getOverwriteStateContext(afterState, {
-        incomingSnapshotId: traceMeta?.snapshotId || null,
-      }),
-    })
-    emitOverwriteTrace('LOAD_PROJECT_EXIT', getOverwriteStateContext(afterState, {
-      sourceLabel,
-      functionName: 'loadProject',
-      overwritePathLabel: sourceLabel,
-      incomingSnapshotId: traceMeta?.snapshotId || null,
-      stack,
-    }))
-    maybeEmitStoryboardRevertDetected({
-      diff: afterDiff,
-      sourceLabel,
-      stateContext: getOverwriteStateContext(afterState, {
-        incomingSnapshotId: traceMeta?.snapshotId || null,
-      }),
-      stack,
-    })
   },
 
   openProject: async () => {
@@ -4196,12 +3935,6 @@ const useStore = create((set, get) => ({
       )
     }
 
-    emitOverwriteTrace('SHOT_IMAGE_DIFF_BEFORE_APPLY', {
-      sourceLabel,
-      functionName: 'applyLiveStoryboardState',
-      ...summarizeShotImageDiff(beforeState?.scenes || [], orderedScenes),
-      ...getOverwriteStateContext(beforeState),
-    })
     set({
       scenes: get().scenes.map((scene) => ({
         ...scene,
@@ -4231,23 +3964,6 @@ const useStore = create((set, get) => ({
         lastSyncedAt: new Date().toISOString(),
       }),
     })
-    const conversionAfterState = get()
-    const conversionDiff = summarizeShotImageDiff(conversionBeforeScenes, conversionAfterState.scenes || [])
-    emitOverwriteTrace('SHOT_IMAGE_DIFF_AFTER_APPLY', {
-      sourceLabel: 'local_to_cloud_conversion',
-      functionName: 'createCloudProjectFromLocal',
-      ...conversionDiff,
-      ...getOverwriteStateContext(conversionAfterState, {
-        projectId: cloudProject?.id || null,
-        incomingSnapshotId: snapshot?.id ? String(snapshot.id) : null,
-      }),
-    })
-    emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(conversionAfterState, {
-      sourceLabel: 'local_to_cloud_conversion',
-      functionName: 'createCloudProjectFromLocal',
-      projectId: cloudProject?.id || null,
-      incomingSnapshotId: snapshot?.id ? String(snapshot.id) : null,
-    }))
     get().acknowledgeCloudSnapshot(String(snapshot.id))
     return { project: cloudProject, snapshot }
   },
@@ -4295,19 +4011,6 @@ const useStore = create((set, get) => ({
     // (scenes/shots) will be populated by live table subscriptions for
     // liveModelVersion >= 1, or by snapshot hydration for legacy projects.
     const scene = createScene({ id: 'scene_1', sceneLabel: 'SCENE 1', location: 'LOCATION' })
-    emitOverwriteTrace('OVERWRITE_PATH_ENTER', getOverwriteStateContext(get(), {
-      sourceLabel: 'initial_cloud_load',
-      functionName: 'openCloudProject',
-      projectId,
-      stack: getCompactTraceStack(),
-    }))
-    const beforeScenes = get().scenes || []
-    emitOverwriteTrace('SHOT_IMAGE_DIFF_BEFORE_APPLY', {
-      sourceLabel: 'initial_cloud_load',
-      functionName: 'openCloudProject',
-      ...summarizeShotImageDiff(beforeScenes, [scene]),
-      ...getOverwriteStateContext(get(), { projectId }),
-    })
     set({
       projectPath: null,
       browserProjectId: null,
@@ -4355,20 +4058,6 @@ const useStore = create((set, get) => ({
       storyboardImageCache: {},
       documentSession: get().documentSession + 1,
     })
-    const afterOpenState = get()
-    const openDiff = summarizeShotImageDiff(beforeScenes, afterOpenState.scenes || [])
-    emitOverwriteTrace('SHOT_IMAGE_DIFF_AFTER_APPLY', {
-      sourceLabel: 'initial_cloud_load',
-      functionName: 'openCloudProject',
-      ...openDiff,
-      ...getOverwriteStateContext(afterOpenState, { projectId }),
-    })
-    emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(afterOpenState, {
-      sourceLabel: 'initial_cloud_load',
-      functionName: 'openCloudProject',
-      projectId,
-    }))
-
     // Persist across browser refresh so the same cloud project reopens
     // automatically when the user refreshes the page.
     try { sessionStorage.setItem('ss_active_cloud_project_id', projectId) } catch {}
@@ -4427,13 +4116,6 @@ const useStore = create((set, get) => ({
       // and projectRef to local, same as with collaborator snapshot application.
       const preservedProjectRef = currentState.projectRef
       const preservedActiveTab = currentState.activeTab
-      emitOverwriteTrace('OVERWRITE_PATH_ENTER', getOverwriteStateContext(currentState, {
-        sourceLabel: 'hydrate_project_snapshot',
-        functionName: 'hydrateProjectSnapshot',
-        projectId,
-        incomingSnapshotId: snapshot?.id ? String(snapshot.id) : null,
-        stack: getCompactTraceStack(),
-      }))
       if (currentState._cloudDirtyRevision !== null) {
         set((latestState) => ({
           pendingRemoteSnapshot: {
@@ -4455,12 +4137,7 @@ const useStore = create((set, get) => ({
         return { ok: true, deferred: true, snapshotId: snapshot.id }
       }
 
-      get().loadProject(snapshot.payload, {
-        sourceLabel: 'hydrate_project_snapshot',
-        projectId,
-        snapshotId: snapshot?.id ? String(snapshot.id) : null,
-        stack: getCompactTraceStack(),
-      })
+      get().loadProject(snapshot.payload)
 
       const syncedAt = new Date().toISOString()
       set((latestState) => ({
@@ -4483,12 +4160,6 @@ const useStore = create((set, get) => ({
         snapshotHydrationState: { status: 'loaded', projectId },
       }))
       get().acknowledgeCloudSnapshot(String(snapshot.id))
-      emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(get(), {
-        sourceLabel: 'hydrate_project_snapshot',
-        functionName: 'hydrateProjectSnapshot',
-        projectId,
-        incomingSnapshotId: snapshot?.id ? String(snapshot.id) : null,
-      }))
 
       if (isSessionMetricsEnabled) recordSnapshotHydrationTriggered()
       return { ok: true, snapshotId: snapshot.id }
@@ -4503,17 +4174,9 @@ const useStore = create((set, get) => ({
     }
   },
 
-  applyLiveStoryboardState: ({ scenes = [], shots = [] } = {}, traceMeta = {}) => {
+  applyLiveStoryboardState: ({ scenes = [], shots = [] } = {}) => {
     if (!Array.isArray(scenes) || !Array.isArray(shots)) return { applied: false }
     const beforeState = get()
-    const sourceLabel = traceMeta?.sourceLabel || 'other_applyLiveStoryboardState'
-    const stack = traceMeta?.stack || getCompactTraceStack()
-    emitOverwriteTrace('OVERWRITE_PATH_ENTER', getOverwriteStateContext(beforeState, {
-      sourceLabel,
-      functionName: 'applyLiveStoryboardState',
-      overwritePathLabel: sourceLabel,
-      stack,
-    }))
     const existingShotsById = new Map(
       (beforeState?.scenes || []).flatMap((scene) =>
         (scene?.shots || []).map((shot) => [String(shot?.id || ''), shot])
@@ -4602,26 +4265,6 @@ const useStore = create((set, get) => ({
       storyboardSceneOrder: order,
       hasUnsavedChanges: false,
     })
-    const afterState = get()
-    const liveDiff = summarizeShotImageDiff(beforeState?.scenes || [], afterState?.scenes || [])
-    emitOverwriteTrace('SHOT_IMAGE_DIFF_AFTER_APPLY', {
-      sourceLabel,
-      functionName: 'applyLiveStoryboardState',
-      ...liveDiff,
-      ...getOverwriteStateContext(afterState),
-    })
-    emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(afterState, {
-      sourceLabel,
-      functionName: 'applyLiveStoryboardState',
-      overwritePathLabel: sourceLabel,
-      stack,
-    }))
-    maybeEmitStoryboardRevertDetected({
-      diff: liveDiff,
-      sourceLabel,
-      stateContext: getOverwriteStateContext(afterState),
-      stack,
-    })
     return { applied: true }
   },
 
@@ -4644,43 +4287,14 @@ const useStore = create((set, get) => ({
   },
 
   applyIncomingCloudSnapshot: ({ projectId, snapshotId, payload }) => {
-    const entryState = get()
-    emitOverwriteTrace('OVERWRITE_PATH_ENTER', getOverwriteStateContext(entryState, {
-      sourceLabel: 'incoming_cloud_snapshot',
-      functionName: 'applyIncomingCloudSnapshot',
-      projectId,
-      incomingSnapshotId: snapshotId ? String(snapshotId) : null,
-      stack: getCompactTraceStack(),
-    }))
     if (!projectId || !snapshotId || !payload) {
-      emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(get(), {
-        sourceLabel: 'incoming_cloud_snapshot',
-        functionName: 'applyIncomingCloudSnapshot',
-        projectId: projectId || null,
-        incomingSnapshotId: snapshotId ? String(snapshotId) : null,
-        exitReason: 'invalid_snapshot',
-      }))
       return { applied: false, reason: 'invalid_snapshot' }
     }
     const state = get()
     if (state.projectRef?.type !== 'cloud' || state.projectRef.projectId !== projectId) {
-      emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(get(), {
-        sourceLabel: 'incoming_cloud_snapshot',
-        functionName: 'applyIncomingCloudSnapshot',
-        projectId,
-        incomingSnapshotId: String(snapshotId),
-        exitReason: 'different_project',
-      }))
       return { applied: false, reason: 'different_project' }
     }
     if (state.projectRef.snapshotId === snapshotId || state._lastAckedSnapshotId === snapshotId) {
-      emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(get(), {
-        sourceLabel: 'incoming_cloud_snapshot',
-        functionName: 'applyIncomingCloudSnapshot',
-        projectId,
-        incomingSnapshotId: String(snapshotId),
-        exitReason: 'already_current',
-      }))
       return { applied: false, reason: 'already_current' }
     }
     if (state._cloudDirtyRevision !== null || state._cloudSyncInFlight) {
@@ -4700,13 +4314,6 @@ const useStore = create((set, get) => ({
           lastSyncedAt: latestState.saveSyncState.lastSyncedAt,
         }),
       }))
-      emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(get(), {
-        sourceLabel: 'incoming_cloud_snapshot',
-        functionName: 'applyIncomingCloudSnapshot',
-        projectId,
-        incomingSnapshotId: snapshotId ? String(snapshotId) : null,
-        exitReason: 'queued_pending_remote_snapshot',
-      }))
       return { applied: false, reason: 'local_changes_pending' }
     }
 
@@ -4718,12 +4325,7 @@ const useStore = create((set, get) => ({
     const preservedProjectRef = state.projectRef
     const preservedActiveTab = state.activeTab
 
-    get().loadProject(payload, {
-      sourceLabel: 'incoming_cloud_snapshot',
-      projectId,
-      snapshotId: snapshotId ? String(snapshotId) : null,
-      stack: getCompactTraceStack(),
-    })
+    get().loadProject(payload)
 
     const syncedAt = new Date().toISOString()
     set((latestState) => ({
@@ -4758,39 +4360,17 @@ const useStore = create((set, get) => ({
         ? { status: 'loaded', projectId }
         : latestState.snapshotHydrationState,
     }))
-    emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(get(), {
-      sourceLabel: 'incoming_cloud_snapshot',
-      functionName: 'applyIncomingCloudSnapshot',
-      projectId,
-      incomingSnapshotId: snapshotId ? String(snapshotId) : null,
-      exitReason: 'applied',
-    }))
     return { applied: true }
   },
 
   applyPendingRemoteSnapshot: () => {
     const pending = get().pendingRemoteSnapshot
     if (!pending) return { applied: false, reason: 'none_pending' }
-    emitOverwriteTrace('OVERWRITE_PATH_ENTER', getOverwriteStateContext(get(), {
-      sourceLabel: 'pending_remote_snapshot',
-      functionName: 'applyPendingRemoteSnapshot',
-      projectId: pending.projectId || null,
-      incomingSnapshotId: pending.snapshotId ? String(pending.snapshotId) : null,
-      stack: getCompactTraceStack(),
-    }))
     const result = get().applyIncomingCloudSnapshot({
       projectId: pending.projectId,
       snapshotId: pending.snapshotId,
       payload: pending.payload,
     })
-    emitOverwriteTrace('OVERWRITE_PATH_EXIT', getOverwriteStateContext(get(), {
-      sourceLabel: 'pending_remote_snapshot',
-      functionName: 'applyPendingRemoteSnapshot',
-      projectId: pending.projectId || null,
-      incomingSnapshotId: pending.snapshotId ? String(pending.snapshotId) : null,
-      applied: Boolean(result?.applied),
-      exitReason: result?.reason || null,
-    }))
     return result
   },
 

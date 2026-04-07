@@ -121,18 +121,6 @@ function getOutlineItemStyle(color, isActive = false) {
 }
 
 
-function isCloudDebugEnabledApp() {
-  if (import.meta.env.DEV) return true
-  if (typeof window === 'undefined') return false
-  try {
-    const params = new URLSearchParams(window.location?.search || '')
-    if (params.get('ssCloudDebug') === '1') return true
-    return window.localStorage?.getItem('ssCloudDebug') === '1'
-  } catch {
-    return false
-  }
-}
-
 const STORYBOARD_OUTLINE_LABEL_COLOR = 'var(--ss-left-sidebar-text)'
 const STORYBOARD_OUTLINE_SUBTITLE_COLOR = '#9AA9C2'
 
@@ -826,20 +814,8 @@ export default function App() {
     : null
 
   const handleStoryboardDragStart = useCallback((event) => {
-    if (typeof window !== 'undefined' && isCloudDebugEnabledApp()) {
-      const activeShot = storyboardShotsWithIds.find((shot) => shot.id === event.active?.id)
-      if (activeShot) {
-        // eslint-disable-next-line no-console
-        console.info('[SHOT_REORDER_AUDIT]', {
-          phase: 'drag_start',
-          draggedShotId: String(activeShot.id),
-          originalIndex: storyboardShotsWithIds.findIndex((shot) => shot.id === activeShot.id),
-          sceneId: String(activeShot.sceneId || ''),
-        })
-      }
-    }
     setActiveStoryboardShotId(event.active?.id || null)
-  }, [storyboardShotsWithIds])
+  }, [])
 
   const handleStoryboardDragEnd = useCallback((event) => {
     const { active, over } = event
@@ -848,25 +824,6 @@ export default function App() {
     const activeShot = storyboardShotsWithIds.find(shot => shot.id === active.id)
     const overShot = storyboardShotsWithIds.find(shot => shot.id === over.id)
     if (!activeShot || !overShot) return
-    if (typeof window !== 'undefined' && isCloudDebugEnabledApp()) {
-      const projected = [...storyboardShotsWithIds]
-      const oldIndex = projected.findIndex((shot) => shot.id === active.id)
-      const newIndex = projected.findIndex((shot) => shot.id === over.id)
-      if (oldIndex >= 0 && newIndex >= 0) {
-        const [moved] = projected.splice(oldIndex, 1)
-        projected.splice(newIndex, 0, moved)
-      }
-      // eslint-disable-next-line no-console
-      console.info('[SHOT_REORDER_AUDIT]', {
-        phase: 'drop_commit',
-        draggedShotId: String(active.id),
-        targetShotId: String(over.id),
-        targetIndex: projected.findIndex((shot) => shot.id === over.id),
-        sourceSceneId: String(activeShot.sceneId || ''),
-        targetSceneId: String(overShot.sceneId || ''),
-        newLocalOrder: projected.map((shot, idx) => ({ shotId: String(shot.id), index: idx, sceneId: String(shot.sceneId || '') })),
-      })
-    }
     if (activeShot.sceneId === overShot.sceneId) {
       reorderShots(activeShot.sceneId, active.id, over.id)
       if (projectRef?.type === 'cloud') {
