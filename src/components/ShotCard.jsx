@@ -124,6 +124,28 @@ function logShotImageAssignAudit(payload = {}) {
   console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', payload)
 }
 
+function resolveCanonicalStoryboardSource({
+  cloudAssetBlocked,
+  isCloudProject,
+  hasStableAssetId,
+  prefetchedCloudThumb,
+  fetchedCloudThumb,
+  imageAssetThumb,
+  image,
+}) {
+  if (cloudAssetBlocked) return { src: null, reason: 'cloud_asset_blocked' }
+  if (isCloudProject && hasStableAssetId) {
+    if (prefetchedCloudThumb) return { src: prefetchedCloudThumb, reason: 'prefetched_cloud_thumb' }
+    if (fetchedCloudThumb) return { src: fetchedCloudThumb, reason: 'fetched_cloud_thumb' }
+    if (imageAssetThumb) return { src: imageAssetThumb, reason: 'shot_imageAsset_thumb' }
+    return { src: image || null, reason: image ? 'shot_image' : 'none' }
+  }
+  if (prefetchedCloudThumb) return { src: prefetchedCloudThumb, reason: 'prefetched_cloud_thumb' }
+  if (fetchedCloudThumb) return { src: fetchedCloudThumb, reason: 'fetched_cloud_thumb' }
+  if (imageAssetThumb) return { src: imageAssetThumb, reason: 'shot_imageAsset_thumb' }
+  return { src: image || null, reason: image ? 'shot_image' : 'none' }
+}
+
 function sanitizeNumericInput(value) {
   if (value == null) return ''
   const cleaned = String(value).replace(/[^0-9.]/g, '')
@@ -179,9 +201,12 @@ function ShotCard({
     assetId: null,
     domNodeId: null,
   })
+  const previousAssetIdRef = useRef(null)
+  const preloadTokenRef = useRef(0)
   const [imageLoadState, setImageLoadState] = useState('idle')
   const [imgCurrentSrc, setImgCurrentSrc] = useState(null)
   const [lastSourceChangeAt, setLastSourceChangeAt] = useState(null)
+  const [displayedSrc, setDisplayedSrc] = useState(null)
   const shotTargetAuditRef = useRef({
     actionId: null,
     actionLabel: null,
@@ -733,17 +758,18 @@ function ShotCard({
     [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
   )
 
-  const storyboardImageSrc = cloudAssetBlocked
-    ? null
-    : (prefetchedCloudAssetView?.thumbUrl || cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
-  const storyboardImageSourceReason = cloudAssetBlocked
-    ? 'cloud_asset_blocked'
-    : (prefetchedCloudAssetView?.thumbUrl
-        ? 'prefetched_cloud_thumb'
-        : (cloudAssetView?.thumbUrl
-            ? 'fetched_cloud_thumb'
-            : (shot.imageAsset?.thumb ? 'shot_imageAsset_thumb' : (shot.image ? 'shot_image' : 'none'))))
   const stableAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+  const canonicalSource = resolveCanonicalStoryboardSource({
+    cloudAssetBlocked,
+    isCloudProject: projectRef?.type === 'cloud',
+    hasStableAssetId: Boolean(stableAssetId),
+    prefetchedCloudThumb: prefetchedCloudAssetView?.thumbUrl || null,
+    fetchedCloudThumb: cloudAssetView?.thumbUrl || null,
+    imageAssetThumb: shot?.imageAsset?.thumb || null,
+    image: shot?.image || null,
+  })
+  const storyboardImageSrc = canonicalSource.src
+  const storyboardImageSourceReason = canonicalSource.reason
   const stableAssetSourceExperiment = isStableAssetSourceExperimentEnabled()
   const storyboardImageSrcFinal = (projectRef?.type === 'cloud' && stableAssetId && stableAssetSourceExperiment)
     ? (prefetchedCloudAssetView?.thumbUrl || cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || null)
@@ -751,6 +777,41 @@ function ShotCard({
   const storyboardImageSourceReasonFinal = (projectRef?.type === 'cloud' && stableAssetId && stableAssetSourceExperiment)
     ? 'stable_asset_source_experiment'
     : storyboardImageSourceReason
+
+  useEffect(() => {
+    const previousAssetId = previousAssetIdRef.current
+    const nextAssetId = stableAssetId || null
+    const assetChanged = previousAssetId !== nextAssetId
+    previousAssetIdRef.current = nextAssetId
+    const nextSource = storyboardImageSrcFinal || null
+
+    if (assetChanged || !nextAssetId) {
+      preloadTokenRef.current += 1
+      setDisplayedSrc(nextSource)
+      return
+    }
+
+    if (!displayedSrc && nextSource) {
+      setDisplayedSrc(nextSource)
+      return
+    }
+
+    if (!nextSource || nextSource === displayedSrc) return
+
+    // Keep current frame visible across same-asset URL churn; only swap after preload succeeds.
+    const token = preloadTokenRef.current + 1
+    preloadTokenRef.current = token
+    const probe = new Image()
+    probe.onload = () => {
+      if (preloadTokenRef.current !== token) return
+      setDisplayedSrc(nextSource)
+    }
+    probe.onerror = () => {
+      if (preloadTokenRef.current !== token) return
+      // keep existing displayedSrc on preload failure
+    }
+    probe.src = nextSource
+  }, [displayedSrc, stableAssetId, storyboardImageSrcFinal])
 
   const syncCurrentSrcSnapshot = useCallback(() => {
     const node = imageElementRef.current || null
@@ -776,7 +837,7 @@ function ShotCard({
       sceneId: sceneId ? String(sceneId) : null,
       assetId: stableAssetId,
       sourceReason: storyboardImageSourceReasonFinal,
-      finalDisplaySrc: storyboardImageSrcFinal || null,
+      finalDisplaySrc: displayedSrc || storyboardImageSrcFinal || null,
       currentSrc: snapshot.currentSrc,
       imgSrc: snapshot.elementSrc,
       loadState: imageLoadState,
@@ -794,6 +855,7 @@ function ShotCard({
     stableAssetId,
     storyboardImageSourceReasonFinal,
     storyboardImageSrcFinal,
+    displayedSrc,
     syncCurrentSrcSnapshot,
   ])
 
@@ -898,7 +960,7 @@ function ShotCard({
       data-debug-scene-id={String(sceneId || '')}
       data-debug-asset-id={String(stableAssetId || '')}
       data-debug-source-reason={String(storyboardImageSourceReasonFinal || '')}
-      data-debug-final-display-src={String(storyboardImageSrcFinal || '')}
+      data-debug-final-display-src={String(displayedSrc || storyboardImageSrcFinal || '')}
       data-debug-load-state={String(imageLoadState || '')}
       data-debug-current-src={String(imgCurrentSrc || '')}
       className={`shot-card ${isDragging ? 'is-dragging' : ''} ${isDesktopDown ? 'is-compact' : ''} ${isPhone ? 'is-phone' : ''}`}
@@ -987,11 +1049,11 @@ function ShotCard({
             SHOTCARD DEBUG ACTIVE · {String(shot.id)}
           </div>
         ) : null}
-        {storyboardImageSrcFinal ? (
+        {displayedSrc ? (
           <img
-            key={`${shot.id}:${stableAssetId || 'no-asset'}`}
+            key={`${shot.id}:${stableAssetId || 'no-asset'}:${displayedSrc || 'no-src'}`}
             ref={imageElementRef}
-            src={storyboardImageSrcFinal}
+            src={displayedSrc}
             alt="Shot frame"
             loading="lazy"
             decoding="async"
@@ -1036,7 +1098,7 @@ function ShotCard({
             <div><strong>sceneId:</strong> {String(sceneId || '—')}</div>
             <div><strong>assetId:</strong> {stableAssetId || '—'}</div>
             <div><strong>sourceReason:</strong> {storyboardImageSourceReasonFinal}</div>
-            <div><strong>finalDisplaySrc:</strong> {truncateDebugValue(storyboardImageSrcFinal)}</div>
+            <div><strong>finalDisplaySrc:</strong> {truncateDebugValue(displayedSrc || storyboardImageSrcFinal)}</div>
             <div><strong>shot.image:</strong> {truncateDebugValue(shot?.image)}</div>
             <div><strong>imageAsset.thumb:</strong> {truncateDebugValue(shot?.imageAsset?.thumb)}</div>
             <div><strong>img.currentSrc:</strong> {truncateDebugValue(imgCurrentSrc)}</div>
@@ -1055,7 +1117,7 @@ function ShotCard({
               <button type="button" className="shot-image-picker-button" onClick={() => fileInputRef.current?.click()}>
                 Upload New
               </button>
-              {storyboardImageSrcFinal ? (
+              {displayedSrc ? (
                 <button
                   type="button"
                   className="shot-image-picker-button shot-image-picker-button-danger"
