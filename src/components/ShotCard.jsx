@@ -211,8 +211,6 @@ function ShotCard({
     }
   }, [cloudAssetBlocked, cloudProjectId, getAssetSignedViewsBatch, imagePickerStep, libraryAssets])
 
-<<<<<<< claude/cleanup-storyboard-fix-GxCIc
-=======
   useEffect(() => {
     if (imagePickerStep !== 'library') return
     setLibraryPreviewFailures({})
@@ -246,7 +244,6 @@ function ShotCard({
     }
   }, [sceneId, shot.id])
 
->>>>>>> main
   const {
     attributes,
     listeners,
