@@ -61,6 +61,11 @@ Temporary debug-enabled tracing to identify the exact runtime caller/path that t
 - Optional render experiment flag:
   - `?ssStableAssetSrcOnly=1`
   - `localStorage.setItem('ssStableAssetSrcOnly','1')`
+- Live shot sync writer experiment flag:
+  - `?ssOnlySyncEditedShot=1`
+  - `localStorage.setItem('ssOnlySyncEditedShot','1')`
+- Live sync semantic audit prefix:
+  - `[LIVE_SHOT_SYNC_AUDIT]`
 - `local_to_cloud_conversion`
 - `other_load_project`
 - `other_applyLiveStoryboardState`

@@ -145,6 +145,26 @@ function isConvexDiagEnabled() {
   }
 }
 
+function isOnlySyncEditedShotExperimentEnabled() {
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssOnlySyncEditedShot') === '1') return true
+    return window.localStorage?.getItem('ssOnlySyncEditedShot') === '1'
+  } catch {
+    return false
+  }
+}
+
+function summarizeLiveShotImageFields(shot = {}) {
+  const image = shot?.image || shot?.payload?.image || null
+  const imageAsset = shot?.imageAsset || shot?.payload?.imageAsset || null
+  const thumb = imageAsset?.thumb || null
+  const assetId = imageAsset?.cloud?.assetId ? String(imageAsset.cloud.assetId) : null
+  const updatedAt = shot?.updatedAt ?? shot?.payload?.updatedAt ?? null
+  return { image, thumb, assetId, updatedAt }
+}
+
 function isCloudDebugEnabled() {
   if (import.meta.env.DEV) return true
   if (typeof window === 'undefined') return false
@@ -190,6 +210,7 @@ export default function CloudSyncCoordinator() {
   const updateShotImage = useStore(s => s.updateShotImage)
   const hasUnsavedChanges = useStore(s => s.hasUnsavedChanges)
   const lastStoryboardEditAt = useStore(s => Number(s.lastStoryboardEditAt || 0))
+  const lastStoryboardEditedShotId = useStore(s => (s.lastStoryboardEditedShotId ? String(s.lastStoryboardEditedShotId) : null))
   const pendingRemoteSnapshot = useStore(s => s.pendingRemoteSnapshot)
   const applyPendingRemoteSnapshot = useStore(s => s.applyPendingRemoteSnapshot)
   const clearPendingRemoteSnapshot = useStore(s => s.clearPendingRemoteSnapshot)
@@ -880,6 +901,10 @@ export default function CloudSyncCoordinator() {
       deleteScenes: 0,
       deleteShots: 0,
     }
+    const cycleId = `live-sync-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+    const onlySyncEditedShotEnabled = isOnlySyncEditedShotExperimentEnabled()
+    const isImmediateEditedShotCycle = Boolean(lastStoryboardEditedShotId) && (Date.now() - Number(lastStoryboardEditAt || 0) < 15_000)
+    const experimentTargetShotId = onlySyncEditedShotEnabled && isImmediateEditedShotCycle ? String(lastStoryboardEditedShotId) : null
 
     for (const scene of (scenes || [])) {
       const sceneId = String(scene.id)
@@ -906,32 +931,59 @@ export default function CloudSyncCoordinator() {
         nextShotIds.add(shotId)
         const nextShotPayload = normalizeLiveShotPayload(shot)
         const existingShot = existingShotsById.get(shotId)
-        const shouldUpsertShot = !existingShot
-          || String(existingShot.sceneId || '') !== sceneId
-          || Number(existingShot.order) !== Number(index)
-          || stableStringify(normalizeLiveShotPayload(existingShot)) !== stableStringify(nextShotPayload)
-        if (!shouldUpsertShot) {
+        const oldShotPayload = existingShot ? normalizeLiveShotPayload(existingShot) : null
+        const reasonList = []
+        if (!existingShot) reasonList.push('new_shot')
+        if (existingShot && String(existingShot.sceneId || '') !== sceneId) reasonList.push('scene_changed')
+        if (existingShot && Number(existingShot.order) !== Number(index)) reasonList.push('order_changed')
+        const payloadChanged = !existingShot || stableStringify(oldShotPayload) !== stableStringify(nextShotPayload)
+        if (payloadChanged) reasonList.push('payload_changed')
+        const oldImageSummary = summarizeLiveShotImageFields(existingShot || {})
+        const newImageSummary = summarizeLiveShotImageFields(shot || nextShotPayload || {})
+        const stableAssetIdChanged = oldImageSummary.assetId !== newImageSummary.assetId
+        const signedUrlOnlyChanged = !stableAssetIdChanged
+          && (oldImageSummary.image !== newImageSummary.image || oldImageSummary.thumb !== newImageSummary.thumb)
+        const semanticChanged = reasonList.length > 0
+        const isOriginallyEditedShot = Boolean(experimentTargetShotId) && shotId === experimentTargetShotId
+        const blockedByExperiment = Boolean(experimentTargetShotId) && !isOriginallyEditedShot
+        if (isCloudDebugEnabled()) {
+          // eslint-disable-next-line no-console
+          console.info('[LIVE_SHOT_SYNC_AUDIT]', {
+            phase: 'evaluate_shot',
+            cycleId,
+            ts: new Date().toISOString(),
+            sceneId,
+            shotId,
+            semanticChanged,
+            reasonList,
+            signedUrlOnlyChanged,
+            stableAssetIdChanged,
+            isOriginallyEditedShot,
+            willUpsertLiveShot: semanticChanged && !blockedByExperiment,
+            blockedByExperiment,
+            experimentTargetShotId,
+            oldImageSummary,
+            newImageSummary,
+          })
+        }
+        if (!semanticChanged) {
           ops.skipShots += 1
           continue
         }
-        if (isCloudDebugEnabled()) {
-          const oldAssetId = existingShot?.payload?.imageAsset?.cloud?.assetId
-            ? String(existingShot.payload.imageAsset.cloud.assetId)
-            : (existingShot?.imageAsset?.cloud?.assetId ? String(existingShot.imageAsset.cloud.assetId) : null)
-          const newAssetId = nextShotPayload?.imageAsset?.cloud?.assetId
-            ? String(nextShotPayload.imageAsset.cloud.assetId)
-            : (shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null)
-          // eslint-disable-next-line no-console
-          console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
-            phase: 'before_write',
-            functionName: 'CloudSyncCoordinator:applyLiveStoryboardSync/upsertLiveShot',
-            writeMode: 'live-table-backed',
-            sceneId,
-            editedShotId: shotId,
-            oldAssetId,
-            newAssetId,
-            otherVisibleShotIdsWithSameAssetId: getVisibleShotIdsSharingAsset(newAssetId, shotId),
-          })
+        if (blockedByExperiment) {
+          ops.skipShots += 1
+          if (isCloudDebugEnabled()) {
+            // eslint-disable-next-line no-console
+            console.info('[LIVE_SHOT_SYNC_AUDIT]', {
+              phase: 'skip_by_experiment',
+              cycleId,
+              ts: new Date().toISOString(),
+              sceneId,
+              shotId,
+              experimentTargetShotId,
+            })
+          }
+          continue
         }
         await upsertLiveShot({
           projectId,
@@ -941,18 +993,16 @@ export default function CloudSyncCoordinator() {
           payload: shot,
         })
         if (isCloudDebugEnabled()) {
-          const newAssetId = nextShotPayload?.imageAsset?.cloud?.assetId
-            ? String(nextShotPayload.imageAsset.cloud.assetId)
-            : (shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null)
           // eslint-disable-next-line no-console
-          console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
-            phase: 'after_write_settled',
-            functionName: 'CloudSyncCoordinator:applyLiveStoryboardSync/upsertLiveShot',
-            writeMode: 'live-table-backed',
+          console.info('[LIVE_SHOT_SYNC_AUDIT]', {
+            phase: 'upsert_live_shot',
+            cycleId,
+            ts: new Date().toISOString(),
             sceneId,
-            editedShotId: shotId,
-            finalEditedAssetId: newAssetId,
-            otherVisibleShotIdsWithSameAssetId: getVisibleShotIdsSharingAsset(newAssetId, shotId),
+            shotId,
+            stableAssetIdChanged,
+            signedUrlOnlyChanged,
+            reasonList,
           })
         }
         ops.upsertShots += 1
@@ -984,7 +1034,7 @@ export default function CloudSyncCoordinator() {
         ...ops,
       })
     }
-  }, [convex, deleteLiveScene, deleteLiveShot, getVisibleShotIdsSharingAsset, upsertLiveScene, upsertLiveShot])
+  }, [convex, deleteLiveScene, deleteLiveShot, lastStoryboardEditAt, lastStoryboardEditedShotId, upsertLiveScene, upsertLiveShot])
 
   const flushPendingLiveStoryboardSync = useCallback(async ({ force = false } = {}) => {
     if (soloLiveSyncTimerRef.current) {

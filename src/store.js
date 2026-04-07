@@ -942,6 +942,7 @@ const useStore = create((set, get) => ({
   cloudLineage: null, // { originProjectId, lastKnownSnapshotId }
   liveModelVersion: 0,
   lastStoryboardEditAt: 0,
+  lastStoryboardEditedShotId: null,
   projectName: 'Untitled Shotlist',
   projectEmoji: '🎬',
   projectLogline: '',
@@ -2723,6 +2724,8 @@ const useStore = create((set, get) => ({
         ...state.storyboardImageCache,
         ...(full ? { [shotId]: { full, updatedAt: Date.now() } } : {}),
       },
+      lastStoryboardEditAt: Date.now(),
+      lastStoryboardEditedShotId: editedShotId || null,
       scenes: state.scenes.map(s => ({
         ...s,
         shots: s.shots.map((sh) => {
