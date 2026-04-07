@@ -182,6 +182,12 @@ function ShotCard({
   const [imageLoadState, setImageLoadState] = useState('idle')
   const [imgCurrentSrc, setImgCurrentSrc] = useState(null)
   const [lastSourceChangeAt, setLastSourceChangeAt] = useState(null)
+  const shotTargetAuditRef = useRef({
+    actionId: null,
+    actionLabel: null,
+    initiatingShotId: null,
+    initiatingSceneId: null,
+  })
   const reactCardKey = `scene:${String(sceneId || 'none')}:shot:${String(shot?.id || 'unknown')}`
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
@@ -268,6 +274,24 @@ function ShotCard({
     }
   }, [cloudAssetBlocked, cloudProjectId, getAssetSignedViewsBatch, imagePickerStep, libraryAssets])
 
+  useEffect(() => {
+    if (!isCloudDebugEnabled()) return
+    if (!imagePickerStep) return
+    const flow = shotTargetAuditRef.current || {}
+    // eslint-disable-next-line no-console
+    console.info('[SHOT_TARGET_AUDIT]', {
+      phase: 'picker_open',
+      sourceComponent: 'ShotCard',
+      actionId: flow?.actionId || null,
+      actionLabel: flow?.actionLabel || null,
+      modalStep: imagePickerStep,
+      targetShotId: String(shot.id),
+      targetSceneId: sceneId ? String(sceneId) : null,
+      initiatingShotId: flow?.initiatingShotId || null,
+      initiatingSceneId: flow?.initiatingSceneId || null,
+    })
+  }, [imagePickerStep, sceneId, shot.id])
+
   const {
     attributes,
     listeners,
@@ -283,6 +307,61 @@ function ShotCard({
     '--card-color': shot.color,
     opacity: isDragging ? 0.4 : 1,
   }
+
+  const startShotTargetAudit = useCallback((actionLabel) => {
+    const token = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+    shotTargetAuditRef.current = {
+      actionId: token,
+      actionLabel,
+      initiatingShotId: String(shot.id),
+      initiatingSceneId: sceneId ? String(sceneId) : null,
+    }
+    if (isCloudDebugEnabled()) {
+      // eslint-disable-next-line no-console
+      console.info('[SHOT_TARGET_AUDIT]', {
+        phase: 'open_add_image',
+        sourceComponent: 'ShotCard',
+        actionLabel,
+        actionId: token,
+        clickedShotId: String(shot.id),
+        sceneId: sceneId ? String(sceneId) : null,
+      })
+    }
+    return token
+  }, [sceneId, shot.id])
+
+  const writeShotImageWithTargetAudit = useCallback(({ functionName, payload, assetId = null }) => {
+    const flow = shotTargetAuditRef.current || {}
+    const targetShotId = String(shot.id)
+    const originShotId = flow?.initiatingShotId ? String(flow.initiatingShotId) : targetShotId
+    const mismatch = originShotId !== targetShotId
+    if (isCloudDebugEnabled()) {
+      // eslint-disable-next-line no-console
+      console.info('[SHOT_TARGET_AUDIT]', {
+        phase: 'before_updateShotImage',
+        functionName,
+        actionId: flow?.actionId || null,
+        actionLabel: flow?.actionLabel || null,
+        shotIdBeingWritten: targetShotId,
+        assetIdBeingWritten: assetId ? String(assetId) : null,
+        originatingUiShotId: originShotId,
+        targetChangedSinceStart: mismatch,
+      })
+      if (mismatch) {
+        // eslint-disable-next-line no-console
+        console.warn('[SHOT_TARGET_MISMATCH]', {
+          functionName,
+          actionId: flow?.actionId || null,
+          actionLabel: flow?.actionLabel || null,
+          originatingUiShotId: originShotId,
+          finalWriteShotId: targetShotId,
+          originatingSceneId: flow?.initiatingSceneId || null,
+          finalSceneId: sceneId ? String(sceneId) : null,
+        })
+      }
+    }
+    updateShotImage(shot.id, payload)
+  }, [sceneId, shot.id, updateShotImage])
 
   const auditShotImageAssignment = useCallback(({
     functionName,
@@ -345,7 +424,9 @@ function ShotCard({
         console.warn('Failed to unassign shot library asset', err)
       }
     }
-    updateShotImage(shot.id, {
+    writeShotImageWithTargetAudit({
+      functionName: 'ShotCard:clearShotImage',
+      payload: {
       image: null,
       imageAsset: {
         version: 1,
@@ -355,6 +436,8 @@ function ShotCard({
         meta: null,
         cloud: null,
       },
+      },
+      assetId: null,
     })
     auditShotImageAssignment({
       functionName: 'ShotCard:clearShotImage',
@@ -363,7 +446,7 @@ function ShotCard({
       nextAssetId: null,
       previousVisibleMap: visibleBefore,
     })
-  }, [auditShotImageAssignment, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, projectRef, shot.id, shot?.imageAsset?.cloud?.assetId, unassignShotLibraryAsset, updateShotImage])
+  }, [auditShotImageAssignment, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, projectRef, shot.id, shot?.imageAsset?.cloud?.assetId, unassignShotLibraryAsset, writeShotImageWithTargetAudit])
 
   const assignLibraryAssetToShot = useCallback(async (assetId) => {
     if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
@@ -379,7 +462,27 @@ function ShotCard({
       const signedView = await getSignedViewWithCache(assetId)
       const payload = buildShotImageFromLibraryAsset(signedView)
       if (!payload) throw new Error('Could not resolve selected library asset')
-      updateShotImage(shot.id, payload)
+      if (isCloudDebugEnabled()) {
+        const flow = shotTargetAuditRef.current || {}
+        // eslint-disable-next-line no-console
+        console.info('[SHOT_TARGET_AUDIT]', {
+          phase: 'asset_selected',
+          sourceComponent: 'ShotCard',
+          functionName: 'ShotCard:assignLibraryAssetToShot',
+          actionId: flow?.actionId || null,
+          targetShotIdAtCallback: String(shot.id),
+          originalInitiatingShotId: flow?.initiatingShotId || null,
+          targetShotChangedSinceStart: flow?.initiatingShotId
+            ? String(flow.initiatingShotId) !== String(shot.id)
+            : false,
+          assetIdSelected: String(assetId),
+        })
+      }
+      writeShotImageWithTargetAudit({
+        functionName: 'ShotCard:assignLibraryAssetToShot',
+        payload,
+        assetId,
+      })
       const nextAssetId = payload?.imageAsset?.cloud?.assetId ? String(payload.imageAsset.cloud.assetId) : null
       auditShotImageAssignment({
         functionName: 'ShotCard:assignLibraryAssetToShot',
@@ -392,9 +495,10 @@ function ShotCard({
     } finally {
       setIsAssigningFromLibrary(false)
     }
-  }, [assignShotLibraryAsset, auditShotImageAssignment, cloudAssetBlocked, getSignedViewWithCache, projectRef, shot.id, shot?.imageAsset?.cloud?.assetId, updateShotImage])
+  }, [assignShotLibraryAsset, auditShotImageAssignment, cloudAssetBlocked, getSignedViewWithCache, projectRef, shot.id, shot?.imageAsset?.cloud?.assetId, writeShotImageWithTargetAudit])
 
   const handleImageClick = () => {
+    startShotTargetAudit(projectRef?.type === 'cloud' ? 'open_cloud_image_picker' : 'open_local_upload_picker')
     if (projectRef?.type === 'cloud') {
       setImagePickerStep('options')
       return
@@ -467,6 +571,22 @@ function ShotCard({
         })
         const uploadedAssetId = uploaded?.imageAsset?.cloud?.assetId
         if (uploadedAssetId) {
+          if (isCloudDebugEnabled()) {
+            const flow = shotTargetAuditRef.current || {}
+            // eslint-disable-next-line no-console
+            console.info('[SHOT_TARGET_AUDIT]', {
+              phase: 'upload_complete',
+              sourceComponent: 'ShotCard',
+              functionName: 'ShotCard:handleImageChange(cloud-upload)',
+              actionId: flow?.actionId || null,
+              targetShotIdAtCallback: String(shot.id),
+              originalInitiatingShotId: flow?.initiatingShotId || null,
+              targetShotChangedSinceStart: flow?.initiatingShotId
+                ? String(flow.initiatingShotId) !== String(shot.id)
+                : false,
+              assetIdSelected: String(uploadedAssetId),
+            })
+          }
           await assignShotLibraryAsset({
             projectId: projectRef.projectId,
             shotId: shot.id,
@@ -474,7 +594,11 @@ function ShotCard({
           })
           const signedView = await getSignedViewWithCache(uploadedAssetId)
           const libraryPayload = buildShotImageFromLibraryAsset(signedView)
-          updateShotImage(shot.id, libraryPayload || uploaded)
+          writeShotImageWithTargetAudit({
+            functionName: 'ShotCard:handleImageChange(cloud-upload+assign)',
+            payload: libraryPayload || uploaded,
+            assetId: uploadedAssetId,
+          })
           const nextAssetId = libraryPayload?.imageAsset?.cloud?.assetId
             ? String(libraryPayload.imageAsset.cloud.assetId)
             : (uploaded?.imageAsset?.cloud?.assetId ? String(uploaded.imageAsset.cloud.assetId) : null)
@@ -486,7 +610,27 @@ function ShotCard({
             previousVisibleMap: visibleBefore,
           })
         } else {
-          updateShotImage(shot.id, uploaded)
+          if (isCloudDebugEnabled()) {
+            const flow = shotTargetAuditRef.current || {}
+            // eslint-disable-next-line no-console
+            console.info('[SHOT_TARGET_AUDIT]', {
+              phase: 'upload_complete',
+              sourceComponent: 'ShotCard',
+              functionName: 'ShotCard:handleImageChange(cloud-upload-fallback)',
+              actionId: flow?.actionId || null,
+              targetShotIdAtCallback: String(shot.id),
+              originalInitiatingShotId: flow?.initiatingShotId || null,
+              targetShotChangedSinceStart: flow?.initiatingShotId
+                ? String(flow.initiatingShotId) !== String(shot.id)
+                : false,
+              assetIdSelected: null,
+            })
+          }
+          writeShotImageWithTargetAudit({
+            functionName: 'ShotCard:handleImageChange(cloud-upload-fallback)',
+            payload: uploaded,
+            assetId: uploaded?.imageAsset?.cloud?.assetId || null,
+          })
           const nextAssetId = uploaded?.imageAsset?.cloud?.assetId ? String(uploaded.imageAsset.cloud.assetId) : null
           auditShotImageAssignment({
             functionName: 'ShotCard:handleImageChange(cloud-upload-fallback)',
@@ -502,7 +646,27 @@ function ShotCard({
           fullLongEdge: 1600,
           quality: 0.84,
         })
-        updateShotImage(shot.id, processed)
+        if (isCloudDebugEnabled()) {
+          const flow = shotTargetAuditRef.current || {}
+          // eslint-disable-next-line no-console
+          console.info('[SHOT_TARGET_AUDIT]', {
+            phase: 'upload_complete',
+            sourceComponent: 'ShotCard',
+            functionName: 'ShotCard:handleImageChange(local-upload)',
+            actionId: flow?.actionId || null,
+            targetShotIdAtCallback: String(shot.id),
+            originalInitiatingShotId: flow?.initiatingShotId || null,
+            targetShotChangedSinceStart: flow?.initiatingShotId
+              ? String(flow.initiatingShotId) !== String(shot.id)
+              : false,
+            assetIdSelected: null,
+          })
+        }
+        writeShotImageWithTargetAudit({
+          functionName: 'ShotCard:handleImageChange(local-upload)',
+          payload: processed,
+          assetId: null,
+        })
         auditShotImageAssignment({
           functionName: 'ShotCard:handleImageChange(local-upload)',
           writeMode: 'local-only',
@@ -523,7 +687,7 @@ function ShotCard({
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, shot?.imageAsset?.cloud?.assetId, updateShotImage, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getSignedViewWithCache, auditShotImageAssignment])
+  }, [shot.id, shot?.imageAsset?.cloud?.assetId, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getSignedViewWithCache, auditShotImageAssignment, writeShotImageWithTargetAudit])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
