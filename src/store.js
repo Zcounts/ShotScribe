@@ -188,7 +188,15 @@ const OVERWRITE_REVERT_SEEN_KEY = '__SS_TRACE_REVERT_SEEN__'
 const OVERWRITE_TRACE_EVENT_NAME = '__SS_OVERWRITE_TRACE_EVENT__'
 
 function isOverwriteTraceEnabled() {
-  return import.meta.env.DEV
+  if (import.meta.env.DEV) return true
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssCloudDebug') === '1') return true
+    return window.localStorage?.getItem('ssCloudDebug') === '1'
+  } catch {
+    return false
+  }
 }
 
 function getCompactTraceStack() {

@@ -136,8 +136,20 @@ function isConvexDiagEnabled() {
   }
 }
 
+function isCloudDebugEnabled() {
+  if (import.meta.env.DEV) return true
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssCloudDebug') === '1') return true
+    return window.localStorage?.getItem('ssCloudDebug') === '1'
+  } catch {
+    return false
+  }
+}
+
 function emitCoordinatorOverwriteTrace(event, payload = {}) {
-  if (!import.meta.env.DEV) return
+  if (!isCloudDebugEnabled()) return
   const entry = {
     event,
     ts: new Date().toISOString(),
@@ -249,7 +261,7 @@ export default function CloudSyncCoordinator() {
   })
 
   useEffect(() => {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return
+    if (!isCloudDebugEnabled() || typeof window === 'undefined') return
     window[OVERWRITE_TRACE_HEAD_KEY] = latestSnapshotHead?.latestSnapshotId
       ? String(latestSnapshotHead.latestSnapshotId)
       : null
@@ -391,7 +403,7 @@ export default function CloudSyncCoordinator() {
   }, [])
 
   useEffect(() => {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return
+    if (!isCloudDebugEnabled() || typeof window === 'undefined') return
     const onTrace = (event) => {
       const entry = event?.detail || null
       if (!entry || entry.event !== 'STORYBOARD_REVERT_DETECTED') return
@@ -406,6 +418,24 @@ export default function CloudSyncCoordinator() {
     }
     window.addEventListener(OVERWRITE_TRACE_EVENT_NAME, onTrace)
     return () => window.removeEventListener(OVERWRITE_TRACE_EVENT_NAME, onTrace)
+  }, [captureFocusedOverwriteTrace])
+
+  useEffect(() => {
+    if (!isCloudDebugEnabled() || typeof window === 'undefined') return
+    window.__SS_OPEN_CLOUD_DEBUG_TRACE__ = () => {
+      setCloudDebugTracePayload((prev) => {
+        if (prev) return prev
+        return {
+          capturedAt: new Date().toISOString(),
+          trigger: { event: 'MANUAL_OPEN' },
+          focusedTrace: captureFocusedOverwriteTrace(),
+        }
+      })
+      setCloudDebugTraceOpen(true)
+    }
+    return () => {
+      try { delete window.__SS_OPEN_CLOUD_DEBUG_TRACE__ } catch {}
+    }
   }, [captureFocusedOverwriteTrace])
 
   const handleCopyCloudTrace = useCallback(async () => {
@@ -1442,7 +1472,7 @@ export default function CloudSyncCoordinator() {
     updateShotImage,
   ])
 
-  if (!import.meta.env.DEV) return null
+  if (!isCloudDebugEnabled()) return null
 
   return (
     <>

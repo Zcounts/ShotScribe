@@ -1,9 +1,9 @@
 # Cloud Overwrite Provenance Trace Instrumentation (2026-04-06)
 
 ## Purpose
-Temporary DEV-only tracing to identify the exact runtime caller/path that triggers storyboard overwrite/revert during cloud sync transitions.
+Temporary debug-enabled tracing to identify the exact runtime caller/path that triggers storyboard overwrite/revert during cloud sync transitions.
 
-## In-app viewer (DEV only)
+## In-app viewer (debug-enabled only)
 - When `STORYBOARD_REVERT_DETECTED` fires, the app now shows:
   - banner: **“Storyboard revert detected. Debug trace captured.”**
   - auto-open modal: **Cloud Debug Trace**
@@ -12,6 +12,13 @@ Temporary DEV-only tracing to identify the exact runtime caller/path that trigge
   - **Clear Trace**
   - **Close**
 - This removes the need to open DevTools just to access trace payloads.
+
+## Enabling cloud debug on deployed app
+- Option A: open app with query param:
+  - `https://app.shot-scribe.com/?ssCloudDebug=1`
+- Option B: set localStorage once, then refresh:
+  - `localStorage.setItem('ssCloudDebug', '1')`
+- Debug is also enabled automatically in local DEV builds.
 
 ## Trace buffer
 - Global buffer key: `window.__SS_OVERWRITE_TRACE__`
@@ -87,5 +94,5 @@ i > 0 ? t.slice(Math.max(0, i - 6), i + 1) : t.slice(-20)
 ```
 
 ## Notes
-- Instrumentation is trace-only and DEV-focused.
+- Instrumentation is trace-only and debug-flag focused.
 - No permanent bug fix is implemented in this pass.
