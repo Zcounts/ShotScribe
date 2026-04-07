@@ -865,6 +865,19 @@ export default function CloudSyncCoordinator() {
     modeLabelRef.current = nextLabel
   }, [cloudProjectId, heldCollaboratorMode, isSoloMode, otherCollaboratorCount])
 
+  const getVisibleShotIdsSharingAsset = useCallback((assetId, excludeShotId = null) => {
+    if (!assetId || typeof document === 'undefined' || typeof window === 'undefined') return []
+    const viewportHeight = window.innerHeight || 0
+    return Array.from(document.querySelectorAll('.shot-card[data-entity-type="shot"]'))
+      .filter((node) => {
+        const rect = node.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.top <= viewportHeight
+      })
+      .filter((node) => String(node.getAttribute('data-debug-asset-id') || '') === String(assetId))
+      .map((node) => String(node.getAttribute('data-entity-id') || ''))
+      .filter((id) => id && id !== String(excludeShotId || ''))
+  }, [])
+
   const applyLiveStoryboardSync = useCallback(async ({ projectId, scenes, storyboardSceneOrder }) => {
     const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
       ? liveSceneRowsRef.current
