@@ -1052,11 +1052,21 @@ export default function CloudSyncCoordinator() {
   }, [convex, deleteLiveScene, deleteLiveShot, lastStoryboardEditAt, lastStoryboardEditedShotId, upsertLiveScene, upsertLiveShot])
 
   const flushPendingLiveStoryboardSync = useCallback(async ({ force = false } = {}) => {
+    if (liveSyncFlushInFlightRef.current) {
+      // A write is already in flight. Preserve the debounce timer (or re-arm it at
+      // a short interval) so the pending payload is not orphaned — it will flush
+      // once the in-flight write completes and clears liveSyncFlushInFlightRef.
+      if (pendingLiveSyncRef.current && !soloLiveSyncTimerRef.current) {
+        soloLiveSyncTimerRef.current = window.setTimeout(() => {
+          flushPendingLiveStoryboardSync({ force: true })
+        }, 100)
+      }
+      return
+    }
     if (soloLiveSyncTimerRef.current) {
       window.clearTimeout(soloLiveSyncTimerRef.current)
       soloLiveSyncTimerRef.current = null
     }
-    if (liveSyncFlushInFlightRef.current) return
     const pending = pendingLiveSyncRef.current
     if (!pending) return
     if (!force && soloModeRef.current && Date.now() - Number(pending.enqueuedAt || 0) < SOLO_LIVE_SYNC_DEBOUNCE_MS) return
