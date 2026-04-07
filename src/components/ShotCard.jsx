@@ -156,6 +156,20 @@ function sanitizeNumericInput(value) {
   return `${integerPart}${decimalPart}`
 }
 
+function resolveLibraryPreviewSrc(assetView, asset) {
+  if (assetView?.thumbUrl) return assetView.thumbUrl
+  if (assetView?.fullUrl) return assetView.fullUrl
+  if (asset?.thumbUrl) return asset.thumbUrl
+  if (asset?.previewUrl) return asset.previewUrl
+  if (asset?.thumbnailUrl) return asset.thumbnailUrl
+  if (asset?.localUrl) return asset.localUrl
+  if (asset?.meta?.thumbUrl) return asset.meta.thumbUrl
+  if (asset?.meta?.previewUrl) return asset.meta.previewUrl
+  if (asset?.meta?.thumbnailUrl) return asset.meta.thumbnailUrl
+  if (asset?.meta?.thumbDataUrl) return asset.meta.thumbDataUrl
+  return null
+}
+
 function ShotCard({
   shot,
   displayId,
@@ -187,6 +201,7 @@ function ShotCard({
   const [cloudAssetView, setCloudAssetView] = useState(null)
   const [imagePickerStep, setImagePickerStep] = useState(null)
   const [libraryAssetViews, setLibraryAssetViews] = useState({})
+  const [libraryPreviewFailures, setLibraryPreviewFailures] = useState({})
   const [isLoadingLibraryViews, setIsLoadingLibraryViews] = useState(false)
   const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
   const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
@@ -276,6 +291,15 @@ function ShotCard({
         || !Array.isArray(libraryAssets)
         || libraryAssets.length === 0
       ) return
+      const now = Date.now()
+      const cachedViews = {}
+      for (const asset of libraryAssets) {
+        const assetId = String(asset?.assetId || '')
+        if (!assetId) continue
+        const cached = getCachedSignedViewFromCache(assetId, { now })
+        if (cached) cachedViews[assetId] = cached
+      }
+      if (!cancelled) setLibraryAssetViews(cachedViews)
       setIsLoadingLibraryViews(true)
       try {
         const views = await getOrCreateSignedViewsBatchRequest({
@@ -298,6 +322,11 @@ function ShotCard({
       cancelled = true
     }
   }, [cloudAssetBlocked, cloudProjectId, getAssetSignedViewsBatch, imagePickerStep, libraryAssets])
+
+  useEffect(() => {
+    if (imagePickerStep !== 'library') return
+    setLibraryPreviewFailures({})
+  }, [imagePickerStep])
 
   useEffect(() => {
     if (!isCloudDebugEnabled()) return
@@ -1157,9 +1186,11 @@ function ShotCard({
               ) : (
                 (libraryAssets || []).map((asset) => {
                   const assetView = libraryAssetViews?.[String(asset.assetId)] || null
-                  const previewSrc = assetView?.thumbUrl || assetView?.fullUrl || null
+                  const assetId = String(asset.assetId)
+                  const previewSrc = resolveLibraryPreviewSrc(assetView, asset)
+                  const previewFailed = Boolean(libraryPreviewFailures?.[assetId])
                   return (
-                    <div key={String(asset.assetId)} className="shot-library-picker-card">
+                    <div key={assetId} className="shot-library-picker-card">
                       <button
                         type="button"
                         disabled={isAssigningFromLibrary}
@@ -1167,8 +1198,20 @@ function ShotCard({
                         onClick={() => assignLibraryAssetToShot(asset.assetId)}
                       >
                         <div className="shot-library-picker-thumb">
-                          {previewSrc ? (
-                            <img src={previewSrc} alt={asset.sourceName || 'Library image preview'} loading="lazy" decoding="async" />
+                          {previewSrc && !previewFailed ? (
+                            <img
+                              src={previewSrc}
+                              alt={asset.sourceName || 'Library image preview'}
+                              loading="lazy"
+                              decoding="async"
+                              onError={() => {
+                                setLibraryPreviewFailures((current) => (
+                                  current?.[assetId]
+                                    ? current
+                                    : { ...current, [assetId]: true }
+                                ))
+                              }}
+                            />
                           ) : (
                             <div className="shot-library-picker-thumb-fallback">
                               {isLoadingLibraryViews ? 'Loading preview…' : 'No preview'}
