@@ -49,6 +49,9 @@ const TRACE_EVENT_FILTER = new Set([
   'SHOTCARD_IMG_LOAD',
   'SHOTCARD_IMG_ERROR',
   'SHOTCARD_IMG_UNMOUNT',
+  'SHOTCARD_DUPLICATE_ASSET_ID_VISIBLE',
+  'SHOTCARD_DUPLICATE_DISPLAY_SRC_VISIBLE',
+  'SHOTCARD_VISIBLE_SNAPSHOT_SYNC_STATUS',
   'STORYBOARD_REVERT_DETECTED',
 ])
 
@@ -355,6 +358,7 @@ export default function CloudSyncCoordinator() {
   const cloudAccessPolicy = useCloudAccessPolicy({ projectRole: cloudProject?.currentUserRole || null })
   const setLiveModelVersion = useStore(s => s.setLiveModelVersion)
   const applyLiveStoryboardState = useStore(s => s.applyLiveStoryboardState)
+  const saveSyncState = useStore(s => s.saveSyncState)
 
   // Guard so the sessionStorage restore runs at most once per mount, even if
   // the adapter effect re-fires due to dependency changes.
@@ -379,10 +383,13 @@ export default function CloudSyncCoordinator() {
   const loggedDeferredScenesRef = useRef(false)
   const loggedDeferredShotsRef = useRef(false)
   const collaboratorSeenInSessionRef = useRef(false)
+  const prevSyncStatusRef = useRef(null)
+  const preCloudReadySnapshotRef = useRef(null)
   const [cloudDebugTraceOpen, setCloudDebugTraceOpen] = useState(false)
   const [cloudDebugTraceNotice, setCloudDebugTraceNotice] = useState('')
   const [cloudDebugTracePayload, setCloudDebugTracePayload] = useState(null)
   const [copyTraceStatus, setCopyTraceStatus] = useState('')
+  const [visibleShotCardSyncSnapshot, setVisibleShotCardSyncSnapshot] = useState(null)
 
   const captureFocusedOverwriteTrace = useCallback((triggerEntry = null) => {
     if (typeof window === 'undefined') return []
@@ -429,24 +436,33 @@ export default function CloudSyncCoordinator() {
     const related = rows
       .filter((entry) => renderLifecycleEvents.has(String(entry?.event || '')))
       .filter((entry) => triggerShotIds.has(String(entry?.shotId || '')))
-      .slice(-120)
+      .slice(-20)
       .map((entry, idx) => ({
         seq: idx + 1,
         ts: entry?.ts || null,
         event: entry?.event || null,
         shotId: entry?.shotId ? String(entry.shotId) : null,
+        reactKey: entry?.reactKey || null,
+        sceneId: entry?.sceneId || null,
         sourceReason: entry?.sourceReason || null,
         finalDisplaySrc: entry?.finalDisplaySrc || null,
         currentSrc: entry?.currentSrc || entry?.nextCurrentSrc || null,
+        imgSrc: entry?.imgSrc || entry?.nextImgSrc || null,
+        loadState: entry?.loadState || null,
         prevSourceReason: entry?.prevSourceReason || null,
         nextSourceReason: entry?.nextSourceReason || null,
         prevFinalDisplaySrc: entry?.prevFinalDisplaySrc || null,
         nextFinalDisplaySrc: entry?.nextFinalDisplaySrc || null,
         prevCurrentSrc: entry?.prevCurrentSrc || null,
         nextCurrentSrc: entry?.nextCurrentSrc || null,
+        prevImgSrc: entry?.prevImgSrc || null,
+        nextImgSrc: entry?.nextImgSrc || null,
         prevAssetId: entry?.prevAssetId || null,
         nextAssetId: entry?.nextAssetId || entry?.assetId || null,
         assetIdChanged: entry?.assetIdChanged ?? null,
+        finalDisplaySrcChanged: entry?.finalDisplaySrcChanged ?? null,
+        domNodeIdentityChanged: entry?.domNodeIdentityChanged ?? null,
+        domNodeId: entry?.domNodeId || entry?.nextDomNodeId || null,
         signedUrlChurnOnly: entry?.signedUrlChurnOnly ?? null,
       }))
     return {
@@ -455,6 +471,116 @@ export default function CloudSyncCoordinator() {
       relatedRenderLifecycleEvents: related,
     }
   }, [])
+
+  const captureVisibleShotCardsSnapshot = useCallback((label) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return []
+    const nodes = Array.from(document.querySelectorAll('.shot-card[data-entity-type="shot"]'))
+    const viewportHeight = window.innerHeight || 0
+    const rows = nodes.map((node) => {
+      const rect = node.getBoundingClientRect()
+      const isVisible = rect.width > 0
+        && rect.height > 0
+        && rect.bottom >= 0
+        && rect.top <= viewportHeight
+      if (!isVisible) return null
+      const shotId = String(node.getAttribute('data-entity-id') || '')
+      const img = node.querySelector('.image-placeholder img')
+      return {
+        shotId: shotId || null,
+        reactKey: node.getAttribute('data-debug-react-key') || null,
+        sceneId: node.getAttribute('data-debug-scene-id') || null,
+        assetId: node.getAttribute('data-debug-asset-id') || null,
+        sourceReason: node.getAttribute('data-debug-source-reason') || null,
+        finalDisplaySrc: node.getAttribute('data-debug-final-display-src') || null,
+        currentSrc: node.getAttribute('data-debug-current-src') || null,
+        loadState: node.getAttribute('data-debug-load-state') || null,
+        imgSrc: img?.src || null,
+        imageComplete: img ? Boolean(img.complete) : false,
+        naturalWidth: img?.naturalWidth ?? null,
+        naturalHeight: img?.naturalHeight ?? null,
+        rect: { top: Math.round(rect.top), left: Math.round(rect.left), width: Math.round(rect.width), height: Math.round(rect.height) },
+      }
+    }).filter(Boolean)
+    emitCoordinatorOverwriteTrace('SHOTCARD_VISIBLE_SNAPSHOT_SYNC_STATUS', {
+      sourceLabel: 'sync_status_transition',
+      functionName: 'CloudSyncCoordinator:captureVisibleShotCardsSnapshot',
+      snapshotLabel: label,
+      syncStatus: saveSyncState?.status || null,
+      visibleCards: rows,
+    })
+    return rows
+  }, [saveSyncState?.status])
+
+  const emitVisibleDuplicateWarnings = useCallback((rows = []) => {
+    if (!Array.isArray(rows) || rows.length < 2) return
+    const byAssetId = new Map()
+    const byDisplaySrc = new Map()
+    rows.forEach((row) => {
+      const shotId = String(row?.shotId || '')
+      const assetId = String(row?.assetId || '')
+      const finalDisplaySrc = String(row?.finalDisplaySrc || '')
+      if (shotId && assetId && assetId !== '—') {
+        const list = byAssetId.get(assetId) || []
+        list.push(shotId)
+        byAssetId.set(assetId, list)
+      }
+      if (shotId && finalDisplaySrc && finalDisplaySrc !== '—') {
+        const list = byDisplaySrc.get(finalDisplaySrc) || []
+        list.push(shotId)
+        byDisplaySrc.set(finalDisplaySrc, list)
+      }
+    })
+    byAssetId.forEach((shotIds, assetId) => {
+      if (shotIds.length < 2) return
+      emitCoordinatorOverwriteTrace('SHOTCARD_DUPLICATE_ASSET_ID_VISIBLE', {
+        sourceLabel: 'visible_shotcard_scan',
+        functionName: 'CloudSyncCoordinator:emitVisibleDuplicateWarnings',
+        assetId,
+        shotIds,
+      })
+    })
+    byDisplaySrc.forEach((shotIds, finalDisplaySrc) => {
+      if (shotIds.length < 2) return
+      emitCoordinatorOverwriteTrace('SHOTCARD_DUPLICATE_DISPLAY_SRC_VISIBLE', {
+        sourceLabel: 'visible_shotcard_scan',
+        functionName: 'CloudSyncCoordinator:emitVisibleDuplicateWarnings',
+        finalDisplaySrc,
+        shotIds,
+      })
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isCloudDebugEnabled()) return
+    const rows = captureVisibleShotCardsSnapshot('periodic_scan')
+    emitVisibleDuplicateWarnings(rows)
+    const id = window.setInterval(() => {
+      const nextRows = captureVisibleShotCardsSnapshot('periodic_scan')
+      emitVisibleDuplicateWarnings(nextRows)
+    }, 2500)
+    return () => window.clearInterval(id)
+  }, [captureVisibleShotCardsSnapshot, emitVisibleDuplicateWarnings])
+
+  useEffect(() => {
+    if (!isCloudDebugEnabled()) return
+    const prevStatus = String(prevSyncStatusRef.current || '')
+    const nextStatus = String(saveSyncState?.status || '')
+    if (prevStatus !== 'syncing_to_cloud' && nextStatus === 'syncing_to_cloud') {
+      preCloudReadySnapshotRef.current = captureVisibleShotCardsSnapshot('before_cloud_backup_ready')
+    }
+    if (prevStatus === 'syncing_to_cloud' && nextStatus === 'synced_to_cloud') {
+      const beforeRows = preCloudReadySnapshotRef.current || captureVisibleShotCardsSnapshot('before_cloud_backup_ready_fallback')
+      const afterRows = captureVisibleShotCardsSnapshot('after_cloud_backup_ready')
+      emitVisibleDuplicateWarnings(afterRows)
+      setVisibleShotCardSyncSnapshot({
+        capturedAt: new Date().toISOString(),
+        transition: `${prevStatus} -> ${nextStatus}`,
+        before: beforeRows,
+        after: afterRows,
+      })
+    }
+    prevSyncStatusRef.current = nextStatus
+  }, [captureVisibleShotCardsSnapshot, emitVisibleDuplicateWarnings, saveSyncState?.status])
 
   useEffect(() => {
     if (!isCloudDebugEnabled() || typeof window === 'undefined') return
@@ -509,6 +635,7 @@ export default function CloudSyncCoordinator() {
       window[OVERWRITE_REVERT_SEEN_KEY] = new Set()
     }
     setCloudDebugTracePayload(null)
+    setVisibleShotCardSyncSnapshot(null)
     setCloudDebugTraceNotice('Cloud debug trace cleared.')
     setCopyTraceStatus('')
   }, [])
@@ -1583,6 +1710,53 @@ export default function CloudSyncCoordinator() {
               </div>
             </div>
             {copyTraceStatus ? <div style={{ marginBottom: 8, fontSize: 12 }}>{copyTraceStatus}</div> : null}
+            {visibleShotCardSyncSnapshot ? (
+              <div
+                style={{
+                  marginBottom: 12,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 8,
+                  padding: 10,
+                  background: '#0d1118',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Visible ShotCard Snapshot Around Sync Transition</div>
+                <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 8 }}>
+                  {visibleShotCardSyncSnapshot.transition} @ {visibleShotCardSyncSnapshot.capturedAt}
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 12, marginBottom: 4 }}>Before</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 11, lineHeight: 1.35 }}>
+                      {JSON.stringify(visibleShotCardSyncSnapshot.before || [], null, 2)}
+                    </pre>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, marginBottom: 4 }}>After</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 11, lineHeight: 1.35 }}>
+                      {JSON.stringify(visibleShotCardSyncSnapshot.after || [], null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {Array.isArray(cloudDebugTracePayload?.focusedTrace?.relatedRenderLifecycleEvents)
+              && cloudDebugTracePayload.focusedTrace.relatedRenderLifecycleEvents.length ? (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 8,
+                    padding: 10,
+                    background: '#0d1118',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last 20 Render Events (Affected ShotIds)</div>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 11, lineHeight: 1.35 }}>
+                    {JSON.stringify(cloudDebugTracePayload.focusedTrace.relatedRenderLifecycleEvents, null, 2)}
+                  </pre>
+                </div>
+              ) : null}
             <pre
               style={{
                 margin: 0,

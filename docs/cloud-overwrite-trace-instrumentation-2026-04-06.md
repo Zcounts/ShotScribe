@@ -38,6 +38,9 @@ Temporary debug-enabled tracing to identify the exact runtime caller/path that t
 - `SHOTCARD_IMG_LOAD`
 - `SHOTCARD_IMG_ERROR`
 - `SHOTCARD_IMG_UNMOUNT`
+- `SHOTCARD_DUPLICATE_ASSET_ID_VISIBLE`
+- `SHOTCARD_DUPLICATE_DISPLAY_SRC_VISIBLE`
+- `SHOTCARD_VISIBLE_SNAPSHOT_SYNC_STATUS`
 - `STORYBOARD_REVERT_DETECTED`
 
 ## Instrumented source labels
