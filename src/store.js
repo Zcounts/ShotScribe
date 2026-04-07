@@ -213,6 +213,7 @@ function getShotImageMapFromScenes(scenes = []) {
       map.set(shotId, {
         image: shot?.image || null,
         thumb: shot?.imageAsset?.thumb || null,
+        assetId: shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null,
       })
     })
   })
@@ -225,19 +226,44 @@ function summarizeShotImageDiff(beforeScenes = [], afterScenes = []) {
   const allIds = new Set([...beforeMap.keys(), ...afterMap.keys()])
   const imageChanged = []
   const imageAssetChanged = []
+  const assetIdChanged = []
+  const potentialRegressionShotIds = []
   const thumbSamples = []
   for (const shotId of allIds) {
-    const before = beforeMap.get(shotId) || { image: null, thumb: null }
-    const after = afterMap.get(shotId) || { image: null, thumb: null }
+    const before = beforeMap.get(shotId) || { image: null, thumb: null, assetId: null }
+    const after = afterMap.get(shotId) || { image: null, thumb: null, assetId: null }
+    const beforeHasUsableImage = Boolean(
+      (typeof before.image === 'string' && before.image.trim())
+      || (typeof before.thumb === 'string' && before.thumb.trim())
+      || (typeof before.assetId === 'string' && before.assetId.trim()),
+    )
+    const afterHasUsableImage = Boolean(
+      (typeof after.image === 'string' && after.image.trim())
+      || (typeof after.thumb === 'string' && after.thumb.trim())
+      || (typeof after.assetId === 'string' && after.assetId.trim()),
+    )
     if (before.image !== after.image) imageChanged.push(shotId)
     if (before.thumb !== after.thumb) imageAssetChanged.push(shotId)
-    if (thumbSamples.length < 5 && (before.image !== after.image || before.thumb !== after.thumb)) {
+    if (before.assetId !== after.assetId) assetIdChanged.push(shotId)
+    const possibleRegression = beforeHasUsableImage
+      && (
+        !afterHasUsableImage
+        || before.assetId !== after.assetId
+        || (before.assetId === after.assetId && before.thumb !== after.thumb && before.image !== after.image)
+      )
+    if (possibleRegression) potentialRegressionShotIds.push(shotId)
+    if (thumbSamples.length < 5 && (before.image !== after.image || before.thumb !== after.thumb || before.assetId !== after.assetId)) {
       thumbSamples.push({
         shotId,
         beforeImage: before.image,
         afterImage: after.image,
         beforeThumb: before.thumb,
         afterThumb: after.thumb,
+        beforeAssetId: before.assetId,
+        afterAssetId: after.assetId,
+        beforeHasUsableImage,
+        afterHasUsableImage,
+        possibleRegression,
       })
     }
   }
@@ -246,6 +272,10 @@ function summarizeShotImageDiff(beforeScenes = [], afterScenes = []) {
     imageAssetChangedCount: imageAssetChanged.length,
     imageChangedShotIds: imageChanged.slice(0, 10),
     imageAssetChangedShotIds: imageAssetChanged.slice(0, 10),
+    assetIdChangedCount: assetIdChanged.length,
+    assetIdChangedShotIds: assetIdChanged.slice(0, 10),
+    potentialRegressionCount: potentialRegressionShotIds.length,
+    potentialRegressionShotIds: potentialRegressionShotIds.slice(0, 10),
     thumbSamples,
   }
 }
@@ -290,11 +320,11 @@ function getOverwriteStateContext(state = {}, extra = {}) {
 
 function maybeEmitStoryboardRevertDetected({ diff, sourceLabel, stateContext, stack }) {
   if (!isOverwriteTraceEnabled()) return
-  if (!diff?.imageChangedCount && !diff?.imageAssetChangedCount) return
+  if (!diff?.potentialRegressionCount) return
   const shouldFlag = String(stateContext?.syncStatus || '') === 'synced_to_cloud'
     || Boolean(stateContext?.lastAckedSnapshotId)
   if (!shouldFlag) return
-  const signature = `${sourceLabel}|${diff.imageChangedShotIds.join(',')}|${diff.imageAssetChangedShotIds.join(',')}`
+  const signature = `${sourceLabel}|${diff.potentialRegressionShotIds.join(',')}`
   if (typeof window !== 'undefined') {
     const seen = window[OVERWRITE_REVERT_SEEN_KEY] instanceof Set
       ? window[OVERWRITE_REVERT_SEEN_KEY]
@@ -305,9 +335,11 @@ function maybeEmitStoryboardRevertDetected({ diff, sourceLabel, stateContext, st
   }
   emitOverwriteTrace('STORYBOARD_REVERT_DETECTED', {
     sourceLabel,
-    changedShotIds: Array.from(new Set([...(diff.imageChangedShotIds || []), ...(diff.imageAssetChangedShotIds || [])])).slice(0, 10),
+    changedShotIds: diff.potentialRegressionShotIds || [],
     imageChangedCount: diff.imageChangedCount,
     imageAssetChangedCount: diff.imageAssetChangedCount,
+    assetIdChangedCount: diff.assetIdChangedCount,
+    potentialRegressionCount: diff.potentialRegressionCount,
     thumbSamples: diff.thumbSamples,
     stack,
     ...stateContext,

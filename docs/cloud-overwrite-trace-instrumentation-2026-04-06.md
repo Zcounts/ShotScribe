@@ -32,6 +32,7 @@ Temporary debug-enabled tracing to identify the exact runtime caller/path that t
 - `LOAD_PROJECT_EXIT`
 - `SHOT_IMAGE_DIFF_BEFORE_APPLY`
 - `SHOT_IMAGE_DIFF_AFTER_APPLY`
+- `STORYBOARD_RENDER_SOURCE`
 - `STORYBOARD_REVERT_DETECTED`
 
 ## Instrumented source labels
