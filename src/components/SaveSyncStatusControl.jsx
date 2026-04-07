@@ -41,6 +41,18 @@ function memberInitials(member) {
   return initials || 'U'
 }
 
+function isCloudDebugEnabled() {
+  if (import.meta.env.DEV) return true
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssCloudDebug') === '1') return true
+    return window.localStorage?.getItem('ssCloudDebug') === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function SaveSyncStatusControl({
   cloudAccessPolicy,
   onEnableCloudBackup,
@@ -163,6 +175,7 @@ export default function SaveSyncStatusControl({
   const modeLabel = isCloudProject ? 'Cloud Backup' : 'Local Only'
   const canEnableCloudBackup = !isCloudProject && cloudAccessPolicy?.paidCloudAccess && signedInForCloud && cloudRepositoryReady
   const canSaveToCloudNow = isCloudProject && cloudAccessPolicy?.canEditCloudProject
+  const cloudDebugEnabled = useMemo(() => isCloudDebugEnabled(), [])
 
   const currentStatus = useMemo(() => {
     if (!isCloudProject) return 'Saved locally'
@@ -366,6 +379,19 @@ export default function SaveSyncStatusControl({
                 </button>
               </>
             )}
+            {cloudDebugEnabled ? (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.__SS_OPEN_CLOUD_DEBUG_TRACE__?.()
+                  } catch {}
+                }}
+                style={{ border: '1px solid rgba(148,163,184,0.45)', background: 'rgba(51,65,85,0.34)', color: '#E2E8F0', borderRadius: 6, fontSize: 11, padding: '5px 9px', cursor: 'pointer' }}
+              >
+                Cloud Debug
+              </button>
+            ) : null}
           </div>
 
           {pendingRemoteSnapshot ? (
