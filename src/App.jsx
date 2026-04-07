@@ -120,16 +120,6 @@ function getOutlineItemStyle(color, isActive = false) {
   }
 }
 
-function isForcePersistReorderEnabled() {
-  if (typeof window === 'undefined') return false
-  try {
-    const params = new URLSearchParams(window.location?.search || '')
-    if (params.get('ssForcePersistReorder') === '1') return true
-    return window.localStorage?.getItem('ssForcePersistReorder') === '1'
-  } catch {
-    return false
-  }
-}
 
 function isCloudDebugEnabledApp() {
   if (import.meta.env.DEV) return true
@@ -879,51 +869,35 @@ export default function App() {
     }
     if (activeShot.sceneId === overShot.sceneId) {
       reorderShots(activeShot.sceneId, active.id, over.id)
-      if (projectRef?.type === 'cloud' && isForcePersistReorderEnabled()) {
+      if (projectRef?.type === 'cloud') {
         window.setTimeout(() => {
           const state = useStore.getState()
           const scenesNow = state.getStoryboardScenes()
           const projectId = state.projectRef?.projectId
           if (!projectId || !state?.cloudSyncContext?.syncLiveStoryboardState) return
-          const orderedShots = scenesNow.flatMap((scene) =>
-            (scene?.shots || []).map((shot, index) => ({ shotId: String(shot.id), sceneId: String(scene.id), order: index })),
-          )
-          // eslint-disable-next-line no-console
-          console.info('[SHOT_REORDER_AUDIT]', {
-            phase: 'force_persist_reorder',
-            projectId: String(projectId),
-            writtenShots: orderedShots,
-          })
           state.cloudSyncContext.syncLiveStoryboardState({
             projectId,
             scenes: scenesNow,
             storyboardSceneOrder: state.storyboardSceneOrder || [],
           })
+          state.cloudSyncContext.flushLiveStoryboardSync?.()
         }, 0)
       }
       return
     }
     moveShotToScene(active.id, overShot.sceneId, { beforeShotId: over.id })
-    if (projectRef?.type === 'cloud' && isForcePersistReorderEnabled()) {
+    if (projectRef?.type === 'cloud') {
       window.setTimeout(() => {
         const state = useStore.getState()
         const scenesNow = state.getStoryboardScenes()
         const projectId = state.projectRef?.projectId
         if (!projectId || !state?.cloudSyncContext?.syncLiveStoryboardState) return
-        const orderedShots = scenesNow.flatMap((scene) =>
-          (scene?.shots || []).map((shot, index) => ({ shotId: String(shot.id), sceneId: String(scene.id), order: index })),
-        )
-        // eslint-disable-next-line no-console
-        console.info('[SHOT_REORDER_AUDIT]', {
-          phase: 'force_persist_reorder',
-          projectId: String(projectId),
-          writtenShots: orderedShots,
-        })
         state.cloudSyncContext.syncLiveStoryboardState({
           projectId,
           scenes: scenesNow,
           storyboardSceneOrder: state.storyboardSceneOrder || [],
         })
+        state.cloudSyncContext.flushLiveStoryboardSync?.()
       }, 0)
     }
   }, [moveShotToScene, projectRef?.type, reorderShots, storyboardShotsWithIds])
