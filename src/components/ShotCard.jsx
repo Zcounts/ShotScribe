@@ -211,42 +211,11 @@ function ShotCard({
     }
   }, [cloudAssetBlocked, cloudProjectId, getAssetSignedViewsBatch, imagePickerStep, libraryAssets])
 
-<<<<<<< claude/cleanup-storyboard-fix-GxCIc
-=======
   useEffect(() => {
     if (imagePickerStep !== 'library') return
     setLibraryPreviewFailures({})
   }, [imagePickerStep])
 
-  useEffect(() => {
-    if (!isCloudDebugEnabled()) return
-    if (!imagePickerStep) return
-    const flow = shotTargetAuditRef.current || {}
-    // eslint-disable-next-line no-console
-    console.info('[SHOT_TARGET_AUDIT]', {
-      phase: 'picker_open',
-      sourceComponent: 'ShotCard',
-      actionId: flow?.actionId || null,
-      actionLabel: flow?.actionLabel || null,
-      modalStep: imagePickerStep,
-      targetShotId: String(shot.id),
-      targetSceneId: sceneId ? String(sceneId) : null,
-      initiatingShotId: flow?.initiatingShotId || null,
-      initiatingSceneId: flow?.initiatingSceneId || null,
-    })
-  }, [imagePickerStep, sceneId, shot.id])
-
-  useEffect(() => {
-    if (!isCloudDebugEnabled()) return
-    // eslint-disable-next-line no-console
-    console.info('[SHOTCARD_DEBUG_MOUNT]', { shotId: String(shot.id), sceneId: sceneId ? String(sceneId) : null })
-    return () => {
-      // eslint-disable-next-line no-console
-      console.info('[SHOTCARD_DEBUG_UNMOUNT]', { shotId: String(shot.id), sceneId: sceneId ? String(sceneId) : null })
-    }
-  }, [sceneId, shot.id])
-
->>>>>>> main
   const {
     attributes,
     listeners,
