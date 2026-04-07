@@ -290,3 +290,15 @@ ShotScribe mobile now supports **two explicit workflows**:
 - Follow-up UI correction (April 4, 2026): **Page & Styles** now uses a compact icon-led inspector with only `Page` and `Paragraph` tabs (no `All` tab), while preserving existing field behavior/data flow.
 - Scene sync fix (April 4, 2026): manual screenplay edits now split screenplay blocks by slugline headings and sync persisted `scriptScenes` so the Scenes tab stays aligned with Script tab sluglines. Import behavior remains unchanged.
 - Caret navigation fix (April 6, 2026): in the unified Script editor, `ArrowRight` now moves from a block end to the next block start, and `ArrowLeft` moves from a block start to the previous block end (without changing Enter/Tab/Undo behavior).
+
+## Launch UX priorities checklist (operator-facing)
+
+Use this checklist when reviewing release candidates to keep product behavior aligned with public-beta priorities:
+
+- Save state is always obvious (clear status text for local saves and cloud sync state).
+- Local vs cloud behavior is clearly labeled in editing surfaces and project-level actions.
+- Local-first editing remains reliable even when cloud services are unavailable.
+- Paid cloud workflows preserve desktop → mobile → desktop continuity without data loss.
+- Mobile shot status updates reliably round-trip back to cloud projects and desktop views.
+
+This checklist is intentionally lightweight and release-focused so teams can run quick smoke checks before SiteGround artifact uploads.
