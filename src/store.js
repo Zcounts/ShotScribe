@@ -4412,22 +4412,45 @@ const useStore = create((set, get) => ({
       overwritePathLabel: sourceLabel,
       stack,
     }))
+    const existingShotsById = new Map(
+      (beforeState?.scenes || []).flatMap((scene) =>
+        (scene?.shots || []).map((shot) => [String(shot?.id || ''), shot])
+      ).filter(([shotId]) => shotId),
+    )
+    const lastLocalStoryboardEditAt = Number(beforeState?.lastStoryboardEditAt || 0)
+
+    const incomingHasUsableImagePayload = (liveShot) => {
+      if (!liveShot || typeof liveShot !== 'object') return false
+      if (typeof liveShot.image === 'string' && liveShot.image.trim()) return true
+      if (typeof liveShot?.imageAsset?.thumb === 'string' && liveShot.imageAsset.thumb.trim()) return true
+      if (typeof liveShot?.imageAsset?.cloud?.assetId === 'string' && liveShot.imageAsset.cloud.assetId.trim()) return true
+      return false
+    }
+
     const shotsByScene = new Map()
     shots
       .slice()
       .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
       .forEach((shot) => {
         const sceneId = String(shot.sceneId || '')
+        const shotId = String(shot.shotId || '')
         if (!sceneId) return
         if (!shotsByScene.has(sceneId)) shotsByScene.set(sceneId, [])
         const customFields = (shot.customFields && typeof shot.customFields === 'object') ? shot.customFields : {}
+        const existingShot = existingShotsById.get(shotId)
+        const incomingUpdatedAt = Number(shot?.updatedAt || 0)
+        const incomingIsOlderThanLatestLocalEdit = incomingUpdatedAt > 0 && incomingUpdatedAt < lastLocalStoryboardEditAt
+        const shouldPreserveExistingImage = Boolean(existingShot)
+          && (!incomingHasUsableImagePayload(shot) || incomingIsOlderThanLatestLocalEdit)
+        const nextImage = shouldPreserveExistingImage ? (existingShot?.image || null) : (shot.image || null)
+        const nextImageAsset = shouldPreserveExistingImage ? (existingShot?.imageAsset || null) : (shot.imageAsset || null)
         shotsByScene.get(sceneId).push({
-          id: shot.shotId,
+          id: shotId,
           cameraName: shot.cameraName || 'Camera 1',
           focalLength: shot.focalLength || '',
           color: shot.color || null,
-          image: shot.image || null,
-          imageAsset: shot.imageAsset || null,
+          image: nextImage,
+          imageAsset: nextImageAsset,
           specs: shot.specs || { size: '', type: '', move: '', equip: '' },
           notes: shot.notes || '',
           subject: shot.subject || '',

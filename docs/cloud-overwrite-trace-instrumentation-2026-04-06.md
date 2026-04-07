@@ -96,3 +96,8 @@ i > 0 ? t.slice(Math.max(0, i - 6), i + 1) : t.slice(-20)
 ## Notes
 - Instrumentation is trace-only and debug-flag focused.
 - No permanent bug fix is implemented in this pass.
+
+## Follow-up finding and scoped fix (2026-04-07)
+- Confirmed overwrite source path: `live_storyboard_subscription_apply` -> `applyLiveStoryboardState`.
+- `pendingRemoteSnapshot` replay was not the active overwrite path at revert time.
+- Scoped mitigation in `applyLiveStoryboardState` now preserves existing shot `image` / `imageAsset` when incoming live row image payload is empty or older than the latest local storyboard edit timestamp.
