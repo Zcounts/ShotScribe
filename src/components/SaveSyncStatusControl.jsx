@@ -81,7 +81,9 @@ export default function SaveSyncStatusControl({
   const [shareBusy, setShareBusy] = useState(false)
   const [shareMessage, setShareMessage] = useState('')
   const [seededMembersResult, setSeededMembersResult] = useState(null)
+  const [debugToast, setDebugToast] = useState('')
   const panelRef = useRef(null)
+  const debugStartupLoggedRef = useRef(false)
 
   const isCloudProject = projectRef?.type === 'cloud'
   const projectId = isCloudProject ? projectRef.projectId : null
@@ -176,6 +178,15 @@ export default function SaveSyncStatusControl({
   const canEnableCloudBackup = !isCloudProject && cloudAccessPolicy?.paidCloudAccess && signedInForCloud && cloudRepositoryReady
   const canSaveToCloudNow = isCloudProject && cloudAccessPolicy?.canEditCloudProject
   const cloudDebugEnabled = useMemo(() => isCloudDebugEnabled(), [])
+  const debugBuildFingerprint = useMemo(() => 'dbg-2026-04-07-shotcard-sanity', [])
+
+  useEffect(() => {
+    if (!cloudDebugEnabled) return
+    if (debugStartupLoggedRef.current) return
+    debugStartupLoggedRef.current = true
+    // eslint-disable-next-line no-console
+    console.info('[SS_CLOUD_DEBUG_ENABLED]', { href: window.location.href })
+  }, [cloudDebugEnabled])
 
   const currentStatus = useMemo(() => {
     if (!isCloudProject) return 'Saved locally'
@@ -380,19 +391,41 @@ export default function SaveSyncStatusControl({
               </>
             )}
             {cloudDebugEnabled ? (
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    window.__SS_OPEN_CLOUD_DEBUG_TRACE__?.()
-                  } catch {}
-                }}
-                style={{ border: '1px solid rgba(148,163,184,0.45)', background: 'rgba(51,65,85,0.34)', color: '#E2E8F0', borderRadius: 6, fontSize: 11, padding: '5px 9px', cursor: 'pointer' }}
-              >
-                Cloud Debug
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.__SS_OPEN_CLOUD_DEBUG_TRACE__?.()
+                    } catch {}
+                  }}
+                  style={{ border: '1px solid rgba(148,163,184,0.45)', background: 'rgba(51,65,85,0.34)', color: '#E2E8F0', borderRadius: 6, fontSize: 11, padding: '5px 9px', cursor: 'pointer' }}
+                >
+                  Cloud Debug
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // eslint-disable-next-line no-console
+                    console.info('[SS_DEBUG_BUTTON_CLICKED]')
+                    setDebugToast('Debug button fired')
+                    window.setTimeout(() => setDebugToast(''), 1800)
+                  }}
+                  style={{ border: '1px solid rgba(251,191,36,0.45)', background: 'rgba(120,53,15,0.36)', color: '#FCD34D', borderRadius: 6, fontSize: 11, padding: '5px 9px', cursor: 'pointer' }}
+                >
+                  Emit Test Debug Log
+                </button>
+              </>
             ) : null}
           </div>
+          {cloudDebugEnabled ? (
+            <div style={{ marginTop: 8, fontSize: 10, color: '#FCD34D' }}>
+              Debug build fingerprint: {debugBuildFingerprint}
+            </div>
+          ) : null}
+          {debugToast ? (
+            <div style={{ marginTop: 6, fontSize: 10, color: '#A7F3D0' }}>{debugToast}</div>
+          ) : null}
 
           {pendingRemoteSnapshot ? (
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>

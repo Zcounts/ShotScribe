@@ -292,6 +292,16 @@ function ShotCard({
     })
   }, [imagePickerStep, sceneId, shot.id])
 
+  useEffect(() => {
+    if (!isCloudDebugEnabled()) return
+    // eslint-disable-next-line no-console
+    console.info('[SHOTCARD_DEBUG_MOUNT]', { shotId: String(shot.id), sceneId: sceneId ? String(sceneId) : null })
+    return () => {
+      // eslint-disable-next-line no-console
+      console.info('[SHOTCARD_DEBUG_UNMOUNT]', { shotId: String(shot.id), sceneId: sceneId ? String(sceneId) : null })
+    }
+  }, [sceneId, shot.id])
+
   const {
     attributes,
     listeners,
@@ -957,6 +967,26 @@ function ShotCard({
         onClick={handleImageClick}
         style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
       >
+        {isCloudDebugEnabled() ? (
+          <div
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: 6,
+              zIndex: 6,
+              padding: '3px 6px',
+              borderRadius: 4,
+              background: 'rgba(220, 38, 38, 0.88)',
+              color: '#fff',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              pointerEvents: 'none',
+            }}
+          >
+            SHOTCARD DEBUG ACTIVE · {String(shot.id)}
+          </div>
+        ) : null}
         {storyboardImageSrcFinal ? (
           <img
             key={`${shot.id}:${stableAssetId || 'no-asset'}`}
