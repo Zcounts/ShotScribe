@@ -30,6 +30,54 @@ const SHOT_ASPECT_RATIO_PRESETS = ['1:1', '4:3', '16:9', '3:2', '2.39:1']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
+function isCloudDebugEnabled() {
+  if (import.meta.env.DEV) return true
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssCloudDebug') === '1') return true
+    return window.localStorage?.getItem('ssCloudDebug') === '1'
+  } catch {
+    return false
+  }
+}
+
+function pushCloudDebugTrace(entry = {}) {
+  if (typeof window === 'undefined') return
+  const payload = {
+    ts: new Date().toISOString(),
+    ...entry,
+  }
+  const key = '__SS_OVERWRITE_TRACE__'
+  const rows = Array.isArray(window[key]) ? window[key] : []
+  rows.push(payload)
+  window[key] = rows.slice(-800)
+  try {
+    window.dispatchEvent(new CustomEvent('__SS_OVERWRITE_TRACE_EVENT__', { detail: payload }))
+  } catch {}
+}
+
+function truncateDebugValue(value, max = 90) {
+  const text = String(value || '')
+  if (!text) return '—'
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+const IMAGE_NODE_ID_KEY = '__SS_IMAGE_NODE_IDS__'
+const IMAGE_NODE_ID_SEQ_KEY = '__SS_IMAGE_NODE_ID_SEQ__'
+
+function getImageNodeDebugId(node) {
+  if (!node || typeof window === 'undefined') return null
+  const existingMap = window[IMAGE_NODE_ID_KEY] instanceof WeakMap ? window[IMAGE_NODE_ID_KEY] : new WeakMap()
+  if (!window[IMAGE_NODE_ID_KEY]) window[IMAGE_NODE_ID_KEY] = existingMap
+  if (existingMap.has(node)) return existingMap.get(node)
+  const nextSeq = Number(window[IMAGE_NODE_ID_SEQ_KEY] || 0) + 1
+  window[IMAGE_NODE_ID_SEQ_KEY] = nextSeq
+  const id = `img-node-${nextSeq}`
+  existingMap.set(node, id)
+  return id
+}
+
 function sanitizeNumericInput(value) {
   if (value == null) return ''
   const cleaned = String(value).replace(/[^0-9.]/g, '')
@@ -76,6 +124,19 @@ function ShotCard({
   const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
   const { isDesktopDown, isPhone } = useResponsiveViewport()
   const fileInputRef = useRef(null)
+  const imageElementRef = useRef(null)
+  const previousSourceRef = useRef({
+    sourceReason: null,
+    finalDisplaySrc: null,
+    currentSrc: null,
+    elementSrc: null,
+    assetId: null,
+    domNodeId: null,
+  })
+  const [imageLoadState, setImageLoadState] = useState('idle')
+  const [imgCurrentSrc, setImgCurrentSrc] = useState(null)
+  const [lastSourceChangeAt, setLastSourceChangeAt] = useState(null)
+  const reactCardKey = `scene:${String(sceneId || 'none')}:shot:${String(shot?.id || 'unknown')}`
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
   useDevRenderCounter('ShotCard', shot.id)
@@ -361,6 +422,149 @@ function ShotCard({
   const storyboardImageSrc = cloudAssetBlocked
     ? null
     : (prefetchedCloudAssetView?.thumbUrl || cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
+  const storyboardImageSourceReason = cloudAssetBlocked
+    ? 'cloud_asset_blocked'
+    : (prefetchedCloudAssetView?.thumbUrl
+        ? 'prefetched_cloud_thumb'
+        : (cloudAssetView?.thumbUrl
+            ? 'fetched_cloud_thumb'
+            : (shot.imageAsset?.thumb ? 'shot_imageAsset_thumb' : (shot.image ? 'shot_image' : 'none'))))
+  const stableAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+
+  const syncCurrentSrcSnapshot = useCallback(() => {
+    const node = imageElementRef.current || null
+    const nextCurrentSrc = node?.currentSrc || null
+    const elementSrc = node?.src || null
+    const domNodeId = getImageNodeDebugId(node)
+    setImgCurrentSrc(nextCurrentSrc)
+    return {
+      currentSrc: nextCurrentSrc,
+      elementSrc,
+      domNodeId,
+    }
+  }, [])
+
+  const emitShotCardTraceEvent = useCallback((eventName, details = {}) => {
+    if (!isCloudDebugEnabled()) return
+    const snapshot = syncCurrentSrcSnapshot()
+    pushCloudDebugTrace({
+      event: eventName,
+      sourceLabel: 'shot_card_image',
+      shotId: shot?.id ? String(shot.id) : null,
+      reactKey: reactCardKey,
+      sceneId: sceneId ? String(sceneId) : null,
+      assetId: stableAssetId,
+      sourceReason: storyboardImageSourceReason,
+      finalDisplaySrc: storyboardImageSrc || null,
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      loadState: imageLoadState,
+      domNodeId: snapshot.domNodeId,
+      assetIdChanged: details.assetIdChanged ?? null,
+      finalDisplaySrcChanged: details.finalDisplaySrcChanged ?? null,
+      domNodeIdentityChanged: details.domNodeIdentityChanged ?? null,
+      ...details,
+    })
+  }, [
+    imageLoadState,
+    reactCardKey,
+    sceneId,
+    shot?.id,
+    stableAssetId,
+    storyboardImageSourceReason,
+    storyboardImageSrc,
+    syncCurrentSrcSnapshot,
+  ])
+
+  useEffect(() => {
+    const snapshot = syncCurrentSrcSnapshot()
+    emitShotCardTraceEvent('STORYBOARD_RENDER_SOURCE', {
+      event: 'STORYBOARD_RENDER_SOURCE',
+      sourceLabel: 'shot_card_render',
+      functionName: 'ShotCard:storyboardImageSrc',
+      image: shot?.image || null,
+      imageAsset: shot?.imageAsset || null,
+      imageAssetThumb: shot?.imageAsset?.thumb || null,
+      updatedAt: shot?.updatedAt ?? null,
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      domNodeId: snapshot.domNodeId,
+    })
+  }, [
+    emitShotCardTraceEvent,
+    shot?.id,
+    shot?.image,
+    shot?.imageAsset,
+    shot?.updatedAt,
+    syncCurrentSrcSnapshot,
+  ])
+
+  useEffect(() => {
+    emitShotCardTraceEvent('SHOTCARD_IMG_MOUNT')
+    return () => {
+      emitShotCardTraceEvent('SHOTCARD_IMG_UNMOUNT')
+    }
+  }, [emitShotCardTraceEvent])
+
+  useEffect(() => {
+    const previous = previousSourceRef.current
+    const nextSnapshot = syncCurrentSrcSnapshot()
+    const nowIso = new Date().toISOString()
+    setImageLoadState(storyboardImageSrc ? 'loading' : 'idle')
+    setLastSourceChangeAt(nowIso)
+    emitShotCardTraceEvent('SHOTCARD_IMG_SRC_CHANGE', {
+      prevSourceReason: previous.sourceReason,
+      nextSourceReason: storyboardImageSourceReason,
+      prevFinalDisplaySrc: previous.finalDisplaySrc,
+      nextFinalDisplaySrc: storyboardImageSrc || null,
+      prevCurrentSrc: previous.currentSrc,
+      nextCurrentSrc: nextSnapshot.currentSrc,
+      prevImgSrc: previous.elementSrc,
+      nextImgSrc: nextSnapshot.elementSrc,
+      prevAssetId: previous.assetId,
+      nextAssetId: stableAssetId,
+      assetIdChanged: previous.assetId !== stableAssetId,
+      finalDisplaySrcChanged: previous.finalDisplaySrc !== (storyboardImageSrc || null),
+      domNodeIdentityChanged: previous.domNodeId !== nextSnapshot.domNodeId,
+      prevDomNodeId: previous.domNodeId,
+      nextDomNodeId: nextSnapshot.domNodeId,
+      signedUrlChurnOnly: Boolean(
+        previous.assetId
+        && stableAssetId
+        && previous.assetId === stableAssetId
+        && previous.finalDisplaySrc !== (storyboardImageSrc || null)
+      ),
+      sourceChangedAt: nowIso,
+    })
+    previousSourceRef.current = {
+      sourceReason: storyboardImageSourceReason,
+      finalDisplaySrc: storyboardImageSrc || null,
+      currentSrc: nextSnapshot.currentSrc,
+      elementSrc: nextSnapshot.elementSrc,
+      assetId: stableAssetId,
+      domNodeId: nextSnapshot.domNodeId,
+    }
+  }, [emitShotCardTraceEvent, stableAssetId, storyboardImageSourceReason, storyboardImageSrc, syncCurrentSrcSnapshot])
+
+  const handleStoryboardImageLoad = useCallback(() => {
+    const snapshot = syncCurrentSrcSnapshot()
+    setImageLoadState('loaded')
+    emitShotCardTraceEvent('SHOTCARD_IMG_LOAD', {
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      domNodeId: snapshot.domNodeId,
+    })
+  }, [emitShotCardTraceEvent, syncCurrentSrcSnapshot])
+
+  const handleStoryboardImageError = useCallback(() => {
+    const snapshot = syncCurrentSrcSnapshot()
+    setImageLoadState('error')
+    emitShotCardTraceEvent('SHOTCARD_IMG_ERROR', {
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      domNodeId: snapshot.domNodeId,
+    })
+  }, [emitShotCardTraceEvent, syncCurrentSrcSnapshot])
 
   return (
     <div
@@ -369,6 +573,13 @@ function ShotCard({
       id={`storyboard-shot-${shot.id}`}
       data-entity-type="shot"
       data-entity-id={shot.id}
+      data-debug-react-key={reactCardKey}
+      data-debug-scene-id={String(sceneId || '')}
+      data-debug-asset-id={String(stableAssetId || '')}
+      data-debug-source-reason={String(storyboardImageSourceReason || '')}
+      data-debug-final-display-src={String(storyboardImageSrc || '')}
+      data-debug-load-state={String(imageLoadState || '')}
+      data-debug-current-src={String(imgCurrentSrc || '')}
       className={`shot-card ${isDragging ? 'is-dragging' : ''} ${isDesktopDown ? 'is-compact' : ''} ${isPhone ? 'is-phone' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -436,7 +647,15 @@ function ShotCard({
         style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
       >
         {storyboardImageSrc ? (
-          <img src={storyboardImageSrc} alt="Shot frame" loading="lazy" decoding="async" />
+          <img
+            ref={imageElementRef}
+            src={storyboardImageSrc}
+            alt="Shot frame"
+            loading="lazy"
+            decoding="async"
+            onLoad={handleStoryboardImageLoad}
+            onError={handleStoryboardImageError}
+          />
         ) : cloudAssetBlocked ? (
           <div className="flex flex-col items-center gap-1 text-amber-300">
             <span className="text-xs font-medium">Cloud image unavailable</span>
@@ -452,6 +671,38 @@ function ShotCard({
             <span className="text-xs font-medium">Click to add image</span>
           </div>
         )}
+        {isCloudDebugEnabled() ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: 6,
+              right: 6,
+              bottom: 6,
+              zIndex: 4,
+              padding: '6px 8px',
+              borderRadius: 6,
+              background: 'rgba(0, 0, 0, 0.76)',
+              color: '#d1f7ff',
+              fontSize: 10,
+              lineHeight: 1.35,
+              textAlign: 'left',
+              pointerEvents: 'none',
+            }}
+          >
+            <div><strong>shotId:</strong> {String(shot?.id || '—')}</div>
+            <div><strong>reactKey:</strong> {reactCardKey}</div>
+            <div><strong>sceneId:</strong> {String(sceneId || '—')}</div>
+            <div><strong>assetId:</strong> {stableAssetId || '—'}</div>
+            <div><strong>sourceReason:</strong> {storyboardImageSourceReason}</div>
+            <div><strong>finalDisplaySrc:</strong> {truncateDebugValue(storyboardImageSrc)}</div>
+            <div><strong>shot.image:</strong> {truncateDebugValue(shot?.image)}</div>
+            <div><strong>imageAsset.thumb:</strong> {truncateDebugValue(shot?.imageAsset?.thumb)}</div>
+            <div><strong>img.currentSrc:</strong> {truncateDebugValue(imgCurrentSrc)}</div>
+            <div><strong>img.src:</strong> {truncateDebugValue(imageElementRef.current?.src || null)}</div>
+            <div><strong>imgState:</strong> {imageLoadState}</div>
+            <div><strong>lastSrcChange:</strong> {lastSourceChangeAt || '—'}</div>
+          </div>
+        ) : null}
         {imagePickerStep === 'options' && projectRef?.type === 'cloud' ? (
           <div className="shot-image-picker-overlay" onClick={(e) => e.stopPropagation()}>
             <div className="shot-image-picker-title">Add Image to Shot</div>
