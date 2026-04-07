@@ -30,6 +30,100 @@ const SHOT_ASPECT_RATIO_PRESETS = ['1:1', '4:3', '16:9', '3:2', '2.39:1']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
+function isCloudDebugEnabled() {
+  if (import.meta.env.DEV) return true
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssCloudDebug') === '1') return true
+    return window.localStorage?.getItem('ssCloudDebug') === '1'
+  } catch {
+    return false
+  }
+}
+
+function isStableAssetSourceExperimentEnabled() {
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssStableAssetSrcOnly') === '1') return true
+    return window.localStorage?.getItem('ssStableAssetSrcOnly') === '1'
+  } catch {
+    return false
+  }
+}
+
+function pushCloudDebugTrace(entry = {}) {
+  if (typeof window === 'undefined') return
+  const payload = {
+    ts: new Date().toISOString(),
+    ...entry,
+  }
+  const key = '__SS_OVERWRITE_TRACE__'
+  const rows = Array.isArray(window[key]) ? window[key] : []
+  rows.push(payload)
+  window[key] = rows.slice(-800)
+  try {
+    window.dispatchEvent(new CustomEvent('__SS_OVERWRITE_TRACE_EVENT__', { detail: payload }))
+  } catch {}
+}
+
+function truncateDebugValue(value, max = 90) {
+  const text = String(value || '')
+  if (!text) return '—'
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+const IMAGE_NODE_ID_KEY = '__SS_IMAGE_NODE_IDS__'
+const IMAGE_NODE_ID_SEQ_KEY = '__SS_IMAGE_NODE_ID_SEQ__'
+
+function getImageNodeDebugId(node) {
+  if (!node || typeof window === 'undefined') return null
+  const existingMap = window[IMAGE_NODE_ID_KEY] instanceof WeakMap ? window[IMAGE_NODE_ID_KEY] : new WeakMap()
+  if (!window[IMAGE_NODE_ID_KEY]) window[IMAGE_NODE_ID_KEY] = existingMap
+  if (existingMap.has(node)) return existingMap.get(node)
+  const nextSeq = Number(window[IMAGE_NODE_ID_SEQ_KEY] || 0) + 1
+  window[IMAGE_NODE_ID_SEQ_KEY] = nextSeq
+  const id = `img-node-${nextSeq}`
+  existingMap.set(node, id)
+  return id
+}
+
+function readShotAssetIdFromState(shotId) {
+  try {
+    const state = useStore.getState()
+    for (const scene of (state?.scenes || [])) {
+      for (const shot of (scene?.shots || [])) {
+        if (String(shot?.id || '') !== String(shotId || '')) continue
+        return shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+      }
+    }
+  } catch {}
+  return null
+}
+
+function readVisibleShotAssetMap() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return {}
+  const viewportHeight = window.innerHeight || 0
+  const rows = {}
+  const cards = document.querySelectorAll('.shot-card[data-entity-type="shot"]')
+  cards.forEach((node) => {
+    const rect = node.getBoundingClientRect()
+    const isVisible = rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.top <= viewportHeight
+    if (!isVisible) return
+    const shotId = String(node.getAttribute('data-entity-id') || '')
+    if (!shotId) return
+    rows[shotId] = node.getAttribute('data-debug-asset-id') || null
+  })
+  return rows
+}
+
+function logShotImageAssignAudit(payload = {}) {
+  if (!isCloudDebugEnabled()) return
+  // eslint-disable-next-line no-console
+  console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', payload)
+}
+
 function sanitizeNumericInput(value) {
   if (value == null) return ''
   const cleaned = String(value).replace(/[^0-9.]/g, '')
@@ -76,6 +170,25 @@ function ShotCard({
   const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
   const { isDesktopDown, isPhone } = useResponsiveViewport()
   const fileInputRef = useRef(null)
+  const imageElementRef = useRef(null)
+  const previousSourceRef = useRef({
+    sourceReason: null,
+    finalDisplaySrc: null,
+    currentSrc: null,
+    elementSrc: null,
+    assetId: null,
+    domNodeId: null,
+  })
+  const [imageLoadState, setImageLoadState] = useState('idle')
+  const [imgCurrentSrc, setImgCurrentSrc] = useState(null)
+  const [lastSourceChangeAt, setLastSourceChangeAt] = useState(null)
+  const shotTargetAuditRef = useRef({
+    actionId: null,
+    actionLabel: null,
+    initiatingShotId: null,
+    initiatingSceneId: null,
+  })
+  const reactCardKey = `scene:${String(sceneId || 'none')}:shot:${String(shot?.id || 'unknown')}`
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
   useDevRenderCounter('ShotCard', shot.id)
@@ -161,6 +274,24 @@ function ShotCard({
     }
   }, [cloudAssetBlocked, cloudProjectId, getAssetSignedViewsBatch, imagePickerStep, libraryAssets])
 
+  useEffect(() => {
+    if (!isCloudDebugEnabled()) return
+    if (!imagePickerStep) return
+    const flow = shotTargetAuditRef.current || {}
+    // eslint-disable-next-line no-console
+    console.info('[SHOT_TARGET_AUDIT]', {
+      phase: 'picker_open',
+      sourceComponent: 'ShotCard',
+      actionId: flow?.actionId || null,
+      actionLabel: flow?.actionLabel || null,
+      modalStep: imagePickerStep,
+      targetShotId: String(shot.id),
+      targetSceneId: sceneId ? String(sceneId) : null,
+      initiatingShotId: flow?.initiatingShotId || null,
+      initiatingSceneId: flow?.initiatingSceneId || null,
+    })
+  }, [imagePickerStep, sceneId, shot.id])
+
   const {
     attributes,
     listeners,
@@ -177,7 +308,112 @@ function ShotCard({
     opacity: isDragging ? 0.4 : 1,
   }
 
+  const startShotTargetAudit = useCallback((actionLabel) => {
+    const token = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+    shotTargetAuditRef.current = {
+      actionId: token,
+      actionLabel,
+      initiatingShotId: String(shot.id),
+      initiatingSceneId: sceneId ? String(sceneId) : null,
+    }
+    if (isCloudDebugEnabled()) {
+      // eslint-disable-next-line no-console
+      console.info('[SHOT_TARGET_AUDIT]', {
+        phase: 'open_add_image',
+        sourceComponent: 'ShotCard',
+        actionLabel,
+        actionId: token,
+        clickedShotId: String(shot.id),
+        sceneId: sceneId ? String(sceneId) : null,
+      })
+    }
+    return token
+  }, [sceneId, shot.id])
+
+  const writeShotImageWithTargetAudit = useCallback(({ functionName, payload, assetId = null }) => {
+    const flow = shotTargetAuditRef.current || {}
+    const targetShotId = String(shot.id)
+    const originShotId = flow?.initiatingShotId ? String(flow.initiatingShotId) : targetShotId
+    const mismatch = originShotId !== targetShotId
+    if (isCloudDebugEnabled()) {
+      // eslint-disable-next-line no-console
+      console.info('[SHOT_TARGET_AUDIT]', {
+        phase: 'before_updateShotImage',
+        functionName,
+        actionId: flow?.actionId || null,
+        actionLabel: flow?.actionLabel || null,
+        shotIdBeingWritten: targetShotId,
+        assetIdBeingWritten: assetId ? String(assetId) : null,
+        originatingUiShotId: originShotId,
+        targetChangedSinceStart: mismatch,
+      })
+      if (mismatch) {
+        // eslint-disable-next-line no-console
+        console.warn('[SHOT_TARGET_MISMATCH]', {
+          functionName,
+          actionId: flow?.actionId || null,
+          actionLabel: flow?.actionLabel || null,
+          originatingUiShotId: originShotId,
+          finalWriteShotId: targetShotId,
+          originatingSceneId: flow?.initiatingSceneId || null,
+          finalSceneId: sceneId ? String(sceneId) : null,
+        })
+      }
+    }
+    updateShotImage(shot.id, payload)
+  }, [sceneId, shot.id, updateShotImage])
+
+  const auditShotImageAssignment = useCallback(({
+    functionName,
+    writeMode,
+    beforeAssetId,
+    nextAssetId,
+    previousVisibleMap,
+  }) => {
+    const visibleMapBefore = previousVisibleMap || readVisibleShotAssetMap()
+    const otherVisibleWithSameAssetBefore = Object.entries(visibleMapBefore)
+      .filter(([id, assetId]) => id !== String(shot.id) && assetId && assetId === nextAssetId)
+      .map(([id]) => id)
+    logShotImageAssignAudit({
+      phase: 'before_write',
+      functionName,
+      writeMode,
+      sceneId: sceneId ? String(sceneId) : null,
+      editedShotId: String(shot.id),
+      oldAssetId: beforeAssetId || null,
+      newAssetId: nextAssetId || null,
+      otherVisibleShotIdsWithSameAssetId: otherVisibleWithSameAssetBefore,
+    })
+    window.setTimeout(() => {
+      const visibleMapAfter = readVisibleShotAssetMap()
+      const finalEditedAssetId = readShotAssetIdFromState(shot.id)
+      const changedVisibleShotIds = Object.keys(visibleMapAfter).filter(
+        (id) => String(visibleMapBefore[id] || '') !== String(visibleMapAfter[id] || ''),
+      )
+      const siblingChanges = changedVisibleShotIds
+        .filter((id) => id !== String(shot.id))
+        .map((id) => ({
+          shotId: id,
+          assetIdBefore: visibleMapBefore[id] || null,
+          assetIdAfter: visibleMapAfter[id] || null,
+          finalAssetIdInStore: readShotAssetIdFromState(id),
+        }))
+      logShotImageAssignAudit({
+        phase: 'after_write_settled',
+        functionName,
+        writeMode,
+        sceneId: sceneId ? String(sceneId) : null,
+        editedShotId: String(shot.id),
+        finalEditedAssetId,
+        changedVisibleShotIds,
+        siblingChanges,
+      })
+    }, 0)
+  }, [sceneId, shot.id])
+
   const clearShotImage = useCallback(async () => {
+    const beforeAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+    const visibleBefore = readVisibleShotAssetMap()
     if (projectRef?.type === 'cloud' && cloudAccessPolicy.canEditCloudProject && !cloudAssetBlocked) {
       try {
         await unassignShotLibraryAsset({
@@ -188,7 +424,9 @@ function ShotCard({
         console.warn('Failed to unassign shot library asset', err)
       }
     }
-    updateShotImage(shot.id, {
+    writeShotImageWithTargetAudit({
+      functionName: 'ShotCard:clearShotImage',
+      payload: {
       image: null,
       imageAsset: {
         version: 1,
@@ -198,11 +436,22 @@ function ShotCard({
         meta: null,
         cloud: null,
       },
+      },
+      assetId: null,
     })
-  }, [cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, projectRef, shot.id, unassignShotLibraryAsset, updateShotImage])
+    auditShotImageAssignment({
+      functionName: 'ShotCard:clearShotImage',
+      writeMode: projectRef?.type === 'cloud' ? 'cloud-backed' : 'local-only',
+      beforeAssetId,
+      nextAssetId: null,
+      previousVisibleMap: visibleBefore,
+    })
+  }, [auditShotImageAssignment, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, projectRef, shot.id, shot?.imageAsset?.cloud?.assetId, unassignShotLibraryAsset, writeShotImageWithTargetAudit])
 
   const assignLibraryAssetToShot = useCallback(async (assetId) => {
     if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    const beforeAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+    const visibleBefore = readVisibleShotAssetMap()
     setIsAssigningFromLibrary(true)
     try {
       await assignShotLibraryAsset({
@@ -213,14 +462,43 @@ function ShotCard({
       const signedView = await getSignedViewWithCache(assetId)
       const payload = buildShotImageFromLibraryAsset(signedView)
       if (!payload) throw new Error('Could not resolve selected library asset')
-      updateShotImage(shot.id, payload)
+      if (isCloudDebugEnabled()) {
+        const flow = shotTargetAuditRef.current || {}
+        // eslint-disable-next-line no-console
+        console.info('[SHOT_TARGET_AUDIT]', {
+          phase: 'asset_selected',
+          sourceComponent: 'ShotCard',
+          functionName: 'ShotCard:assignLibraryAssetToShot',
+          actionId: flow?.actionId || null,
+          targetShotIdAtCallback: String(shot.id),
+          originalInitiatingShotId: flow?.initiatingShotId || null,
+          targetShotChangedSinceStart: flow?.initiatingShotId
+            ? String(flow.initiatingShotId) !== String(shot.id)
+            : false,
+          assetIdSelected: String(assetId),
+        })
+      }
+      writeShotImageWithTargetAudit({
+        functionName: 'ShotCard:assignLibraryAssetToShot',
+        payload,
+        assetId,
+      })
+      const nextAssetId = payload?.imageAsset?.cloud?.assetId ? String(payload.imageAsset.cloud.assetId) : null
+      auditShotImageAssignment({
+        functionName: 'ShotCard:assignLibraryAssetToShot',
+        writeMode: 'cloud-backed',
+        beforeAssetId,
+        nextAssetId,
+        previousVisibleMap: visibleBefore,
+      })
       setImagePickerStep(null)
     } finally {
       setIsAssigningFromLibrary(false)
     }
-  }, [assignShotLibraryAsset, cloudAssetBlocked, getSignedViewWithCache, projectRef, shot.id, updateShotImage])
+  }, [assignShotLibraryAsset, auditShotImageAssignment, cloudAssetBlocked, getSignedViewWithCache, projectRef, shot.id, shot?.imageAsset?.cloud?.assetId, writeShotImageWithTargetAudit])
 
   const handleImageClick = () => {
+    startShotTargetAudit(projectRef?.type === 'cloud' ? 'open_cloud_image_picker' : 'open_local_upload_picker')
     if (projectRef?.type === 'cloud') {
       setImagePickerStep('options')
       return
@@ -261,6 +539,8 @@ function ShotCard({
       return
     }
     try {
+      const beforeAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+      const visibleBefore = readVisibleShotAssetMap()
       const isCloudProject = projectRef?.type === 'cloud'
       if (isCloudProject) {
         if (cloudAssetBlocked || !cloudAccessPolicy.canEditCloudProject) {
@@ -291,6 +571,22 @@ function ShotCard({
         })
         const uploadedAssetId = uploaded?.imageAsset?.cloud?.assetId
         if (uploadedAssetId) {
+          if (isCloudDebugEnabled()) {
+            const flow = shotTargetAuditRef.current || {}
+            // eslint-disable-next-line no-console
+            console.info('[SHOT_TARGET_AUDIT]', {
+              phase: 'upload_complete',
+              sourceComponent: 'ShotCard',
+              functionName: 'ShotCard:handleImageChange(cloud-upload)',
+              actionId: flow?.actionId || null,
+              targetShotIdAtCallback: String(shot.id),
+              originalInitiatingShotId: flow?.initiatingShotId || null,
+              targetShotChangedSinceStart: flow?.initiatingShotId
+                ? String(flow.initiatingShotId) !== String(shot.id)
+                : false,
+              assetIdSelected: String(uploadedAssetId),
+            })
+          }
           await assignShotLibraryAsset({
             projectId: projectRef.projectId,
             shotId: shot.id,
@@ -298,9 +594,51 @@ function ShotCard({
           })
           const signedView = await getSignedViewWithCache(uploadedAssetId)
           const libraryPayload = buildShotImageFromLibraryAsset(signedView)
-          updateShotImage(shot.id, libraryPayload || uploaded)
+          writeShotImageWithTargetAudit({
+            functionName: 'ShotCard:handleImageChange(cloud-upload+assign)',
+            payload: libraryPayload || uploaded,
+            assetId: uploadedAssetId,
+          })
+          const nextAssetId = libraryPayload?.imageAsset?.cloud?.assetId
+            ? String(libraryPayload.imageAsset.cloud.assetId)
+            : (uploaded?.imageAsset?.cloud?.assetId ? String(uploaded.imageAsset.cloud.assetId) : null)
+          auditShotImageAssignment({
+            functionName: 'ShotCard:handleImageChange(cloud-upload+assign)',
+            writeMode: 'cloud-backed',
+            beforeAssetId,
+            nextAssetId,
+            previousVisibleMap: visibleBefore,
+          })
         } else {
-          updateShotImage(shot.id, uploaded)
+          if (isCloudDebugEnabled()) {
+            const flow = shotTargetAuditRef.current || {}
+            // eslint-disable-next-line no-console
+            console.info('[SHOT_TARGET_AUDIT]', {
+              phase: 'upload_complete',
+              sourceComponent: 'ShotCard',
+              functionName: 'ShotCard:handleImageChange(cloud-upload-fallback)',
+              actionId: flow?.actionId || null,
+              targetShotIdAtCallback: String(shot.id),
+              originalInitiatingShotId: flow?.initiatingShotId || null,
+              targetShotChangedSinceStart: flow?.initiatingShotId
+                ? String(flow.initiatingShotId) !== String(shot.id)
+                : false,
+              assetIdSelected: null,
+            })
+          }
+          writeShotImageWithTargetAudit({
+            functionName: 'ShotCard:handleImageChange(cloud-upload-fallback)',
+            payload: uploaded,
+            assetId: uploaded?.imageAsset?.cloud?.assetId || null,
+          })
+          const nextAssetId = uploaded?.imageAsset?.cloud?.assetId ? String(uploaded.imageAsset.cloud.assetId) : null
+          auditShotImageAssignment({
+            functionName: 'ShotCard:handleImageChange(cloud-upload-fallback)',
+            writeMode: 'cloud-backed',
+            beforeAssetId,
+            nextAssetId,
+            previousVisibleMap: visibleBefore,
+          })
         }
       } else {
         const processed = await processStoryboardUpload(file, {
@@ -308,7 +646,34 @@ function ShotCard({
           fullLongEdge: 1600,
           quality: 0.84,
         })
-        updateShotImage(shot.id, processed)
+        if (isCloudDebugEnabled()) {
+          const flow = shotTargetAuditRef.current || {}
+          // eslint-disable-next-line no-console
+          console.info('[SHOT_TARGET_AUDIT]', {
+            phase: 'upload_complete',
+            sourceComponent: 'ShotCard',
+            functionName: 'ShotCard:handleImageChange(local-upload)',
+            actionId: flow?.actionId || null,
+            targetShotIdAtCallback: String(shot.id),
+            originalInitiatingShotId: flow?.initiatingShotId || null,
+            targetShotChangedSinceStart: flow?.initiatingShotId
+              ? String(flow.initiatingShotId) !== String(shot.id)
+              : false,
+            assetIdSelected: null,
+          })
+        }
+        writeShotImageWithTargetAudit({
+          functionName: 'ShotCard:handleImageChange(local-upload)',
+          payload: processed,
+          assetId: null,
+        })
+        auditShotImageAssignment({
+          functionName: 'ShotCard:handleImageChange(local-upload)',
+          writeMode: 'local-only',
+          beforeAssetId,
+          nextAssetId: null,
+          previousVisibleMap: visibleBefore,
+        })
       }
       setImagePickerStep(null)
       devPerfLog('storyboard:image-upload', {
@@ -322,7 +687,7 @@ function ShotCard({
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, updateShotImage, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getSignedViewWithCache])
+  }, [shot.id, shot?.imageAsset?.cloud?.assetId, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getSignedViewWithCache, auditShotImageAssignment, writeShotImageWithTargetAudit])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
@@ -361,6 +726,156 @@ function ShotCard({
   const storyboardImageSrc = cloudAssetBlocked
     ? null
     : (prefetchedCloudAssetView?.thumbUrl || cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
+  const storyboardImageSourceReason = cloudAssetBlocked
+    ? 'cloud_asset_blocked'
+    : (prefetchedCloudAssetView?.thumbUrl
+        ? 'prefetched_cloud_thumb'
+        : (cloudAssetView?.thumbUrl
+            ? 'fetched_cloud_thumb'
+            : (shot.imageAsset?.thumb ? 'shot_imageAsset_thumb' : (shot.image ? 'shot_image' : 'none'))))
+  const stableAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+  const stableAssetSourceExperiment = isStableAssetSourceExperimentEnabled()
+  const storyboardImageSrcFinal = (projectRef?.type === 'cloud' && stableAssetId && stableAssetSourceExperiment)
+    ? (prefetchedCloudAssetView?.thumbUrl || cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || null)
+    : storyboardImageSrc
+  const storyboardImageSourceReasonFinal = (projectRef?.type === 'cloud' && stableAssetId && stableAssetSourceExperiment)
+    ? 'stable_asset_source_experiment'
+    : storyboardImageSourceReason
+
+  const syncCurrentSrcSnapshot = useCallback(() => {
+    const node = imageElementRef.current || null
+    const nextCurrentSrc = node?.currentSrc || null
+    const elementSrc = node?.src || null
+    const domNodeId = getImageNodeDebugId(node)
+    setImgCurrentSrc(nextCurrentSrc)
+    return {
+      currentSrc: nextCurrentSrc,
+      elementSrc,
+      domNodeId,
+    }
+  }, [])
+
+  const emitShotCardTraceEvent = useCallback((eventName, details = {}) => {
+    if (!isCloudDebugEnabled()) return
+    const snapshot = syncCurrentSrcSnapshot()
+    pushCloudDebugTrace({
+      event: eventName,
+      sourceLabel: 'shot_card_image',
+      shotId: shot?.id ? String(shot.id) : null,
+      reactKey: reactCardKey,
+      sceneId: sceneId ? String(sceneId) : null,
+      assetId: stableAssetId,
+      sourceReason: storyboardImageSourceReasonFinal,
+      finalDisplaySrc: storyboardImageSrcFinal || null,
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      loadState: imageLoadState,
+      domNodeId: snapshot.domNodeId,
+      assetIdChanged: details.assetIdChanged ?? null,
+      finalDisplaySrcChanged: details.finalDisplaySrcChanged ?? null,
+      domNodeIdentityChanged: details.domNodeIdentityChanged ?? null,
+      ...details,
+    })
+  }, [
+    imageLoadState,
+    reactCardKey,
+    sceneId,
+    shot?.id,
+    stableAssetId,
+    storyboardImageSourceReasonFinal,
+    storyboardImageSrcFinal,
+    syncCurrentSrcSnapshot,
+  ])
+
+  useEffect(() => {
+    const snapshot = syncCurrentSrcSnapshot()
+    emitShotCardTraceEvent('STORYBOARD_RENDER_SOURCE', {
+      event: 'STORYBOARD_RENDER_SOURCE',
+      sourceLabel: 'shot_card_render',
+      functionName: 'ShotCard:storyboardImageSrc',
+      image: shot?.image || null,
+      imageAsset: shot?.imageAsset || null,
+      imageAssetThumb: shot?.imageAsset?.thumb || null,
+      updatedAt: shot?.updatedAt ?? null,
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      domNodeId: snapshot.domNodeId,
+    })
+  }, [
+    emitShotCardTraceEvent,
+    shot?.id,
+    shot?.image,
+    shot?.imageAsset,
+    shot?.updatedAt,
+    syncCurrentSrcSnapshot,
+  ])
+
+  useEffect(() => {
+    emitShotCardTraceEvent('SHOTCARD_IMG_MOUNT')
+    return () => {
+      emitShotCardTraceEvent('SHOTCARD_IMG_UNMOUNT')
+    }
+  }, [emitShotCardTraceEvent])
+
+  useEffect(() => {
+    const previous = previousSourceRef.current
+    const nextSnapshot = syncCurrentSrcSnapshot()
+    const nowIso = new Date().toISOString()
+    setImageLoadState(storyboardImageSrcFinal ? 'loading' : 'idle')
+    setLastSourceChangeAt(nowIso)
+    emitShotCardTraceEvent('SHOTCARD_IMG_SRC_CHANGE', {
+      prevSourceReason: previous.sourceReason,
+      nextSourceReason: storyboardImageSourceReasonFinal,
+      prevFinalDisplaySrc: previous.finalDisplaySrc,
+      nextFinalDisplaySrc: storyboardImageSrcFinal || null,
+      prevCurrentSrc: previous.currentSrc,
+      nextCurrentSrc: nextSnapshot.currentSrc,
+      prevImgSrc: previous.elementSrc,
+      nextImgSrc: nextSnapshot.elementSrc,
+      prevAssetId: previous.assetId,
+      nextAssetId: stableAssetId,
+      assetIdChanged: previous.assetId !== stableAssetId,
+      finalDisplaySrcChanged: previous.finalDisplaySrc !== (storyboardImageSrcFinal || null),
+      domNodeIdentityChanged: previous.domNodeId !== nextSnapshot.domNodeId,
+      prevDomNodeId: previous.domNodeId,
+      nextDomNodeId: nextSnapshot.domNodeId,
+      signedUrlChurnOnly: Boolean(
+        previous.assetId
+        && stableAssetId
+        && previous.assetId === stableAssetId
+        && previous.finalDisplaySrc !== (storyboardImageSrcFinal || null)
+      ),
+      sourceChangedAt: nowIso,
+    })
+    previousSourceRef.current = {
+      sourceReason: storyboardImageSourceReasonFinal,
+      finalDisplaySrc: storyboardImageSrcFinal || null,
+      currentSrc: nextSnapshot.currentSrc,
+      elementSrc: nextSnapshot.elementSrc,
+      assetId: stableAssetId,
+      domNodeId: nextSnapshot.domNodeId,
+    }
+  }, [emitShotCardTraceEvent, stableAssetId, storyboardImageSourceReasonFinal, storyboardImageSrcFinal, syncCurrentSrcSnapshot])
+
+  const handleStoryboardImageLoad = useCallback(() => {
+    const snapshot = syncCurrentSrcSnapshot()
+    setImageLoadState('loaded')
+    emitShotCardTraceEvent('SHOTCARD_IMG_LOAD', {
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      domNodeId: snapshot.domNodeId,
+    })
+  }, [emitShotCardTraceEvent, syncCurrentSrcSnapshot])
+
+  const handleStoryboardImageError = useCallback(() => {
+    const snapshot = syncCurrentSrcSnapshot()
+    setImageLoadState('error')
+    emitShotCardTraceEvent('SHOTCARD_IMG_ERROR', {
+      currentSrc: snapshot.currentSrc,
+      imgSrc: snapshot.elementSrc,
+      domNodeId: snapshot.domNodeId,
+    })
+  }, [emitShotCardTraceEvent, syncCurrentSrcSnapshot])
 
   return (
     <div
@@ -369,6 +884,13 @@ function ShotCard({
       id={`storyboard-shot-${shot.id}`}
       data-entity-type="shot"
       data-entity-id={shot.id}
+      data-debug-react-key={reactCardKey}
+      data-debug-scene-id={String(sceneId || '')}
+      data-debug-asset-id={String(stableAssetId || '')}
+      data-debug-source-reason={String(storyboardImageSourceReasonFinal || '')}
+      data-debug-final-display-src={String(storyboardImageSrcFinal || '')}
+      data-debug-load-state={String(imageLoadState || '')}
+      data-debug-current-src={String(imgCurrentSrc || '')}
       className={`shot-card ${isDragging ? 'is-dragging' : ''} ${isDesktopDown ? 'is-compact' : ''} ${isPhone ? 'is-phone' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -435,8 +957,17 @@ function ShotCard({
         onClick={handleImageClick}
         style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
       >
-        {storyboardImageSrc ? (
-          <img src={storyboardImageSrc} alt="Shot frame" loading="lazy" decoding="async" />
+        {storyboardImageSrcFinal ? (
+          <img
+            key={`${shot.id}:${stableAssetId || 'no-asset'}`}
+            ref={imageElementRef}
+            src={storyboardImageSrcFinal}
+            alt="Shot frame"
+            loading="lazy"
+            decoding="async"
+            onLoad={handleStoryboardImageLoad}
+            onError={handleStoryboardImageError}
+          />
         ) : cloudAssetBlocked ? (
           <div className="flex flex-col items-center gap-1 text-amber-300">
             <span className="text-xs font-medium">Cloud image unavailable</span>
@@ -452,6 +983,38 @@ function ShotCard({
             <span className="text-xs font-medium">Click to add image</span>
           </div>
         )}
+        {isCloudDebugEnabled() ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: 6,
+              right: 6,
+              bottom: 6,
+              zIndex: 4,
+              padding: '6px 8px',
+              borderRadius: 6,
+              background: 'rgba(0, 0, 0, 0.76)',
+              color: '#d1f7ff',
+              fontSize: 10,
+              lineHeight: 1.35,
+              textAlign: 'left',
+              pointerEvents: 'none',
+            }}
+          >
+            <div><strong>shotId:</strong> {String(shot?.id || '—')}</div>
+            <div><strong>reactKey:</strong> {reactCardKey}</div>
+            <div><strong>sceneId:</strong> {String(sceneId || '—')}</div>
+            <div><strong>assetId:</strong> {stableAssetId || '—'}</div>
+            <div><strong>sourceReason:</strong> {storyboardImageSourceReasonFinal}</div>
+            <div><strong>finalDisplaySrc:</strong> {truncateDebugValue(storyboardImageSrcFinal)}</div>
+            <div><strong>shot.image:</strong> {truncateDebugValue(shot?.image)}</div>
+            <div><strong>imageAsset.thumb:</strong> {truncateDebugValue(shot?.imageAsset?.thumb)}</div>
+            <div><strong>img.currentSrc:</strong> {truncateDebugValue(imgCurrentSrc)}</div>
+            <div><strong>img.src:</strong> {truncateDebugValue(imageElementRef.current?.src || null)}</div>
+            <div><strong>imgState:</strong> {imageLoadState}</div>
+            <div><strong>lastSrcChange:</strong> {lastSourceChangeAt || '—'}</div>
+          </div>
+        ) : null}
         {imagePickerStep === 'options' && projectRef?.type === 'cloud' ? (
           <div className="shot-image-picker-overlay" onClick={(e) => e.stopPropagation()}>
             <div className="shot-image-picker-title">Add Image to Shot</div>
@@ -462,7 +1025,7 @@ function ShotCard({
               <button type="button" className="shot-image-picker-button" onClick={() => fileInputRef.current?.click()}>
                 Upload New
               </button>
-              {storyboardImageSrc ? (
+              {storyboardImageSrcFinal ? (
                 <button
                   type="button"
                   className="shot-image-picker-button shot-image-picker-button-danger"
