@@ -66,6 +66,11 @@ Temporary debug-enabled tracing to identify the exact runtime caller/path that t
   - `localStorage.setItem('ssOnlySyncEditedShot','1')`
 - Live sync semantic audit prefix:
   - `[LIVE_SHOT_SYNC_AUDIT]`
+- Reorder persistence audit prefix:
+  - `[SHOT_REORDER_AUDIT]`
+- Reorder force-persist experiment:
+  - `?ssForcePersistReorder=1`
+  - `localStorage.setItem('ssForcePersistReorder','1')`
 - `local_to_cloud_conversion`
 - `other_load_project`
 - `other_applyLiveStoryboardState`

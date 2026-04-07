@@ -947,6 +947,21 @@ export default function CloudSyncCoordinator() {
         const isOriginallyEditedShot = Boolean(experimentTargetShotId) && shotId === experimentTargetShotId
         const blockedByExperiment = Boolean(experimentTargetShotId) && !isOriginallyEditedShot
         if (isCloudDebugEnabled()) {
+          const willWrite = semanticChanged && !blockedByExperiment
+          // eslint-disable-next-line no-console
+          console.info('[SHOT_REORDER_AUDIT]', {
+            phase: 'persistence_step',
+            cycleId,
+            shotId,
+            sceneId,
+            reasonList,
+            oldPersistedOrder: existingShot ? Number(existingShot.order) : null,
+            newPersistedOrder: Number(index),
+            semanticChanged,
+            willIssueLiveWrite: willWrite,
+          })
+        }
+        if (isCloudDebugEnabled()) {
           // eslint-disable-next-line no-console
           console.info('[LIVE_SHOT_SYNC_AUDIT]', {
             phase: 'evaluate_shot',
@@ -1332,6 +1347,35 @@ export default function CloudSyncCoordinator() {
     if (deferredLiveApplyTimerRef.current) {
       window.clearTimeout(deferredLiveApplyTimerRef.current)
       deferredLiveApplyTimerRef.current = null
+    }
+    if (isCloudDebugEnabled()) {
+      const incomingOrder = (effectiveLiveShots || [])
+        .slice()
+        .sort((a, b) => {
+          const sceneCompare = String(a?.sceneId || '').localeCompare(String(b?.sceneId || ''))
+          if (sceneCompare !== 0) return sceneCompare
+          return Number(a?.order || 0) - Number(b?.order || 0)
+        })
+        .map((shot) => ({
+          shotId: String(shot?.shotId || ''),
+          sceneId: String(shot?.sceneId || ''),
+          order: Number(shot?.order || 0),
+        }))
+      const localOrder = (useStore.getState()?.scenes || []).flatMap((scene) =>
+        (scene?.shots || []).map((shot, index) => ({
+          shotId: String(shot?.id || ''),
+          sceneId: String(scene?.id || ''),
+          order: index,
+        })),
+      )
+      // eslint-disable-next-line no-console
+      console.info('[SHOT_REORDER_AUDIT]', {
+        phase: 'live_apply_step',
+        sourceLabel: 'live_storyboard_subscription_apply',
+        incomingLiveOrder: incomingOrder,
+        currentLocalOrder: localOrder,
+        differsFromLocal: stableStringify(incomingOrder) !== stableStringify(localOrder),
+      })
     }
     applyLiveStoryboardState(
       { scenes: effectiveLiveScenes, shots: effectiveLiveShots },
