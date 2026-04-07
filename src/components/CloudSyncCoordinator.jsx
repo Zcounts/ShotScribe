@@ -844,6 +844,19 @@ export default function CloudSyncCoordinator() {
     modeLabelRef.current = nextLabel
   }, [cloudProjectId, heldCollaboratorMode, isSoloMode, otherCollaboratorCount])
 
+  const getVisibleShotIdsSharingAsset = useCallback((assetId, excludeShotId = null) => {
+    if (!assetId || typeof document === 'undefined' || typeof window === 'undefined') return []
+    const viewportHeight = window.innerHeight || 0
+    return Array.from(document.querySelectorAll('.shot-card[data-entity-type="shot"]'))
+      .filter((node) => {
+        const rect = node.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.top <= viewportHeight
+      })
+      .filter((node) => String(node.getAttribute('data-debug-asset-id') || '') === String(assetId))
+      .map((node) => String(node.getAttribute('data-entity-id') || ''))
+      .filter((id) => id && id !== String(excludeShotId || ''))
+  }, [])
+
   const applyLiveStoryboardSync = useCallback(async ({ projectId, scenes, storyboardSceneOrder }) => {
     const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
       ? liveSceneRowsRef.current
@@ -901,6 +914,25 @@ export default function CloudSyncCoordinator() {
           ops.skipShots += 1
           continue
         }
+        if (isCloudDebugEnabled()) {
+          const oldAssetId = existingShot?.payload?.imageAsset?.cloud?.assetId
+            ? String(existingShot.payload.imageAsset.cloud.assetId)
+            : (existingShot?.imageAsset?.cloud?.assetId ? String(existingShot.imageAsset.cloud.assetId) : null)
+          const newAssetId = nextShotPayload?.imageAsset?.cloud?.assetId
+            ? String(nextShotPayload.imageAsset.cloud.assetId)
+            : (shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null)
+          // eslint-disable-next-line no-console
+          console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
+            phase: 'before_write',
+            functionName: 'CloudSyncCoordinator:applyLiveStoryboardSync/upsertLiveShot',
+            writeMode: 'live-table-backed',
+            sceneId,
+            editedShotId: shotId,
+            oldAssetId,
+            newAssetId,
+            otherVisibleShotIdsWithSameAssetId: getVisibleShotIdsSharingAsset(newAssetId, shotId),
+          })
+        }
         await upsertLiveShot({
           projectId,
           sceneId,
@@ -908,6 +940,21 @@ export default function CloudSyncCoordinator() {
           order: index,
           payload: shot,
         })
+        if (isCloudDebugEnabled()) {
+          const newAssetId = nextShotPayload?.imageAsset?.cloud?.assetId
+            ? String(nextShotPayload.imageAsset.cloud.assetId)
+            : (shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null)
+          // eslint-disable-next-line no-console
+          console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
+            phase: 'after_write_settled',
+            functionName: 'CloudSyncCoordinator:applyLiveStoryboardSync/upsertLiveShot',
+            writeMode: 'live-table-backed',
+            sceneId,
+            editedShotId: shotId,
+            finalEditedAssetId: newAssetId,
+            otherVisibleShotIdsWithSameAssetId: getVisibleShotIdsSharingAsset(newAssetId, shotId),
+          })
+        }
         ops.upsertShots += 1
       }
     }
@@ -937,7 +984,7 @@ export default function CloudSyncCoordinator() {
         ...ops,
       })
     }
-  }, [convex, deleteLiveScene, deleteLiveShot, upsertLiveScene, upsertLiveShot])
+  }, [convex, deleteLiveScene, deleteLiveShot, getVisibleShotIdsSharingAsset, upsertLiveScene, upsertLiveShot])
 
   const flushPendingLiveStoryboardSync = useCallback(async ({ force = false } = {}) => {
     if (soloLiveSyncTimerRef.current) {

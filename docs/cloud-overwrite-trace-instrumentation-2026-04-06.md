@@ -51,6 +51,16 @@ Temporary debug-enabled tracing to identify the exact runtime caller/path that t
 - `head_alignment`
 - `live_storyboard_subscription_apply`
 - `live_storyboard_deferred_apply`
+
+## Temporary assignment audit (this pass)
+- Console prefix: `[SHOT_IMAGE_ASSIGN_AUDIT]`
+- Added in:
+  - `ShotCard` image assignment handlers (`clearShotImage`, `assignLibraryAssetToShot`, `handleImageChange`)
+  - `store.updateShotImage`
+  - `CloudSyncCoordinator.applyLiveStoryboardSync` (live-table shot upserts)
+- Optional render experiment flag:
+  - `?ssStableAssetSrcOnly=1`
+  - `localStorage.setItem('ssStableAssetSrcOnly','1')`
 - `local_to_cloud_conversion`
 - `other_load_project`
 - `other_applyLiveStoryboardState`

@@ -2682,6 +2682,42 @@ const useStore = create((set, get) => ({
     const meta = isLegacyPayload ? null : (imagePayload?.meta || imagePayload?.imageAsset?.meta || null)
     const cloud = isLegacyPayload ? null : (imagePayload?.cloud || imagePayload?.imageAsset?.cloud || null)
     const mime = isLegacyPayload ? 'image/webp' : (imagePayload?.mime || imagePayload?.imageAsset?.mime || 'image/webp')
+    const editedShotId = String(shotId || '')
+    const oldAssetId = (() => {
+      const state = get()
+      for (const scene of (state?.scenes || [])) {
+        for (const shot of (scene?.shots || [])) {
+          if (String(shot?.id || '') !== editedShotId) continue
+          return shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+        }
+      }
+      return null
+    })()
+    const newAssetId = cloud?.assetId ? String(cloud.assetId) : null
+    if (isOverwriteTraceEnabled()) {
+      const visibleWithSameAsset = (() => {
+        if (!newAssetId || typeof document === 'undefined' || typeof window === 'undefined') return []
+        const viewportHeight = window.innerHeight || 0
+        return Array.from(document.querySelectorAll('.shot-card[data-entity-type="shot"]'))
+          .filter((node) => {
+            const rect = node.getBoundingClientRect()
+            return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.top <= viewportHeight
+          })
+          .filter((node) => String(node.getAttribute('data-debug-asset-id') || '') === newAssetId)
+          .map((node) => String(node.getAttribute('data-entity-id') || ''))
+          .filter((id) => id && id !== editedShotId)
+      })()
+      // eslint-disable-next-line no-console
+      console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
+        phase: 'before_write',
+        functionName: 'store:updateShotImage',
+        writeMode: get()?.projectRef?.type === 'cloud' ? 'cloud-backed' : 'local-only',
+        editedShotId,
+        oldAssetId,
+        newAssetId,
+        otherVisibleShotIdsWithSameAssetId: visibleWithSameAsset,
+      })
+    }
     set(state => ({
       storyboardImageCache: {
         ...state.storyboardImageCache,
@@ -2708,6 +2744,36 @@ const useStore = create((set, get) => ({
         }),
       })),
     }))
+    if (isOverwriteTraceEnabled()) {
+      const next = get()
+      const finalEditedAssetId = (() => {
+        for (const scene of (next?.scenes || [])) {
+          for (const shot of (scene?.shots || [])) {
+            if (String(shot?.id || '') !== editedShotId) continue
+            return shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+          }
+        }
+        return null
+      })()
+      const changedShotIds = []
+      for (const scene of (next?.scenes || [])) {
+        for (const shot of (scene?.shots || [])) {
+          const id = String(shot?.id || '')
+          if (!id || id === editedShotId) continue
+          const shotAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
+          if (shotAssetId === newAssetId) changedShotIds.push(id)
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.info('[SHOT_IMAGE_ASSIGN_AUDIT]', {
+        phase: 'after_write_settled',
+        functionName: 'store:updateShotImage',
+        writeMode: next?.projectRef?.type === 'cloud' ? 'cloud-backed' : 'local-only',
+        editedShotId,
+        finalEditedAssetId,
+        otherVisibleShotIdsWithSameAssetId: changedShotIds.slice(0, 20),
+      })
+    }
     get()._scheduleAutoSave()
   },
 
