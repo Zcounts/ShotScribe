@@ -2505,6 +2505,7 @@ const useStore = create((set, get) => ({
         }))
         return { ...scene, shots: arrayMove(shotsWithStableDisplayIds, oldIndex, newIndex) }
       }),
+      lastStoryboardEditAt: Date.now(),
     }))
     get()._scheduleAutoSave()
   },

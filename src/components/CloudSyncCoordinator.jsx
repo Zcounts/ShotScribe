@@ -1064,6 +1064,18 @@ export default function CloudSyncCoordinator() {
     try {
       pendingLiveSyncRef.current = null
       await applyLiveStoryboardSync(pending)
+      // In solo mode the Convex live-query subscription is inactive, so
+      // soloLiveShotsSnapshot is never automatically refreshed after a write.
+      // Re-fetch now so the deferred apply has the authoritative persisted order
+      // instead of the stale snapshot from initial load.
+      if (soloModeRef.current && cloudProjectId) {
+        const [sceneRows, shotRows] = await Promise.all([
+          convex.query('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
+          convex.query('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
+        ])
+        if (Array.isArray(sceneRows)) setSoloLiveScenesSnapshot(sceneRows)
+        if (Array.isArray(shotRows)) setSoloLiveShotsSnapshot(shotRows)
+      }
     } catch (error) {
       pendingLiveSyncRef.current = pending
       if (isConvexDiagEnabled()) {
@@ -1076,7 +1088,7 @@ export default function CloudSyncCoordinator() {
     } finally {
       liveSyncFlushInFlightRef.current = false
     }
-  }, [applyLiveStoryboardSync])
+  }, [applyLiveStoryboardSync, cloudProjectId, convex, setSoloLiveScenesSnapshot, setSoloLiveShotsSnapshot])
 
   const applyDeferredLiveStoryboardState = useCallback(() => {
     if (!deferredLiveApplyRef.current) return
@@ -1200,6 +1212,7 @@ export default function CloudSyncCoordinator() {
           flushPendingLiveStoryboardSync({ force: true })
         }, SOLO_LIVE_SYNC_DEBOUNCE_MS)
       },
+      flushLiveStoryboardSync: () => flushPendingLiveStoryboardSync({ force: true }),
       currentUserId,
       collaborationMode: isCloudProject && cloudAccessPolicy.canCollaborateOnCloudProject,
       hasActiveCollaborators: hasOtherCollaborators,
