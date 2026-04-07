@@ -30,6 +30,18 @@ const SHOT_ASPECT_RATIO_PRESETS = ['1:1', '4:3', '16:9', '3:2', '2.39:1']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const CLOUD_IMAGE_ALLOWED_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
+function isCloudDebugEnabled() {
+  if (import.meta.env.DEV) return true
+  if (typeof window === 'undefined') return false
+  try {
+    const params = new URLSearchParams(window.location?.search || '')
+    if (params.get('ssCloudDebug') === '1') return true
+    return window.localStorage?.getItem('ssCloudDebug') === '1'
+  } catch {
+    return false
+  }
+}
+
 function sanitizeNumericInput(value) {
   if (value == null) return ''
   const cleaned = String(value).replace(/[^0-9.]/g, '')
@@ -361,6 +373,42 @@ function ShotCard({
   const storyboardImageSrc = cloudAssetBlocked
     ? null
     : (prefetchedCloudAssetView?.thumbUrl || cloudAssetView?.thumbUrl || shot.imageAsset?.thumb || shot.image || null)
+  const storyboardImageSourceReason = cloudAssetBlocked
+    ? 'cloud_asset_blocked'
+    : (prefetchedCloudAssetView?.thumbUrl
+        ? 'prefetched_cloud_thumb'
+        : (cloudAssetView?.thumbUrl
+            ? 'fetched_cloud_thumb'
+            : (shot.imageAsset?.thumb ? 'shot_imageAsset_thumb' : (shot.image ? 'shot_image' : 'none'))))
+
+  useEffect(() => {
+    if (!isCloudDebugEnabled() || typeof window === 'undefined') return
+    const entry = {
+      event: 'STORYBOARD_RENDER_SOURCE',
+      ts: new Date().toISOString(),
+      sourceLabel: 'shot_card_render',
+      functionName: 'ShotCard:storyboardImageSrc',
+      shotId: shot?.id ? String(shot.id) : null,
+      image: shot?.image || null,
+      imageAsset: shot?.imageAsset || null,
+      imageAssetThumb: shot?.imageAsset?.thumb || null,
+      assetId: shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null,
+      updatedAt: shot?.updatedAt ?? null,
+      finalDisplaySrc: storyboardImageSrc || null,
+      sourceReason: storyboardImageSourceReason,
+    }
+    const key = '__SS_OVERWRITE_TRACE__'
+    const rows = Array.isArray(window[key]) ? window[key] : []
+    rows.push(entry)
+    window[key] = rows.slice(-500)
+  }, [
+    shot?.id,
+    shot?.image,
+    shot?.imageAsset,
+    shot?.updatedAt,
+    storyboardImageSourceReason,
+    storyboardImageSrc,
+  ])
 
   return (
     <div
