@@ -33,6 +33,11 @@ Temporary debug-enabled tracing to identify the exact runtime caller/path that t
 - `SHOT_IMAGE_DIFF_BEFORE_APPLY`
 - `SHOT_IMAGE_DIFF_AFTER_APPLY`
 - `STORYBOARD_RENDER_SOURCE`
+- `SHOTCARD_IMG_MOUNT`
+- `SHOTCARD_IMG_SRC_CHANGE`
+- `SHOTCARD_IMG_LOAD`
+- `SHOTCARD_IMG_ERROR`
+- `SHOTCARD_IMG_UNMOUNT`
 - `STORYBOARD_REVERT_DETECTED`
 
 ## Instrumented source labels

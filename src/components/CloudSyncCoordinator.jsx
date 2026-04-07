@@ -44,6 +44,11 @@ const TRACE_EVENT_FILTER = new Set([
   'SHOT_IMAGE_DIFF_BEFORE_APPLY',
   'SHOT_IMAGE_DIFF_AFTER_APPLY',
   'STORYBOARD_RENDER_SOURCE',
+  'SHOTCARD_IMG_MOUNT',
+  'SHOTCARD_IMG_SRC_CHANGE',
+  'SHOTCARD_IMG_LOAD',
+  'SHOTCARD_IMG_ERROR',
+  'SHOTCARD_IMG_UNMOUNT',
   'STORYBOARD_REVERT_DETECTED',
 ])
 
@@ -379,10 +384,10 @@ export default function CloudSyncCoordinator() {
   const [cloudDebugTracePayload, setCloudDebugTracePayload] = useState(null)
   const [copyTraceStatus, setCopyTraceStatus] = useState('')
 
-  const captureFocusedOverwriteTrace = useCallback(() => {
+  const captureFocusedOverwriteTrace = useCallback((triggerEntry = null) => {
     if (typeof window === 'undefined') return []
     const rows = Array.isArray(window[OVERWRITE_TRACE_BUFFER_KEY]) ? window[OVERWRITE_TRACE_BUFFER_KEY] : []
-    return rows
+    const focused = rows
       .filter((entry) => TRACE_EVENT_FILTER.has(String(entry?.event || '')))
       .slice(-50)
       .map((entry, idx) => ({
@@ -399,8 +404,56 @@ export default function CloudSyncCoordinator() {
         pendingRemoteSnapshotId: entry?.pendingRemoteSnapshotId || null,
         imageChangedShotIds: entry?.imageChangedShotIds || [],
         imageAssetChangedShotIds: entry?.imageAssetChangedShotIds || [],
+        potentialRegressionShotIds: entry?.potentialRegressionShotIds || [],
         thumbSamples: entry?.thumbSamples || [],
       }))
+    const triggerShotIds = new Set([
+      ...(triggerEntry?.changedShotIds || []),
+      ...(triggerEntry?.potentialRegressionShotIds || []),
+    ].map((value) => String(value || '')).filter(Boolean))
+    if (!triggerShotIds.size) {
+      return {
+        focused,
+        triggerShotIds: [],
+        relatedRenderLifecycleEvents: [],
+      }
+    }
+    const renderLifecycleEvents = new Set([
+      'STORYBOARD_RENDER_SOURCE',
+      'SHOTCARD_IMG_MOUNT',
+      'SHOTCARD_IMG_SRC_CHANGE',
+      'SHOTCARD_IMG_LOAD',
+      'SHOTCARD_IMG_ERROR',
+      'SHOTCARD_IMG_UNMOUNT',
+    ])
+    const related = rows
+      .filter((entry) => renderLifecycleEvents.has(String(entry?.event || '')))
+      .filter((entry) => triggerShotIds.has(String(entry?.shotId || '')))
+      .slice(-120)
+      .map((entry, idx) => ({
+        seq: idx + 1,
+        ts: entry?.ts || null,
+        event: entry?.event || null,
+        shotId: entry?.shotId ? String(entry.shotId) : null,
+        sourceReason: entry?.sourceReason || null,
+        finalDisplaySrc: entry?.finalDisplaySrc || null,
+        currentSrc: entry?.currentSrc || entry?.nextCurrentSrc || null,
+        prevSourceReason: entry?.prevSourceReason || null,
+        nextSourceReason: entry?.nextSourceReason || null,
+        prevFinalDisplaySrc: entry?.prevFinalDisplaySrc || null,
+        nextFinalDisplaySrc: entry?.nextFinalDisplaySrc || null,
+        prevCurrentSrc: entry?.prevCurrentSrc || null,
+        nextCurrentSrc: entry?.nextCurrentSrc || null,
+        prevAssetId: entry?.prevAssetId || null,
+        nextAssetId: entry?.nextAssetId || entry?.assetId || null,
+        assetIdChanged: entry?.assetIdChanged ?? null,
+        signedUrlChurnOnly: entry?.signedUrlChurnOnly ?? null,
+      }))
+    return {
+      focused,
+      triggerShotIds: Array.from(triggerShotIds),
+      relatedRenderLifecycleEvents: related,
+    }
   }, [])
 
   useEffect(() => {
@@ -408,7 +461,7 @@ export default function CloudSyncCoordinator() {
     const onTrace = (event) => {
       const entry = event?.detail || null
       if (!entry || entry.event !== 'STORYBOARD_REVERT_DETECTED') return
-      const focused = captureFocusedOverwriteTrace()
+      const focused = captureFocusedOverwriteTrace(entry)
       setCloudDebugTracePayload({
         capturedAt: new Date().toISOString(),
         trigger: entry,
