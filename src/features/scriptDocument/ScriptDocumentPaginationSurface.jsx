@@ -230,6 +230,20 @@ function hasSelectionModifier(event) {
   return event.shiftKey || event.altKey || event.metaKey || event.ctrlKey
 }
 
+function selectAllEditableBlocks(container) {
+  if (!container || typeof window === 'undefined' || typeof document === 'undefined') return false
+  const editableBlocks = Array.from(container.querySelectorAll('[data-script-editable-block="true"]'))
+  if (!editableBlocks.length) return false
+  const selection = window.getSelection()
+  if (!selection) return false
+  const range = document.createRange()
+  range.setStartBefore(editableBlocks[0])
+  range.setEndAfter(editableBlocks[editableBlocks.length - 1])
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
+}
+
 export default function ScriptDocumentPaginationSurface({
   readOnly = false,
   writeOptions = null,
@@ -246,6 +260,7 @@ export default function ScriptDocumentPaginationSurface({
   const activeNodeIndexRef = useRef(null)
   const nodeElementByIndexRef = useRef({})
   const pendingCaretRef = useRef(null)
+  const surfaceRef = useRef(null)
 
   const paginated = useMemo(() => paginateScriptDocument({
     scriptDocument: documentRef,
@@ -304,7 +319,7 @@ export default function ScriptDocumentPaginationSurface({
         writingMode: 'horizontal-tb',
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div ref={surfaceRef} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {paginated.pages.map((page) => (
           <div
             key={page.id}
@@ -333,6 +348,7 @@ export default function ScriptDocumentPaginationSurface({
                   contentEditable={!readOnly}
                   aria-readonly={readOnly}
                   suppressContentEditableWarning
+                  data-script-editable-block="true"
                   dir="ltr"
                   onFocus={() => {
                     if (readOnly) return
@@ -380,6 +396,7 @@ export default function ScriptDocumentPaginationSurface({
                   aria-readonly={readOnly}
                   suppressContentEditableWarning
                   dir="ltr"
+                  data-script-editable-block="true"
                   data-node-index={block.nodeIndex}
                   onFocus={() => {
                     activeNodeIndexRef.current = block.nodeIndex
@@ -395,6 +412,14 @@ export default function ScriptDocumentPaginationSurface({
                     const nodeIndex = block.nodeIndex
                     const caretOffset = getCaretOffsetWithinElement(event.currentTarget)
                     if (readOnly) return
+                    const isSelectAll = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'a'
+                    if (isSelectAll) {
+                      const didSelectAll = selectAllEditableBlocks(surfaceRef.current)
+                      if (didSelectAll) {
+                        event.preventDefault()
+                      }
+                      return
+                    }
                     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
                       if (hasSelectionModifier(event)) return
                       if (!Number.isInteger(caretOffset)) return
