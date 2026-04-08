@@ -635,6 +635,14 @@ export default function CloudSyncCoordinator() {
               immediateLiveWriteIssued: !soloModeRef.current,
               queuedForSoloFlush: soloModeRef.current,
             })
+            // eslint-disable-next-line no-console
+            console.debug('[CAMERA_ROUNDTRIP_AUDIT] outgoing_payload', {
+              shotId,
+              sceneId,
+              cameraName: newCameraName,
+              color: newColor,
+              mutationPayload: { shotId, sceneId, order: index, cameraName: newCameraName, color: newColor },
+            })
           }
         }
         const oldImageSummary = summarizeLiveShotImageFields(existingShot || {})
@@ -842,6 +850,59 @@ export default function CloudSyncCoordinator() {
         if (!soloModeRef.current) {
           pendingLiveSyncRef.current = null
           await applyLiveStoryboardSync(payload)
+          // Refresh the live snapshot after writing so that when hasUnsavedChanges
+          // clears (local persist at ~2.5 s) the apply effect uses fresh Convex data
+          // rather than the stale pre-edit snapshot.  In solo mode this refetch is
+          // already done inside flushPendingLiveStoryboardSync; here we mirror it for
+          // the non-solo (non-collaboration) path where that flush never runs.
+          if (cloudProjectId) {
+            try {
+              const [sceneRows, shotRows] = await Promise.all([
+                convex.query('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
+                convex.query('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
+              ])
+              if (import.meta.env.DEV) {
+                const localShotsFlat = (payload.scenes || []).flatMap((sc) => sc.shots || [])
+                ;(shotRows || []).forEach((row) => {
+                  const localShot = localShotsFlat.find((s) => String(s?.id || '') === String(row?.shotId || ''))
+                  if (!localShot) return
+                  const expectedCameraName = localShot.cameraName || 'Camera 1'
+                  const expectedColor = localShot.color || null
+                  const readCameraName = row.cameraName || 'Camera 1'
+                  const readColor = row.color || null
+                  // eslint-disable-next-line no-console
+                  console.debug('[CAMERA_ROUNDTRIP_AUDIT] server_read', {
+                    shotId: row.shotId,
+                    cameraName: readCameraName,
+                    color: readColor,
+                    updatedAt: row.updatedAt,
+                  })
+                  if (readCameraName !== expectedCameraName) {
+                    // eslint-disable-next-line no-console
+                    console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
+                      shotId: row.shotId,
+                      field: 'cameraName',
+                      stage: 'server_read',
+                      expected: expectedCameraName,
+                      actual: readCameraName,
+                    })
+                  }
+                  if (readColor !== expectedColor) {
+                    // eslint-disable-next-line no-console
+                    console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
+                      shotId: row.shotId,
+                      field: 'color',
+                      stage: 'server_read',
+                      expected: expectedColor,
+                      actual: readColor,
+                    })
+                  }
+                })
+              }
+              if (Array.isArray(sceneRows)) setSoloLiveScenesSnapshot(sceneRows)
+              if (Array.isArray(shotRows)) setSoloLiveShotsSnapshot(shotRows)
+            } catch {}
+          }
           return
         }
         pendingLiveSyncRef.current = payload
@@ -859,6 +920,8 @@ export default function CloudSyncCoordinator() {
     applyLiveStoryboardSync,
     cloudAccessPolicy.canCollaborateOnCloudProject,
     cloudAccessPolicy.canEditCloudProject,
+    cloudProjectId,
+    convex,
     currentUserId,
     commitScriptDomain,
     createSnapshot,
@@ -866,6 +929,8 @@ export default function CloudSyncCoordinator() {
     hasOtherCollaborators,
     projectRef?.type,
     setCloudSyncContext,
+    setSoloLiveScenesSnapshot,
+    setSoloLiveShotsSnapshot,
   ])
 
   useEffect(() => {
