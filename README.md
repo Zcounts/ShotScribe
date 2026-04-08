@@ -104,6 +104,7 @@ Reference docs:
 - `docs/billing-stripe-runbook.md`
 - `docs/admin-role-runbook.md`
 - `docs/shadcn-migration-foundation.md` (web-only phased shadcn/ui migration baseline)
+- `docs/lumalayout-phase0-runtime-audit.md` (Phase 0 desktop/runtime coupling + save/open/export audit and migration map)
 
 ---
 
