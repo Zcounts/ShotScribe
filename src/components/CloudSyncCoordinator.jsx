@@ -607,6 +607,36 @@ export default function CloudSyncCoordinator() {
         if (existingShot && Number(existingShot.order) !== Number(index)) reasonList.push('order_changed')
         const payloadChanged = !existingShot || stableStringify(oldShotPayload) !== stableStringify(nextShotPayload)
         if (payloadChanged) reasonList.push('payload_changed')
+        if (import.meta.env.DEV) {
+          const oldCameraName = oldShotPayload?.cameraName || 'Camera 1'
+          const newCameraName = nextShotPayload?.cameraName || 'Camera 1'
+          const oldColor = oldShotPayload?.color || null
+          const newColor = nextShotPayload?.color || null
+          if (oldCameraName !== newCameraName || oldColor !== newColor) {
+            // eslint-disable-next-line no-console
+            console.debug('[CAMERA_SETTING_AUDIT] outgoing_write', {
+              fieldType: oldCameraName !== newCameraName ? 'label_text' : 'color',
+              shotId,
+              sceneId,
+              previousPersisted: {
+                cameraName: oldCameraName,
+                color: oldColor,
+              },
+              nextPersisted: {
+                cameraName: newCameraName,
+                color: newColor,
+              },
+              persistedPayload: {
+                shotId,
+                sceneId,
+                order: index,
+                payload: nextShotPayload,
+              },
+              immediateLiveWriteIssued: !soloModeRef.current,
+              queuedForSoloFlush: soloModeRef.current,
+            })
+          }
+        }
         const oldImageSummary = summarizeLiveShotImageFields(existingShot || {})
         const newImageSummary = summarizeLiveShotImageFields(shot || nextShotPayload || {})
         const stableAssetIdChanged = oldImageSummary.assetId !== newImageSummary.assetId
