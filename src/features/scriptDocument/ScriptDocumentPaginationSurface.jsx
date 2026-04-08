@@ -305,6 +305,36 @@ export default function ScriptDocumentPaginationSurface({
     onActiveNodeChange?.({ nodeIndex: activeIndex, blockType: activeType })
   }, [documentRef, onActiveBlockTypeChange, onActiveNodeChange])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+      const anchorNode = selection.anchorNode
+      if (!anchorNode) return
+      const anchorElement = anchorNode.nodeType === Node.ELEMENT_NODE
+        ? anchorNode
+        : anchorNode.parentElement
+      if (!anchorElement) return
+      if (!surfaceRef.current?.contains(anchorElement)) return
+      const blockElement = anchorElement.closest?.('[data-node-index]')
+      if (!blockElement) return
+      const nodeIndex = Number(blockElement.getAttribute('data-node-index'))
+      if (!Number.isInteger(nodeIndex)) return
+      if (activeNodeIndexRef.current === nodeIndex) return
+      activeNodeIndexRef.current = nodeIndex
+      const node = (documentRef?.content || [])[nodeIndex]
+      const activeType = editorTypeToStyleType(node?.type || 'action')
+      onActiveBlockTypeChange?.(activeType)
+      onActiveNodeChange?.({ nodeIndex, blockType: activeType })
+    }
+
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange)
+    }
+  }, [documentRef, onActiveBlockTypeChange, onActiveNodeChange])
+
   return (
     <div
       dir="ltr"
@@ -342,7 +372,28 @@ export default function ScriptDocumentPaginationSurface({
               writingMode: 'horizontal-tb',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', minHeight: paginated.pageContentHeightPx }}>
+            <div
+              contentEditable={!readOnly}
+              aria-readonly={readOnly}
+              suppressContentEditableWarning
+              onInput={() => {
+                if (readOnly) return
+                let nextDocument = documentRef
+                let didChange = false
+                page.blocks.forEach((pageBlock) => {
+                  const element = nodeElementByIndexRef.current[pageBlock.nodeIndex]
+                  if (!element) return
+                  const nextText = normalizeEditableText(element.textContent || '')
+                  const currentText = textFromNode((nextDocument?.content || [])[pageBlock.nodeIndex])
+                  if (nextText === currentText) return
+                  didChange = true
+                  nextDocument = updateNodeText(nextDocument, pageBlock.nodeIndex, nextText)
+                })
+                if (!didChange) return
+                updateScriptDocumentLive(nextDocument, { reason: 'script_document_surface_typing' })
+              }}
+              style={{ display: 'flex', flexDirection: 'column', minHeight: paginated.pageContentHeightPx, outline: 'none' }}
+            >
               {page.blocks.length === 0 ? (
                 <div
                   contentEditable={!readOnly}
@@ -392,21 +443,14 @@ export default function ScriptDocumentPaginationSurface({
                       if (element.textContent !== nextText) element.textContent = nextText
                     }
                   }}
-                  contentEditable={!readOnly}
-                  aria-readonly={readOnly}
-                  suppressContentEditableWarning
                   dir="ltr"
                   data-script-editable-block="true"
                   data-node-index={block.nodeIndex}
-                  onFocus={() => {
+                  onMouseDown={() => {
                     activeNodeIndexRef.current = block.nodeIndex
                     const activeType = editorTypeToStyleType(block.nodeType)
                     onActiveBlockTypeChange?.(activeType)
                     onActiveNodeChange?.({ nodeIndex: block.nodeIndex, blockType: activeType })
-                  }}
-                  onInput={(event) => {
-                    const next = updateNodeText(documentRef, block.nodeIndex, event.currentTarget.textContent || '')
-                    updateScriptDocumentLive(next, { reason: 'script_document_surface_typing' })
                   }}
                   onKeyDown={(event) => {
                     const nodeIndex = block.nodeIndex
