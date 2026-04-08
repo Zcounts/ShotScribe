@@ -1076,17 +1076,15 @@ export default function App() {
         </div>
       ) : activeTab === 'storyboard' ? (
         <div
-          ref={storyboardScrollRef}
-          className="flex-1 overflow-auto canvas-texture"
-          onScroll={handleStoryboardScroll}
+          className="flex-1 overflow-hidden canvas-texture"
           style={cloudReadOnlyInteractionStyle || undefined}
         >
-          <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', minHeight: '100%', paddingTop: 0, paddingRight: 14, paddingBottom: 0, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', height: '100%', minHeight: 0, paddingTop: 0, paddingRight: 14, paddingBottom: 0, paddingLeft: showStoryboardOutline ? 0 : 14 }}>
             {showStoryboardOutline && (
               <div
                 style={isDesktopDown
                   ? { width: 0, position: 'relative', alignSelf: 'stretch', display: 'flex' }
-                  : { width: 'var(--ss-left-sidebar-width)', position: 'sticky', top: 0, alignSelf: 'stretch', minHeight: '100%', maxHeight: '100%', display: 'flex' }
+                  : { width: 'var(--ss-left-sidebar-width)', position: 'relative', alignSelf: 'stretch', minHeight: 0, maxHeight: '100%', display: 'flex' }
                 }
               >
                 <SidebarPane
@@ -1143,6 +1141,11 @@ export default function App() {
                 </SidebarPane>
               </div>
             )}
+            <div
+              ref={storyboardScrollRef}
+              style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto' }}
+              onScroll={handleStoryboardScroll}
+            >
             <DndContext
               sensors={storyboardSensors}
               collisionDetection={closestCenter}
@@ -1233,6 +1236,7 @@ export default function App() {
               ) : null}
             </DragOverlay>
             </DndContext>
+            </div>
           </div>
         </div>
       ) : activeTab === 'shotlist' ? (

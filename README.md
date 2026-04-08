@@ -25,6 +25,7 @@ This monorepo currently contains:
 - Main app responsive header now uses clearer row stacking at narrower widths across tabs (project identity row, actions row, menu/configure row, then tabs) and keeps the legacy Quick actions launcher removed from the main toolbar.
 - Schedule tab left sidebar now keeps the Selected Day and Summary accordions visually consistent with the dark sidebar theme (no light background blocks, light-muted text tokens only).
 - Storyboard desktop left outline sidebar now stretches to the same full-height content area behavior used by other tabs, eliminating a short sidebar gap when storyboard content is sparse.
+- Storyboard tab now uses split scroll ownership on desktop: the outline sidebar and storyboard canvas each keep independent vertical scrolling so scrolling long pages no longer drags the left outline pane.
 - Storyboard Project Media Library picker now reliably renders thumbnail previews again (including cached/signed view and existing lightweight preview metadata fallbacks), while gracefully falling back to “No preview” only when no usable preview source exists.
 
 ---
