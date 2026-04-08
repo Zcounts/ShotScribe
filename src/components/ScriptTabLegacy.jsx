@@ -364,6 +364,20 @@ function createRangeForOffsets(blockElement, start, end) {
   return range
 }
 
+function selectAllEditableBlocks(container) {
+  if (!container || typeof window === 'undefined' || typeof document === 'undefined') return false
+  const editableBlocks = Array.from(container.querySelectorAll('[data-script-editable-block="true"]'))
+  if (!editableBlocks.length) return false
+  const selection = window.getSelection()
+  if (!selection) return false
+  const range = document.createRange()
+  range.setStartBefore(editableBlocks[0])
+  range.setEndAfter(editableBlocks[editableBlocks.length - 1])
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
+}
+
 function ScriptEditableBlock({ block, blockStyle, isSelected, fontWeight, onFocusBlock, onCommit, onKeyDown, onRegisterHeading, readOnly = false }) {
   const ref = useRef(null)
   const [draftText, setDraftText] = useState(block.blockText || '')
@@ -414,6 +428,7 @@ function ScriptEditableBlock({ block, blockStyle, isSelected, fontWeight, onFocu
       data-block-id={block.blockId}
       data-block-type={block.blockType}
       data-scene-heading={block.isHeading ? 'true' : undefined}
+      data-script-editable-block="true"
       contentEditable={!readOnly}
       suppressContentEditableWarning
       spellCheck
@@ -1003,6 +1018,15 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const handleBlockKeyDown = useCallback((event, block) => {
     if (view !== 'write' || isWriteBlockedByLock) return
     const element = event.currentTarget
+    const isSelectAll = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'a'
+
+    if (isSelectAll) {
+      const didSelectAll = selectAllEditableBlocks(pageCanvasRef.current)
+      if (didSelectAll) {
+        event.preventDefault()
+      }
+      return
+    }
 
     if (event.key === 'Tab') {
       event.preventDefault()

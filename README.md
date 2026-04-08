@@ -291,6 +291,7 @@ ShotScribe mobile now supports **two explicit workflows**:
 - Follow-up UI correction (April 4, 2026): **Page & Styles** now uses a compact icon-led inspector with only `Page` and `Paragraph` tabs (no `All` tab), while preserving existing field behavior/data flow.
 - Scene sync fix (April 4, 2026): manual screenplay edits now split screenplay blocks by slugline headings and sync persisted `scriptScenes` so the Scenes tab stays aligned with Script tab sluglines. Import behavior remains unchanged.
 - Caret navigation fix (April 6, 2026): in the unified Script editor, `ArrowRight` now moves from a block end to the next block start, and `ArrowLeft` moves from a block start to the previous block end (without changing Enter/Tab/Undo behavior).
+- Select-all fix (April 8, 2026): in Script tab write mode, `Ctrl+A` / `Cmd+A` now selects the entire screenplay document across all visible blocks, so copy includes the full script instead of only the active block.
 
 ## Launch UX priorities checklist (operator-facing)
 
