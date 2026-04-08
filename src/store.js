@@ -4341,6 +4341,27 @@ const useStore = create((set, get) => ({
               incomingLooksOlderOrStale: incomingIsOlderThanLatestLocalEdit,
             })
           }
+          if (labelDiffers || colorDiffers || incomingIsOlderThanLatestLocalEdit || !shot.cameraName) {
+            // eslint-disable-next-line no-console
+            console.debug('[CAMERA_ROUNDTRIP_AUDIT] client_apply', {
+              shotId,
+              sceneId,
+              cameraName: incomingCameraName,
+              color: incomingColor,
+              usedDefault: { cameraName: !shot.cameraName, color: shot.color == null },
+              incomingIsOlderThanLatestLocalEdit,
+            })
+            if (!shot.cameraName) {
+              // eslint-disable-next-line no-console
+              console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
+                shotId,
+                field: 'cameraName',
+                stage: 'client_apply',
+                expected: localCameraName,
+                actual: '(missing — fell back to default)',
+              })
+            }
+          }
           if (incomingIsOlderThanLatestLocalEdit && labelDiffers) {
             // eslint-disable-next-line no-console
             console.warn('[CAMERA_SETTING_REVERT]', {
