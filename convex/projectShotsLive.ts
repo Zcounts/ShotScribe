@@ -44,10 +44,18 @@ export const listShotsByProject = query({
   handler: async (ctx, args) => {
     const currentUserId = await requireCurrentUserId(ctx)
     await requireProjectRole(ctx, args.projectId, currentUserId, 'viewer')
-    return ctx.db
+    const rows = await ctx.db
       .query('projectShots')
       .withIndex('by_project_id_scene_id_order', (q: any) => q.eq('projectId', args.projectId))
       .collect()
+    for (const row of rows) {
+      console.debug('[CAMERA_FIELD_PROOF] query_read', {
+        shotId: String(row?.shotId || ''),
+        cameraName: row?.cameraName || 'Camera 1',
+        color: row?.color || null,
+      })
+    }
+    return rows
   },
 })
 
@@ -69,6 +77,22 @@ export const upsertShot = mutation({
       .withIndex('by_project_id_shot_id', (q: any) => q.eq('projectId', args.projectId).eq('shotId', args.shotId))
       .unique()
     const nextPayload = normalizeShotPayload(args.payload)
+    const inputCameraName = (args.payload as any)?.cameraName
+    const inputColor = (args.payload as any)?.color
+    console.debug('[CAMERA_FIELD_PROOF] mutation_input', {
+      shotId: String(args.shotId || ''),
+      cameraName: inputCameraName ?? null,
+      color: inputColor ?? null,
+    })
+    if (inputCameraName == null || (typeof inputCameraName === 'string' && !inputCameraName.trim())) {
+      console.warn('[CAMERA_FIELD_BREAK]', {
+        shotId: String(args.shotId || ''),
+        field: 'cameraName',
+        stage: 'mutation_input',
+        expected: 'non-empty cameraName',
+        actual: inputCameraName ?? null,
+      })
+    }
     if (existing) {
       await ctx.db.patch(existing._id, {
         sceneId: args.sceneId,
@@ -76,6 +100,11 @@ export const upsertShot = mutation({
         ...nextPayload,
         updatedByUserId: currentUserId,
         updatedAt: now,
+      })
+      console.debug('[CAMERA_FIELD_PROOF] mutation_write', {
+        shotId: String(args.shotId || ''),
+        cameraName: nextPayload.cameraName || 'Camera 1',
+        color: nextPayload.color || null,
       })
       return { ok: true, shotDocId: existing._id }
     }
@@ -88,6 +117,11 @@ export const upsertShot = mutation({
       updatedByUserId: currentUserId,
       createdAt: now,
       updatedAt: now,
+    })
+    console.debug('[CAMERA_FIELD_PROOF] mutation_write', {
+      shotId: String(args.shotId || ''),
+      cameraName: nextPayload.cameraName || 'Camera 1',
+      color: nextPayload.color || null,
     })
     return { ok: true, shotDocId: id }
   },
