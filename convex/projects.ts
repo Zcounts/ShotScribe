@@ -41,6 +41,13 @@ function normalizeLegacyScene(scene: any, index: number) {
     intOrExt: scene?.intOrExt || scene?.intExt || '',
     dayNight: scene?.dayNight || '',
     color: scene?.color || null,
+    cameras: Array.isArray(scene?.cameras)
+      ? scene.cameras.map((camera: any) => ({
+        name: String(camera?.name || ''),
+        body: String(camera?.body || ''),
+        color: camera?.color || null,
+      }))
+      : null,
     linkedScriptSceneId: scene?.linkedScriptSceneId || null,
     pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes : [''],
     pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors : [],
@@ -211,6 +218,13 @@ export const ensureStoryboardLiveModel = mutation({
             intOrExt: scene.intOrExt || '',
             dayNight: scene.dayNight || '',
             color: scene.color || undefined,
+            cameras: Array.isArray(scene.cameras)
+              ? scene.cameras.map((camera: any) => ({
+                name: String(camera?.name || ''),
+                body: String(camera?.body || ''),
+                color: camera?.color || undefined,
+              }))
+              : undefined,
             linkedScriptSceneId: scene.linkedScriptSceneId || undefined,
             pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes.map((entry: any) => String(entry || '')) : [''],
             pageColors: Array.isArray(scene.pageColors) ? scene.pageColors.map((entry: any) => String(entry || '')) : [],

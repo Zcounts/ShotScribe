@@ -4,6 +4,13 @@ import { requireCurrentUserId, requireProjectRole } from './projectMembers'
 import { requireCloudWritesEnabled } from './ops'
 
 function normalizeScenePayload(scene: any) {
+  const cameras = Array.isArray(scene?.cameras)
+    ? scene.cameras.map((camera: any) => ({
+      name: String(camera?.name || ''),
+      body: String(camera?.body || ''),
+      color: camera?.color || undefined,
+    }))
+    : undefined
   return {
     sceneLabel: String(scene?.sceneLabel || '').trim() || 'SCENE',
     slugline: scene?.slugline || '',
@@ -11,6 +18,7 @@ function normalizeScenePayload(scene: any) {
     intOrExt: scene?.intOrExt || '',
     dayNight: scene?.dayNight || '',
     color: scene?.color || undefined,
+    cameras,
     linkedScriptSceneId: scene?.linkedScriptSceneId || undefined,
     pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes.map((entry: any) => String(entry || '')) : [''],
     pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors.map((entry: any) => String(entry || '')) : [],

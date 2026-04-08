@@ -55,6 +55,13 @@ async function resolveInlineImageBlob(source) {
 }
 
 function normalizeLiveScenePayload(scene) {
+  const cameras = Array.isArray(scene?.cameras)
+    ? scene.cameras.map((camera) => ({
+      name: String(camera?.name || ''),
+      body: String(camera?.body || ''),
+      color: camera?.color || undefined,
+    }))
+    : undefined
   return {
     sceneLabel: String(scene?.sceneLabel || '').trim() || 'SCENE',
     slugline: scene?.slugline || '',
@@ -62,6 +69,7 @@ function normalizeLiveScenePayload(scene) {
     intOrExt: scene?.intOrExt || '',
     dayNight: scene?.dayNight || '',
     color: scene?.color || undefined,
+    cameras,
     linkedScriptSceneId: scene?.linkedScriptSceneId || undefined,
     pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes.map((entry) => String(entry || '')) : [''],
     pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors.map((entry) => String(entry || '')) : [],
@@ -584,6 +592,36 @@ export default function CloudSyncCoordinator() {
       const shouldUpsertScene = !existingScene
         || Number(existingScene.order) !== Number(nextOrder)
         || stableStringify(normalizeLiveScenePayload(existingScene)) !== stableStringify(nextPayload)
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.debug('[CAMERA_UI_SOURCE_AUDIT] persistence_target', {
+          file: 'src/components/CloudSyncCoordinator.jsx',
+          function: 'applyLiveStoryboardSync',
+          objectType: 'scene_live_row',
+          payloadPath: `scene.payload.cameras`,
+          sceneId,
+          cameras: nextPayload?.cameras || [],
+        })
+        const renderedFieldPath = 'scene.cameras[idx].{name,color}'
+        const writtenFieldPath = 'scene.cameras[idx].{name,color}'
+        const persistedFieldPath = 'projectScenes.cameras[idx].{name,color}'
+        if (writtenFieldPath !== renderedFieldPath) {
+          // eslint-disable-next-line no-console
+          console.warn('[CAMERA_SOURCE_MISMATCH]', {
+            controlType: 'label_text',
+            renderedFieldPath,
+            writtenFieldPath,
+            persistedFieldPath,
+          })
+          // eslint-disable-next-line no-console
+          console.warn('[CAMERA_SOURCE_MISMATCH]', {
+            controlType: 'color',
+            renderedFieldPath,
+            writtenFieldPath,
+            persistedFieldPath,
+          })
+        }
+      }
       if (shouldUpsertScene) {
         await upsertLiveScene({
           projectId,
@@ -612,36 +650,33 @@ export default function CloudSyncCoordinator() {
           const newCameraName = nextShotPayload?.cameraName || 'Camera 1'
           const oldColor = oldShotPayload?.color || null
           const newColor = nextShotPayload?.color || null
-          if (oldCameraName !== newCameraName || oldColor !== newColor) {
+          // eslint-disable-next-line no-console
+          console.debug('[CAMERA_FIELD_PROOF] payload_built', {
+            shotId,
+            cameraName: newCameraName,
+            color: newColor,
+          })
+          const cameraNameChanged = oldCameraName !== newCameraName
+          const colorChanged = oldColor !== newColor
+          const semanticChanged = reasonList.length > 0
+          const willWrite = semanticChanged
+          // eslint-disable-next-line no-console
+          console.debug('[CAMERA_FIELD_PROOF] write_decision', {
+            shotId,
+            changed: semanticChanged,
+            willWrite,
+            reasons: reasonList,
+            cameraNameContributed: cameraNameChanged,
+            colorContributed: colorChanged,
+          })
+          if ((cameraNameChanged || colorChanged) && !willWrite) {
             // eslint-disable-next-line no-console
-            console.debug('[CAMERA_SETTING_AUDIT] outgoing_write', {
-              fieldType: oldCameraName !== newCameraName ? 'label_text' : 'color',
+            console.warn('[CAMERA_FIELD_BREAK]', {
               shotId,
-              sceneId,
-              previousPersisted: {
-                cameraName: oldCameraName,
-                color: oldColor,
-              },
-              nextPersisted: {
-                cameraName: newCameraName,
-                color: newColor,
-              },
-              persistedPayload: {
-                shotId,
-                sceneId,
-                order: index,
-                payload: nextShotPayload,
-              },
-              immediateLiveWriteIssued: !soloModeRef.current,
-              queuedForSoloFlush: soloModeRef.current,
-            })
-            // eslint-disable-next-line no-console
-            console.debug('[CAMERA_ROUNDTRIP_AUDIT] outgoing_payload', {
-              shotId,
-              sceneId,
-              cameraName: newCameraName,
-              color: newColor,
-              mutationPayload: { shotId, sceneId, order: index, cameraName: newCameraName, color: newColor },
+              field: cameraNameChanged ? 'cameraName' : 'color',
+              stage: 'write_decision',
+              expected: cameraNameChanged ? newCameraName : newColor,
+              actual: cameraNameChanged ? oldCameraName : oldColor,
             })
           }
         }
@@ -871,7 +906,7 @@ export default function CloudSyncCoordinator() {
                   const readCameraName = row.cameraName || 'Camera 1'
                   const readColor = row.color || null
                   // eslint-disable-next-line no-console
-                  console.debug('[CAMERA_ROUNDTRIP_AUDIT] server_read', {
+                  console.debug('[CAMERA_FIELD_PROOF] query_read', {
                     shotId: row.shotId,
                     cameraName: readCameraName,
                     color: readColor,
@@ -879,20 +914,20 @@ export default function CloudSyncCoordinator() {
                   })
                   if (readCameraName !== expectedCameraName) {
                     // eslint-disable-next-line no-console
-                    console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
+                    console.warn('[CAMERA_FIELD_BREAK]', {
                       shotId: row.shotId,
                       field: 'cameraName',
-                      stage: 'server_read',
+                      stage: 'query_read',
                       expected: expectedCameraName,
                       actual: readCameraName,
                     })
                   }
                   if (readColor !== expectedColor) {
                     // eslint-disable-next-line no-console
-                    console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
+                    console.warn('[CAMERA_FIELD_BREAK]', {
                       shotId: row.shotId,
                       field: 'color',
-                      stage: 'server_read',
+                      stage: 'query_read',
                       expected: expectedColor,
                       actual: readColor,
                     })
