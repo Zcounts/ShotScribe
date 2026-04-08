@@ -34,6 +34,7 @@ import { createCloudProjectAdapter, createProjectRepository } from './data/repos
 import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
 import { detectUnmigratedLocalAssetsFromProjectData } from './utils/localAssetPreflight'
 import {
+  convertLegacyScriptScenesToProseMirrorDocument,
   normalizeScriptDocumentState,
   SCRIPT_DERIVATION_VERSION,
   SCRIPT_DOC_VERSION,
@@ -1131,9 +1132,16 @@ const useStore = create((set, get) => ({
         const otherScenes = state.scriptScenes.filter(s => s.importSource !== scriptMeta.filename)
         const otherScripts = state.importedScripts.filter(s => s.filename !== scriptMeta.filename)
         const mergedScriptScenes = [...otherScenes, ...enriched]
+        const convertedDocument = convertLegacyScriptScenesToProseMirrorDocument(mergedScriptScenes, {
+          documentSettings: state.scriptSettings?.documentSettings,
+          scriptAnnotations: state.scriptAnnotations,
+        })
         return {
           scriptScenes: mergedScriptScenes,
           importedScripts: [...otherScripts, newScript],
+          scriptDocument: convertedDocument.scriptDocument,
+          scriptAnnotations: convertedDocument.scriptAnnotations,
+          scriptDocumentLive: null,
           scenes: state.scenes.map((storyScene, idx) => {
             if (storyScene.linkedScriptSceneId) return storyScene
             const fallback = mergedScriptScenes[idx]
@@ -1155,9 +1163,16 @@ const useStore = create((set, get) => ({
           ? state.importedScripts.map(s => s.filename === scriptMeta.filename ? newScript : s)
           : [...state.importedScripts, newScript]
         const mergedScriptScenes = [...state.scriptScenes, ...newScenes]
+        const convertedDocument = convertLegacyScriptScenesToProseMirrorDocument(mergedScriptScenes, {
+          documentSettings: state.scriptSettings?.documentSettings,
+          scriptAnnotations: state.scriptAnnotations,
+        })
         return {
           scriptScenes: mergedScriptScenes,
           importedScripts: updatedScripts,
+          scriptDocument: convertedDocument.scriptDocument,
+          scriptAnnotations: convertedDocument.scriptAnnotations,
+          scriptDocumentLive: null,
           scenes: state.scenes.map((storyScene, idx) => {
             if (storyScene.linkedScriptSceneId) return storyScene
             const fallback = mergedScriptScenes[idx]
@@ -1177,6 +1192,7 @@ const useStore = create((set, get) => ({
       importedSceneCount: Array.isArray(parsedScenes) ? parsedScenes.length : 0,
       source: scriptMeta?.filename || 'unknown',
     })
+    get().deriveScriptDocumentNow({ reason: 'script_import', persist: false })
     get()._scheduleAutoSave()
   },
 
