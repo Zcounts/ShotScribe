@@ -2111,6 +2111,43 @@ const useStore = create((set, get) => ({
     }
   },
 
+  _syncCameraSettingImmediately: ({ fieldType, shotId, oldValue, newValue } = {}) => {
+    const state = get()
+    if (state.projectRef?.type !== 'cloud') return
+    if (!state.cloudSyncContext?.canSync || !state.cloudSyncContext?.cloudWritesEnabled) return
+    const syncFn = state.cloudSyncContext?.syncLiveStoryboardState
+    if (typeof syncFn !== 'function') return
+    const scene = (state.scenes || []).find((candidate) =>
+      (candidate?.shots || []).some((shot) => String(shot?.id || '') === String(shotId || '')),
+    )
+    const shot = (scene?.shots || []).find((candidate) => String(candidate?.id || '') === String(shotId || '')) || null
+    if (!scene || !shot) return
+    const payload = {
+      shotId: String(shot.id || ''),
+      cameraName: shot.cameraName || 'Camera 1',
+      color: shot.color || null,
+      sceneId: String(scene.id || ''),
+    }
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug('[CAMERA_SETTING_AUDIT] outgoing_write', {
+        fieldType: fieldType || null,
+        oldValue,
+        newValue,
+        cameraKey: payload.shotId,
+        sceneId: payload.sceneId,
+        persistedPayload: payload,
+        immediateLiveWriteIssued: true,
+      })
+    }
+    syncFn({
+      projectId: state.projectRef.projectId,
+      scenes: state.scenes || [],
+      storyboardSceneOrder: state.storyboardSceneOrder || [],
+    })
+    state.cloudSyncContext.flushLiveStoryboardSync?.()
+  },
+
   addScene: (overrides = {}) => {
     const currentScenes = get().scenes
     const sceneNum = currentScenes.length + 1
@@ -2483,14 +2520,44 @@ const useStore = create((set, get) => ({
   },
 
   updateShot: (shotId, updates) => {
+    const editedShotId = String(shotId || '')
+    const previousShot = (() => {
+      const state = get()
+      for (const scene of (state?.scenes || [])) {
+        for (const shot of (scene?.shots || [])) {
+          if (String(shot?.id || '') === editedShotId) return shot
+        }
+      }
+      return null
+    })()
     set(state => ({
       scenes: state.scenes.map(s => ({
         ...s,
         shots: s.shots.map(sh => sh.id === shotId ? { ...sh, ...updates } : sh),
       })),
       lastStoryboardEditAt: Date.now(),
+      lastStoryboardEditedShotId: editedShotId || null,
     }))
     get()._scheduleAutoSave()
+    if (Object.prototype.hasOwnProperty.call(updates || {}, 'cameraName')) {
+      const nextCameraName = updates?.cameraName
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.debug('[CAMERA_SETTING_AUDIT] local_change', {
+          fieldType: 'label_text',
+          shotId: editedShotId || null,
+          oldValue: previousShot?.cameraName ?? 'Camera 1',
+          newValue: nextCameraName ?? '',
+          cameraKey: editedShotId || null,
+        })
+      }
+      get()._syncCameraSettingImmediately({
+        fieldType: 'label_text',
+        shotId: editedShotId,
+        oldValue: previousShot?.cameraName ?? 'Camera 1',
+        newValue: nextCameraName ?? '',
+      })
+    }
   },
 
   updateShotSpec: (shotId, specKey, value) => {
@@ -2518,13 +2585,41 @@ const useStore = create((set, get) => ({
   },
 
   updateShotColor: (shotId, color) => {
+    const editedShotId = String(shotId || '')
+    const previousShot = (() => {
+      const state = get()
+      for (const scene of (state?.scenes || [])) {
+        for (const shot of (scene?.shots || [])) {
+          if (String(shot?.id || '') === editedShotId) return shot
+        }
+      }
+      return null
+    })()
     set(state => ({
       scenes: state.scenes.map(s => ({
         ...s,
         shots: s.shots.map(sh => sh.id === shotId ? { ...sh, color } : sh),
       })),
+      lastStoryboardEditAt: Date.now(),
+      lastStoryboardEditedShotId: editedShotId || null,
     }))
     get()._scheduleAutoSave()
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug('[CAMERA_SETTING_AUDIT] local_change', {
+        fieldType: 'color',
+        shotId: editedShotId || null,
+        oldValue: previousShot?.color ?? null,
+        newValue: color ?? null,
+        cameraKey: editedShotId || null,
+      })
+    }
+    get()._syncCameraSettingImmediately({
+      fieldType: 'color',
+      shotId: editedShotId,
+      oldValue: previousShot?.color ?? null,
+      newValue: color ?? null,
+    })
   },
 
   updateShotImage: (shotId, imagePayload) => {
@@ -4221,6 +4316,54 @@ const useStore = create((set, get) => ({
         const existingShot = existingShotsById.get(shotId)
         const incomingUpdatedAt = Number(shot?.updatedAt || 0)
         const incomingIsOlderThanLatestLocalEdit = incomingUpdatedAt > 0 && incomingUpdatedAt < lastLocalStoryboardEditAt
+        if (import.meta.env.DEV && existingShot) {
+          const incomingCameraName = shot.cameraName || 'Camera 1'
+          const incomingColor = shot.color || null
+          const localCameraName = existingShot?.cameraName || 'Camera 1'
+          const localColor = existingShot?.color || null
+          const labelDiffers = incomingCameraName !== localCameraName
+          const colorDiffers = incomingColor !== localColor
+          if (labelDiffers || colorDiffers) {
+            // eslint-disable-next-line no-console
+            console.debug('[CAMERA_SETTING_AUDIT] incoming_live_apply', {
+              shotId,
+              sceneId,
+              incomingUpdatedAt,
+              lastLocalStoryboardEditAt,
+              fieldDiffs: {
+                label_text: labelDiffers
+                  ? { localValueBeforeApply: localCameraName, incomingLiveValue: incomingCameraName }
+                  : null,
+                color: colorDiffers
+                  ? { localValueBeforeApply: localColor, incomingLiveValue: incomingColor }
+                  : null,
+              },
+              incomingLooksOlderOrStale: incomingIsOlderThanLatestLocalEdit,
+            })
+          }
+          if (incomingIsOlderThanLatestLocalEdit && labelDiffers) {
+            // eslint-disable-next-line no-console
+            console.warn('[CAMERA_SETTING_REVERT]', {
+              fieldType: 'label_text',
+              localValue: localCameraName,
+              incomingLiveValue: incomingCameraName,
+              applyPath: 'src/store.js:applyLiveStoryboardState',
+              shotId,
+              sceneId,
+            })
+          }
+          if (incomingIsOlderThanLatestLocalEdit && colorDiffers) {
+            // eslint-disable-next-line no-console
+            console.warn('[CAMERA_SETTING_REVERT]', {
+              fieldType: 'color',
+              localValue: localColor,
+              incomingLiveValue: incomingColor,
+              applyPath: 'src/store.js:applyLiveStoryboardState',
+              shotId,
+              sceneId,
+            })
+          }
+        }
         const shouldPreserveExistingImage = Boolean(existingShot)
           && (!incomingHasUsableImagePayload(shot) || incomingIsOlderThanLatestLocalEdit)
         const nextImage = shouldPreserveExistingImage ? (existingShot?.image || null) : (shot.image || null)
