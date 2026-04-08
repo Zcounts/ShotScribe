@@ -451,6 +451,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const linkShotToScene = useStore(s => s.linkShotToScene)
   const derivedShotLinksByScene = useStore(s => s.derivedScriptData?.compatibility?.shotLinkIndexBySceneId || {})
   const projectRef = useStore(s => s.projectRef)
+  const projectName = useStore(s => s.projectName)
   const cloudSyncContext = useStore(s => s.cloudSyncContext)
   const getProjectData = useStore(s => s.getProjectData)
   const setCloudSnapshotId = useStore(s => s.setCloudSnapshotId)
