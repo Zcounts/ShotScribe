@@ -2543,12 +2543,11 @@ const useStore = create((set, get) => ({
       const nextCameraName = updates?.cameraName
       if (import.meta.env.DEV) {
         // eslint-disable-next-line no-console
-        console.debug('[CAMERA_SETTING_AUDIT] local_change', {
-          fieldType: 'label_text',
+        console.debug('[CAMERA_FIELD_PROOF] local_change', {
           shotId: editedShotId || null,
+          field: 'cameraName',
           oldValue: previousShot?.cameraName ?? 'Camera 1',
           newValue: nextCameraName ?? '',
-          cameraKey: editedShotId || null,
         })
       }
       get()._syncCameraSettingImmediately({
@@ -2606,12 +2605,11 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
-      console.debug('[CAMERA_SETTING_AUDIT] local_change', {
-        fieldType: 'color',
+      console.debug('[CAMERA_FIELD_PROOF] local_change', {
         shotId: editedShotId || null,
+        field: 'color',
         oldValue: previousShot?.color ?? null,
         newValue: color ?? null,
-        cameraKey: editedShotId || null,
       })
     }
     get()._syncCameraSettingImmediately({
@@ -4316,72 +4314,54 @@ const useStore = create((set, get) => ({
         const existingShot = existingShotsById.get(shotId)
         const incomingUpdatedAt = Number(shot?.updatedAt || 0)
         const incomingIsOlderThanLatestLocalEdit = incomingUpdatedAt > 0 && incomingUpdatedAt < lastLocalStoryboardEditAt
+        const incomingCameraName = shot.cameraName || 'Camera 1'
+        const incomingColor = shot.color || null
+        const localCameraName = existingShot?.cameraName || 'Camera 1'
+        const localColor = existingShot?.color || null
+        const shouldPreserveLocalCameraName = Boolean(existingShot) && (incomingIsOlderThanLatestLocalEdit || !shot.cameraName)
+        const shouldPreserveLocalColor = Boolean(existingShot) && incomingIsOlderThanLatestLocalEdit
+        const appliedCameraName = shouldPreserveLocalCameraName ? localCameraName : incomingCameraName
+        const appliedColor = shouldPreserveLocalColor ? localColor : incomingColor
         if (import.meta.env.DEV && existingShot) {
-          const incomingCameraName = shot.cameraName || 'Camera 1'
-          const incomingColor = shot.color || null
-          const localCameraName = existingShot?.cameraName || 'Camera 1'
-          const localColor = existingShot?.color || null
           const labelDiffers = incomingCameraName !== localCameraName
           const colorDiffers = incomingColor !== localColor
-          if (labelDiffers || colorDiffers) {
+          // eslint-disable-next-line no-console
+          console.debug('[CAMERA_FIELD_PROOF] client_apply', {
+            shotId,
+            incoming: { cameraName: incomingCameraName, color: incomingColor },
+            localBeforeApply: { cameraName: localCameraName, color: localColor },
+            localAfterApply: { cameraName: appliedCameraName, color: appliedColor },
+            incomingUpdatedAt,
+            lastLocalStoryboardEditAt,
+          })
+          if (!shot.cameraName) {
             // eslint-disable-next-line no-console
-            console.debug('[CAMERA_SETTING_AUDIT] incoming_live_apply', {
+            console.warn('[CAMERA_FIELD_BREAK]', {
               shotId,
-              sceneId,
-              incomingUpdatedAt,
-              lastLocalStoryboardEditAt,
-              fieldDiffs: {
-                label_text: labelDiffers
-                  ? { localValueBeforeApply: localCameraName, incomingLiveValue: incomingCameraName }
-                  : null,
-                color: colorDiffers
-                  ? { localValueBeforeApply: localColor, incomingLiveValue: incomingColor }
-                  : null,
-              },
-              incomingLooksOlderOrStale: incomingIsOlderThanLatestLocalEdit,
+              field: 'cameraName',
+              stage: 'client_apply',
+              expected: localCameraName,
+              actual: '(missing — fell back to default)',
             })
           }
-          if (labelDiffers || colorDiffers || incomingIsOlderThanLatestLocalEdit || !shot.cameraName) {
+          if (incomingIsOlderThanLatestLocalEdit && labelDiffers && !shouldPreserveLocalCameraName) {
             // eslint-disable-next-line no-console
-            console.debug('[CAMERA_ROUNDTRIP_AUDIT] client_apply', {
+            console.warn('[CAMERA_FIELD_BREAK]', {
               shotId,
-              sceneId,
-              cameraName: incomingCameraName,
-              color: incomingColor,
-              usedDefault: { cameraName: !shot.cameraName, color: shot.color == null },
-              incomingIsOlderThanLatestLocalEdit,
-            })
-            if (!shot.cameraName) {
-              // eslint-disable-next-line no-console
-              console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
-                shotId,
-                field: 'cameraName',
-                stage: 'client_apply',
-                expected: localCameraName,
-                actual: '(missing — fell back to default)',
-              })
-            }
-          }
-          if (incomingIsOlderThanLatestLocalEdit && labelDiffers) {
-            // eslint-disable-next-line no-console
-            console.warn('[CAMERA_SETTING_REVERT]', {
-              fieldType: 'label_text',
-              localValue: localCameraName,
-              incomingLiveValue: incomingCameraName,
-              applyPath: 'src/store.js:applyLiveStoryboardState',
-              shotId,
-              sceneId,
+              field: 'cameraName',
+              stage: 'client_apply',
+              expected: localCameraName,
+              actual: incomingCameraName,
             })
           }
-          if (incomingIsOlderThanLatestLocalEdit && colorDiffers) {
+          if (incomingIsOlderThanLatestLocalEdit && colorDiffers && !shouldPreserveLocalColor) {
             // eslint-disable-next-line no-console
-            console.warn('[CAMERA_SETTING_REVERT]', {
-              fieldType: 'color',
-              localValue: localColor,
-              incomingLiveValue: incomingColor,
-              applyPath: 'src/store.js:applyLiveStoryboardState',
+            console.warn('[CAMERA_FIELD_BREAK]', {
               shotId,
-              sceneId,
+              field: 'color',
+              stage: 'client_apply',
+              expected: localColor,
+              actual: incomingColor,
             })
           }
         }
@@ -4391,9 +4371,9 @@ const useStore = create((set, get) => ({
         const nextImageAsset = shouldPreserveExistingImage ? (existingShot?.imageAsset || null) : (shot.imageAsset || null)
         shotsByScene.get(sceneId).push({
           id: shotId,
-          cameraName: shot.cameraName || 'Camera 1',
+          cameraName: appliedCameraName,
           focalLength: shot.focalLength || '',
-          color: shot.color || null,
+          color: appliedColor,
           image: nextImage,
           imageAsset: nextImageAsset,
           specs: shot.specs || { size: '', type: '', move: '', equip: '' },

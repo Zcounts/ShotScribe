@@ -612,36 +612,33 @@ export default function CloudSyncCoordinator() {
           const newCameraName = nextShotPayload?.cameraName || 'Camera 1'
           const oldColor = oldShotPayload?.color || null
           const newColor = nextShotPayload?.color || null
-          if (oldCameraName !== newCameraName || oldColor !== newColor) {
+          // eslint-disable-next-line no-console
+          console.debug('[CAMERA_FIELD_PROOF] payload_built', {
+            shotId,
+            cameraName: newCameraName,
+            color: newColor,
+          })
+          const cameraNameChanged = oldCameraName !== newCameraName
+          const colorChanged = oldColor !== newColor
+          const semanticChanged = reasonList.length > 0
+          const willWrite = semanticChanged
+          // eslint-disable-next-line no-console
+          console.debug('[CAMERA_FIELD_PROOF] write_decision', {
+            shotId,
+            changed: semanticChanged,
+            willWrite,
+            reasons: reasonList,
+            cameraNameContributed: cameraNameChanged,
+            colorContributed: colorChanged,
+          })
+          if ((cameraNameChanged || colorChanged) && !willWrite) {
             // eslint-disable-next-line no-console
-            console.debug('[CAMERA_SETTING_AUDIT] outgoing_write', {
-              fieldType: oldCameraName !== newCameraName ? 'label_text' : 'color',
+            console.warn('[CAMERA_FIELD_BREAK]', {
               shotId,
-              sceneId,
-              previousPersisted: {
-                cameraName: oldCameraName,
-                color: oldColor,
-              },
-              nextPersisted: {
-                cameraName: newCameraName,
-                color: newColor,
-              },
-              persistedPayload: {
-                shotId,
-                sceneId,
-                order: index,
-                payload: nextShotPayload,
-              },
-              immediateLiveWriteIssued: !soloModeRef.current,
-              queuedForSoloFlush: soloModeRef.current,
-            })
-            // eslint-disable-next-line no-console
-            console.debug('[CAMERA_ROUNDTRIP_AUDIT] outgoing_payload', {
-              shotId,
-              sceneId,
-              cameraName: newCameraName,
-              color: newColor,
-              mutationPayload: { shotId, sceneId, order: index, cameraName: newCameraName, color: newColor },
+              field: cameraNameChanged ? 'cameraName' : 'color',
+              stage: 'write_decision',
+              expected: cameraNameChanged ? newCameraName : newColor,
+              actual: cameraNameChanged ? oldCameraName : oldColor,
             })
           }
         }
@@ -871,7 +868,7 @@ export default function CloudSyncCoordinator() {
                   const readCameraName = row.cameraName || 'Camera 1'
                   const readColor = row.color || null
                   // eslint-disable-next-line no-console
-                  console.debug('[CAMERA_ROUNDTRIP_AUDIT] server_read', {
+                  console.debug('[CAMERA_FIELD_PROOF] query_read', {
                     shotId: row.shotId,
                     cameraName: readCameraName,
                     color: readColor,
@@ -879,20 +876,20 @@ export default function CloudSyncCoordinator() {
                   })
                   if (readCameraName !== expectedCameraName) {
                     // eslint-disable-next-line no-console
-                    console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
+                    console.warn('[CAMERA_FIELD_BREAK]', {
                       shotId: row.shotId,
                       field: 'cameraName',
-                      stage: 'server_read',
+                      stage: 'query_read',
                       expected: expectedCameraName,
                       actual: readCameraName,
                     })
                   }
                   if (readColor !== expectedColor) {
                     // eslint-disable-next-line no-console
-                    console.warn('[CAMERA_ROUNDTRIP_BREAK]', {
+                    console.warn('[CAMERA_FIELD_BREAK]', {
                       shotId: row.shotId,
                       field: 'color',
-                      stage: 'server_read',
+                      stage: 'query_read',
                       expected: expectedColor,
                       actual: readColor,
                     })
