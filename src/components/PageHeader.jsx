@@ -120,9 +120,40 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
   }
 
   const cameras = scene.cameras || [{ name: scene.cameraName || 'Camera 1', body: scene.cameraBody || 'fx30' }]
+  if (import.meta.env.DEV) {
+    cameras.forEach((cam, idx) => {
+      // eslint-disable-next-line no-console
+      console.debug('[CAMERA_UI_SOURCE_AUDIT] render_source', {
+        component: 'PageHeader',
+        file: 'src/components/PageHeader.jsx',
+        controlType: 'label_text',
+        fieldPath: `scene.cameras[${idx}].name`,
+        value: cam?.name || '',
+      })
+      // eslint-disable-next-line no-console
+      console.debug('[CAMERA_UI_SOURCE_AUDIT] render_source', {
+        component: 'PageHeader',
+        file: 'src/components/PageHeader.jsx',
+        controlType: 'color',
+        fieldPath: `scene.cameras[${idx}].color`,
+        value: cam?.color || null,
+      })
+    })
+  }
 
   const updateCamera = (idx, field, value) => {
     const updated = cameras.map((c, i) => i === idx ? { ...c, [field]: value } : c)
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug('[CAMERA_UI_SOURCE_AUDIT] write_target', {
+        component: 'PageHeader',
+        file: 'src/components/PageHeader.jsx',
+        controlType: field === 'name' ? 'label_text' : (field === 'color' ? 'color' : field),
+        function: 'updateCamera',
+        fieldPath: `scene.cameras[${idx}].${field}`,
+        value,
+      })
+    }
     set({ cameras: updated })
   }
 

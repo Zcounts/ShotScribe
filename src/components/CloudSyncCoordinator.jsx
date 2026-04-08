@@ -55,6 +55,13 @@ async function resolveInlineImageBlob(source) {
 }
 
 function normalizeLiveScenePayload(scene) {
+  const cameras = Array.isArray(scene?.cameras)
+    ? scene.cameras.map((camera) => ({
+      name: String(camera?.name || ''),
+      body: String(camera?.body || ''),
+      color: camera?.color || undefined,
+    }))
+    : undefined
   return {
     sceneLabel: String(scene?.sceneLabel || '').trim() || 'SCENE',
     slugline: scene?.slugline || '',
@@ -62,6 +69,7 @@ function normalizeLiveScenePayload(scene) {
     intOrExt: scene?.intOrExt || '',
     dayNight: scene?.dayNight || '',
     color: scene?.color || undefined,
+    cameras,
     linkedScriptSceneId: scene?.linkedScriptSceneId || undefined,
     pageNotes: Array.isArray(scene?.pageNotes) ? scene.pageNotes.map((entry) => String(entry || '')) : [''],
     pageColors: Array.isArray(scene?.pageColors) ? scene.pageColors.map((entry) => String(entry || '')) : [],
@@ -584,6 +592,36 @@ export default function CloudSyncCoordinator() {
       const shouldUpsertScene = !existingScene
         || Number(existingScene.order) !== Number(nextOrder)
         || stableStringify(normalizeLiveScenePayload(existingScene)) !== stableStringify(nextPayload)
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.debug('[CAMERA_UI_SOURCE_AUDIT] persistence_target', {
+          file: 'src/components/CloudSyncCoordinator.jsx',
+          function: 'applyLiveStoryboardSync',
+          objectType: 'scene_live_row',
+          payloadPath: `scene.payload.cameras`,
+          sceneId,
+          cameras: nextPayload?.cameras || [],
+        })
+        const renderedFieldPath = 'scene.cameras[idx].{name,color}'
+        const writtenFieldPath = 'scene.cameras[idx].{name,color}'
+        const persistedFieldPath = 'projectScenes.cameras[idx].{name,color}'
+        if (writtenFieldPath !== renderedFieldPath) {
+          // eslint-disable-next-line no-console
+          console.warn('[CAMERA_SOURCE_MISMATCH]', {
+            controlType: 'label_text',
+            renderedFieldPath,
+            writtenFieldPath,
+            persistedFieldPath,
+          })
+          // eslint-disable-next-line no-console
+          console.warn('[CAMERA_SOURCE_MISMATCH]', {
+            controlType: 'color',
+            renderedFieldPath,
+            writtenFieldPath,
+            persistedFieldPath,
+          })
+        }
+      }
       if (shouldUpsertScene) {
         await upsertLiveScene({
           projectId,

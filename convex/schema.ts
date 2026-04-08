@@ -81,6 +81,7 @@ export default defineSchema({
     intOrExt: v.optional(v.string()),
     dayNight: v.optional(v.string()),
     color: v.optional(v.string()),
+    cameras: v.optional(v.any()),
     linkedScriptSceneId: v.optional(v.string()),
     pageNotes: v.optional(v.array(v.string())),
     pageColors: v.optional(v.array(v.string())),

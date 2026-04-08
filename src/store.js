@@ -4405,19 +4405,31 @@ const useStore = create((set, get) => ({
     const orderedScenes = scenes
       .slice()
       .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
-      .map((scene) => ({
-        id: scene.sceneId,
-        sceneLabel: scene.sceneLabel || '',
-        slugline: scene.slugline || '',
-        location: scene.location || '',
-        intOrExt: scene.intOrExt || '',
-        dayNight: scene.dayNight || '',
-        color: scene.color || null,
-        linkedScriptSceneId: scene.linkedScriptSceneId || null,
-        pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes : [''],
-        pageColors: Array.isArray(scene.pageColors) ? scene.pageColors : [],
-        shots: shotsByScene.get(String(scene.sceneId)) || [],
-      }))
+      .map((scene) => {
+        const existingScene = (beforeState?.scenes || []).find((candidate) => String(candidate?.id || '') === String(scene.sceneId || ''))
+        const incomingCameras = Array.isArray(scene.cameras)
+          ? scene.cameras.map((camera) => ({
+            name: String(camera?.name || ''),
+            body: String(camera?.body || ''),
+            color: camera?.color || null,
+          }))
+          : null
+        const nextCameras = incomingCameras || existingScene?.cameras || [{ name: scene.cameraName || 'Camera 1', body: scene.cameraBody || 'fx30' }]
+        return {
+          id: scene.sceneId,
+          sceneLabel: scene.sceneLabel || '',
+          slugline: scene.slugline || '',
+          location: scene.location || '',
+          intOrExt: scene.intOrExt || '',
+          dayNight: scene.dayNight || '',
+          color: scene.color || null,
+          cameras: nextCameras,
+          linkedScriptSceneId: scene.linkedScriptSceneId || null,
+          pageNotes: Array.isArray(scene.pageNotes) ? scene.pageNotes : [''],
+          pageColors: Array.isArray(scene.pageColors) ? scene.pageColors : [],
+          shots: shotsByScene.get(String(scene.sceneId)) || [],
+        }
+      })
 
     const order = orderedScenes.map((scene) => scene.id)
     set({
