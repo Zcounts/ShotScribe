@@ -56,6 +56,79 @@ function getCellValue(colKey, shot, scene) {
   return shot[colKey] ?? ''
 }
 
+// ── Image pre-fetch utilities (cross-origin canvas-taint fix) ─────────────────
+//
+// html2canvas taints the canvas when it encounters cross-origin <img> elements
+// (e.g. Convex signed HTTPS URLs). Converting those URLs to base64 data URLs
+// before export removes the cross-origin constraint entirely.
+
+/**
+ * Fetch a remote URL and return it as a base64 data URL.
+ * URLs that are already data: or blob: are returned unchanged.
+ */
+async function toBase64DataURL(url) {
+  if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const blob = await response.blob()
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch (err) {
+    console.warn('[PDF Export] Could not pre-fetch image, falling back to original URL:', url, err.message)
+    return url
+  }
+}
+
+/**
+ * Collect all remote image URLs from store shots and pre-fetch them as base64.
+ * Returns a plain object mapping { originalUrl → base64DataUrl }.
+ */
+async function preloadShotImages() {
+  const { getStoryboardScenes } = useStore.getState()
+  const scenes = getStoryboardScenes()
+  const urls = new Set()
+  scenes.forEach(scene => {
+    scene.shots.forEach(shot => {
+      if (shot.image && !shot.image.startsWith('data:') && !shot.image.startsWith('blob:')) {
+        urls.add(shot.image)
+      }
+    })
+  })
+  if (urls.size === 0) return {}
+  console.log(`[PDF Export] Pre-fetching ${urls.size} image(s) to base64 (Electron path)…`)
+  const entries = await Promise.all(
+    [...urls].map(async url => [url, await toBase64DataURL(url)])
+  )
+  return Object.fromEntries(entries)
+}
+
+/**
+ * Collect all remote image URLs from a set of DOM elements and pre-fetch them
+ * as base64. Returns a plain object mapping { originalUrl → base64DataUrl }.
+ */
+async function preloadDomImages(elements) {
+  const urls = new Set()
+  elements.forEach(el => {
+    el.querySelectorAll('img[src]').forEach(img => {
+      const src = img.getAttribute('src')
+      if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
+        urls.add(src)
+      }
+    })
+  })
+  if (urls.size === 0) return {}
+  console.log(`[PDF Export] Pre-fetching ${urls.size} image(s) to base64 (browser path)…`)
+  const entries = await Promise.all(
+    [...urls].map(async url => [url, await toBase64DataURL(url)])
+  )
+  return Object.fromEntries(entries)
+}
+
 // ── Storyboard print HTML: built from store data ──────────────────────────────
 //
 // Generates a self-contained HTML document with one .page-doc div per logical
@@ -63,7 +136,7 @@ function getCellValue(colKey, shot, scene) {
 // Always uses a hardcoded light theme — white background, black text.
 // No reference to the live app DOM.
 
-function buildStoryboardPrintHtml() {
+function buildStoryboardPrintHtml(imageMap = {}) {
   const { getStoryboardScenes, columnCount, projectName, storyboardDisplayConfig } = useStore.getState()
   const scenes = getStoryboardScenes()
   const cols = Math.max(2, Math.min(4, columnCount || 4))
@@ -110,7 +183,7 @@ function buildStoryboardPrintHtml() {
       // Build card HTML for each shot in this page
       const cardHtmlItems = pageShots.map(shot => {
         const imgHtml = shot.image
-          ? `<img src="${shot.image}" alt="${escapeHtml(shot.displayId)}">`
+          ? `<img src="${imageMap[shot.image] || shot.image}" alt="${escapeHtml(shot.displayId)}">`
           : `<div class="no-img">No image</div>`
 
         const specColumns = ['size', 'type', 'move', 'equip'].filter(key => !useDisplayConfig || visibleInfo[key] !== false)
@@ -2152,7 +2225,7 @@ function prepareForCapture(el) {
   }
 }
 
-async function captureElementWithTimeout(el, scale = 1.5, timeoutMs = 60000) {
+async function captureElementWithTimeout(el, scale = 1.5, timeoutMs = 60000, imageMap = {}) {
   const restore = prepareForCapture(el)
   try {
     return await Promise.race([
@@ -2165,6 +2238,14 @@ async function captureElementWithTimeout(el, scale = 1.5, timeoutMs = 60000) {
         imageTimeout: 15000,
         onclone: (_clonedDoc, clonedEl) => {
           clonedEl.style.overflow = 'visible'
+          // Replace remote img src values with pre-fetched base64 data URLs so
+          // html2canvas never encounters a cross-origin URL that would taint the canvas.
+          if (Object.keys(imageMap).length > 0) {
+            clonedEl.querySelectorAll('img[src]').forEach(img => {
+              const src = img.getAttribute('src')
+              if (src && imageMap[src]) img.setAttribute('src', imageMap[src])
+            })
+          }
         },
       }),
       new Promise((_res, rej) =>
@@ -2176,7 +2257,7 @@ async function captureElementWithTimeout(el, scale = 1.5, timeoutMs = 60000) {
   }
 }
 
-async function exportPagesBrowser(pages) {
+async function exportPagesBrowser(pages, imageMap = {}) {
   console.log(`[PDF Export] Starting browser/html2canvas path — ${pages.length} page(s)`)
 
   let pdf = null
@@ -2186,14 +2267,14 @@ async function exportPagesBrowser(pages) {
     let canvas
     try {
       console.log(`[PDF Export] Rendering page ${i + 1}/${pages.length} at scale ${scale}…`)
-      canvas = await captureElementWithTimeout(pages[i], scale, 60000)
+      canvas = await captureElementWithTimeout(pages[i], scale, 60000, imageMap)
     } catch (scaleErr) {
       console.warn(`[PDF Export] Page ${i + 1} failed at scale ${scale}:`, scaleErr.message)
       if (scale > 1.0) {
         scale = 1.0
         console.log(`[PDF Export] Retrying page ${i + 1} at scale 1.0…`)
         try {
-          canvas = await captureElementWithTimeout(pages[i], scale, 60000)
+          canvas = await captureElementWithTimeout(pages[i], scale, 60000, imageMap)
         } catch (retryErr) {
           console.error(`[PDF Export] Page ${i + 1} failed on retry:`, retryErr.message)
           continue
@@ -2241,7 +2322,10 @@ async function exportPagesBrowser(pages) {
 export async function exportStoryboardPDF(pageRefs, projectName) {
   try {
     if (platformService.hasPrintToPDF()) {
-      const html = buildStoryboardPrintHtml()
+      // Pre-fetch all remote shot images to base64 so the Electron print-to-PDF
+      // renderer never encounters cross-origin URLs that could produce blank frames.
+      const imageMap = await preloadShotImages()
+      const html = buildStoryboardPrintHtml(imageMap)
       await exportViaPrint(html, projectName, 'storyboard')
     } else {
       const pages = (pageRefs?.current || []).filter(Boolean)
@@ -2249,7 +2333,10 @@ export async function exportStoryboardPDF(pageRefs, projectName) {
         console.warn('[PDF Export] No storyboard page elements found — aborting.')
         return
       }
-      await exportPagesBrowser(pages)
+      // Pre-fetch all remote images visible in the live DOM before html2canvas
+      // runs, so the canvas is never tainted by cross-origin <img> elements.
+      const imageMap = await preloadDomImages(pages)
+      await exportPagesBrowser(pages, imageMap)
     }
   } catch (err) {
     console.error('[PDF Export] Storyboard export failed:', err)
