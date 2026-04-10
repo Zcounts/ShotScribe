@@ -2235,6 +2235,35 @@ async function exportViaPrint(htmlContent, projectName, suffix = '', explicitFil
   return saveResult
 }
 
+async function exportCallsheetPdfViaServer({ htmlContent, projectName, daySuffix = 'callsheet', explicitFileName = '' } = {}) {
+  const endpoint = import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL
+  if (!endpoint) return { handled: false }
+
+  const base = (projectName || 'export').replace(/[^a-z0-9]/gi, '_') || 'export'
+  const fileName = explicitFileName || `${base}_${daySuffix}.pdf`
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html: htmlContent, fileName }),
+  })
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '')
+    throw new Error(`Server callsheet export failed (${response.status}): ${errText || 'unknown error'}`)
+  }
+
+  const pdfBlob = await response.blob()
+  const url = URL.createObjectURL(pdfBlob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  return { handled: true, filePath: '' }
+}
+
 // ── Browser fallback path: html2canvas ────────────────────────────────────────
 // Used when running outside Electron (no desktop print-to-PDF bridge).
 
@@ -2576,6 +2605,12 @@ export async function exportCallsheetPDF(projectName) {
     const html = buildCallsheetPrintHtml()
     if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'callsheet')
+    } else if (import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL) {
+      await exportCallsheetPdfViaServer({
+        htmlContent: html,
+        projectName,
+        daySuffix: 'callsheet',
+      })
     } else {
       const previewBlob = new Blob([html], { type: 'text/html' })
       const previewUrl = URL.createObjectURL(previewBlob)
@@ -2622,6 +2657,16 @@ export async function exportSingleDayCallsheetPDF({
   if (platformService.hasPrintToPDF()) {
     const saveResult = await exportViaPrint(html, projectName, '', resolvedFileName)
     return { filePath: saveResult?.filePath || '', fileName: resolvedFileName }
+  }
+
+  if (import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL) {
+    await exportCallsheetPdfViaServer({
+      htmlContent: html,
+      projectName,
+      explicitFileName: resolvedFileName,
+      daySuffix: `callsheet_day${dayIdx + 1}`,
+    })
+    return { filePath: '', fileName: resolvedFileName }
   }
 
   const previewBlob = new Blob([html], { type: 'text/html' })

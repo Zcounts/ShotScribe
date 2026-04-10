@@ -121,6 +121,7 @@ Frontend env (root app):
 - `VITE_APP_ENV` (optional; sent to Sentry as `environment`, for example `production`/`staging`)
 - `VITE_APP_RELEASE` (optional; sent to Sentry as `release`, for example git SHA)
 - `VITE_MONITORING_ENDPOINT` (optional)
+- `VITE_CALLSHEET_PDF_EXPORT_URL` (optional but recommended for polished web callsheet export; points to a serverless endpoint that renders callsheet HTML to a true PDF via headless Chromium)
 
 Mobile frontend env (`mobile/` app):
 - `VITE_SENTRY_DSN` (optional; production builds only)
@@ -141,6 +142,12 @@ Post-deploy verification (web + mobile):
 1. Open the deployed app and confirm a Clarity session appears in the Clarity dashboard.
 2. Trigger a controlled client error in browser devtools and verify it appears in Sentry with the expected `environment` and `release`.
 3. Confirm no Clarity script requests and no Sentry startup traffic occur in local `npm run dev` sessions unless explicitly configured and built as production.
+
+Callsheet true-PDF export (web):
+1. Deploy a Node serverless endpoint at `api/export-callsheet-pdf` (this repo includes a reference handler in `api/export-callsheet-pdf.mjs` using `puppeteer-core` + `@sparticuz/chromium`).
+2. Set `VITE_CALLSHEET_PDF_EXPORT_URL` to that endpoint URL.
+3. With that env set, callsheet export uses server-rendered headless-Chromium PDF generation (Letter, print backgrounds on, browser headers/footers off).
+4. If the env is not set, the app falls back to client print behavior for compatibility.
 
 Convex env (production as needed):
 - `AUTH_ISSUER_URL`
