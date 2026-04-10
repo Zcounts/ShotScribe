@@ -121,6 +121,7 @@ Frontend env (root app):
 - `VITE_APP_ENV` (optional; sent to Sentry as `environment`, for example `production`/`staging`)
 - `VITE_APP_RELEASE` (optional; sent to Sentry as `release`, for example git SHA)
 - `VITE_MONITORING_ENDPOINT` (optional)
+- `VITE_CALLSHEET_PDF_EXPORT_URL` (optional but recommended for polished web callsheet export; points to a serverless endpoint that renders callsheet HTML to a true PDF via headless Chromium)
 
 Mobile frontend env (`mobile/` app):
 - `VITE_SENTRY_DSN` (optional; production builds only)

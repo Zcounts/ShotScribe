@@ -3142,6 +3142,12 @@ function _handleExportError(err) {
     msg += '\n\nTip: the page took too long to render — try exporting fewer scenes at once.'
   } else if (/ipc|main process/i.test(raw)) {
     msg += '\n\nThe Electron main process could not render the page. Check the developer console for details.'
+  } else if (/VITE_CALLSHEET_PDF_EXPORT_URL/i.test(raw)) {
+    msg += '\n\nTrue PDF export is not configured. Set VITE_CALLSHEET_PDF_EXPORT_URL and rebuild the frontend.'
+  } else if (/cors|failed to fetch|network/i.test(raw)) {
+    msg += '\n\nThe true PDF endpoint could not be reached (possible CORS/network issue). Verify endpoint deployment and CORS allowlist.'
+  } else if (/Server callsheet export failed/i.test(raw)) {
+    msg += '\n\nThe true PDF endpoint responded with an error. Check server logs for api/export-callsheet-pdf.'
   }
   alert(msg)
 }
@@ -3234,6 +3240,8 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   }
 
   const busy = (key) => exporting && exportingKey === key
+  const callsheetExportMode = getCallsheetExportMode()
+  const callsheetExportConfigured = callsheetExportMode !== 'browser-fallback'
   const activeTabLabel = activeTab === 'shotlist'
     ? 'Shotlist'
     : activeTab === 'schedule'

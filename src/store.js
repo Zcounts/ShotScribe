@@ -124,6 +124,7 @@ export const CALLSHEET_COLUMN_DEFINITIONS = {
     { key: 'character', label: 'Character' },
     { key: 'sceneCount', label: 'SC(Day) Scenes' },
     { key: 'pageCount', label: 'PG(Day) Pages' },
+    { key: 'callTime', label: 'Call Time - Day' },
     { key: 'pickupTime', label: 'Pickup - Day' },
     { key: 'makeupCall', label: 'Makeup - Day' },
     { key: 'setCall', label: 'Set - Day' },
