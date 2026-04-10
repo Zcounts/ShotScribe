@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS, DEFAULT_CALLSHEET_SECTION_CONFIG } from '../store'
 import SidebarPane from './SidebarPane'
 import { DayTabBar } from './DayTabBar'
@@ -99,26 +100,66 @@ function SectionColumnConfigureControl({ sectionKey, sectionLabel, columnConfig,
   const columns = CALLSHEET_COLUMN_DEFINITIONS[sectionKey] || []
   const visibleMap = new Map((columnConfig || []).map(column => [column.key, !!column.visible]))
   const primaryKey = CALLSHEET_PRIMARY_COLUMN_BY_SECTION[sectionKey]
+  const triggerRef = useRef(null)
+  const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0 })
+
+  useLayoutEffect(() => {
+    if (!isOpen) return undefined
+    const PANEL_WIDTH = 250
+    const EDGE_GAP = 8
+    const VERTICAL_GAP = 6
+
+    const updatePosition = () => {
+      const triggerNode = triggerRef.current
+      if (!triggerNode) return
+      const rect = triggerNode.getBoundingClientRect()
+      const scrollY = window.scrollY || window.pageYOffset || 0
+      const scrollX = window.scrollX || window.pageXOffset || 0
+
+      const documentTop = rect.bottom + scrollY + VERTICAL_GAP
+      const documentLeft = rect.right + scrollX - PANEL_WIDTH
+      const viewportTop = documentTop - scrollY
+      const viewportLeft = Math.min(
+        Math.max(EDGE_GAP, documentLeft - scrollX),
+        window.innerWidth - PANEL_WIDTH - EDGE_GAP,
+      )
+
+      setPanelPosition({
+        top: viewportTop,
+        left: viewportLeft,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    return () => window.removeEventListener('resize', updatePosition)
+  }, [isOpen])
 
   return (
     <div style={{ position: 'relative' }} data-callsheet-config-popover="true">
-      <ConfigureButton onClick={onToggleOpen} />
+      <div ref={triggerRef} style={{ display: 'inline-flex' }} data-callsheet-config-popover="true">
+        <ConfigureButton onClick={onToggleOpen} />
+      </div>
       {isOpen ? (
-        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 250, zIndex: 40, border: '1px solid #CBD5E1', borderRadius: 8, boxShadow: '0 12px 28px rgba(15,23,42,0.18)', background: '#fff', padding: 8 }} data-callsheet-config-popover="true">
-          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700, marginBottom: 6 }}>{sectionLabel}</div>
-          <div style={{ display: 'grid', gap: 5 }}>
-            {columns.map(column => {
-              const checked = column.key === primaryKey ? true : visibleMap.get(column.key) !== false
-              const locked = column.key === primaryKey
-              return (
-                <label key={column.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12, color: '#334155' }}>
-                  <span>{column.label}{locked ? ' (required)' : ''}</span>
-                  <input type="checkbox" checked={checked} disabled={locked} onChange={(e) => onToggleColumn(sectionKey, column.key, e.target.checked)} />
-                </label>
-              )
-            })}
+        createPortal(
+          <div style={{ position: 'fixed', top: panelPosition.top, left: panelPosition.left, width: 250, zIndex: 9999, border: '1px solid #CBD5E1', borderRadius: 8, boxShadow: '0 12px 28px rgba(15,23,42,0.18)', background: '#fff', padding: 8 }} data-callsheet-config-popover="true">
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', fontWeight: 700, marginBottom: 6 }}>{sectionLabel}</div>
+            <div style={{ display: 'grid', gap: 5 }}>
+              {columns.map(column => {
+                const checked = column.key === primaryKey ? true : visibleMap.get(column.key) !== false
+                const locked = column.key === primaryKey
+                return (
+                  <label key={column.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12, color: '#334155' }}>
+                    <span>{column.label}{locked ? ' (required)' : ''}</span>
+                    <input type="checkbox" checked={checked} disabled={locked} onChange={(e) => onToggleColumn(sectionKey, column.key, e.target.checked)} />
+                  </label>
+                )
+              })}
+            </div>
           </div>
-        </div>
+          ,
+          document.body,
+        )
       ) : null}
     </div>
   )
