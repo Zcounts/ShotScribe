@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { downloadScriptAsTxt } from '../utils/scriptTxtSerializer'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
@@ -2235,53 +2236,274 @@ async function exportViaPrint(htmlContent, projectName, suffix = '', explicitFil
   return saveResult
 }
 
-function getCallsheetServerExportUrl() {
-  return String(import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL || '').trim()
+function hasMeaningfulCallsheetValue(value) {
+  if (value === null || value === undefined) return false
+  const normalized = String(value).trim()
+  if (!normalized) return false
+  const lower = normalized.toLowerCase()
+  return lower !== 'none' && lower !== 'n/a' && lower !== 'na'
 }
 
-function getCallsheetExportMode() {
-  if (platformService.hasPrintToPDF()) return 'desktop'
-  if (getCallsheetServerExportUrl()) return 'server'
-  return 'browser-fallback'
-}
+function buildCallsheetExportData(dayIdxFilter = null) {
+  const { schedule, callsheets, projectName, castRoster, crewRoster, scriptScenes, getScheduleWithShots, callsheetColumnConfig } = useStore.getState()
+  if (!schedule.length) return { projectName, pages: [] }
 
-function notifyCallsheetFallback(reason) {
-  console.warn('[Callsheet Export] True PDF export is not configured. Browser print fallback will be used.', { reason })
-}
-
-async function exportCallsheetPdfViaServer({ htmlContent, projectName, daySuffix = 'callsheet', explicitFileName = '' } = {}) {
-  const endpoint = getCallsheetServerExportUrl()
-  if (!endpoint) {
-    throw new Error('Missing VITE_CALLSHEET_PDF_EXPORT_URL. True PDF export endpoint is not configured.')
+  const fmt12 = (t) => {
+    if (!t) return ''
+    const [h, m] = t.split(':').map(Number)
+    if (isNaN(h) || isNaN(m)) return t
+    const ap = h >= 12 ? 'PM' : 'AM'
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ap}`
+  }
+  const fmtDate = (d) => {
+    if (!d) return ''
+    const [y, mo, da] = d.split('-')
+    return `${mo}/${da}/${y}`
+  }
+  const formatMinuteOfDay = (totalMins) => {
+    if (typeof totalMins !== 'number') return ''
+    const safeTotal = ((Math.round(totalMins) % (24 * 60)) + 24 * 60) % (24 * 60)
+    const h24 = Math.floor(safeTotal / 60)
+    const m = safeTotal % 60
+    const h12 = h24 % 12 || 12
+    const ampm = h24 < 12 ? 'AM' : 'PM'
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
+  }
+  const formatDayNightDisplay = (value) => {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    const upper = raw.toUpperCase()
+    if (upper === 'NIGHT') return 'NITE'
+    return upper.slice(0, 4)
   }
 
-  const base = (projectName || 'export').replace(/[^a-z0-9]/gi, '_') || 'export'
-  const fileName = explicitFileName || `${base}_${daySuffix}.pdf`
-  console.info('[Callsheet Export] Server PDF request starting.', { endpoint, fileName })
+  const scheduleWithShots = getScheduleWithShots()
+  const primaryBySection = { advancedSchedule: 'sluglineScene', castList: 'actor', crewList: 'name' }
+  const isColumnVisible = (sectionKey, columnKey) => {
+    if (columnKey === primaryBySection[sectionKey]) return true
+    const rows = Array.isArray(callsheetColumnConfig?.[sectionKey]) ? callsheetColumnConfig[sectionKey] : []
+    const match = rows.find(row => row.key === columnKey)
+    return match ? !!match.visible : true
+  }
 
-  let response
-  try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html: htmlContent, fileName }),
+  const pages = schedule
+    .map((day, dayIdx) => ({ day, dayIdx }))
+    .filter(({ dayIdx }) => dayIdxFilter === null || dayIdxFilter.includes(dayIdx))
+    .map(({ day, dayIdx }) => {
+      const cs = callsheets[day.id] || {}
+      const productionTitle = cs.productionTitle !== undefined ? cs.productionTitle : (projectName || 'Untitled Project')
+      const preferredShootLocation = hasMeaningfulCallsheetValue(day.primaryLocation) ? day.primaryLocation : cs.shootLocation
+      const generalInfo = [
+        ['Production', productionTitle],
+        ['Basecamp / Unit Base', day.basecamp],
+        ['Shoot Location', preferredShootLocation],
+        ['Weather', cs.weather],
+        ['Nearest Hospital', cs.nearestHospital],
+        ['Emergency Contacts', cs.emergencyContacts],
+      ]
+        .filter(([, value]) => hasMeaningfulCallsheetValue(value))
+        .map(([label, value]) => ({ label, value: String(value).trim() }))
+
+      const derivedScheduleRows = buildDayScheduleRows(day, scheduleWithShots, scriptScenes)
+      const castListRows = deriveDayCastRows({
+        dayId: day.id, callsheet: cs, castRoster, scriptScenes, scheduledSceneIds: derivedScheduleRows.scheduledSceneIds,
+      })
+      const crewListRows = deriveDayCrewRows({ callsheet: cs, crewRoster, day })
+
+      const scheduleColumns = CALLSHEET_COLUMN_DEFINITIONS.advancedSchedule.filter(col => isColumnVisible('advancedSchedule', col.key))
+      const castColumns = CALLSHEET_COLUMN_DEFINITIONS.castList.filter(col => isColumnVisible('castList', col.key))
+      const crewColumns = CALLSHEET_COLUMN_DEFINITIONS.crewList.filter(col => isColumnVisible('crewList', col.key))
+
+      const scheduleRows = derivedScheduleRows.scenes.map((scene) => ({
+        sceneNumber: scene.sceneNumber || '',
+        sluglineScene: scene.slugline || '',
+        location: scene.location || '',
+        intExt: scene.intExt || '',
+        dayNight: formatDayNightDisplay(scene.dayNight),
+        start: formatMinuteOfDay(scene.start),
+        end: formatMinuteOfDay(scene.end),
+        pages: Number(scene.pageCount || 0).toFixed(2),
+        shots: String(scene.shotCount ?? ''),
+        notes: scene.notes || '',
+      })).filter(row => Object.values(row).some(hasMeaningfulCallsheetValue))
+
+      const castRows = castListRows.map(row => ({
+        actor: row.name || '',
+        character: row.character || '',
+        sceneCount: row.sceneCount ? String(row.sceneCount) : '',
+        pageCount: row.pageCount ? Number(row.pageCount).toFixed(2) : '',
+        pickupTime: row.pickupTime || '',
+        makeupCall: row.makeupCall || '',
+        setCall: row.setCall || '',
+        contact: row.contact || '',
+      })).filter(row => Object.values(row).some(hasMeaningfulCallsheetValue))
+
+      const crewRows = crewListRows.map(row => ({
+        name: row.name || '',
+        role: row.role || row.department || '',
+        callTime: row.callTime || '',
+        notes: row.notes || '',
+        contact: row.contact || '',
+      })).filter(row => Object.values(row).some(hasMeaningfulCallsheetValue))
+
+      const locationDetails = [
+        ['Address', cs.locationAddress],
+        ['Parking', cs.parkingNotes],
+        ['Directions', cs.directions],
+        ['Maps', cs.mapsLink],
+      ]
+        .filter(([, value]) => hasMeaningfulCallsheetValue(value))
+        .map(([label, value]) => ({ label, value: String(value).trim() }))
+
+      const additionalNotes = hasMeaningfulCallsheetValue(cs.additionalNotes) ? String(cs.additionalNotes).trim() : ''
+      const footerMeta = [`Day ${dayIdx + 1}`, day.date ? fmtDate(day.date) : '', day.startTime ? `General Call ${fmt12(day.startTime)}` : '']
+        .filter(Boolean)
+        .join(' • ')
+
+      return {
+        dayNumber: dayIdx + 1,
+        productionTitle,
+        generalInfo,
+        schedule: { columns: scheduleColumns, rows: scheduleRows },
+        cast: { columns: castColumns, rows: castRows },
+        crew: { columns: crewColumns, rows: crewRows },
+        locationDetails,
+        additionalNotes,
+        footerMeta,
+      }
     })
-  } catch (error) {
-    throw new Error(`Server callsheet export request failed for ${endpoint}. Possible network/CORS issue. ${error?.message || error}`)
-  }
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '')
-    throw new Error(`Server callsheet export failed (${response.status}) at ${endpoint}: ${errText || 'unknown error'}`)
-  }
+  return { projectName, pages }
+}
 
-  const pdfBlob = await response.blob()
-  console.info('[Callsheet Export] Server PDF request succeeded.', {
-    endpoint,
-    sizeBytes: pdfBlob?.size || 0,
-    type: pdfBlob?.type || 'unknown',
-  })
-  const url = URL.createObjectURL(pdfBlob)
+const callsheetPdfStyles = StyleSheet.create({
+  page: { backgroundColor: '#ffffff', paddingTop: 26, paddingBottom: 36, paddingHorizontal: 26, fontFamily: 'Helvetica', color: '#0f172a', fontSize: 9 },
+  header: { backgroundColor: '#0b1220', borderBottomWidth: 3, borderBottomColor: '#1f2937', borderTopLeftRadius: 6, borderTopRightRadius: 6, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { fontSize: 17, fontWeight: 700, color: '#ffffff' },
+  subtitle: { marginTop: 4, fontSize: 8, fontWeight: 700, color: '#dbeafe', letterSpacing: 1.5 },
+  day: { fontSize: 12, fontWeight: 700, color: '#f8fafc' },
+  section: { marginTop: 10 },
+  sectionTitle: { backgroundColor: '#111827', color: '#ffffff', fontSize: 8, fontWeight: 700, paddingVertical: 5, paddingHorizontal: 8, letterSpacing: 1.2, textTransform: 'uppercase' },
+  infoRow: { flexDirection: 'row', borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#d1d5db' },
+  infoLabel: { width: 120, backgroundColor: '#eef2ff', paddingVertical: 6, paddingHorizontal: 8, fontSize: 8, fontWeight: 700, color: '#111827', borderRightWidth: 1, borderRightColor: '#d1d5db' },
+  infoValue: { flex: 1, paddingVertical: 6, paddingHorizontal: 8, fontSize: 9, color: '#111111' },
+  table: { borderWidth: 1, borderColor: '#111827' },
+  tableHead: { flexDirection: 'row', backgroundColor: '#111827' },
+  th: { fontSize: 7.5, fontWeight: 700, color: '#ffffff', paddingVertical: 5, paddingHorizontal: 6, borderRightWidth: 1, borderRightColor: '#1f2937' },
+  tr: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#d1d5db' },
+  td: { fontSize: 8.5, color: '#111111', paddingVertical: 5, paddingHorizontal: 6, borderRightWidth: 1, borderRightColor: '#d1d5db' },
+  notesBlock: { borderWidth: 1, borderColor: '#111827', paddingVertical: 7, paddingHorizontal: 8, fontSize: 9, lineHeight: 1.4, color: '#111111' },
+  footer: { marginTop: 10, borderTopWidth: 1.2, borderTopColor: '#111827', paddingTop: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  footerLeft: { flexDirection: 'column', gap: 2 },
+  footerMeta: { fontSize: 8, fontWeight: 700, color: '#111827' },
+  footerText: { fontSize: 8, color: '#111827' },
+  footerRight: { fontSize: 8, fontWeight: 700, color: '#111827', textAlign: 'right' },
+})
+
+function CallsheetPdfDocument({ payload }) {
+  const generatedStamp = new Date().toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return (
+    <Document>
+      {payload.pages.map((dayPage, pageIdx) => (
+        <Page key={`${dayPage.dayNumber}-${pageIdx}`} size="LETTER" style={callsheetPdfStyles.page} wrap>
+          <View style={callsheetPdfStyles.header}>
+            <View>
+              <Text style={callsheetPdfStyles.title}>{dayPage.productionTitle || 'Untitled Project'}</Text>
+              <Text style={callsheetPdfStyles.subtitle}>CALLSHEET</Text>
+            </View>
+            <Text style={callsheetPdfStyles.day}>Day {dayPage.dayNumber}</Text>
+          </View>
+
+          {dayPage.generalInfo.length > 0 && (
+            <View style={callsheetPdfStyles.section}>
+              <Text style={callsheetPdfStyles.sectionTitle}>GENERAL INFO</Text>
+              {dayPage.generalInfo.map((row, idx) => (
+                <View key={`gi-${idx}`} style={callsheetPdfStyles.infoRow}>
+                  <Text style={callsheetPdfStyles.infoLabel}>{row.label.toUpperCase()}</Text>
+                  <Text style={callsheetPdfStyles.infoValue}>{row.value}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {dayPage.schedule.rows.length > 0 && (
+            <CallsheetTable title="ADVANCED SCHEDULE" columns={dayPage.schedule.columns} rows={dayPage.schedule.rows} />
+          )}
+          {dayPage.cast.rows.length > 0 && (
+            <CallsheetTable title="CAST LIST" columns={dayPage.cast.columns} rows={dayPage.cast.rows} />
+          )}
+          {dayPage.crew.rows.length > 0 && (
+            <CallsheetTable title="CREW LIST" columns={dayPage.crew.columns} rows={dayPage.crew.rows} />
+          )}
+
+          {dayPage.locationDetails.length > 0 && (
+            <View style={callsheetPdfStyles.section}>
+              <Text style={callsheetPdfStyles.sectionTitle}>LOCATION DETAILS</Text>
+              {dayPage.locationDetails.map((row, idx) => (
+                <View key={`loc-${idx}`} style={callsheetPdfStyles.infoRow}>
+                  <Text style={callsheetPdfStyles.infoLabel}>{row.label.toUpperCase()}</Text>
+                  <Text style={callsheetPdfStyles.infoValue}>{row.value}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {dayPage.additionalNotes && (
+            <View style={callsheetPdfStyles.section}>
+              <Text style={callsheetPdfStyles.sectionTitle}>ADDITIONAL NOTES / SPECIAL INSTRUCTIONS</Text>
+              <Text style={callsheetPdfStyles.notesBlock}>{dayPage.additionalNotes}</Text>
+            </View>
+          )}
+
+          <View style={callsheetPdfStyles.footer}>
+            <View style={callsheetPdfStyles.footerLeft}>
+              <Text style={callsheetPdfStyles.footerMeta}>{dayPage.footerMeta}</Text>
+              <Text style={callsheetPdfStyles.footerText}>Generated by ShotScribe — {generatedStamp}</Text>
+            </View>
+            <Text style={callsheetPdfStyles.footerRight}>CONFIDENTIAL — FOR PRODUCTION USE ONLY</Text>
+          </View>
+        </Page>
+      ))}
+    </Document>
+  )
+}
+
+function CallsheetTable({ title, columns, rows }) {
+  const widthPercent = `${(100 / Math.max(columns.length, 1)).toFixed(4)}%`
+  return (
+    <View style={callsheetPdfStyles.section}>
+      <Text style={callsheetPdfStyles.sectionTitle}>{title}</Text>
+      <View style={callsheetPdfStyles.table}>
+        <View style={callsheetPdfStyles.tableHead}>
+          {columns.map((column, idx) => (
+            <Text key={`${title}-th-${column.key}`} style={[callsheetPdfStyles.th, { width: widthPercent, borderRightWidth: idx === columns.length - 1 ? 0 : 1 }]}>
+              {String(column.label || '').toUpperCase()}
+            </Text>
+          ))}
+        </View>
+        {rows.map((row, rowIdx) => (
+          <View key={`${title}-row-${rowIdx}`} style={[callsheetPdfStyles.tr, { backgroundColor: rowIdx % 2 ? '#f9fafb' : '#ffffff' }]} wrap={false}>
+            {columns.map((column, colIdx) => (
+              <Text key={`${title}-td-${rowIdx}-${column.key}`} style={[callsheetPdfStyles.td, { width: widthPercent, borderRightWidth: colIdx === columns.length - 1 ? 0 : 1 }]}>
+                {String(row[column.key] ?? '')}
+              </Text>
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+async function downloadCallsheetPdf({ dayIdxFilter = null, projectName, explicitFileName = '' } = {}) {
+  const payload = buildCallsheetExportData(dayIdxFilter)
+  if (!payload.pages.length) {
+    throw new Error('No shooting days scheduled.')
+  }
+  const base = (projectName || payload.projectName || 'callsheet').replace(/[^a-z0-9]/gi, '_')
+  const fileName = explicitFileName || `${base || 'callsheet'}_callsheet.pdf`
+  const blob = await pdf(<CallsheetPdfDocument payload={payload} />).toBlob()
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = fileName
@@ -2289,7 +2511,7 @@ async function exportCallsheetPdfViaServer({ htmlContent, projectName, daySuffix
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
-  return { handled: true, filePath: '' }
+  return { filePath: '', fileName }
 }
 
 // ── Browser fallback path: html2canvas ────────────────────────────────────────
@@ -2630,39 +2852,7 @@ export async function exportSchedulePDF(projectName) {
  */
 export async function exportCallsheetPDF(projectName) {
   try {
-    const html = buildCallsheetPrintHtml()
-    const exportMode = getCallsheetExportMode()
-    const endpoint = getCallsheetServerExportUrl()
-    console.info('[Callsheet Export] Mode selected.', { exportMode, endpoint: endpoint || '(not configured)' })
-
-    if (exportMode === 'desktop') {
-      await exportViaPrint(html, projectName, 'callsheet')
-    } else if (exportMode === 'server') {
-      await exportCallsheetPdfViaServer({
-        htmlContent: html,
-        projectName,
-        daySuffix: 'callsheet',
-      })
-    } else {
-      notifyCallsheetFallback('VITE_CALLSHEET_PDF_EXPORT_URL is missing at build/runtime.')
-      const previewBlob = new Blob([html], { type: 'text/html' })
-      const previewUrl = URL.createObjectURL(previewBlob)
-      const win = window.open(previewUrl, '_blank', 'width=900,height=700')
-      if (!win) {
-        const a = document.createElement('a')
-        a.href = previewUrl
-        a.download = `${(projectName || 'callsheet').replace(/[^a-z0-9]/gi, '_')}_callsheet.html`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(previewUrl)
-        return
-      }
-      const releasePreviewUrl = () => URL.revokeObjectURL(previewUrl)
-      win.addEventListener('afterprint', releasePreviewUrl, { once: true })
-      setTimeout(() => { win.focus(); win.print() }, 500)
-      setTimeout(releasePreviewUrl, 60000)
-    }
+    await downloadCallsheetPdf({ dayIdxFilter: null, projectName })
   } catch (err) {
     console.error('[PDF Export] Callsheet export failed:', err)
     _handleExportError(err)
@@ -2683,45 +2873,13 @@ export async function exportSingleDayCallsheetPDF({
   shootDate,
   explicitFileName,
 }) {
-  const html = buildCallsheetPrintHtml([dayIdx])
   const fallbackName = `${projectName || 'Untitled Project'} - Callsheet - Day ${dayNumber || (dayIdx + 1)} - ${shootDate || 'TBD'}.pdf`
   const resolvedFileName = sanitizeExportFilename(explicitFileName || fallbackName) || `Callsheet-Day-${dayIdx + 1}.pdf`
-  const exportMode = getCallsheetExportMode()
-  const endpoint = getCallsheetServerExportUrl()
-  console.info('[Callsheet Export] Single-day mode selected.', {
-    exportMode,
-    endpoint: endpoint || '(not configured)',
-    dayIdx,
+  return downloadCallsheetPdf({
+    dayIdxFilter: [dayIdx],
+    projectName,
+    explicitFileName: resolvedFileName,
   })
-
-  if (exportMode === 'desktop') {
-    const saveResult = await exportViaPrint(html, projectName, '', resolvedFileName)
-    return { filePath: saveResult?.filePath || '', fileName: resolvedFileName }
-  }
-
-  if (exportMode === 'server') {
-    await exportCallsheetPdfViaServer({
-      htmlContent: html,
-      projectName,
-      explicitFileName: resolvedFileName,
-      daySuffix: `callsheet_day${dayIdx + 1}`,
-    })
-    return { filePath: '', fileName: resolvedFileName }
-  }
-
-  notifyCallsheetFallback('VITE_CALLSHEET_PDF_EXPORT_URL is missing at build/runtime.')
-  const previewBlob = new Blob([html], { type: 'text/html' })
-  const previewUrl = URL.createObjectURL(previewBlob)
-  const win = window.open(previewUrl, '_blank', 'width=900,height=700')
-  if (!win) {
-    URL.revokeObjectURL(previewUrl)
-    throw new Error('Unable to open print window. Please allow popups and retry.')
-  }
-  const releasePreviewUrl = () => URL.revokeObjectURL(previewUrl)
-  win.addEventListener('afterprint', releasePreviewUrl, { once: true })
-  setTimeout(() => { win.focus(); win.print() }, 500)
-  setTimeout(releasePreviewUrl, 60000)
-  return { filePath: '', fileName: resolvedFileName }
 }
 
 /** @deprecated Use exportStoryboardPDF or exportShotlistPDF directly */
@@ -3213,12 +3371,8 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
           <div style={{ marginTop: 20 }}>
             <SectionLabel>Callsheets</SectionLabel>
             <ExportBtn
-              label={busy('callsheet')
-                ? 'Exporting…'
-                : (callsheetExportConfigured ? 'Callsheet PDF' : 'Print / Save PDF (Callsheet)')}
-              sub={callsheetExportConfigured
-                ? 'Produces one polished callsheet PDF per shoot day.'
-                : 'True PDF backend not configured. Opens print-friendly callsheet for browser Save as PDF.'}
+              label={busy('callsheet') ? 'Exporting…' : 'Callsheet PDF'}
+              sub="Generates and downloads a polished callsheet PDF directly."
               disabled={exporting}
               onClick={() => run('callsheet', () => exportCallsheetPDF(projectName))}
             />
