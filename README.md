@@ -27,6 +27,7 @@ This monorepo currently contains:
 - Storyboard desktop left outline sidebar now stretches to the same full-height content area behavior used by other tabs, eliminating a short sidebar gap when storyboard content is sparse.
 - Storyboard tab now uses split scroll ownership on desktop: the outline sidebar and storyboard canvas each keep independent vertical scrolling so scrolling long pages no longer drags the left outline pane.
 - Storyboard Project Media Library picker now reliably renders thumbnail previews again (including cached/signed view and existing lightweight preview metadata fallbacks), while gracefully falling back to “No preview” only when no usable preview source exists.
+- Callsheet PDF export now uses a higher-contrast professional print layout, suppresses empty sections/rows by default, moves shoot-date/general-call metadata into the footer, and fixes browser fallback printing so `about:blank` no longer appears in generated output.
 
 ---
 
@@ -120,6 +121,7 @@ Frontend env (root app):
 - `VITE_APP_ENV` (optional; sent to Sentry as `environment`, for example `production`/`staging`)
 - `VITE_APP_RELEASE` (optional; sent to Sentry as `release`, for example git SHA)
 - `VITE_MONITORING_ENDPOINT` (optional)
+- `VITE_CALLSHEET_PDF_EXPORT_URL` (optional but recommended for polished web callsheet export; points to a serverless endpoint that renders callsheet HTML to a true PDF via headless Chromium)
 
 Mobile frontend env (`mobile/` app):
 - `VITE_SENTRY_DSN` (optional; production builds only)
@@ -140,6 +142,13 @@ Post-deploy verification (web + mobile):
 1. Open the deployed app and confirm a Clarity session appears in the Clarity dashboard.
 2. Trigger a controlled client error in browser devtools and verify it appears in Sentry with the expected `environment` and `release`.
 3. Confirm no Clarity script requests and no Sentry startup traffic occur in local `npm run dev` sessions unless explicitly configured and built as production.
+
+Callsheet true-PDF export (web):
+1. SiteGround static hosting does **not** execute server code; deploy the companion serverless package in `serverless/callsheet-pdf-vercel/` to a real Node runtime (for example Vercel).
+2. Deploy command example: `cd serverless/callsheet-pdf-vercel && npm install && npx vercel --prod`.
+3. Use the deployed endpoint URL as `VITE_CALLSHEET_PDF_EXPORT_URL` in the SiteGround frontend build environment (for example `https://<project>.vercel.app/api/export-callsheet-pdf`), then rebuild/redeploy frontend assets.
+4. With that env set, callsheet export uses server-rendered headless-Chromium PDF generation (Letter, print backgrounds on, browser headers/footers off) and downloads the PDF directly.
+5. If the env is not set, callsheet export stays available as an honest browser `Print / Save PDF` fallback.
 
 Convex env (production as needed):
 - `AUTH_ISSUER_URL`
