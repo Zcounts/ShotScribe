@@ -84,6 +84,23 @@ const CALLSHEET_PRIMARY_COLUMN_BY_SECTION = {
   crewList: 'name',
 }
 
+const DEFAULT_CALLSHEET = {
+  shootLocation: '',
+  nearestHospital: '',
+  emergencyContacts: '',
+  weather: '',
+  cast: [],
+  crew: [],
+  keyContactCrewIds: [],
+  castExcludedRosterIds: [],
+  crewExcludedRosterIds: [],
+  locationAddress: '',
+  parkingNotes: '',
+  directions: '',
+  mapsLink: '',
+  additionalNotes: '',
+}
+
 function ConfigureButton({ onClick }) {
   return (
     <button
@@ -359,7 +376,6 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
   const projectName = useStore(s => s.projectName)
   const callsheetSectionConfig = useStore(s => s.callsheetSectionConfig)
   const callsheetColumnConfig = useStore(s => s.callsheetColumnConfig)
-  const getCallsheet = useStore(s => s.getCallsheet)
   const updateCallsheet = useStore(s => s.updateCallsheet)
   const updateShootingDay = useStore(s => s.updateShootingDay)
   const setCallsheetSectionConfig = useStore(s => s.setCallsheetSectionConfig)
@@ -429,7 +445,20 @@ export default function CallsheetTab({ configureOpen = true, onOpenExportHub = n
     [activeDay, availableDays]
   )
 
-  const callsheet = activeDay ? getCallsheet(activeDay.id) : {}
+  const activeDayCallsheet = useStore(
+    useCallback(
+      (state) => {
+        if (!activeDay?.id) return null
+        return state.callsheets?.[activeDay.id] || null
+      },
+      [activeDay?.id],
+    ),
+  )
+  const callsheet = useMemo(() => (
+    activeDay
+      ? { ...DEFAULT_CALLSHEET, ...(activeDayCallsheet || {}) }
+      : DEFAULT_CALLSHEET
+  ), [activeDay, activeDayCallsheet])
   const scheduleWithShots = getScheduleWithShots()
 
   const scheduleRows = useMemo(() => (
