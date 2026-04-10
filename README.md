@@ -27,6 +27,7 @@ This monorepo currently contains:
 - Storyboard desktop left outline sidebar now stretches to the same full-height content area behavior used by other tabs, eliminating a short sidebar gap when storyboard content is sparse.
 - Storyboard tab now uses split scroll ownership on desktop: the outline sidebar and storyboard canvas each keep independent vertical scrolling so scrolling long pages no longer drags the left outline pane.
 - Storyboard Project Media Library picker now reliably renders thumbnail previews again (including cached/signed view and existing lightweight preview metadata fallbacks), while gracefully falling back to “No preview” only when no usable preview source exists.
+- Callsheet PDF export now uses a higher-contrast professional print layout, suppresses empty sections/rows by default, moves shoot-date/general-call metadata into the footer, and fixes browser fallback printing so `about:blank` no longer appears in generated output.
 
 ---
 
@@ -140,6 +141,11 @@ Post-deploy verification (web + mobile):
 1. Open the deployed app and confirm a Clarity session appears in the Clarity dashboard.
 2. Trigger a controlled client error in browser devtools and verify it appears in Sentry with the expected `environment` and `release`.
 3. Confirm no Clarity script requests and no Sentry startup traffic occur in local `npm run dev` sessions unless explicitly configured and built as production.
+
+Callsheet true-PDF export (web):
+1. Callsheet export is generated client-side in-browser using `@react-pdf/renderer`.
+2. Clicking callsheet export downloads a real PDF directly (no browser print dialog).
+3. Current callsheet export remains data-driven from schedule + callsheet/cast/crew store state and suppresses empty sections.
 
 Convex env (production as needed):
 - `AUTH_ISSUER_URL`
