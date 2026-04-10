@@ -3251,8 +3251,6 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   }
 
   const busy = (key) => exporting && exportingKey === key
-  const callsheetExportMode = getCallsheetExportMode()
-  const callsheetExportConfigured = callsheetExportMode !== 'browser-fallback'
   const activeTabLabel = activeTab === 'shotlist'
     ? 'Shotlist'
     : activeTab === 'schedule'
