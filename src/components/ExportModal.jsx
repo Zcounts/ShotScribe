@@ -1573,6 +1573,7 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
             if (column.key === 'character') return `<td>${escapeHtml(row.character || '')}</td>`
             if (column.key === 'sceneCount') return `<td>${row.sceneCount ? escapeHtml(String(row.sceneCount)) : ''}</td>`
             if (column.key === 'pageCount') return `<td>${row.pageCount ? escapeHtml(Number(row.pageCount).toFixed(2)) : ''}</td>`
+            if (column.key === 'callTime') return `<td>${escapeHtml(row.callTime || '')}</td>`
             if (column.key === 'pickupTime') return `<td>${escapeHtml(row.pickupTime || '')}</td>`
             if (column.key === 'makeupCall') return `<td>${escapeHtml(row.makeupCall || '')}</td>`
             if (column.key === 'setCall') return `<td>${escapeHtml(row.setCall || '')}</td>`
@@ -2339,6 +2340,7 @@ function buildCallsheetExportData(dayIdxFilter = null) {
         character: row.character || '',
         sceneCount: row.sceneCount ? String(row.sceneCount) : '',
         pageCount: row.pageCount ? Number(row.pageCount).toFixed(2) : '',
+        callTime: row.callTime || '',
         pickupTime: row.pickupTime || '',
         makeupCall: row.makeupCall || '',
         setCall: row.setCall || '',
@@ -3215,10 +3217,12 @@ function ExportBtn({ label, sub, onClick, disabled, primary }) {
 export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, activeTab, projectName }) {
   const schedule = useStore(s => s.schedule)
   const getProjectData = useStore(s => s.getProjectData)
+  const callsheetTabViewState = useStore(s => s.tabViewState?.callsheet)
   const [exporting, setExporting] = useState(false)
   const [exportingKey, setExportingKey] = useState(null)
   const [selectedMobileDayId, setSelectedMobileDayId] = useState('')
   const [snapshotDayIds, setSnapshotDayIds] = useState([])
+  const [callsheetScope, setCallsheetScope] = useState('all')
 
   useEffect(() => {
     if (!schedule.length) {
@@ -3235,6 +3239,12 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   }, [schedule, selectedMobileDayId, snapshotDayIds])
 
   if (!isOpen) return null
+
+  // Resolve the currently-active callsheet day for "Current Day Only" export
+  const activeDayId = callsheetTabViewState?.selectedDayId || null
+  const activeDayIdx = activeDayId ? schedule.findIndex(d => d.id === activeDayId) : 0
+  const activeDay = activeDayIdx >= 0 ? schedule[activeDayIdx] : schedule[0]
+  const resolvedDayIdx = activeDayIdx >= 0 ? activeDayIdx : 0
 
   const run = async (key, fn) => {
     setExporting(true)
@@ -3379,11 +3389,52 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
 
           <div style={{ marginTop: 20 }}>
             <SectionLabel>Callsheets</SectionLabel>
+            {/* Scope selector */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {[
+                { value: 'current', label: 'Current Day Only' },
+                { value: 'all', label: 'All Callsheets' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setCallsheetScope(opt.value)}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: callsheetScope === opt.value ? '2px solid #2563eb' : '1px solid #d1d5db',
+                    background: callsheetScope === opt.value ? '#eff6ff' : '#f9fafb',
+                    color: callsheetScope === opt.value ? '#1d4ed8' : '#374151',
+                    fontWeight: callsheetScope === opt.value ? 700 : 400,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {callsheetScope === 'current' && activeDay && (
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, paddingLeft: 2 }}>
+                Day {resolvedDayIdx + 1}{activeDay.date ? ` · ${activeDay.date}` : ''}
+              </div>
+            )}
             <ExportBtn
               label={busy('callsheet') ? 'Exporting…' : 'Callsheet PDF'}
-              sub="Generates and downloads a polished callsheet PDF directly."
+              sub={callsheetScope === 'current'
+                ? 'Exports only the currently-viewed shoot day.'
+                : 'Exports every shoot day as a multi-page PDF.'}
               disabled={exporting}
-              onClick={() => run('callsheet', () => exportCallsheetPDF(projectName))}
+              onClick={() => run('callsheet', () =>
+                callsheetScope === 'current'
+                  ? exportSingleDayCallsheetPDF({
+                      dayIdx: resolvedDayIdx,
+                      projectName,
+                      dayNumber: resolvedDayIdx + 1,
+                      shootDate: activeDay?.date || 'TBD',
+                    })
+                  : exportCallsheetPDF(projectName)
+              )}
             />
           </div>
 
