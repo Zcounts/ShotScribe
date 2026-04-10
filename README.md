@@ -28,7 +28,6 @@ This monorepo currently contains:
 - Storyboard tab now uses split scroll ownership on desktop: the outline sidebar and storyboard canvas each keep independent vertical scrolling so scrolling long pages no longer drags the left outline pane.
 - Storyboard Project Media Library picker now reliably renders thumbnail previews again (including cached/signed view and existing lightweight preview metadata fallbacks), while gracefully falling back to “No preview” only when no usable preview source exists.
 - Callsheet PDF export now uses a higher-contrast professional print layout, suppresses empty sections/rows by default, moves shoot-date/general-call metadata into the footer, and fixes browser fallback printing so `about:blank` no longer appears in generated output.
-- Callsheet tab cloud-backed typing now updates on every keystroke again by subscribing directly to the active day’s callsheet state, removing the delayed one-character-per-sync behavior.
 
 ---
 
@@ -149,6 +148,7 @@ Callsheet true-PDF export (web):
 2. Set `VITE_CALLSHEET_PDF_EXPORT_URL` to that endpoint URL.
 3. With that env set, callsheet export uses server-rendered headless-Chromium PDF generation (Letter, print backgrounds on, browser headers/footers off).
 4. If the env is not set, the app falls back to client print behavior for compatibility.
+5. SiteGround static hosting does **not** execute `api/*.mjs` files by itself; the endpoint must run on an actual server/serverless runtime (for example Vercel/Netlify/Cloud Run/custom Node service).
 
 Convex env (production as needed):
 - `AUTH_ISSUER_URL`

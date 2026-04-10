@@ -2235,24 +2235,54 @@ async function exportViaPrint(htmlContent, projectName, suffix = '', explicitFil
   return saveResult
 }
 
+function getCallsheetServerExportUrl() {
+  return String(import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL || '').trim()
+}
+
+function getCallsheetExportMode() {
+  if (platformService.hasPrintToPDF()) return 'desktop'
+  if (getCallsheetServerExportUrl()) return 'server'
+  return 'browser-fallback'
+}
+
+function notifyCallsheetFallback(reason) {
+  const msg = `True PDF export is not configured. Browser print fallback is being used.\n\nReason: ${reason}`
+  console.warn(`[Callsheet Export] ${msg}`)
+  alert(msg)
+}
+
 async function exportCallsheetPdfViaServer({ htmlContent, projectName, daySuffix = 'callsheet', explicitFileName = '' } = {}) {
-  const endpoint = import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL
-  if (!endpoint) return { handled: false }
+  const endpoint = getCallsheetServerExportUrl()
+  if (!endpoint) {
+    throw new Error('Missing VITE_CALLSHEET_PDF_EXPORT_URL. True PDF export endpoint is not configured.')
+  }
 
   const base = (projectName || 'export').replace(/[^a-z0-9]/gi, '_') || 'export'
   const fileName = explicitFileName || `${base}_${daySuffix}.pdf`
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ html: htmlContent, fileName }),
-  })
+  console.info('[Callsheet Export] Server PDF request starting.', { endpoint, fileName })
+
+  let response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html: htmlContent, fileName }),
+    })
+  } catch (error) {
+    throw new Error(`Server callsheet export request failed for ${endpoint}. Possible network/CORS issue. ${error?.message || error}`)
+  }
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '')
-    throw new Error(`Server callsheet export failed (${response.status}): ${errText || 'unknown error'}`)
+    throw new Error(`Server callsheet export failed (${response.status}) at ${endpoint}: ${errText || 'unknown error'}`)
   }
 
   const pdfBlob = await response.blob()
+  console.info('[Callsheet Export] Server PDF request succeeded.', {
+    endpoint,
+    sizeBytes: pdfBlob?.size || 0,
+    type: pdfBlob?.type || 'unknown',
+  })
   const url = URL.createObjectURL(pdfBlob)
   const a = document.createElement('a')
   a.href = url
@@ -2603,15 +2633,20 @@ export async function exportSchedulePDF(projectName) {
 export async function exportCallsheetPDF(projectName) {
   try {
     const html = buildCallsheetPrintHtml()
-    if (platformService.hasPrintToPDF()) {
+    const exportMode = getCallsheetExportMode()
+    const endpoint = getCallsheetServerExportUrl()
+    console.info('[Callsheet Export] Mode selected.', { exportMode, endpoint: endpoint || '(not configured)' })
+
+    if (exportMode === 'desktop') {
       await exportViaPrint(html, projectName, 'callsheet')
-    } else if (import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL) {
+    } else if (exportMode === 'server') {
       await exportCallsheetPdfViaServer({
         htmlContent: html,
         projectName,
         daySuffix: 'callsheet',
       })
     } else {
+      notifyCallsheetFallback('VITE_CALLSHEET_PDF_EXPORT_URL is missing at build/runtime.')
       const previewBlob = new Blob([html], { type: 'text/html' })
       const previewUrl = URL.createObjectURL(previewBlob)
       const win = window.open(previewUrl, '_blank', 'width=900,height=700')
@@ -2653,13 +2688,20 @@ export async function exportSingleDayCallsheetPDF({
   const html = buildCallsheetPrintHtml([dayIdx])
   const fallbackName = `${projectName || 'Untitled Project'} - Callsheet - Day ${dayNumber || (dayIdx + 1)} - ${shootDate || 'TBD'}.pdf`
   const resolvedFileName = sanitizeExportFilename(explicitFileName || fallbackName) || `Callsheet-Day-${dayIdx + 1}.pdf`
+  const exportMode = getCallsheetExportMode()
+  const endpoint = getCallsheetServerExportUrl()
+  console.info('[Callsheet Export] Single-day mode selected.', {
+    exportMode,
+    endpoint: endpoint || '(not configured)',
+    dayIdx,
+  })
 
-  if (platformService.hasPrintToPDF()) {
+  if (exportMode === 'desktop') {
     const saveResult = await exportViaPrint(html, projectName, '', resolvedFileName)
     return { filePath: saveResult?.filePath || '', fileName: resolvedFileName }
   }
 
-  if (import.meta.env.VITE_CALLSHEET_PDF_EXPORT_URL) {
+  if (exportMode === 'server') {
     await exportCallsheetPdfViaServer({
       htmlContent: html,
       projectName,
@@ -2669,6 +2711,7 @@ export async function exportSingleDayCallsheetPDF({
     return { filePath: '', fileName: resolvedFileName }
   }
 
+  notifyCallsheetFallback('VITE_CALLSHEET_PDF_EXPORT_URL is missing at build/runtime.')
   const previewBlob = new Blob([html], { type: 'text/html' })
   const previewUrl = URL.createObjectURL(previewBlob)
   const win = window.open(previewUrl, '_blank', 'width=900,height=700')
@@ -2943,6 +2986,12 @@ function _handleExportError(err) {
     msg += '\n\nTip: the page took too long to render — try exporting fewer scenes at once.'
   } else if (/ipc|main process/i.test(raw)) {
     msg += '\n\nThe Electron main process could not render the page. Check the developer console for details.'
+  } else if (/VITE_CALLSHEET_PDF_EXPORT_URL/i.test(raw)) {
+    msg += '\n\nTrue PDF export is not configured. Set VITE_CALLSHEET_PDF_EXPORT_URL and rebuild the frontend.'
+  } else if (/cors|failed to fetch|network/i.test(raw)) {
+    msg += '\n\nThe true PDF endpoint could not be reached (possible CORS/network issue). Verify endpoint deployment and CORS allowlist.'
+  } else if (/Server callsheet export failed/i.test(raw)) {
+    msg += '\n\nThe true PDF endpoint responded with an error. Check server logs for api/export-callsheet-pdf.'
   }
   alert(msg)
 }
