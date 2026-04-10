@@ -1526,33 +1526,40 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
           return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
         }).join('\n')
 
-    const castRows = castListRows.length === 0
-      ? `<tr><td colspan="${Math.max(castColumns.length, 1)}" style="color:#aaa;font-style:italic;padding:6px 8px">No cast listed</td></tr>`
-      : castListRows.map((row, i) => {
+    // Filter cast rows where all variable fields are empty
+    const castListRowsFiltered = castListRows.filter(row =>
+      (row.sceneCount != null && row.sceneCount > 0) ||
+      (row.pageCount != null && row.pageCount > 0) ||
+      row.character || row.pickupTime || row.makeupCall || row.setCall || row.contact
+    )
+    const castRowsSource = castListRowsFiltered.length > 0 ? castListRowsFiltered : castListRows
+    const castRows = castRowsSource.length === 0
+      ? `<tr><td colspan="${Math.max(castColumns.length, 1)}" style="color:#666;font-style:italic;padding:6px 8px">No cast listed</td></tr>`
+      : castRowsSource.map((row, i) => {
           const cells = castColumns.map(column => {
             if (column.key === 'actor') return `<td>${escapeHtml(row.name || '')}</td>`
-            if (column.key === 'character') return `<td>${escapeHtml(row.character || '—')}</td>`
-            if (column.key === 'sceneCount') return `<td>${escapeHtml(String(row.sceneCount ?? 0))}</td>`
-            if (column.key === 'pageCount') return `<td>${escapeHtml(Number(row.pageCount || 0).toFixed(2))}</td>`
+            if (column.key === 'character') return `<td>${escapeHtml(row.character || '')}</td>`
+            if (column.key === 'sceneCount') return `<td>${row.sceneCount ? escapeHtml(String(row.sceneCount)) : ''}</td>`
+            if (column.key === 'pageCount') return `<td>${row.pageCount ? escapeHtml(Number(row.pageCount).toFixed(2)) : ''}</td>`
             if (column.key === 'pickupTime') return `<td>${escapeHtml(row.pickupTime || '')}</td>`
             if (column.key === 'makeupCall') return `<td>${escapeHtml(row.makeupCall || '')}</td>`
             if (column.key === 'setCall') return `<td>${escapeHtml(row.setCall || '')}</td>`
-            if (column.key === 'contact') return `<td>${escapeHtml(row.contact || '—')}</td>`
-            return '<td>—</td>'
+            if (column.key === 'contact') return `<td>${escapeHtml(row.contact || '')}</td>`
+            return '<td></td>'
           }).join('')
           return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
         }).join('\n')
 
     const crewRows = crewListRows.length === 0
-      ? `<tr><td colspan="${Math.max(crewColumns.length, 1)}" style="color:#aaa;font-style:italic;padding:6px 8px">No crew listed</td></tr>`
+      ? `<tr><td colspan="${Math.max(crewColumns.length, 1)}" style="color:#666;font-style:italic;padding:6px 8px">No crew listed</td></tr>`
       : crewListRows.map((row, i) => {
           const cells = crewColumns.map(column => {
             if (column.key === 'name') return `<td>${escapeHtml(row.name || '')}</td>`
-            if (column.key === 'role') return `<td>${escapeHtml(row.role || row.department || '—')}</td>`
+            if (column.key === 'role') return `<td>${escapeHtml(row.role || row.department || '')}</td>`
             if (column.key === 'callTime') return `<td>${escapeHtml(row.callTime || '')}</td>`
             if (column.key === 'notes') return `<td>${escapeHtml(row.notes || '')}</td>`
-            if (column.key === 'contact') return `<td>${escapeHtml(row.contact || '—')}</td>`
-            return '<td>—</td>'
+            if (column.key === 'contact') return `<td>${escapeHtml(row.contact || '')}</td>`
+            return '<td></td>'
           }).join('')
           return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
         }).join('\n')
@@ -1564,9 +1571,13 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
     if (cs.directions)      locLines.push(`<div class="loc-row"><span class="loc-label">Directions</span><span>${escapeHtml(cs.directions).replace(/\n/g, '<br>')}</span></div>`)
     if (cs.mapsLink)        locLines.push(`<div class="loc-row"><span class="loc-label">Maps</span><span>${escapeHtml(cs.mapsLink)}</span></div>`)
 
-    const advNotes = cs.additionalNotes
+    const hasContent = (v) =>
+      v !== null && v !== undefined && String(v).trim() !== '' && String(v).toLowerCase() !== 'none'
+
+    const showAdvNotes = hasContent(cs.additionalNotes)
+    const advNotes = showAdvNotes
       ? `<div class="adv-notes">${escapeHtml(cs.additionalNotes).replace(/\n/g, '<br>')}</div>`
-      : `<div style="color:#aaa;font-style:italic">None</div>`
+      : ''
 
     return `<div class="day-page">
   <!-- HEADER -->
@@ -1625,13 +1636,14 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
   </div>` : ''}
 
   <!-- ADDITIONAL NOTES -->
+  ${showAdvNotes ? `
   <div class="section">
     <div class="section-title">ADDITIONAL NOTES / SPECIAL INSTRUCTIONS</div>
     ${advNotes}
-  </div>
+  </div>` : ''}
 
   <div class="cs-footer">
-    <span>Generated by ShotScribe · ${escapeHtml(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))}</span>
+    <span>Generated by ShotScribe — ${escapeHtml(new Date().toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span>
     <span>CONFIDENTIAL — FOR PRODUCTION USE ONLY</span>
   </div>
 </div>`
@@ -1643,7 +1655,20 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
 <meta charset="utf-8">
 <title>Callsheet — ${escapeHtml(projectName || 'Untitled')}</title>
 <style>
-@page { size: A4; margin: 12mm 14mm 14mm; }
+/* Suppress browser-generated print headers and footers (URL, date, page number).
+   Margin box declarations inside @page (CSS Paged Media spec) clear browser UI
+   in supporting browsers. For Chrome/Edge, the user may still need to uncheck
+   "Headers and footers" in the print dialog if the browser ignores these rules. */
+@page {
+  size: letter;
+  margin: 0.75in;
+  @top-left   { content: none; }
+  @top-center { content: none; }
+  @top-right  { content: none; }
+  @bottom-left   { content: none; }
+  @bottom-center { content: none; }
+  @bottom-right  { content: none; }
+}
 @media print { html, body { margin: 0; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -1669,22 +1694,23 @@ html, body {
   background: #1a1a1a;
   color: #fff;
   padding: 10px 14px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   border-radius: 2px;
 }
 .cs-title {
-  font-size: 20pt;
+  font-size: 22pt;
   font-weight: 900;
   letter-spacing: 0.02em;
   line-height: 1.1;
+  color: #fff;
 }
 .cs-subtitle {
-  font-size: 12pt;
+  font-size: 9pt;
   font-weight: 700;
-  color: rgba(255,255,255,0.75);
+  color: rgba(255,255,255,0.9);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-top: 3px;
+  margin-top: 4px;
 }
 .cs-header-right {
   text-align: right;
@@ -1692,11 +1718,13 @@ html, body {
 .cs-day {
   font-size: 11pt;
   font-weight: 700;
+  color: #fff;
 }
 .cs-calltime {
-  font-size: 9pt;
-  color: rgba(255,255,255,0.7);
-  margin-top: 2px;
+  font-size: 10pt;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  margin-top: 3px;
 }
 
 /* Sections */
@@ -1704,48 +1732,40 @@ html, body {
   margin-bottom: 10px;
 }
 .section-title {
-  background: #f0ede4;
-  border: 1px solid #ccc;
-  border-bottom: none;
-  padding: 3px 8px;
-  font-size: 7.5pt;
-  font-weight: 900;
-  letter-spacing: 0.1em;
+  background: #1a1a1a;
+  color: #ffffff;
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #333;
-}
-.empty-msg {
-  padding: 6px 8px;
-  font-style: italic;
-  color: #aaa;
-  border: 1px solid #e5e5e5;
-  font-size: 8.5pt;
 }
 
 /* General Info table */
 .info-table {
   width: 100%;
   border-collapse: collapse;
-  border: 1px solid #ddd;
+  border: 1px solid #333;
   table-layout: fixed;
 }
 .info-label {
-  padding: 3px 8px;
-  font-size: 7pt;
+  padding: 4px 8px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #666;
-  border-bottom: 1px solid #e8e5e0;
-  border-right: 1px solid #e8e5e0;
-  background: #faf8f5;
+  color: #444;
+  border-bottom: 1px solid #ccc;
+  border-right: 1px solid #ccc;
+  background: #f0f0f0;
   white-space: nowrap;
   vertical-align: top;
 }
 .info-value {
-  padding: 3px 8px;
-  font-size: 8.5pt;
-  border-bottom: 1px solid #e8e5e0;
+  padding: 4px 8px;
+  font-size: 9pt;
+  color: #111;
+  border-bottom: 1px solid #ccc;
   vertical-align: top;
 }
 
@@ -1753,52 +1773,53 @@ html, body {
 table {
   width: 100%;
   border-collapse: collapse;
-  border: 1px solid #ddd;
+  border: 1px solid #333;
   table-layout: fixed;
 }
 thead th {
-  background: #f0ede4;
-  color: #555;
-  font-size: 7pt;
+  background: #1a1a1a;
+  color: #ffffff;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: left;
-  padding: 3px 6px;
-  border-bottom: 1.5px solid #bbb;
-  border-right: 1px solid #ddd;
+  padding: 5px 8px;
+  border-right: 1px solid #333;
   white-space: nowrap;
   overflow: hidden;
 }
 thead th:last-child { border-right: none; }
 tbody td {
-  padding: 3px 6px;
-  border-bottom: 1px solid #e8e5e0;
-  border-right: 1px solid #e8e5e0;
-  font-size: 8.5pt;
+  padding: 5px 8px;
+  border-bottom: 1px solid #ccc;
+  border-right: 1px solid #ccc;
+  font-size: 9pt;
+  color: #111;
   vertical-align: top;
 }
 tbody td:last-child { border-right: none; }
-tr.row-even td { background: #fff; }
-tr.row-odd td  { background: #faf8f5; }
+tr.row-even td { background: #ffffff; }
+tr.row-odd td  { background: #f5f5f5; }
 tr.break-adv-row td { background: #fefce8; border-bottom-color: #fde68a; }
 
 /* Location details */
 .loc-row {
   display: flex;
   gap: 10px;
-  padding: 3px 8px;
-  border: 1px solid #ddd;
+  padding: 4px 8px;
+  border: 1px solid #333;
   border-top: none;
-  font-size: 8.5pt;
+  font-size: 9pt;
+  color: #111;
 }
-.loc-row:first-child { border-top: 1px solid #ddd; }
+.loc-row:first-child { border-top: 1px solid #333; }
 .loc-label {
-  font-size: 7pt;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #666;
+  color: #444;
   width: 70px;
   flex-shrink: 0;
   padding-top: 1px;
@@ -1807,21 +1828,22 @@ tr.break-adv-row td { background: #fefce8; border-bottom-color: #fde68a; }
 /* Additional Notes */
 .adv-notes {
   padding: 6px 8px;
-  border: 1px solid #ddd;
-  font-size: 8.5pt;
+  border: 1px solid #ccc;
+  font-size: 9pt;
+  color: #111;
   line-height: 1.5;
   white-space: pre-wrap;
 }
 
 /* Footer */
 .cs-footer {
-  margin-top: 10px;
+  margin-top: 12px;
   padding-top: 5px;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid #ccc;
   display: flex;
   justify-content: space-between;
-  font-size: 7pt;
-  color: #aaa;
+  font-size: 7.5pt;
+  color: #666;
 }
 </style>
 </head>
