@@ -2246,9 +2246,7 @@ function getCallsheetExportMode() {
 }
 
 function notifyCallsheetFallback(reason) {
-  const msg = `True PDF export is not configured. Browser print fallback is being used.\n\nReason: ${reason}`
-  console.warn(`[Callsheet Export] ${msg}`)
-  alert(msg)
+  console.warn('[Callsheet Export] True PDF export is not configured. Browser print fallback will be used.', { reason })
 }
 
 async function exportCallsheetPdfViaServer({ htmlContent, projectName, daySuffix = 'callsheet', explicitFileName = '' } = {}) {
@@ -3084,6 +3082,8 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   }
 
   const busy = (key) => exporting && exportingKey === key
+  const callsheetExportMode = getCallsheetExportMode()
+  const callsheetExportConfigured = callsheetExportMode !== 'browser-fallback'
   const activeTabLabel = activeTab === 'shotlist'
     ? 'Shotlist'
     : activeTab === 'schedule'
@@ -3213,8 +3213,12 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
           <div style={{ marginTop: 20 }}>
             <SectionLabel>Callsheets</SectionLabel>
             <ExportBtn
-              label={busy('callsheet') ? 'Exporting…' : 'Callsheet PDF'}
-              sub="Produces one callsheet page per shoot day."
+              label={busy('callsheet')
+                ? 'Exporting…'
+                : (callsheetExportConfigured ? 'Callsheet PDF' : 'Print / Save PDF (Callsheet)')}
+              sub={callsheetExportConfigured
+                ? 'Produces one polished callsheet PDF per shoot day.'
+                : 'True PDF backend not configured. Opens print-friendly callsheet for browser Save as PDF.'}
               disabled={exporting}
               onClick={() => run('callsheet', () => exportCallsheetPDF(projectName))}
             />

@@ -144,11 +144,11 @@ Post-deploy verification (web + mobile):
 3. Confirm no Clarity script requests and no Sentry startup traffic occur in local `npm run dev` sessions unless explicitly configured and built as production.
 
 Callsheet true-PDF export (web):
-1. Deploy a Node serverless endpoint at `api/export-callsheet-pdf` (this repo includes a reference handler in `api/export-callsheet-pdf.mjs` using `puppeteer-core` + `@sparticuz/chromium`).
-2. Set `VITE_CALLSHEET_PDF_EXPORT_URL` to that endpoint URL.
-3. With that env set, callsheet export uses server-rendered headless-Chromium PDF generation (Letter, print backgrounds on, browser headers/footers off).
-4. If the env is not set, the app falls back to client print behavior for compatibility.
-5. SiteGround static hosting does **not** execute `api/*.mjs` files by itself; the endpoint must run on an actual server/serverless runtime (for example Vercel/Netlify/Cloud Run/custom Node service).
+1. SiteGround static hosting does **not** execute server code; deploy the companion serverless package in `serverless/callsheet-pdf-vercel/` to a real Node runtime (for example Vercel).
+2. Deploy command example: `cd serverless/callsheet-pdf-vercel && npm install && npx vercel --prod`.
+3. Use the deployed endpoint URL as `VITE_CALLSHEET_PDF_EXPORT_URL` in the SiteGround frontend build environment (for example `https://<project>.vercel.app/api/export-callsheet-pdf`), then rebuild/redeploy frontend assets.
+4. With that env set, callsheet export uses server-rendered headless-Chromium PDF generation (Letter, print backgrounds on, browser headers/footers off) and downloads the PDF directly.
+5. If the env is not set, callsheet export stays available as an honest browser `Print / Save PDF` fallback.
 
 Convex env (production as needed):
 - `AUTH_ISSUER_URL`

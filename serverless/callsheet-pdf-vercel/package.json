@@ -1,0 +1,13 @@
+{
+  "name": "shotscribe-callsheet-pdf-service",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "^123.0.1",
+    "puppeteer-core": "^24.7.2"
+  }
+}
