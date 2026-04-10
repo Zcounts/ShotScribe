@@ -19,9 +19,8 @@ export default defineConfig(({ mode }) => {
         input: {
           index: resolve(__dirname, 'index.html'),
         },
-        // pdfreader and its dependencies use Node.js APIs (fs, events, stream).
-        // We keep these external to avoid bundling server-only modules into the web client.
-        external: ['pdfreader', 'pdf2json', 'events', 'fs', 'stream', 'util', 'path', 'buffer'],
+        // Keep deprecated server-only PDF parser packages out of the browser bundle.
+        external: ['pdfreader', 'pdf2json'],
       },
     },
     resolve: {

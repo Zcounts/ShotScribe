@@ -144,9 +144,10 @@ Post-deploy verification (web + mobile):
 3. Confirm no Clarity script requests and no Sentry startup traffic occur in local `npm run dev` sessions unless explicitly configured and built as production.
 
 Callsheet true-PDF export (web):
-1. Callsheet export is generated client-side in-browser using `@react-pdf/renderer`.
+1. Callsheet export is generated client-side in-browser using `@react-pdf/renderer`, loaded lazily only when export is triggered.
 2. Clicking callsheet export downloads a real PDF directly (no browser print dialog).
 3. Current callsheet export remains data-driven from schedule + callsheet/cast/crew store state and suppresses empty sections.
+4. Browser startup no longer evaluates Node-core specifiers from the callsheet export path (prevents blank-screen crashes like unresolved `events` on initial app load).
 
 Convex env (production as needed):
 - `AUTH_ISSUER_URL`

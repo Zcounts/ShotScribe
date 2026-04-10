@@ -2,19 +2,26 @@ import React, { useEffect, useState } from 'react'
 import { downloadScriptAsTxt } from '../utils/scriptTxtSerializer'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
-import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
 import { platformService } from '../services/platformService'
 
 let mobileExportServicePromise = null
+let reactPdfRendererPromise = null
 
 async function getMobileExportService() {
   if (!mobileExportServicePromise) {
     mobileExportServicePromise = import('../services/mobile/mobileExportService.js')
   }
   return mobileExportServicePromise
+}
+
+async function getReactPdfRenderer() {
+  if (!reactPdfRendererPromise) {
+    reactPdfRendererPromise = import('@react-pdf/renderer')
+  }
+  return reactPdfRendererPromise
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2376,123 +2383,125 @@ function buildCallsheetExportData(dayIdxFilter = null) {
   return { projectName, pages }
 }
 
-const callsheetPdfStyles = StyleSheet.create({
-  page: { backgroundColor: '#ffffff', paddingTop: 26, paddingBottom: 36, paddingHorizontal: 26, fontFamily: 'Helvetica', color: '#0f172a', fontSize: 9 },
-  header: { backgroundColor: '#0b1220', borderBottomWidth: 3, borderBottomColor: '#1f2937', borderTopLeftRadius: 6, borderTopRightRadius: 6, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 17, fontWeight: 700, color: '#ffffff' },
-  subtitle: { marginTop: 4, fontSize: 8, fontWeight: 700, color: '#dbeafe', letterSpacing: 1.5 },
-  day: { fontSize: 12, fontWeight: 700, color: '#f8fafc' },
-  section: { marginTop: 10 },
-  sectionTitle: { backgroundColor: '#111827', color: '#ffffff', fontSize: 8, fontWeight: 700, paddingVertical: 5, paddingHorizontal: 8, letterSpacing: 1.2, textTransform: 'uppercase' },
-  infoRow: { flexDirection: 'row', borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#d1d5db' },
-  infoLabel: { width: 120, backgroundColor: '#eef2ff', paddingVertical: 6, paddingHorizontal: 8, fontSize: 8, fontWeight: 700, color: '#111827', borderRightWidth: 1, borderRightColor: '#d1d5db' },
-  infoValue: { flex: 1, paddingVertical: 6, paddingHorizontal: 8, fontSize: 9, color: '#111111' },
-  table: { borderWidth: 1, borderColor: '#111827' },
-  tableHead: { flexDirection: 'row', backgroundColor: '#111827' },
-  th: { fontSize: 7.5, fontWeight: 700, color: '#ffffff', paddingVertical: 5, paddingHorizontal: 6, borderRightWidth: 1, borderRightColor: '#1f2937' },
-  tr: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#d1d5db' },
-  td: { fontSize: 8.5, color: '#111111', paddingVertical: 5, paddingHorizontal: 6, borderRightWidth: 1, borderRightColor: '#d1d5db' },
-  notesBlock: { borderWidth: 1, borderColor: '#111827', paddingVertical: 7, paddingHorizontal: 8, fontSize: 9, lineHeight: 1.4, color: '#111111' },
-  footer: { marginTop: 10, borderTopWidth: 1.2, borderTopColor: '#111827', paddingTop: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  footerLeft: { flexDirection: 'column', gap: 2 },
-  footerMeta: { fontSize: 8, fontWeight: 700, color: '#111827' },
-  footerText: { fontSize: 8, color: '#111827' },
-  footerRight: { fontSize: 8, fontWeight: 700, color: '#111827', textAlign: 'right' },
-})
+function createCallsheetPdfDocument({ Document, Page, Text, View, StyleSheet }) {
+  const callsheetPdfStyles = StyleSheet.create({
+    page: { backgroundColor: '#ffffff', paddingTop: 26, paddingBottom: 36, paddingHorizontal: 26, fontFamily: 'Helvetica', color: '#0f172a', fontSize: 9 },
+    header: { backgroundColor: '#0b1220', borderBottomWidth: 3, borderBottomColor: '#1f2937', borderTopLeftRadius: 6, borderTopRightRadius: 6, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    title: { fontSize: 17, fontWeight: 700, color: '#ffffff' },
+    subtitle: { marginTop: 4, fontSize: 8, fontWeight: 700, color: '#dbeafe', letterSpacing: 1.5 },
+    day: { fontSize: 12, fontWeight: 700, color: '#f8fafc' },
+    section: { marginTop: 10 },
+    sectionTitle: { backgroundColor: '#111827', color: '#ffffff', fontSize: 8, fontWeight: 700, paddingVertical: 5, paddingHorizontal: 8, letterSpacing: 1.2, textTransform: 'uppercase' },
+    infoRow: { flexDirection: 'row', borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#d1d5db' },
+    infoLabel: { width: 120, backgroundColor: '#eef2ff', paddingVertical: 6, paddingHorizontal: 8, fontSize: 8, fontWeight: 700, color: '#111827', borderRightWidth: 1, borderRightColor: '#d1d5db' },
+    infoValue: { flex: 1, paddingVertical: 6, paddingHorizontal: 8, fontSize: 9, color: '#111111' },
+    table: { borderWidth: 1, borderColor: '#111827' },
+    tableHead: { flexDirection: 'row', backgroundColor: '#111827' },
+    th: { fontSize: 7.5, fontWeight: 700, color: '#ffffff', paddingVertical: 5, paddingHorizontal: 6, borderRightWidth: 1, borderRightColor: '#1f2937' },
+    tr: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#d1d5db' },
+    td: { fontSize: 8.5, color: '#111111', paddingVertical: 5, paddingHorizontal: 6, borderRightWidth: 1, borderRightColor: '#d1d5db' },
+    notesBlock: { borderWidth: 1, borderColor: '#111827', paddingVertical: 7, paddingHorizontal: 8, fontSize: 9, lineHeight: 1.4, color: '#111111' },
+    footer: { marginTop: 10, borderTopWidth: 1.2, borderTopColor: '#111827', paddingTop: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    footerLeft: { flexDirection: 'column', gap: 2 },
+    footerMeta: { fontSize: 8, fontWeight: 700, color: '#111827' },
+    footerText: { fontSize: 8, color: '#111827' },
+    footerRight: { fontSize: 8, fontWeight: 700, color: '#111827', textAlign: 'right' },
+  })
 
-function CallsheetPdfDocument({ payload }) {
-  const generatedStamp = new Date().toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-  return (
-    <Document>
-      {payload.pages.map((dayPage, pageIdx) => (
-        <Page key={`${dayPage.dayNumber}-${pageIdx}`} size="LETTER" style={callsheetPdfStyles.page} wrap>
-          <View style={callsheetPdfStyles.header}>
-            <View>
-              <Text style={callsheetPdfStyles.title}>{dayPage.productionTitle || 'Untitled Project'}</Text>
-              <Text style={callsheetPdfStyles.subtitle}>CALLSHEET</Text>
-            </View>
-            <Text style={callsheetPdfStyles.day}>Day {dayPage.dayNumber}</Text>
-          </View>
-
-          {dayPage.generalInfo.length > 0 && (
-            <View style={callsheetPdfStyles.section}>
-              <Text style={callsheetPdfStyles.sectionTitle}>GENERAL INFO</Text>
-              {dayPage.generalInfo.map((row, idx) => (
-                <View key={`gi-${idx}`} style={callsheetPdfStyles.infoRow}>
-                  <Text style={callsheetPdfStyles.infoLabel}>{row.label.toUpperCase()}</Text>
-                  <Text style={callsheetPdfStyles.infoValue}>{row.value}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {dayPage.schedule.rows.length > 0 && (
-            <CallsheetTable title="ADVANCED SCHEDULE" columns={dayPage.schedule.columns} rows={dayPage.schedule.rows} />
-          )}
-          {dayPage.cast.rows.length > 0 && (
-            <CallsheetTable title="CAST LIST" columns={dayPage.cast.columns} rows={dayPage.cast.rows} />
-          )}
-          {dayPage.crew.rows.length > 0 && (
-            <CallsheetTable title="CREW LIST" columns={dayPage.crew.columns} rows={dayPage.crew.rows} />
-          )}
-
-          {dayPage.locationDetails.length > 0 && (
-            <View style={callsheetPdfStyles.section}>
-              <Text style={callsheetPdfStyles.sectionTitle}>LOCATION DETAILS</Text>
-              {dayPage.locationDetails.map((row, idx) => (
-                <View key={`loc-${idx}`} style={callsheetPdfStyles.infoRow}>
-                  <Text style={callsheetPdfStyles.infoLabel}>{row.label.toUpperCase()}</Text>
-                  <Text style={callsheetPdfStyles.infoValue}>{row.value}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {dayPage.additionalNotes && (
-            <View style={callsheetPdfStyles.section}>
-              <Text style={callsheetPdfStyles.sectionTitle}>ADDITIONAL NOTES / SPECIAL INSTRUCTIONS</Text>
-              <Text style={callsheetPdfStyles.notesBlock}>{dayPage.additionalNotes}</Text>
-            </View>
-          )}
-
-          <View style={callsheetPdfStyles.footer}>
-            <View style={callsheetPdfStyles.footerLeft}>
-              <Text style={callsheetPdfStyles.footerMeta}>{dayPage.footerMeta}</Text>
-              <Text style={callsheetPdfStyles.footerText}>Generated by ShotScribe — {generatedStamp}</Text>
-            </View>
-            <Text style={callsheetPdfStyles.footerRight}>CONFIDENTIAL — FOR PRODUCTION USE ONLY</Text>
-          </View>
-        </Page>
-      ))}
-    </Document>
-  )
-}
-
-function CallsheetTable({ title, columns, rows }) {
-  const widthPercent = `${(100 / Math.max(columns.length, 1)).toFixed(4)}%`
-  return (
-    <View style={callsheetPdfStyles.section}>
-      <Text style={callsheetPdfStyles.sectionTitle}>{title}</Text>
-      <View style={callsheetPdfStyles.table}>
-        <View style={callsheetPdfStyles.tableHead}>
-          {columns.map((column, idx) => (
-            <Text key={`${title}-th-${column.key}`} style={[callsheetPdfStyles.th, { width: widthPercent, borderRightWidth: idx === columns.length - 1 ? 0 : 1 }]}>
-              {String(column.label || '').toUpperCase()}
-            </Text>
-          ))}
-        </View>
-        {rows.map((row, rowIdx) => (
-          <View key={`${title}-row-${rowIdx}`} style={[callsheetPdfStyles.tr, { backgroundColor: rowIdx % 2 ? '#f9fafb' : '#ffffff' }]} wrap={false}>
-            {columns.map((column, colIdx) => (
-              <Text key={`${title}-td-${rowIdx}-${column.key}`} style={[callsheetPdfStyles.td, { width: widthPercent, borderRightWidth: colIdx === columns.length - 1 ? 0 : 1 }]}>
-                {String(row[column.key] ?? '')}
+  function CallsheetTable({ title, columns, rows }) {
+    const widthPercent = `${(100 / Math.max(columns.length, 1)).toFixed(4)}%`
+    return (
+      <View style={callsheetPdfStyles.section}>
+        <Text style={callsheetPdfStyles.sectionTitle}>{title}</Text>
+        <View style={callsheetPdfStyles.table}>
+          <View style={callsheetPdfStyles.tableHead}>
+            {columns.map((column, idx) => (
+              <Text key={`${title}-th-${column.key}`} style={[callsheetPdfStyles.th, { width: widthPercent, borderRightWidth: idx === columns.length - 1 ? 0 : 1 }]}>
+                {String(column.label || '').toUpperCase()}
               </Text>
             ))}
           </View>
-        ))}
+          {rows.map((row, rowIdx) => (
+            <View key={`${title}-row-${rowIdx}`} style={[callsheetPdfStyles.tr, { backgroundColor: rowIdx % 2 ? '#f9fafb' : '#ffffff' }]} wrap={false}>
+              {columns.map((column, colIdx) => (
+                <Text key={`${title}-td-${rowIdx}-${column.key}`} style={[callsheetPdfStyles.td, { width: widthPercent, borderRightWidth: colIdx === columns.length - 1 ? 0 : 1 }]}>
+                  {String(row[column.key] ?? '')}
+                </Text>
+              ))}
+            </View>
+          ))}
+        </View>
       </View>
-    </View>
-  )
+    )
+  }
+
+  return function CallsheetPdfDocument({ payload }) {
+    const generatedStamp = new Date().toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    return (
+      <Document>
+        {payload.pages.map((dayPage, pageIdx) => (
+          <Page key={`${dayPage.dayNumber}-${pageIdx}`} size="LETTER" style={callsheetPdfStyles.page} wrap>
+            <View style={callsheetPdfStyles.header}>
+              <View>
+                <Text style={callsheetPdfStyles.title}>{dayPage.productionTitle || 'Untitled Project'}</Text>
+                <Text style={callsheetPdfStyles.subtitle}>CALLSHEET</Text>
+              </View>
+              <Text style={callsheetPdfStyles.day}>Day {dayPage.dayNumber}</Text>
+            </View>
+
+            {dayPage.generalInfo.length > 0 && (
+              <View style={callsheetPdfStyles.section}>
+                <Text style={callsheetPdfStyles.sectionTitle}>GENERAL INFO</Text>
+                {dayPage.generalInfo.map((row, idx) => (
+                  <View key={`gi-${idx}`} style={callsheetPdfStyles.infoRow}>
+                    <Text style={callsheetPdfStyles.infoLabel}>{row.label.toUpperCase()}</Text>
+                    <Text style={callsheetPdfStyles.infoValue}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {dayPage.schedule.rows.length > 0 && (
+              <CallsheetTable title="ADVANCED SCHEDULE" columns={dayPage.schedule.columns} rows={dayPage.schedule.rows} />
+            )}
+            {dayPage.cast.rows.length > 0 && (
+              <CallsheetTable title="CAST LIST" columns={dayPage.cast.columns} rows={dayPage.cast.rows} />
+            )}
+            {dayPage.crew.rows.length > 0 && (
+              <CallsheetTable title="CREW LIST" columns={dayPage.crew.columns} rows={dayPage.crew.rows} />
+            )}
+
+            {dayPage.locationDetails.length > 0 && (
+              <View style={callsheetPdfStyles.section}>
+                <Text style={callsheetPdfStyles.sectionTitle}>LOCATION DETAILS</Text>
+                {dayPage.locationDetails.map((row, idx) => (
+                  <View key={`loc-${idx}`} style={callsheetPdfStyles.infoRow}>
+                    <Text style={callsheetPdfStyles.infoLabel}>{row.label.toUpperCase()}</Text>
+                    <Text style={callsheetPdfStyles.infoValue}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {dayPage.additionalNotes && (
+              <View style={callsheetPdfStyles.section}>
+                <Text style={callsheetPdfStyles.sectionTitle}>ADDITIONAL NOTES / SPECIAL INSTRUCTIONS</Text>
+                <Text style={callsheetPdfStyles.notesBlock}>{dayPage.additionalNotes}</Text>
+              </View>
+            )}
+
+            <View style={callsheetPdfStyles.footer}>
+              <View style={callsheetPdfStyles.footerLeft}>
+                <Text style={callsheetPdfStyles.footerMeta}>{dayPage.footerMeta}</Text>
+                <Text style={callsheetPdfStyles.footerText}>Generated by ShotScribe — {generatedStamp}</Text>
+              </View>
+              <Text style={callsheetPdfStyles.footerRight}>CONFIDENTIAL — FOR PRODUCTION USE ONLY</Text>
+            </View>
+          </Page>
+        ))}
+      </Document>
+    )
+  }
 }
 
 async function downloadCallsheetPdf({ dayIdxFilter = null, projectName, explicitFileName = '' } = {}) {
@@ -2502,6 +2511,8 @@ async function downloadCallsheetPdf({ dayIdxFilter = null, projectName, explicit
   }
   const base = (projectName || payload.projectName || 'callsheet').replace(/[^a-z0-9]/gi, '_')
   const fileName = explicitFileName || `${base || 'callsheet'}_callsheet.pdf`
+  const { pdf, Document, Page, Text, View, StyleSheet } = await getReactPdfRenderer()
+  const CallsheetPdfDocument = createCallsheetPdfDocument({ Document, Page, Text, View, StyleSheet })
   const blob = await pdf(<CallsheetPdfDocument payload={payload} />).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
