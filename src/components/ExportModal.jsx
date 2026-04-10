@@ -1449,10 +1449,18 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
 
   function formatDayNightDisplay(value) {
     const raw = String(value || '').trim()
-    if (!raw) return '—'
+    if (!raw) return ''
     const upper = raw.toUpperCase()
     if (upper === 'NIGHT') return 'NITE'
     return upper.slice(0, 4)
+  }
+
+  function hasMeaningfulText(value) {
+    if (value === null || value === undefined) return false
+    const normalized = String(value).trim()
+    if (!normalized) return false
+    const lower = normalized.toLowerCase()
+    return lower !== 'none' && lower !== 'n/a' && lower !== 'na'
   }
 
   const scheduleWithShots = getScheduleWithShots()
@@ -1476,15 +1484,14 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
     const productionTitle = cs.productionTitle !== undefined ? cs.productionTitle : (projectName || 'Untitled Project')
 
     // ── General Info rows
+    const preferredShootLocation = hasMeaningfulText(day.primaryLocation) ? day.primaryLocation : cs.shootLocation
     const genRows = [
-      ['PRODUCTION', escapeHtml(productionTitle)],
-      ['DATE', day.date ? escapeHtml(fmtDate(day.date)) : '<em>Not set</em>'],
-      ['GENERAL CALL', day.startTime ? `<strong>${escapeHtml(fmt12(day.startTime))}</strong>` : '<em>Not set</em>'],
-      ['BASECAMP / UNIT BASE', day.basecamp ? escapeHtml(day.basecamp) : '<em>Not set</em>'],
-      ['SHOOT LOCATION', day.primaryLocation ? escapeHtml(day.primaryLocation) : (cs.shootLocation ? escapeHtml(cs.shootLocation) : '<em>Not set</em>')],
-      ['WEATHER', cs.weather ? escapeHtml(cs.weather) : ''],
-      ['NEAREST HOSPITAL', cs.nearestHospital ? escapeHtml(cs.nearestHospital) : ''],
-      ['EMERGENCY CONTACTS', cs.emergencyContacts ? escapeHtml(cs.emergencyContacts).replace(/\n/g, '<br>') : ''],
+      ['PRODUCTION', hasMeaningfulText(productionTitle) ? escapeHtml(productionTitle) : ''],
+      ['BASECAMP / UNIT BASE', hasMeaningfulText(day.basecamp) ? escapeHtml(day.basecamp) : ''],
+      ['SHOOT LOCATION', hasMeaningfulText(preferredShootLocation) ? escapeHtml(preferredShootLocation) : ''],
+      ['WEATHER', hasMeaningfulText(cs.weather) ? escapeHtml(cs.weather) : ''],
+      ['NEAREST HOSPITAL', hasMeaningfulText(cs.nearestHospital) ? escapeHtml(cs.nearestHospital) : ''],
+      ['EMERGENCY CONTACTS', hasMeaningfulText(cs.emergencyContacts) ? escapeHtml(cs.emergencyContacts).replace(/\n/g, '<br>') : ''],
     ].filter(([, v]) => v !== '').map(([label, value]) =>
       `<tr><td class="info-label">${label}</td><td class="info-value">${value}</td></tr>`
     ).join('\n')
@@ -1507,21 +1514,40 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
     const castHeader = castColumns.map(column => `<th>${escapeHtml(column.label.toUpperCase())}</th>`).join('')
     const crewHeader = crewColumns.map(column => `<th>${escapeHtml(column.label.toUpperCase())}</th>`).join('')
 
-    const scheduleBodyRows = derivedScheduleRows.scenes.length === 0
-      ? `<tr><td colspan="${Math.max(scheduleColumns.length, 1)}" style="color:#aaa;font-style:italic;padding:6px 8px">No scenes scheduled for this day.</td></tr>`
-      : derivedScheduleRows.scenes.map((scene, i) => {
+    const scheduleRowsSource = derivedScheduleRows.scenes
+      .map(scene => {
+        const valuesByColumn = {}
+        scheduleColumns.forEach(column => {
+          if (column.key === 'sceneNumber') valuesByColumn.sceneNumber = scene.sceneNumber || ''
+          else if (column.key === 'sluglineScene') valuesByColumn.sluglineScene = scene.slugline || ''
+          else if (column.key === 'location') valuesByColumn.location = scene.location || ''
+          else if (column.key === 'intExt') valuesByColumn.intExt = scene.intExt || ''
+          else if (column.key === 'dayNight') valuesByColumn.dayNight = formatDayNightDisplay(scene.dayNight)
+          else if (column.key === 'start') valuesByColumn.start = formatMinuteOfDay(scene.start)
+          else if (column.key === 'end') valuesByColumn.end = formatMinuteOfDay(scene.end)
+          else if (column.key === 'pages') valuesByColumn.pages = Number(scene.pageCount || 0).toFixed(2)
+          else if (column.key === 'shots') valuesByColumn.shots = String(scene.shotCount ?? '')
+          else if (column.key === 'notes') valuesByColumn.notes = scene.notes || ''
+        })
+        return valuesByColumn
+      })
+      .filter(row =>
+        Object.values(row).some(value => hasMeaningfulText(value))
+      )
+
+    const scheduleBodyRows = scheduleRowsSource.map((scene, i) => {
           const cells = scheduleColumns.map(column => {
-            if (column.key === 'sceneNumber') return `<td>${escapeHtml(scene.sceneNumber || '—')}</td>`
-            if (column.key === 'sluglineScene') return `<td>${escapeHtml(scene.slugline || '—')}</td>`
-            if (column.key === 'location') return `<td>${escapeHtml(scene.location || '—')}</td>`
-            if (column.key === 'intExt') return `<td>${escapeHtml(scene.intExt || '—')}</td>`
-            if (column.key === 'dayNight') return `<td>${escapeHtml(formatDayNightDisplay(scene.dayNight))}</td>`
-            if (column.key === 'start') return `<td>${escapeHtml(formatMinuteOfDay(scene.start))}</td>`
-            if (column.key === 'end') return `<td>${escapeHtml(formatMinuteOfDay(scene.end))}</td>`
-            if (column.key === 'pages') return `<td>${escapeHtml(Number(scene.pageCount || 0).toFixed(2))}</td>`
-            if (column.key === 'shots') return `<td>${escapeHtml(String(scene.shotCount ?? '0'))}</td>`
-            if (column.key === 'notes') return `<td>${escapeHtml(scene.notes || '—')}</td>`
-            return '<td>—</td>'
+            if (column.key === 'sceneNumber') return `<td>${escapeHtml(scene.sceneNumber || '')}</td>`
+            if (column.key === 'sluglineScene') return `<td>${escapeHtml(scene.sluglineScene || '')}</td>`
+            if (column.key === 'location') return `<td>${escapeHtml(scene.location || '')}</td>`
+            if (column.key === 'intExt') return `<td>${escapeHtml(scene.intExt || '')}</td>`
+            if (column.key === 'dayNight') return `<td>${escapeHtml(scene.dayNight || '')}</td>`
+            if (column.key === 'start') return `<td>${escapeHtml(scene.start || '')}</td>`
+            if (column.key === 'end') return `<td>${escapeHtml(scene.end || '')}</td>`
+            if (column.key === 'pages') return `<td>${escapeHtml(scene.pages || '')}</td>`
+            if (column.key === 'shots') return `<td>${escapeHtml(scene.shots || '')}</td>`
+            if (column.key === 'notes') return `<td>${escapeHtml(scene.notes || '')}</td>`
+            return '<td></td>'
           }).join('')
           return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
         }).join('\n')
@@ -1533,9 +1559,7 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
       row.character || row.pickupTime || row.makeupCall || row.setCall || row.contact
     )
     const castRowsSource = castListRowsFiltered.length > 0 ? castListRowsFiltered : castListRows
-    const castRows = castRowsSource.length === 0
-      ? `<tr><td colspan="${Math.max(castColumns.length, 1)}" style="color:#666;font-style:italic;padding:6px 8px">No cast listed</td></tr>`
-      : castRowsSource.map((row, i) => {
+    const castRows = castRowsSource.map((row, i) => {
           const cells = castColumns.map(column => {
             if (column.key === 'actor') return `<td>${escapeHtml(row.name || '')}</td>`
             if (column.key === 'character') return `<td>${escapeHtml(row.character || '')}</td>`
@@ -1550,9 +1574,7 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
           return `<tr class="${i % 2 === 0 ? 'row-even' : 'row-odd'}">${cells}</tr>`
         }).join('\n')
 
-    const crewRows = crewListRows.length === 0
-      ? `<tr><td colspan="${Math.max(crewColumns.length, 1)}" style="color:#666;font-style:italic;padding:6px 8px">No crew listed</td></tr>`
-      : crewListRows.map((row, i) => {
+    const crewRows = crewListRows.map((row, i) => {
           const cells = crewColumns.map(column => {
             if (column.key === 'name') return `<td>${escapeHtml(row.name || '')}</td>`
             if (column.key === 'role') return `<td>${escapeHtml(row.role || row.department || '')}</td>`
@@ -1571,62 +1593,69 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
     if (cs.directions)      locLines.push(`<div class="loc-row"><span class="loc-label">Directions</span><span>${escapeHtml(cs.directions).replace(/\n/g, '<br>')}</span></div>`)
     if (cs.mapsLink)        locLines.push(`<div class="loc-row"><span class="loc-label">Maps</span><span>${escapeHtml(cs.mapsLink)}</span></div>`)
 
-    const hasContent = (v) =>
-      v !== null && v !== undefined && String(v).trim() !== '' && String(v).toLowerCase() !== 'none'
-
-    const showAdvNotes = hasContent(cs.additionalNotes)
+    const showAdvNotes = hasMeaningfulText(cs.additionalNotes)
     const advNotes = showAdvNotes
       ? `<div class="adv-notes">${escapeHtml(cs.additionalNotes).replace(/\n/g, '<br>')}</div>`
       : ''
+    const generatedStamp = new Date().toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    const footerLeftMeta = [
+      `Day ${dayIdx + 1}`,
+      day.date ? fmtDate(day.date) : '',
+      day.startTime ? `General Call ${fmt12(day.startTime)}` : '',
+    ].filter(Boolean).join(' • ')
+
+    const showGeneralInfo = genRows.length > 0
+    const showAdvancedSchedule = scheduleBodyRows.length > 0
+    const showCastList = castRows.length > 0
+    const showCrewList = crewRows.length > 0
 
     return `<div class="day-page">
   <!-- HEADER -->
   <div class="cs-header">
     <div class="cs-header-left">
-      <div class="cs-title">${escapeHtml(productionTitle)}</div>
+      <div class="cs-title">${escapeHtml(productionTitle || 'Untitled Project')}</div>
       <div class="cs-subtitle">CALLSHEET</div>
     </div>
     <div class="cs-header-right">
-      <div class="cs-day">Day ${dayIdx + 1}${day.date ? ` — ${escapeHtml(fmtDate(day.date))}` : ''}</div>
-      ${day.startTime ? `<div class="cs-calltime">General Call: <strong>${escapeHtml(fmt12(day.startTime))}</strong></div>` : ''}
+      <div class="cs-day">Day ${dayIdx + 1}</div>
     </div>
   </div>
 
   <!-- GENERAL INFO -->
-  <div class="section">
+  ${showGeneralInfo ? `<div class="section">
     <div class="section-title">GENERAL INFO</div>
     <table class="info-table">
       <colgroup><col style="width:130px"><col style="width:auto"></colgroup>
       <tbody>${genRows}</tbody>
     </table>
-  </div>
+  </div>` : ''}
 
   <!-- ADVANCED SCHEDULE -->
-  <div class="section">
+  ${showAdvancedSchedule ? `<div class="section">
     <div class="section-title">ADVANCED SCHEDULE</div>
     <table>
       <thead><tr>${scheduleHeader}</tr></thead>
       <tbody>${scheduleBodyRows}</tbody>
     </table>
-  </div>
+  </div>` : ''}
 
   <!-- CAST LIST -->
-  <div class="section">
+  ${showCastList ? `<div class="section">
     <div class="section-title">CAST LIST</div>
     <table>
       <thead><tr>${castHeader}</tr></thead>
       <tbody>${castRows}</tbody>
     </table>
-  </div>
+  </div>` : ''}
 
   <!-- CREW LIST -->
-  <div class="section">
+  ${showCrewList ? `<div class="section">
     <div class="section-title">CREW LIST</div>
     <table>
       <thead><tr>${crewHeader}</tr></thead>
       <tbody>${crewRows}</tbody>
     </table>
-  </div>
+  </div>` : ''}
 
   <!-- LOCATION DETAILS -->
   ${locLines.length > 0 ? `
@@ -1643,8 +1672,11 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
   </div>` : ''}
 
   <div class="cs-footer">
-    <span>Generated by ShotScribe — ${escapeHtml(new Date().toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span>
-    <span>CONFIDENTIAL — FOR PRODUCTION USE ONLY</span>
+    <div class="cs-footer-left">
+      <div class="cs-footer-meta">${escapeHtml(footerLeftMeta)}</div>
+      <div>Generated by ShotScribe — ${escapeHtml(generatedStamp)}</div>
+    </div>
+    <span class="cs-footer-right">CONFIDENTIAL — FOR PRODUCTION USE ONLY</span>
   </div>
 </div>`
   })
@@ -1673,13 +1705,15 @@ function buildCallsheetPrintHtml(dayIdxFilter = null) {
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   background: #fff;
-  color: #111;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 9pt;
+  color: #111111;
+  font-family: Inter, 'Segoe UI', Arial, sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.35;
 }
 .day-page {
   break-after: page;
   page-break-after: always;
+  padding-bottom: 4px;
 }
 .day-page:last-child {
   break-after: avoid;
@@ -1690,136 +1724,135 @@ html, body {
 .cs-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  background: #1a1a1a;
+  align-items: center;
+  background: #0b1220;
   color: #fff;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  border-radius: 2px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 3px solid #1f2937;
 }
 .cs-title {
-  font-size: 22pt;
-  font-weight: 900;
-  letter-spacing: 0.02em;
+  font-size: 18pt;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   line-height: 1.1;
   color: #fff;
 }
 .cs-subtitle {
-  font-size: 9pt;
+  font-size: 8pt;
   font-weight: 700;
-  color: rgba(255,255,255,0.9);
-  letter-spacing: 0.12em;
+  color: #dbeafe;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  margin-top: 4px;
+  margin-top: 5px;
 }
 .cs-header-right {
   text-align: right;
 }
 .cs-day {
-  font-size: 11pt;
+  font-size: 12pt;
   font-weight: 700;
-  color: #fff;
-}
-.cs-calltime {
-  font-size: 10pt;
-  font-weight: 700;
-  color: rgba(255,255,255,0.9);
-  margin-top: 3px;
+  color: #f8fafc;
 }
 
 /* Sections */
 .section {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .section-title {
-  background: #1a1a1a;
+  background: #111827;
   color: #ffffff;
-  padding: 4px 8px;
-  font-size: 9px;
+  padding: 6px 10px;
+  font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  border: 1px solid #111827;
+  border-bottom: none;
 }
 
 /* General Info table */
 .info-table {
   width: 100%;
   border-collapse: collapse;
-  border: 1px solid #333;
+  border: 1px solid #111827;
   table-layout: fixed;
 }
 .info-label {
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #444;
-  border-bottom: 1px solid #ccc;
-  border-right: 1px solid #ccc;
-  background: #f0f0f0;
+  color: #111827;
+  border-bottom: 1px solid #d1d5db;
+  border-right: 1px solid #d1d5db;
+  background: #eef2ff;
   white-space: nowrap;
   vertical-align: top;
 }
 .info-value {
-  padding: 4px 8px;
-  font-size: 9pt;
-  color: #111;
-  border-bottom: 1px solid #ccc;
+  padding: 6px 10px;
+  font-size: 9.5pt;
+  color: #111111;
+  border-bottom: 1px solid #d1d5db;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 /* Standard tables */
 table {
   width: 100%;
   border-collapse: collapse;
-  border: 1px solid #333;
+  border: 1px solid #111827;
   table-layout: fixed;
 }
 thead th {
-  background: #1a1a1a;
+  background: #111827;
   color: #ffffff;
   font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   text-align: left;
-  padding: 5px 8px;
-  border-right: 1px solid #333;
+  padding: 6px 8px;
+  border-right: 1px solid #1f2937;
   white-space: nowrap;
   overflow: hidden;
 }
 thead th:last-child { border-right: none; }
 tbody td {
-  padding: 5px 8px;
-  border-bottom: 1px solid #ccc;
-  border-right: 1px solid #ccc;
+  padding: 6px 8px;
+  border-bottom: 1px solid #d1d5db;
+  border-right: 1px solid #d1d5db;
   font-size: 9pt;
-  color: #111;
+  color: #111111;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 tbody td:last-child { border-right: none; }
 tr.row-even td { background: #ffffff; }
-tr.row-odd td  { background: #f5f5f5; }
-tr.break-adv-row td { background: #fefce8; border-bottom-color: #fde68a; }
+tr.row-odd td  { background: #f9fafb; }
 
 /* Location details */
 .loc-row {
   display: flex;
   gap: 10px;
-  padding: 4px 8px;
-  border: 1px solid #333;
+  padding: 6px 10px;
+  border: 1px solid #111827;
   border-top: none;
   font-size: 9pt;
-  color: #111;
+  color: #111111;
+  overflow-wrap: anywhere;
 }
-.loc-row:first-child { border-top: 1px solid #333; }
+.loc-row:first-child { border-top: 1px solid #111827; }
 .loc-label {
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #444;
+  color: #111827;
   width: 70px;
   flex-shrink: 0;
   padding-top: 1px;
@@ -1827,23 +1860,39 @@ tr.break-adv-row td { background: #fefce8; border-bottom-color: #fde68a; }
 
 /* Additional Notes */
 .adv-notes {
-  padding: 6px 8px;
-  border: 1px solid #ccc;
+  padding: 8px 10px;
+  border: 1px solid #111827;
   font-size: 9pt;
-  color: #111;
-  line-height: 1.5;
+  color: #111111;
+  line-height: 1.55;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Footer */
 .cs-footer {
-  margin-top: 12px;
-  padding-top: 5px;
-  border-top: 1px solid #ccc;
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1.5px solid #111827;
   display: flex;
   justify-content: space-between;
-  font-size: 7.5pt;
-  color: #666;
+  align-items: flex-end;
+  font-size: 8pt;
+  color: #111827;
+  gap: 10px;
+}
+.cs-footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cs-footer-meta {
+  font-weight: 700;
+}
+.cs-footer-right {
+  text-align: right;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 </style>
 </head>
@@ -2528,22 +2577,23 @@ export async function exportCallsheetPDF(projectName) {
     if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'callsheet')
     } else {
-      const win = window.open('', '_blank', 'width=900,height=700')
+      const previewBlob = new Blob([html], { type: 'text/html' })
+      const previewUrl = URL.createObjectURL(previewBlob)
+      const win = window.open(previewUrl, '_blank', 'width=900,height=700')
       if (!win) {
-        const blob = new Blob([html], { type: 'text/html' })
-        const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
-        a.href = url
+        a.href = previewUrl
         a.download = `${(projectName || 'callsheet').replace(/[^a-z0-9]/gi, '_')}_callsheet.html`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+        URL.revokeObjectURL(previewUrl)
         return
       }
-      win.document.write(html)
-      win.document.close()
+      const releasePreviewUrl = () => URL.revokeObjectURL(previewUrl)
+      win.addEventListener('afterprint', releasePreviewUrl, { once: true })
       setTimeout(() => { win.focus(); win.print() }, 500)
+      setTimeout(releasePreviewUrl, 60000)
     }
   } catch (err) {
     console.error('[PDF Export] Callsheet export failed:', err)
@@ -2574,13 +2624,17 @@ export async function exportSingleDayCallsheetPDF({
     return { filePath: saveResult?.filePath || '', fileName: resolvedFileName }
   }
 
-  const win = window.open('', '_blank', 'width=900,height=700')
+  const previewBlob = new Blob([html], { type: 'text/html' })
+  const previewUrl = URL.createObjectURL(previewBlob)
+  const win = window.open(previewUrl, '_blank', 'width=900,height=700')
   if (!win) {
+    URL.revokeObjectURL(previewUrl)
     throw new Error('Unable to open print window. Please allow popups and retry.')
   }
-  win.document.write(html)
-  win.document.close()
+  const releasePreviewUrl = () => URL.revokeObjectURL(previewUrl)
+  win.addEventListener('afterprint', releasePreviewUrl, { once: true })
   setTimeout(() => { win.focus(); win.print() }, 500)
+  setTimeout(releasePreviewUrl, 60000)
   return { filePath: '', fileName: resolvedFileName }
 }
 

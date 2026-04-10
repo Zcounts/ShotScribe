@@ -27,6 +27,7 @@ This monorepo currently contains:
 - Storyboard desktop left outline sidebar now stretches to the same full-height content area behavior used by other tabs, eliminating a short sidebar gap when storyboard content is sparse.
 - Storyboard tab now uses split scroll ownership on desktop: the outline sidebar and storyboard canvas each keep independent vertical scrolling so scrolling long pages no longer drags the left outline pane.
 - Storyboard Project Media Library picker now reliably renders thumbnail previews again (including cached/signed view and existing lightweight preview metadata fallbacks), while gracefully falling back to “No preview” only when no usable preview source exists.
+- Callsheet PDF export now uses a higher-contrast professional print layout, suppresses empty sections/rows by default, moves shoot-date/general-call metadata into the footer, and fixes browser fallback printing so `about:blank` no longer appears in generated output.
 
 ---
 
