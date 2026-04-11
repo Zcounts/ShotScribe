@@ -107,6 +107,7 @@ Reference docs:
 - `docs/billing-stripe-runbook.md`
 - `docs/admin-role-runbook.md`
 - `docs/shadcn-migration-foundation.md` (web-only phased shadcn/ui migration baseline)
+- `docs/mobile-cloud-access-sync-audit-2026-04-11.md` (mobile local-vs-cloud access and sync architecture audit + phased plan)
 
 ---
 
