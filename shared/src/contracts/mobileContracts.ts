@@ -23,6 +23,7 @@ export interface MobileScheduleItem {
   shotEquipment?: string
   shotNotes?: string
   shotImageUrl?: string
+  shotImageAssetId?: string
   shotColor?: string
   sceneId?: string
   title?: string
@@ -46,6 +47,7 @@ export interface MobileStoryboardReference {
   shotNotes?: string
   shotColor?: string
   thumbnailUrl?: string
+  thumbnailAssetId?: string
   thumbnailWidth?: number
   thumbnailHeight?: number
   updatedAt: string
