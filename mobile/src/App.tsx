@@ -375,6 +375,12 @@ function CloudEnabledApp() {
         queueEntries.forEach((entry) => delete next[`${entry.projectId}::${entry.dayId}::${entry.shotId}`])
         return next
       })
+      persistCloudCache(nextCache)
+      setProjectStaleState(
+        route.projectId,
+        result?.snapshotId ? String(result.snapshotId) : String(cacheEntry.snapshotId),
+        false,
+      )
       setSyncState({ status: 'synced', at: new Date().toISOString() })
     } catch (err) {
       setSyncState({ status: 'sync_failed', error: err instanceof Error ? err.message : 'Upload failed' })

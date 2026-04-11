@@ -112,6 +112,7 @@ function ShotCard({
   const [isAssigningFromLibrary, setIsAssigningFromLibrary] = useState(false)
   const [isDeletingLibraryAsset, setIsDeletingLibraryAsset] = useState(false)
   const { isDesktopDown, isPhone } = useResponsiveViewport()
+  const [isExpanded, setIsExpanded] = useState(false)
   const fileInputRef = useRef(null)
   const imageElementRef = useRef(null)
   const previousAssetIdRef = useRef(null)
@@ -529,8 +530,21 @@ function ShotCard({
 
       </div>
 
+      {/* Mobile Details Toggle */}
+      {isPhone && (
+        <div className="shot-card-details-toggle">
+          <button
+            type="button"
+            className="shot-card-details-btn"
+            onClick={() => setIsExpanded(v => !v)}
+          >
+            {isExpanded ? 'Hide Details' : 'Details'}
+          </button>
+        </div>
+      )}
+
       {/* Image Area */}
-      <div
+      {(!isPhone || isExpanded) && <div
         className={`image-placeholder ${imagePickerStep === 'options' && projectRef?.type === 'cloud' ? 'image-placeholder-active' : ''}`}
         onClick={handleImageClick}
         style={{ border: `2px solid ${shot.color}`, aspectRatio: parseAspectRatioValue(displayConfig.aspectRatio) }}
@@ -594,8 +608,8 @@ function ShotCard({
           className="hidden"
           onChange={handleImageChange}
         />
-      </div>
-      {imagePickerStep === 'library' && projectRef?.type === 'cloud' && (
+      </div>}
+      {(!isPhone || isExpanded) && imagePickerStep === 'library' && projectRef?.type === 'cloud' && (
         <div className="modal-overlay" style={{ zIndex: 760 }} onClick={() => setImagePickerStep('options')}>
           <div className="modal app-dialog shot-library-picker-modal" onClick={(e) => e.stopPropagation()}>
             <div className="shot-library-picker-header">
@@ -681,7 +695,7 @@ function ShotCard({
       )}
 
       {/* Specs Table */}
-      {visibleSpecKeys.length > 0 && (
+      {(!isPhone || isExpanded) && visibleSpecKeys.length > 0 && (
         <SpecsTable
           shotId={shot.id}
           specs={shot.specs}
@@ -690,7 +704,7 @@ function ShotCard({
         />
       )}
 
-      {timeMetadataColumns.length > 0 && (
+      {(!isPhone || isExpanded) && timeMetadataColumns.length > 0 && (
         <div className="shot-time-fields-wrapper">
           <table className="shot-time-fields">
             <caption>Shot timing and aspect ratio metadata</caption>
@@ -757,7 +771,7 @@ function ShotCard({
       )}
 
       {/* Notes Area */}
-      {visibleInfo.notes !== false && (
+      {(!isPhone || isExpanded) && visibleInfo.notes !== false && (
         <div className="border-t border-gray-200">
           <NotesArea shotId={shot.id} value={shot.notes} />
         </div>
