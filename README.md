@@ -29,6 +29,7 @@ This monorepo currently contains:
 - Storyboard Project Media Library picker now reliably renders thumbnail previews again (including cached/signed view and existing lightweight preview metadata fallbacks), while gracefully falling back to “No preview” only when no usable preview source exists.
 - Callsheet PDF export now uses a higher-contrast professional print layout, suppresses empty sections/rows by default, moves shoot-date/general-call metadata into the footer, and fixes browser fallback printing so `about:blank` no longer appears in generated output.
 - Mobile web layout overflow fixes now keep iPhone-width project headers, mode toggles, tabs, and shot cards within viewport bounds without changing desktop/tablet behavior.
+- Mobile storyboard tab/detail modal now restores full shot storyboard metadata (image, camera/lens/specs, notes) from exported day-package fields to match desktop data coverage in a mobile layout.
 
 ---
 
