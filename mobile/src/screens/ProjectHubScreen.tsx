@@ -284,26 +284,33 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
               <h3>{focusedShot.shotDisplayName ?? focusedShotId}</h3>
               <button type="button" className="inline-button" onClick={() => setFocusedShotId(null)}>Close</button>
             </div>
-            {focusedStoryboard ? (
-              <div className="mobile-shot-detail">
-                {focusedStoryboard.shotImageUrl ? (
-                  <img className="storyboard-preview-image" src={focusedStoryboard.shotImageUrl} alt={focusedStoryboard.shotDisplayName ?? focusedShotId} loading="lazy" />
-                ) : null}
-                <div className="shot-spec-grid">
-                  <p><span>Camera</span><strong>{focusedStoryboard.shotCameraName || '—'}</strong></p>
-                  <p><span>Lens</span><strong>{focusedStoryboard.focalLength || '—'}</strong></p>
-                  <p><span>Size</span><strong>{focusedStoryboard.shotSize || '—'}</strong></p>
-                  <p><span>Type</span><strong>{focusedStoryboard.shotType || '—'}</strong></p>
-                  <p><span>Move</span><strong>{focusedStoryboard.shotMove || '—'}</strong></p>
-                  <p><span>Equipment</span><strong>{focusedStoryboard.shotEquipment || '—'}</strong></p>
+            <div className="mobile-shot-modal-body">
+              {focusedStoryboard && selectedTab === 'storyboard' ? (
+                <div className="mobile-shot-detail">
+                  {focusedStoryboard.shotImageUrl ? (
+                    <img className="storyboard-preview-image" src={focusedStoryboard.shotImageUrl} alt={focusedStoryboard.shotDisplayName ?? focusedShotId} loading="lazy" />
+                  ) : (
+                    <div className="storyboard-preview-fallback"><span>No storyboard image</span></div>
+                  )}
+                  <div className="shot-spec-grid">
+                    <p><span>Camera</span><strong>{focusedStoryboard.shotCameraName || '—'}</strong></p>
+                    <p><span>Lens</span><strong>{focusedStoryboard.focalLength || '—'}</strong></p>
+                    <p><span>Size</span><strong>{focusedStoryboard.shotSize || '—'}</strong></p>
+                    <p><span>Type</span><strong>{focusedStoryboard.shotType || '—'}</strong></p>
+                    <p><span>Move</span><strong>{focusedStoryboard.shotMove || '—'}</strong></p>
+                    <p><span>Equipment</span><strong>{focusedStoryboard.shotEquipment || '—'}</strong></p>
+                  </div>
+                  {focusedStoryboard.shotNotes ? (
+                    <p className="shot-notes"><span>Storyboard notes</span><strong>{focusedStoryboard.shotNotes}</strong></p>
+                  ) : null}
                 </div>
-              </div>
-            ) : null}
-            <textarea className="text-editor" placeholder="Shot / production notes" value={focusedEdit?.shotNotes ?? focusedShot.shotNotes ?? ''} onChange={(event) => onUpdateShotFields(focusedShotId, { shotNotes: event.target.value })} />
-            <textarea className="text-editor" placeholder="Script supervisor notes" value={focusedEdit?.scriptSupervisorNotes ?? ''} onChange={(event) => onUpdateShotFields(focusedShotId, { scriptSupervisorNotes: event.target.value })} />
-            <label className="hint-text">Actual start<input className="touch-input" type="datetime-local" value={(focusedEdit?.actualStartTime ?? '').slice(0, 16)} onChange={(event) => onUpdateShotFields(focusedShotId, { actualStartTime: event.target.value ? new Date(event.target.value).toISOString() : '' })} /></label>
-            <label className="hint-text">Actual end<input className="touch-input" type="datetime-local" value={(focusedEdit?.actualEndTime ?? '').slice(0, 16)} onChange={(event) => onUpdateShotFields(focusedShotId, { actualEndTime: event.target.value ? new Date(event.target.value).toISOString() : '' })} /></label>
-            <button type="button" className="touch-button" onClick={() => onCycleShotStatus(focusedShotId)}>Cycle status</button>
+              ) : null}
+              <textarea className="text-editor" placeholder="Shot / production notes" value={focusedEdit?.shotNotes ?? focusedShot.shotNotes ?? ''} onChange={(event) => onUpdateShotFields(focusedShotId, { shotNotes: event.target.value })} />
+              <textarea className="text-editor" placeholder="Script supervisor notes" value={focusedEdit?.scriptSupervisorNotes ?? ''} onChange={(event) => onUpdateShotFields(focusedShotId, { scriptSupervisorNotes: event.target.value })} />
+              <label className="hint-text">Actual start<input className="touch-input" type="datetime-local" value={(focusedEdit?.actualStartTime ?? '').slice(0, 16)} onChange={(event) => onUpdateShotFields(focusedShotId, { actualStartTime: event.target.value ? new Date(event.target.value).toISOString() : '' })} /></label>
+              <label className="hint-text">Actual end<input className="touch-input" type="datetime-local" value={(focusedEdit?.actualEndTime ?? '').slice(0, 16)} onChange={(event) => onUpdateShotFields(focusedShotId, { actualEndTime: event.target.value ? new Date(event.target.value).toISOString() : '' })} /></label>
+              <button type="button" className="touch-button" onClick={() => onCycleShotStatus(focusedShotId)}>Cycle status</button>
+            </div>
           </div>
         </div>
       ) : null}
