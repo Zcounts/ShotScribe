@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { MobileScheduleItem } from '@shotscribe/shared'
+import type { MobileScheduleItem, MobileStoryboardReference } from '@shotscribe/shared'
 import type { MobileTabKey, ShotFieldEdit, ShotStatus, StoredDayEntry, StoredProjectEntry } from '../types'
 
 interface ProjectHubScreenProps {
@@ -43,6 +43,38 @@ function formatTime(iso?: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+type StoryboardShotData = {
+  shotId: string
+  shotDisplayName?: string
+  shotCameraName?: string
+  focalLength?: string
+  shotSize?: string
+  shotType?: string
+  shotMove?: string
+  shotEquipment?: string
+  shotNotes?: string
+  shotImageUrl?: string
+  shotColor?: string
+  sceneId?: string
+}
+
+function resolveStoryboardShotData(shot: MobileScheduleItem, ref?: MobileStoryboardReference): StoryboardShotData {
+  return {
+    shotId: shot.shotId as string,
+    shotDisplayName: ref?.shotDisplayName ?? shot.shotDisplayName,
+    shotCameraName: ref?.shotCameraName ?? shot.shotCameraName,
+    focalLength: ref?.focalLength ?? shot.focalLength,
+    shotSize: ref?.shotSize ?? shot.shotSize,
+    shotType: ref?.shotType ?? shot.shotType,
+    shotMove: ref?.shotMove ?? shot.shotMove,
+    shotEquipment: ref?.shotEquipment ?? shot.shotEquipment,
+    shotNotes: ref?.shotNotes ?? shot.shotNotes,
+    shotImageUrl: ref?.thumbnailUrl ?? shot.shotImageUrl,
+    shotColor: ref?.shotColor ?? shot.shotColor,
+    sceneId: shot.sceneId,
+  }
+}
+
 function renderOverview(day: StoredDayEntry, doneShots: number, totalShots: number) {
   return (
     <article className="project-card overview-card">
@@ -80,6 +112,13 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
   const [focusedShotId, setFocusedShotId] = useState<string | null>(null)
   const dayList = Object.values(project.days).sort((a, b) => a.shootDate.localeCompare(b.shootDate))
   const shots = useMemo(() => day.dayPackage.scheduleItems.filter((item) => item.type === 'shot' && item.shotId), [day])
+  const storyboardRefsByShotId = useMemo(() => {
+    const map = new Map<string, MobileStoryboardReference>()
+    ;(Array.isArray(day.dayPackage.storyboardRefs) ? day.dayPackage.storyboardRefs : []).forEach((ref) => {
+      map.set(ref.shotId, ref)
+    })
+    return map
+  }, [day])
 
   const doneShots = shots.filter((item) => {
     const edit = shotEdits[toShotKey(project.projectId, day.dayId, item.shotId as string)]
@@ -88,6 +127,7 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
 
   const focusedShot = focusedShotId ? shots.find((item) => item.shotId === focusedShotId) : null
   const focusedEdit = focusedShotId ? shotEdits[toShotKey(project.projectId, day.dayId, focusedShotId)] : undefined
+  const focusedStoryboard = focusedShot ? resolveStoryboardShotData(focusedShot, storyboardRefsByShotId.get(focusedShot.shotId as string)) : null
 
   return (
     <section className="screen project-hub-screen">
@@ -134,7 +174,7 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
         </div>
       ) : null}
 
-      {selectedTab === 'shotlist' || selectedTab === 'storyboard' ? (
+      {selectedTab === 'shotlist' ? (
         <div className="stacked-list">
           {shots.map((shot) => {
             const shotId = shot.shotId as string
@@ -144,6 +184,42 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
               <article key={shot.scheduleItemId} className={`mobile-shot-card status-outline-${status}`}>
                 <h4>{shot.shotDisplayName ?? shotId}</h4>
                 <p className="hint-text">{edit?.scriptSupervisorNotes || edit?.shotNotes || shot.shotNotes || 'No notes'}</p>
+                <div className="mobile-shot-actions">
+                  <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => setFocusedShotId(shotId)}>Details</button>
+                  <button type="button" className={`shot-action-button shot-action-button-${status === 'done' ? 'done' : status === 'skipped' ? 'skipped' : 'neutral'}`} onClick={() => onCycleShotStatus(shotId)}>
+                    {status === 'done' ? 'Done' : status === 'skipped' ? 'Skipped' : 'Mark Done'}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {selectedTab === 'storyboard' ? (
+        <div className="stacked-list">
+          {shots.map((shot) => {
+            const shotId = shot.shotId as string
+            const edit = shotEdits[toShotKey(project.projectId, day.dayId, shotId)]
+            const status = getStatus(shot, edit)
+            const storyboard = resolveStoryboardShotData(shot, storyboardRefsByShotId.get(shotId))
+            return (
+              <article key={shot.scheduleItemId} className={`storyboard-card status-outline-${status}`}>
+                {storyboard.shotImageUrl ? (
+                  <img className="storyboard-preview-image-thumb" src={storyboard.shotImageUrl} alt={storyboard.shotDisplayName ?? shotId} loading="lazy" />
+                ) : (
+                  <div className="storyboard-preview-fallback"><span>No storyboard image</span></div>
+                )}
+                <h4>{storyboard.shotDisplayName ?? shotId}</h4>
+                <div className="shot-spec-grid">
+                  <p><span>Camera</span><strong>{storyboard.shotCameraName || '—'}</strong></p>
+                  <p><span>Lens</span><strong>{storyboard.focalLength || '—'}</strong></p>
+                  <p><span>Size</span><strong>{storyboard.shotSize || '—'}</strong></p>
+                  <p><span>Type</span><strong>{storyboard.shotType || '—'}</strong></p>
+                  <p><span>Move</span><strong>{storyboard.shotMove || '—'}</strong></p>
+                  <p><span>Equipment</span><strong>{storyboard.shotEquipment || '—'}</strong></p>
+                </div>
+                <p className="shot-notes"><span>Storyboard notes</span><strong>{edit?.shotNotes || storyboard.shotNotes || 'No notes yet'}</strong></p>
                 <div className="mobile-shot-actions">
                   <button type="button" className="shot-action-button shot-action-button-secondary" onClick={() => setFocusedShotId(shotId)}>Details</button>
                   <button type="button" className={`shot-action-button shot-action-button-${status === 'done' ? 'done' : status === 'skipped' ? 'skipped' : 'neutral'}`} onClick={() => onCycleShotStatus(shotId)}>
@@ -208,6 +284,21 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
               <h3>{focusedShot.shotDisplayName ?? focusedShotId}</h3>
               <button type="button" className="inline-button" onClick={() => setFocusedShotId(null)}>Close</button>
             </div>
+            {focusedStoryboard ? (
+              <div className="mobile-shot-detail">
+                {focusedStoryboard.shotImageUrl ? (
+                  <img className="storyboard-preview-image" src={focusedStoryboard.shotImageUrl} alt={focusedStoryboard.shotDisplayName ?? focusedShotId} loading="lazy" />
+                ) : null}
+                <div className="shot-spec-grid">
+                  <p><span>Camera</span><strong>{focusedStoryboard.shotCameraName || '—'}</strong></p>
+                  <p><span>Lens</span><strong>{focusedStoryboard.focalLength || '—'}</strong></p>
+                  <p><span>Size</span><strong>{focusedStoryboard.shotSize || '—'}</strong></p>
+                  <p><span>Type</span><strong>{focusedStoryboard.shotType || '—'}</strong></p>
+                  <p><span>Move</span><strong>{focusedStoryboard.shotMove || '—'}</strong></p>
+                  <p><span>Equipment</span><strong>{focusedStoryboard.shotEquipment || '—'}</strong></p>
+                </div>
+              </div>
+            ) : null}
             <textarea className="text-editor" placeholder="Shot / production notes" value={focusedEdit?.shotNotes ?? focusedShot.shotNotes ?? ''} onChange={(event) => onUpdateShotFields(focusedShotId, { shotNotes: event.target.value })} />
             <textarea className="text-editor" placeholder="Script supervisor notes" value={focusedEdit?.scriptSupervisorNotes ?? ''} onChange={(event) => onUpdateShotFields(focusedShotId, { scriptSupervisorNotes: event.target.value })} />
             <label className="hint-text">Actual start<input className="touch-input" type="datetime-local" value={(focusedEdit?.actualStartTime ?? '').slice(0, 16)} onChange={(event) => onUpdateShotFields(focusedShotId, { actualStartTime: event.target.value ? new Date(event.target.value).toISOString() : '' })} /></label>
