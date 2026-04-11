@@ -75,6 +75,7 @@ function buildScheduleItems(day, shotLookup) {
         shotEquipment: shot?.specs?.equip || undefined,
         shotNotes: shot?.notes || undefined,
         shotImageUrl,
+        shotImageAssetId: shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : undefined,
         shotColor: shot?.color || undefined,
         sceneId: linked?.scene?.id,
         title: linked ? `${linked.displayId} ${linked.scene.sceneLabel}` : 'Shot',
@@ -118,6 +119,9 @@ function buildStoryboardRefs(day, shotLookup, timestampIso) {
         out.thumbnailUrl = shot.image
       } else if (shot.image && shot.image.startsWith('data:image/')) {
         out.thumbnailUrl = shot.image
+      }
+      if (shot?.imageAsset?.cloud?.assetId) {
+        out.thumbnailAssetId = String(shot.imageAsset.cloud.assetId)
       }
       return out
     })

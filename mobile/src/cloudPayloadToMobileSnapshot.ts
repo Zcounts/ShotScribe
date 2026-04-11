@@ -67,6 +67,7 @@ export function createMobileSnapshotFromCloudPayload(
         shotEquipment: shot?.specs?.equip || undefined,
         shotNotes: shot?.notes || undefined,
         shotImageUrl: shot?.image || undefined,
+        shotImageAssetId: shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : undefined,
         shotColor: shot?.color || undefined,
         sceneId: linked?.scene?.id || undefined,
         title: typeof block?.label === 'string' ? block.label : (isShot ? linked?.displayLabel : block?.type),
@@ -96,6 +97,7 @@ export function createMobileSnapshotFromCloudPayload(
           shotNotes: shot?.notes || undefined,
           shotColor: shot?.color || undefined,
           thumbnailUrl: shot?.image || undefined,
+          thumbnailAssetId: shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : undefined,
           updatedAt: nowIso,
         }
       })

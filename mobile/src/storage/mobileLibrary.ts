@@ -4,6 +4,8 @@ import type {
   MobileTabKey,
   ShotFieldEdit,
   ShotStatus,
+  StoredCloudCache,
+  StoredCloudCacheEntry,
   StoredDayEntry,
   StoredLastOpened,
   StoredLibrary,
@@ -13,6 +15,7 @@ import type {
 
 const LIBRARY_STORAGE_KEY = 'shotscribe.mobile.library.v1'
 const SESSION_STORAGE_KEY = 'shotscribe.mobile.session.v1'
+const CLOUD_CACHE_STORAGE_KEY = 'shotscribe.mobile.cloudCache.v1'
 
 const EMPTY_LIBRARY: StoredLibrary = {
   version: 1,
@@ -23,6 +26,11 @@ const EMPTY_LIBRARY: StoredLibrary = {
 const EMPTY_SESSION: StoredSession = {
   version: 1,
   lastOpened: null,
+}
+
+const EMPTY_CLOUD_CACHE: StoredCloudCache = {
+  version: 1,
+  entries: {},
 }
 
 function readString(value: unknown, fallback: string): string {
@@ -104,6 +112,52 @@ export function loadLibrary(): StoredLibrary {
 
 export function saveLibrary(library: StoredLibrary): void {
   window.localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library))
+}
+
+export function loadCloudCache(): StoredCloudCache {
+  const raw = window.localStorage.getItem(CLOUD_CACHE_STORAGE_KEY)
+  if (!raw) return EMPTY_CLOUD_CACHE
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredCloudCache>
+    if (parsed.version !== 1 || typeof parsed.entries !== 'object' || !parsed.entries) return EMPTY_CLOUD_CACHE
+    const entries: StoredCloudCache['entries'] = {}
+    for (const [projectId, unsafeEntry] of Object.entries(parsed.entries)) {
+      if (!unsafeEntry || typeof unsafeEntry !== 'object') continue
+      const entry = unsafeEntry as Partial<StoredCloudCacheEntry>
+      if (!entry.snapshotId || !entry.payload || typeof entry.payload !== 'object') continue
+      entries[projectId] = {
+        projectId,
+        snapshotId: String(entry.snapshotId),
+        snapshotVersionToken: typeof entry.snapshotVersionToken === 'string' ? entry.snapshotVersionToken : undefined,
+        createdByUserId: typeof entry.createdByUserId === 'string' ? entry.createdByUserId : '',
+        cachedAt: typeof entry.cachedAt === 'string' ? entry.cachedAt : new Date().toISOString(),
+        payload: entry.payload as Record<string, any>,
+      }
+    }
+    return { version: 1, entries }
+  } catch {
+    return EMPTY_CLOUD_CACHE
+  }
+}
+
+export function saveCloudCache(cache: StoredCloudCache): void {
+  window.localStorage.setItem(CLOUD_CACHE_STORAGE_KEY, JSON.stringify(cache))
+}
+
+export function upsertCloudCacheEntry(
+  cache: StoredCloudCache,
+  entry: StoredCloudCacheEntry,
+): StoredCloudCache {
+  return {
+    version: 1,
+    entries: {
+      ...cache.entries,
+      [entry.projectId]: {
+        ...entry,
+        cachedAt: entry.cachedAt || new Date().toISOString(),
+      },
+    },
+  }
 }
 
 export function loadSession(): StoredSession {

@@ -6,6 +6,7 @@ import type {
   MobileTabKey,
   ShotFieldEdit,
   ShotStatus,
+  StoredCloudCache,
   StoredLastOpened,
   StoredLibrary,
   StoredProjectEntry,
@@ -15,12 +16,15 @@ import { importDayPackagesFromFile } from './importers/mobilePackageImport'
 import {
   getPreferredDayId,
   importDayPackages,
+  loadCloudCache,
   loadLibrary,
   loadSession,
   removeProject,
   resolveLastOpened,
+  saveCloudCache,
   saveLibrary,
   saveSession,
+  upsertCloudCacheEntry,
   upsertShotEdit,
 } from './storage/mobileLibrary'
 import { EmptyLibraryScreen } from './screens/EmptyLibraryScreen'
@@ -28,6 +32,13 @@ import { ImportScreen } from './screens/ImportScreen'
 import { ProjectHubScreen } from './screens/ProjectHubScreen'
 import { CloudAuthPanel, mobileRuntime } from './auth'
 import { applyEditsToCloudPayload, exportProjectAsSnapshot } from './mobileEdits'
+import {
+  getCachedAssetViewUrl,
+  loadAssetViewCache,
+  saveAssetViewCache,
+  upsertAssetViewUrl,
+  type StoredAssetViewCache,
+} from './storage/mobileAssetViews'
 
 type MobileMode = 'local' | 'cloud'
 
@@ -37,6 +48,17 @@ type MobileSyncState =
   | { status: 'syncing' }
   | { status: 'synced'; at: string }
   | { status: 'sync_failed'; error: string }
+
+type CloudSnapshotHead = {
+  latestSnapshotId?: string
+  latestSnapshotVersionToken?: string
+}
+
+type CloudProjectStatus = {
+  isStale: boolean
+  latestSnapshotId: string | null
+  checkedAt: string
+}
 
 const MOBILE_CLOUD_SYNC_DEBOUNCE_MS = 6000
 
@@ -69,153 +91,27 @@ function downloadJson(filename: string, payload: string) {
   URL.revokeObjectURL(url)
 }
 
-function CloudModePane({
-  route,
-  library,
-  onNavigateProject,
-  onSelectCloudProject,
-  onApplyShotEdit,
-}: {
-  route: AppRoute
-  library: StoredLibrary
-  onNavigateProject: (projectId: string, dayId: string, tab: MobileTabKey) => void
-  onSelectCloudProject: (projectId: string) => void
-  onApplyShotEdit: (projectId: string, dayId: string, shotId: string, patch: Partial<Omit<ShotFieldEdit, 'updatedAt'>>) => StoredLibrary
-}) {
-  const convex = useConvex()
-  const [cloudEntitlement, setCloudEntitlement] = useState<any>(null)
-  const cloudProjectsResult = useQuery('projects:listProjectsForCurrentUserLite' as any, {}) as { projects: any[], hasMore: boolean, total: number } | undefined
-  const cloudProjects = cloudProjectsResult?.projects
-  const projectId = route.name === 'project' && route.mode === 'cloud' ? route.projectId : 'skip'
-  const latestSnapshot = useQuery('projectSnapshots:getLatestSnapshotForProject' as any, projectId === 'skip' ? 'skip' : { projectId }) as any
-  const createSnapshot = useMutation('projectSnapshots:createSnapshot' as any)
-  const [syncMessage, setSyncMessage] = useState<string | null>(null)
-
-  const cloudProjectLibrary = useMemo(() => {
-    if (!latestSnapshot?.payload || projectId === 'skip') return null
-    try {
-      const snapshot = createMobileSnapshotFromCloudPayload(latestSnapshot.payload, { projectId })
-      return importDayPackages({ version: 1, projects: {}, shotEdits: {} }, snapshot.dayPackages, new Date().toISOString()).library
-    } catch {
-      return null
-    }
-  }, [latestSnapshot, projectId])
-
-  const cloudActiveProject = route.name === 'project' && route.mode === 'cloud' ? cloudProjectLibrary?.projects[route.projectId] : null
-  const cloudActiveDay = cloudActiveProject && route.name === 'project' ? cloudActiveProject.days[route.dayId] : null
-
-  useEffect(() => {
-    let cancelled = false
-    convex.query('billing:getMyEntitlement' as any)
-      .then((result) => {
-        if (!cancelled) setCloudEntitlement(result ?? null)
-      })
-      .catch(() => {
-        if (!cancelled) setCloudEntitlement(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [convex])
-
-  useEffect(() => {
-    if (route.name !== 'project' || route.mode !== 'cloud') return
-    if (!cloudActiveProject) return
-    if (cloudActiveProject.days[route.dayId]) return
-    const fallbackDay = getPreferredDayId(cloudActiveProject)
-    if (!fallbackDay) return
-    onNavigateProject(cloudActiveProject.projectId, fallbackDay, route.tab)
-  }, [cloudActiveProject, onNavigateProject, route])
-
-  async function persistCloudEdits(projectRef: StoredProjectEntry, dayId: string, shotId: string, patch: Partial<Omit<ShotFieldEdit, 'updatedAt'>>) {
-    if (!latestSnapshot?.payload || !route || route.name !== 'project') return
-    const nextLibrary = onApplyShotEdit(projectRef.projectId, dayId, shotId, patch)
-    try {
-      const payload = applyEditsToCloudPayload(latestSnapshot.payload, projectRef.projectId, nextLibrary.shotEdits)
-      await createSnapshot({
-        projectId: projectRef.projectId,
-        createdByUserId: latestSnapshot.createdByUserId,
-        source: 'manual_save',
-        payload,
-        conflictStrategy: 'last_write_wins',
-      })
-      setSyncMessage('Cloud sync complete.')
-    } catch {
-      setSyncMessage('Cloud sync failed. Check connection and retry.')
-    }
-  }
-
-  return (
-    <>
-      <CloudAuthPanel />
-      {syncMessage ? <p className="notice success">{syncMessage}</p> : null}
-      {cloudEntitlement && !cloudEntitlement.canUseCloudFeatures ? (
-        <p className="notice error">Cloud mode requires an active paid cloud membership.</p>
-      ) : null}
-
-      <SignedOut>
-        <article className="project-card">
-          <p className="hint-text">Sign in to access cloud projects.</p>
-        </article>
-      </SignedOut>
-
-      <SignedIn>
-        {route.name !== 'project' || route.mode !== 'cloud' || !cloudActiveProject || !cloudActiveDay ? (
-          <article className="project-card">
-            <h3>Cloud projects</h3>
-            {cloudProjects === undefined ? <p className="hint-text">Loading cloud projects…</p> : null}
-            {cloudProjects !== undefined && (cloudProjects ?? []).length === 0 ? <p className="hint-text">No cloud projects found yet.</p> : null}
-            {(cloudProjects ?? []).map((project: any) => (
-              <button
-                key={project._id}
-                type="button"
-                className="touch-button"
-                onClick={() => onSelectCloudProject(String(project._id))}
-              >
-                <span>{project.name}</span>
-                <small>{project.currentUserRole}</small>
-              </button>
-            ))}
-          </article>
-        ) : (
-          <ProjectHubScreen
-            mode="cloud"
-            projects={Object.values(cloudProjectLibrary?.projects ?? {})}
-            project={localActiveProject}
-            day={localActiveDay}
-            selectedTab={route.tab}
-            shotEdits={library.shotEdits}
-            onSelectTab={(tab) => onNavigateProject(cloudActiveProject.projectId, cloudActiveDay.dayId, tab)}
-            onSelectDay={(dayId) => onNavigateProject(cloudActiveProject.projectId, dayId, route.tab)}
-            onSelectProject={onSelectCloudProject}
-            onDeleteProject={() => {}}
-            onImport={() => {}}
-            onCycleShotStatus={(shotId) => {
-              const key = `${localActiveProject.projectId}::${localActiveDay.dayId}::${shotId}`
-              const current = library.shotEdits[key]?.status ?? 'todo'
-              const nextStatus: ShotStatus = current === 'done' ? 'skipped' : current === 'skipped' ? 'todo' : 'done'
-              void persistCloudEdits(cloudActiveProject, cloudActiveDay.dayId, shotId, { status: nextStatus })
-            }}
-            onUpdateShotFields={(shotId, patch) => {
-              void persistCloudEdits(cloudActiveProject, cloudActiveDay.dayId, shotId, patch)
-            }}
-          />
-        )}
-      </SignedIn>
-    </>
-  )
-}
-
 export function App() {
+  const convex = useConvex()
+  const createSnapshot = useMutation('projectSnapshots:createSnapshot' as any)
+
   const [mode, setMode] = useState<MobileMode>('local')
   const [library, setLibrary] = useState<StoredLibrary>(() => loadLibrary())
   const [session, setSession] = useState<StoredSession>(() => loadSession())
   const [route, setRoute] = useState<AppRoute>(() => resolveInitialRoute(loadLibrary(), loadSession()))
+  const [cloudCache, setCloudCache] = useState<StoredCloudCache>(() => loadCloudCache())
   const [busy, setBusy] = useState(false)
   const [importSuccess, setImportSuccess] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [cloudMessage, setCloudMessage] = useState<string | null>(null)
   const [syncState, setSyncState] = useState<MobileSyncState>({ status: 'idle' })
+  const [cloudCurrentUserId, setCloudCurrentUserId] = useState<string | null>(null)
+  const [assetViewCache, setAssetViewCache] = useState<StoredAssetViewCache>(() => loadAssetViewCache())
+  const [cloudProjectStatus, setCloudProjectStatus] = useState<Record<string, CloudProjectStatus>>({})
   const cloudSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const cloudProjectsResult = useQuery('projects:listProjectsForCurrentUserLite' as any, mode === 'cloud' ? {} : 'skip') as { projects: any[] } | undefined
+  const cloudProjects = cloudProjectsResult?.projects ?? []
 
   const hasCloudProviders = Boolean(
     mobileRuntime.cloudEnabled && mobileRuntime.clerkPublishableKey && mobileRuntime.convexUrl,
@@ -225,6 +121,29 @@ export function App() {
     () => Object.values(library.projects).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')),
     [library],
   )
+
+  const localActiveProject = route.name === 'project' && route.mode === 'local' ? library.projects[route.projectId] : null
+  const localActiveDay = localActiveProject && route.name === 'project' ? localActiveProject.days[route.dayId] : null
+
+  const cloudActiveProject = route.name === 'project' && route.mode === 'cloud' ? library.projects[route.projectId] : null
+  const cloudActiveDay = cloudActiveProject && route.name === 'project' ? cloudActiveProject.days[route.dayId] : null
+
+  useEffect(() => {
+    if (mode !== 'cloud') return
+    let cancelled = false
+    convex.query('users:currentUser' as any)
+      .then((user) => {
+        if (!cancelled && user?._id) {
+          setCloudCurrentUserId(String(user._id))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCloudCurrentUserId(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [convex, mode])
 
   function persistLastOpened(next: StoredLastOpened) {
     const nextSession: StoredSession = { version: 1, lastOpened: next }
@@ -248,6 +167,105 @@ export function App() {
     setLibrary(next)
     saveLibrary(next)
     return next
+  }
+
+  function persistCloudCache(nextCache: StoredCloudCache) {
+    setCloudCache(nextCache)
+    saveCloudCache(nextCache)
+  }
+
+  function persistAssetViewCache(nextCache: StoredAssetViewCache) {
+    setAssetViewCache(nextCache)
+    saveAssetViewCache(nextCache)
+  }
+
+  function setProjectStaleState(projectId: string, latestSnapshotId: string | null, isStale: boolean) {
+    setCloudProjectStatus((prev) => ({
+      ...prev,
+      [projectId]: {
+        isStale,
+        latestSnapshotId,
+        checkedAt: new Date().toISOString(),
+      },
+    }))
+  }
+
+  function importCloudSnapshotIntoLibrary(projectId: string, payload: Record<string, any>): { nextLibrary: StoredLibrary; dayId: string | null } {
+    const nowIso = new Date().toISOString()
+    const snapshot = createMobileSnapshotFromCloudPayload(payload, {
+      projectId,
+      projectName: typeof payload.projectName === 'string' ? payload.projectName : undefined,
+    })
+    const result = importDayPackages(library, snapshot.dayPackages, nowIso)
+    const nextLibrary = result.library
+    const importedProject = nextLibrary.projects[projectId]
+    const dayId = importedProject ? getPreferredDayId(importedProject, result.summary.importedDayIds[0]) : null
+    setLibrary(nextLibrary)
+    saveLibrary(nextLibrary)
+    return { nextLibrary, dayId }
+  }
+
+  async function openCloudProject(projectId: string, { forceRefresh = false }: { forceRefresh?: boolean } = {}) {
+    setBusy(true)
+    setCloudMessage(null)
+    try {
+      const head = await convex.query('projectSnapshots:getLatestSnapshotHeadForProject' as any, { projectId }) as CloudSnapshotHead | null
+      const cached = cloudCache.entries[projectId]
+      const hasMatchingCache = Boolean(
+        !forceRefresh
+        && cached
+        && head?.latestSnapshotId
+        && String(head.latestSnapshotId) === String(cached.snapshotId)
+        && library.projects[projectId],
+      )
+      setProjectStaleState(
+        projectId,
+        head?.latestSnapshotId ? String(head.latestSnapshotId) : null,
+        Boolean(cached?.snapshotId && head?.latestSnapshotId && String(cached.snapshotId) !== String(head.latestSnapshotId)),
+      )
+
+      if (hasMatchingCache) {
+        const dayId = getPreferredDayId(library.projects[projectId])
+        if (dayId) goToProject('cloud', projectId, dayId, 'overview')
+        setCloudMessage('Opened cached cloud project.')
+        return
+      }
+
+      const latestSnapshot = await convex.query('projectSnapshots:getLatestSnapshotForProject' as any, { projectId }) as any
+      if (!latestSnapshot?.payload) {
+        throw new Error('No cloud snapshot payload was found for this project.')
+      }
+
+      const { dayId } = importCloudSnapshotIntoLibrary(projectId, latestSnapshot.payload)
+      const nextCache = upsertCloudCacheEntry(cloudCache, {
+        projectId,
+        snapshotId: String(latestSnapshot._id),
+        snapshotVersionToken: head?.latestSnapshotVersionToken ? String(head.latestSnapshotVersionToken) : undefined,
+        createdByUserId: String(latestSnapshot.createdByUserId || ''),
+        cachedAt: new Date().toISOString(),
+        payload: latestSnapshot.payload,
+      })
+      persistCloudCache(nextCache)
+      setProjectStaleState(projectId, String(latestSnapshot._id), false)
+
+      if (dayId) goToProject('cloud', projectId, dayId, 'overview')
+      setCloudMessage(forceRefresh ? 'Cloud project refreshed.' : 'Cloud project downloaded and cached on this device.')
+    } catch (error) {
+      setCloudMessage(error instanceof Error ? error.message : 'Could not open cloud project.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function checkCloudProjectFreshness(projectId: string) {
+    const cached = cloudCache.entries[projectId]
+    if (!cached) return
+    try {
+      const head = await convex.query('projectSnapshots:getLatestSnapshotHeadForProject' as any, { projectId }) as CloudSnapshotHead | null
+      const latestSnapshotId = head?.latestSnapshotId ? String(head.latestSnapshotId) : null
+      const stale = Boolean(latestSnapshotId && latestSnapshotId !== String(cached.snapshotId))
+      setProjectStaleState(projectId, latestSnapshotId, stale)
+    } catch {}
   }
 
   async function handleImportFile(file: File) {
@@ -291,18 +309,38 @@ export function App() {
   }
 
   async function flushCloudSave() {
-    if (route.name !== 'project' || route.mode !== 'cloud' || !latestSnapshot?.payload) return
+    if (route.name !== 'project' || route.mode !== 'cloud') return
+    const cacheEntry = cloudCache.entries[route.projectId]
+    if (!cacheEntry?.payload) return
+
     setSyncState({ status: 'syncing' })
     try {
-      const payload = applyEditsToCloudPayload(latestSnapshot.payload, route.projectId, library.shotEdits)
-      await createSnapshot({
+      const payload = applyEditsToCloudPayload(cacheEntry.payload, route.projectId, library.shotEdits)
+      const createdByUserId = cloudCurrentUserId || cacheEntry.createdByUserId
+      if (!createdByUserId) {
+        throw new Error('Cloud user identity unavailable. Please sign in again.')
+      }
+      const result = await createSnapshot({
         projectId: route.projectId,
-        createdByUserId: latestSnapshot.createdByUserId,
+        createdByUserId,
         source: 'autosave',
         payload,
-        expectedLatestSnapshotId: latestSnapshot._id,
+        expectedLatestSnapshotId: cacheEntry.snapshotId,
         conflictStrategy: 'last_write_wins',
+      }) as any
+
+      const nextCache = upsertCloudCacheEntry(cloudCache, {
+        ...cacheEntry,
+        snapshotId: result?.snapshotId ? String(result.snapshotId) : cacheEntry.snapshotId,
+        cachedAt: new Date().toISOString(),
+        payload,
       })
+      persistCloudCache(nextCache)
+      setProjectStaleState(
+        route.projectId,
+        result?.snapshotId ? String(result.snapshotId) : String(cacheEntry.snapshotId),
+        false,
+      )
       setSyncState({ status: 'synced', at: new Date().toISOString() })
     } catch (err) {
       setSyncState({ status: 'sync_failed', error: err instanceof Error ? err.message : 'Upload failed' })
@@ -317,19 +355,46 @@ export function App() {
     }, MOBILE_CLOUD_SYNC_DEBOUNCE_MS)
   }
 
-  // Clear any pending cloud sync timer on unmount
   useEffect(() => {
     return () => {
       if (cloudSyncTimerRef.current) clearTimeout(cloudSyncTimerRef.current)
     }
   }, [])
 
-  function handleUpdateShotFields(projectId: string, dayId: string, shotId: string, patch: any) {
-    const nextLibrary = upsertShotEdit(library, projectId, dayId, shotId, patch)
-    setLibrary(nextLibrary)
-    saveLibrary(nextLibrary)
-    if (mode === 'cloud') {
-      scheduleCloudSave()
+  useEffect(() => {
+    if (mode !== 'cloud') return
+    if (route.name !== 'project' || route.mode !== 'cloud') return
+    void checkCloudProjectFreshness(route.projectId)
+  }, [mode, route])
+
+  async function resolveStoryboardImage(assetId?: string, fallbackUrl?: string, forceRefresh = false): Promise<string | null> {
+    if (mode !== 'cloud' || route.name !== 'project' || route.mode !== 'cloud' || !assetId) return fallbackUrl || null
+    const projectId = route.projectId
+    if (!forceRefresh) {
+      const cachedUrl = getCachedAssetViewUrl(assetViewCache, projectId, assetId)
+      if (cachedUrl) return cachedUrl
+    }
+    try {
+      const result = await convex.action('assets:getAssetSignedViewsBatch' as any, {
+        projectId,
+        assetIds: [assetId],
+      }) as Record<string, any>
+      const view = result?.[assetId]
+      const nextUrl = view?.thumbUrl || view?.fullUrl || fallbackUrl || null
+      if (nextUrl) {
+        const expiresAtRaw = Number(view?.thumbExpiresAt || view?.fullExpiresAt || 0)
+        const nextCache = upsertAssetViewUrl(assetViewCache, {
+          projectId,
+          assetId,
+          url: nextUrl,
+          expiresAt: Number.isFinite(expiresAtRaw) && expiresAtRaw > 0 ? expiresAtRaw : undefined,
+          cachedAt: Date.now(),
+        })
+        persistAssetViewCache(nextCache)
+      }
+      return nextUrl
+    } catch {
+      return fallbackUrl || null
     }
   }
 
@@ -344,9 +409,6 @@ export function App() {
       />
     )
   }
-
-  const localActiveProject = route.name === 'project' && route.mode === 'local' ? library.projects[route.projectId] : null
-  const localActiveDay = localActiveProject && route.name === 'project' ? localActiveProject.days[route.dayId] : null
 
   return (
     <section className="screen">
@@ -375,6 +437,7 @@ export function App() {
       </article>
 
       {mode === 'cloud' && mobileRuntime.clerkPublishableKey ? <CloudAuthPanel /> : null}
+      {mode === 'cloud' && cloudMessage ? <p className="notice">{cloudMessage}</p> : null}
       {mode === 'cloud' && syncState.status !== 'idle' && (
         <p className={`notice ${syncState.status === 'sync_failed' ? 'error' : syncState.status === 'synced' ? 'success' : ''}`}>
           {syncState.status === 'unsaved_changes' && 'Shot changes saved on device · uploading soon…'}
@@ -414,6 +477,7 @@ export function App() {
             onUpdateShotFields={(shotId, patch) => {
               applyShotEdit(localActiveProject.projectId, localActiveDay.dayId, shotId, patch)
             }}
+            resolveStoryboardImage={undefined}
             onExportCurrentProject={() => {
               const json = exportProjectAsSnapshot(localActiveProject, library.shotEdits)
               downloadJson(
@@ -424,13 +488,104 @@ export function App() {
           />
         )
       ) : hasCloudProviders ? (
-        <CloudModePane
-          route={route}
-          library={library}
-          onNavigateProject={(projectId, dayId, tab) => goToProject('cloud', projectId, dayId, tab)}
-          onSelectCloudProject={(projectId) => goToProject('cloud', projectId, 'pending', 'overview')}
-          onApplyShotEdit={applyShotEdit}
-        />
+        <>
+          <SignedOut>
+            <article className="project-card">
+              <p className="hint-text">Sign in to access cloud projects.</p>
+            </article>
+          </SignedOut>
+
+          <SignedIn>
+            {route.name !== 'project' || route.mode !== 'cloud' || !cloudActiveProject || !cloudActiveDay ? (
+              <article className="project-card">
+                <h3>Cloud projects</h3>
+                {cloudProjectsResult === undefined ? <p className="hint-text">Loading cloud projects…</p> : null}
+                {cloudProjectsResult !== undefined && cloudProjects.length === 0 ? <p className="hint-text">No cloud projects found yet.</p> : null}
+                {cloudProjects.map((project: any) => (
+                  <button
+                    key={project._id}
+                    type="button"
+                    className="touch-button"
+                    disabled={busy}
+                    onClick={() => {
+                      void openCloudProject(String(project._id))
+                    }}
+                  >
+                    <span>{project.name}</span>
+                    <small>{project.currentUserRole}</small>
+                  </button>
+                ))}
+              </article>
+            ) : (
+              <>
+                <article className="project-card">
+                  <div className="section-heading">
+                    <h3>Cloud project cache</h3>
+                    <button
+                      type="button"
+                      className="touch-button"
+                      disabled={busy}
+                      onClick={() => {
+                        void openCloudProject(cloudActiveProject.projectId, { forceRefresh: true })
+                      }}
+                    >
+                      {busy ? 'Refreshing…' : 'Refresh from cloud'}
+                    </button>
+                  </div>
+                  <p className="hint-text">Opened from cloud and cached on this device for low-chatter mobile editing.</p>
+                  <p className="hint-text">
+                    Last refreshed: {cloudCache.entries[cloudActiveProject.projectId]?.cachedAt ? new Date(cloudCache.entries[cloudActiveProject.projectId].cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </p>
+                  <p className={`hint-text ${cloudProjectStatus[cloudActiveProject.projectId]?.isStale ? 'notice error' : ''}`}>
+                    {cloudProjectStatus[cloudActiveProject.projectId]?.isStale
+                      ? 'Cloud has newer changes. Refresh recommended.'
+                      : 'Cached copy is up to date.'}
+                  </p>
+                  <button
+                    type="button"
+                    className="touch-button"
+                    disabled={busy}
+                    onClick={() => {
+                      void checkCloudProjectFreshness(cloudActiveProject.projectId)
+                    }}
+                  >
+                    Check cloud status
+                  </button>
+                </article>
+                <ProjectHubScreen
+                  mode="cloud"
+                  projects={projects}
+                  project={cloudActiveProject}
+                  day={cloudActiveDay}
+                  selectedTab={route.tab}
+                  shotEdits={library.shotEdits}
+                  onSelectTab={(tab) => goToProject('cloud', cloudActiveProject.projectId, cloudActiveDay.dayId, tab)}
+                  onSelectDay={(dayId) => goToProject('cloud', cloudActiveProject.projectId, dayId, route.tab)}
+                  onSelectProject={(projectId) => {
+                    const selected = library.projects[projectId]
+                    const dayId = selected ? getPreferredDayId(selected) : null
+                    if (selected && dayId) goToProject('cloud', selected.projectId, dayId, route.tab)
+                    else void openCloudProject(projectId)
+                  }}
+                  onDeleteProject={() => {}}
+                  onImport={() => {}}
+                  onCycleShotStatus={(shotId) => {
+                    const key = `${cloudActiveProject.projectId}::${cloudActiveDay.dayId}::${shotId}`
+                    const current = library.shotEdits[key]?.status ?? 'todo'
+                    const nextStatus: ShotStatus = current === 'done' ? 'skipped' : current === 'skipped' ? 'todo' : 'done'
+                    applyShotEdit(cloudActiveProject.projectId, cloudActiveDay.dayId, shotId, { status: nextStatus })
+                    scheduleCloudSave()
+                  }}
+                  onUpdateShotFields={(shotId, patch) => {
+                    applyShotEdit(cloudActiveProject.projectId, cloudActiveDay.dayId, shotId, patch)
+                    scheduleCloudSave()
+                  }}
+                  resolveStoryboardImage={resolveStoryboardImage}
+                />
+              </>
+            )}
+          </SignedIn>
+        </>
       ) : (
         <article className="project-card">
           <h3>Cloud mode unavailable</h3>

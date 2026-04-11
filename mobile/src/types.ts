@@ -66,3 +66,18 @@ export interface ImportSummary {
   projectName: string
   importedDayIds: string[]
 }
+
+
+export interface StoredCloudCacheEntry {
+  projectId: string
+  snapshotId: string
+  snapshotVersionToken?: string
+  createdByUserId: string
+  cachedAt: string
+  payload: Record<string, any>
+}
+
+export interface StoredCloudCache {
+  version: 1
+  entries: Record<string, StoredCloudCacheEntry>
+}

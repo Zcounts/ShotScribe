@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MobileScheduleItem, MobileStoryboardReference } from '@shotscribe/shared'
 import type { MobileTabKey, ShotFieldEdit, ShotStatus, StoredDayEntry, StoredProjectEntry } from '../types'
 
@@ -18,6 +18,7 @@ interface ProjectHubScreenProps {
   onUpdateShotFields: (shotId: string, patch: Partial<Omit<ShotFieldEdit, 'updatedAt'>>) => void
   onExportCurrentProject?: () => void
   exportBusy?: boolean
+  resolveStoryboardImage?: (assetId?: string, fallbackUrl?: string, forceRefresh?: boolean) => Promise<string | null>
 }
 
 const TAB_ITEMS: Array<{ key: MobileTabKey; label: string }> = [
@@ -54,6 +55,7 @@ type StoryboardShotData = {
   shotEquipment?: string
   shotNotes?: string
   shotImageUrl?: string
+  shotImageAssetId?: string
   shotColor?: string
   sceneId?: string
 }
@@ -70,9 +72,56 @@ function resolveStoryboardShotData(shot: MobileScheduleItem, ref?: MobileStorybo
     shotEquipment: ref?.shotEquipment ?? shot.shotEquipment,
     shotNotes: ref?.shotNotes ?? shot.shotNotes,
     shotImageUrl: ref?.thumbnailUrl ?? shot.shotImageUrl,
+    shotImageAssetId: ref?.thumbnailAssetId ?? shot.shotImageAssetId,
     shotColor: ref?.shotColor ?? shot.shotColor,
     sceneId: shot.sceneId,
   }
+}
+
+function StoryboardImage({
+  assetId,
+  fallbackUrl,
+  alt,
+  className,
+  resolveStoryboardImage,
+}: {
+  assetId?: string
+  fallbackUrl?: string
+  alt: string
+  className: string
+  resolveStoryboardImage?: (assetId?: string, fallbackUrl?: string, forceRefresh?: boolean) => Promise<string | null>
+}) {
+  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(fallbackUrl)
+  const [requested, setRequested] = useState(false)
+
+  useEffect(() => {
+    setResolvedSrc(fallbackUrl)
+    setRequested(false)
+  }, [assetId, fallbackUrl])
+
+  async function resolve(forceRefresh = false) {
+    if (!resolveStoryboardImage || !assetId) return
+    const url = await resolveStoryboardImage(assetId, fallbackUrl, forceRefresh)
+    if (url) setResolvedSrc(url)
+  }
+
+  return (
+    <img
+      className={className}
+      src={resolvedSrc}
+      alt={alt}
+      loading="lazy"
+      onLoad={() => {
+        if (!requested && assetId) {
+          setRequested(true)
+          void resolve(false)
+        }
+      }}
+      onError={() => {
+        if (assetId) void resolve(true)
+      }}
+    />
+  )
 }
 
 function renderOverview(day: StoredDayEntry, doneShots: number, totalShots: number) {
@@ -107,6 +156,7 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
     onUpdateShotFields,
     onExportCurrentProject,
     exportBusy,
+    resolveStoryboardImage,
   } = props
 
   const [focusedShotId, setFocusedShotId] = useState<string | null>(null)
@@ -206,7 +256,13 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
             return (
               <article key={shot.scheduleItemId} className={`storyboard-card status-outline-${status}`}>
                 {storyboard.shotImageUrl ? (
-                  <img className="storyboard-preview-image-thumb" src={storyboard.shotImageUrl} alt={storyboard.shotDisplayName ?? shotId} loading="lazy" />
+                  <StoryboardImage
+                    className="storyboard-preview-image-thumb"
+                    assetId={storyboard.shotImageAssetId}
+                    fallbackUrl={storyboard.shotImageUrl}
+                    alt={storyboard.shotDisplayName ?? shotId}
+                    resolveStoryboardImage={resolveStoryboardImage}
+                  />
                 ) : (
                   <div className="storyboard-preview-fallback"><span>No storyboard image</span></div>
                 )}
@@ -288,7 +344,13 @@ export function ProjectHubScreen(props: ProjectHubScreenProps) {
               {focusedStoryboard && selectedTab === 'storyboard' ? (
                 <div className="mobile-shot-detail">
                   {focusedStoryboard.shotImageUrl ? (
-                    <img className="storyboard-preview-image" src={focusedStoryboard.shotImageUrl} alt={focusedStoryboard.shotDisplayName ?? focusedShotId} loading="lazy" />
+                    <StoryboardImage
+                      className="storyboard-preview-image"
+                      assetId={focusedStoryboard.shotImageAssetId}
+                      fallbackUrl={focusedStoryboard.shotImageUrl}
+                      alt={focusedStoryboard.shotDisplayName ?? focusedShotId}
+                      resolveStoryboardImage={resolveStoryboardImage}
+                    />
                   ) : (
                     <div className="storyboard-preview-fallback"><span>No storyboard image</span></div>
                   )}

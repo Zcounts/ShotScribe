@@ -30,6 +30,7 @@ This monorepo currently contains:
 - Callsheet PDF export now uses a higher-contrast professional print layout, suppresses empty sections/rows by default, moves shoot-date/general-call metadata into the footer, and fixes browser fallback printing so `about:blank` no longer appears in generated output.
 - Mobile web layout overflow fixes now keep iPhone-width project headers, mode toggles, tabs, and shot cards within viewport bounds without changing desktop/tablet behavior.
 - Mobile storyboard tab/detail modal now restores full shot storyboard metadata (image, camera/lens/specs, notes) from exported day-package fields to match desktop data coverage in a mobile layout.
+- Mobile Cloud Project Mode now opens cloud projects into a local on-device cached working copy, supports explicit "Refresh from cloud", metadata-first stale checks, and lazy cloud asset signed-URL resolution with expiry-aware cache fallback for storyboard images.
 
 ---
 
@@ -107,6 +108,7 @@ Reference docs:
 - `docs/billing-stripe-runbook.md`
 - `docs/admin-role-runbook.md`
 - `docs/shadcn-migration-foundation.md` (web-only phased shadcn/ui migration baseline)
+- `docs/mobile-cloud-access-sync-audit-2026-04-11.md` (mobile local-vs-cloud access and sync architecture audit + phased plan)
 
 ---
 
