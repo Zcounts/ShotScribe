@@ -32,6 +32,13 @@ import { ImportScreen } from './screens/ImportScreen'
 import { ProjectHubScreen } from './screens/ProjectHubScreen'
 import { CloudAuthPanel, mobileRuntime } from './auth'
 import { applyEditsToCloudPayload, exportProjectAsSnapshot } from './mobileEdits'
+import {
+  getCachedAssetViewUrl,
+  loadAssetViewCache,
+  saveAssetViewCache,
+  upsertAssetViewUrl,
+  type StoredAssetViewCache,
+} from './storage/mobileAssetViews'
 
 type MobileMode = 'local' | 'cloud'
 
@@ -45,6 +52,12 @@ type MobileSyncState =
 type CloudSnapshotHead = {
   latestSnapshotId?: string
   latestSnapshotVersionToken?: string
+}
+
+type CloudProjectStatus = {
+  isStale: boolean
+  latestSnapshotId: string | null
+  checkedAt: string
 }
 
 const MOBILE_CLOUD_SYNC_DEBOUNCE_MS = 6000
@@ -93,6 +106,8 @@ export function App() {
   const [cloudMessage, setCloudMessage] = useState<string | null>(null)
   const [syncState, setSyncState] = useState<MobileSyncState>({ status: 'idle' })
   const [cloudCurrentUserId, setCloudCurrentUserId] = useState<string | null>(null)
+  const [assetViewCache, setAssetViewCache] = useState<StoredAssetViewCache>(() => loadAssetViewCache())
+  const [cloudProjectStatus, setCloudProjectStatus] = useState<Record<string, CloudProjectStatus>>({})
   const cloudSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cloudProjectsResult = useQuery('projects:listProjectsForCurrentUserLite' as any, mode === 'cloud' ? {} : 'skip') as { projects: any[] } | undefined
@@ -159,6 +174,22 @@ export function App() {
     saveCloudCache(nextCache)
   }
 
+  function persistAssetViewCache(nextCache: StoredAssetViewCache) {
+    setAssetViewCache(nextCache)
+    saveAssetViewCache(nextCache)
+  }
+
+  function setProjectStaleState(projectId: string, latestSnapshotId: string | null, isStale: boolean) {
+    setCloudProjectStatus((prev) => ({
+      ...prev,
+      [projectId]: {
+        isStale,
+        latestSnapshotId,
+        checkedAt: new Date().toISOString(),
+      },
+    }))
+  }
+
   function importCloudSnapshotIntoLibrary(projectId: string, payload: Record<string, any>): { nextLibrary: StoredLibrary; dayId: string | null } {
     const nowIso = new Date().toISOString()
     const snapshot = createMobileSnapshotFromCloudPayload(payload, {
@@ -187,6 +218,11 @@ export function App() {
         && String(head.latestSnapshotId) === String(cached.snapshotId)
         && library.projects[projectId],
       )
+      setProjectStaleState(
+        projectId,
+        head?.latestSnapshotId ? String(head.latestSnapshotId) : null,
+        Boolean(cached?.snapshotId && head?.latestSnapshotId && String(cached.snapshotId) !== String(head.latestSnapshotId)),
+      )
 
       if (hasMatchingCache) {
         const dayId = getPreferredDayId(library.projects[projectId])
@@ -210,6 +246,7 @@ export function App() {
         payload: latestSnapshot.payload,
       })
       persistCloudCache(nextCache)
+      setProjectStaleState(projectId, String(latestSnapshot._id), false)
 
       if (dayId) goToProject('cloud', projectId, dayId, 'overview')
       setCloudMessage(forceRefresh ? 'Cloud project refreshed.' : 'Cloud project downloaded and cached on this device.')
@@ -218,6 +255,17 @@ export function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function checkCloudProjectFreshness(projectId: string) {
+    const cached = cloudCache.entries[projectId]
+    if (!cached) return
+    try {
+      const head = await convex.query('projectSnapshots:getLatestSnapshotHeadForProject' as any, { projectId }) as CloudSnapshotHead | null
+      const latestSnapshotId = head?.latestSnapshotId ? String(head.latestSnapshotId) : null
+      const stale = Boolean(latestSnapshotId && latestSnapshotId !== String(cached.snapshotId))
+      setProjectStaleState(projectId, latestSnapshotId, stale)
+    } catch {}
   }
 
   async function handleImportFile(file: File) {
@@ -288,6 +336,11 @@ export function App() {
         payload,
       })
       persistCloudCache(nextCache)
+      setProjectStaleState(
+        route.projectId,
+        result?.snapshotId ? String(result.snapshotId) : String(cacheEntry.snapshotId),
+        false,
+      )
       setSyncState({ status: 'synced', at: new Date().toISOString() })
     } catch (err) {
       setSyncState({ status: 'sync_failed', error: err instanceof Error ? err.message : 'Upload failed' })
@@ -307,6 +360,43 @@ export function App() {
       if (cloudSyncTimerRef.current) clearTimeout(cloudSyncTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (mode !== 'cloud') return
+    if (route.name !== 'project' || route.mode !== 'cloud') return
+    void checkCloudProjectFreshness(route.projectId)
+  }, [mode, route])
+
+  async function resolveStoryboardImage(assetId?: string, fallbackUrl?: string, forceRefresh = false): Promise<string | null> {
+    if (mode !== 'cloud' || route.name !== 'project' || route.mode !== 'cloud' || !assetId) return fallbackUrl || null
+    const projectId = route.projectId
+    if (!forceRefresh) {
+      const cachedUrl = getCachedAssetViewUrl(assetViewCache, projectId, assetId)
+      if (cachedUrl) return cachedUrl
+    }
+    try {
+      const result = await convex.action('assets:getAssetSignedViewsBatch' as any, {
+        projectId,
+        assetIds: [assetId],
+      }) as Record<string, any>
+      const view = result?.[assetId]
+      const nextUrl = view?.thumbUrl || view?.fullUrl || fallbackUrl || null
+      if (nextUrl) {
+        const expiresAtRaw = Number(view?.thumbExpiresAt || view?.fullExpiresAt || 0)
+        const nextCache = upsertAssetViewUrl(assetViewCache, {
+          projectId,
+          assetId,
+          url: nextUrl,
+          expiresAt: Number.isFinite(expiresAtRaw) && expiresAtRaw > 0 ? expiresAtRaw : undefined,
+          cachedAt: Date.now(),
+        })
+        persistAssetViewCache(nextCache)
+      }
+      return nextUrl
+    } catch {
+      return fallbackUrl || null
+    }
+  }
 
   if (route.name === 'import') {
     return (
@@ -387,6 +477,7 @@ export function App() {
             onUpdateShotFields={(shotId, patch) => {
               applyShotEdit(localActiveProject.projectId, localActiveDay.dayId, shotId, patch)
             }}
+            resolveStoryboardImage={undefined}
             onExportCurrentProject={() => {
               const json = exportProjectAsSnapshot(localActiveProject, library.shotEdits)
               downloadJson(
@@ -442,6 +533,24 @@ export function App() {
                     </button>
                   </div>
                   <p className="hint-text">Opened from cloud and cached on this device for low-chatter mobile editing.</p>
+                  <p className="hint-text">
+                    Last refreshed: {cloudCache.entries[cloudActiveProject.projectId]?.cachedAt ? new Date(cloudCache.entries[cloudActiveProject.projectId].cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </p>
+                  <p className={`hint-text ${cloudProjectStatus[cloudActiveProject.projectId]?.isStale ? 'notice error' : ''}`}>
+                    {cloudProjectStatus[cloudActiveProject.projectId]?.isStale
+                      ? 'Cloud has newer changes. Refresh recommended.'
+                      : 'Cached copy is up to date.'}
+                  </p>
+                  <button
+                    type="button"
+                    className="touch-button"
+                    disabled={busy}
+                    onClick={() => {
+                      void checkCloudProjectFreshness(cloudActiveProject.projectId)
+                    }}
+                  >
+                    Check cloud status
+                  </button>
                 </article>
                 <ProjectHubScreen
                   mode="cloud"
@@ -471,6 +580,7 @@ export function App() {
                     applyShotEdit(cloudActiveProject.projectId, cloudActiveDay.dayId, shotId, patch)
                     scheduleCloudSave()
                   }}
+                  resolveStoryboardImage={resolveStoryboardImage}
                 />
               </>
             )}
