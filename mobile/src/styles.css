@@ -30,6 +30,7 @@ body {
 
 .screen {
   min-height: 100vh;
+  width: 100%;
   max-width: 880px;
   margin: 0 auto;
   padding: 14px 14px 28px;
@@ -811,8 +812,13 @@ p {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.section-heading > * {
+  min-width: 0;
 }
 
 .quicksheet-card {
@@ -1075,6 +1081,11 @@ p {
   font-size: 0.78rem;
 }
 
+.timeline-card > :first-child,
+.mobile-shot-row > :first-child {
+  min-width: 0;
+}
+
 /* ===================================
    STORYBOARD TAB — visual card layout
    =================================== */
@@ -1312,13 +1323,22 @@ p {
     gap: 6px;
   }
 
+  .mode-toggle-row {
+    flex-wrap: wrap;
+  }
+
+  .mode-toggle-row > .touch-button {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+
   .mobile-shot-modal-backdrop {
     padding: 0;
   }
 
   .mobile-shot-modal {
-    width: 100vw;
-    max-width: 100vw;
+    width: 100%;
+    max-width: 100%;
     height: 100dvh;
     max-height: 100dvh;
     border-radius: 0;

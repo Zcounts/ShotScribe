@@ -356,7 +356,7 @@ export function App() {
           Use Local File Mode for offline package imports, or Cloud Project Mode for paid cloud sync +
           collaboration.
         </p>
-        <div className="mobile-shot-actions">
+        <div className="mobile-shot-actions mode-toggle-row">
           <button
             type="button"
             className={`touch-button ${mode === 'local' ? 'touch-button-primary' : ''}`}
