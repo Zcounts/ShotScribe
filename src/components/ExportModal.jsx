@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
+import { derivePdfPageLayout } from '../utils/pdfPageLayout'
 import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
 import { platformService } from '../services/platformService'
 
@@ -2649,21 +2650,19 @@ async function exportPagesBrowser(pages, imageMap = {}) {
     }
 
     const imgData = canvas.toDataURL('image/jpeg', 0.88)
-    const pxW = canvas.width / scale
-    const pxH = canvas.height / scale
+    const pageLayout = derivePdfPageLayout(canvas.width / scale, canvas.height / scale)
 
     if (!pdf) {
       pdf = new jsPDF({
-        orientation: pxW > pxH ? 'landscape' : 'portrait',
         unit: 'px',
-        format: [pxW, pxH],
+        format: pageLayout.format,
         hotfixes: ['px_scaling'],
       })
     } else {
-      pdf.addPage([pxW, pxH], pxW > pxH ? 'landscape' : 'portrait')
+      pdf.addPage(pageLayout.format)
     }
 
-    pdf.addImage(imgData, 'JPEG', 0, 0, pxW, pxH)
+    pdf.addImage(imgData, 'JPEG', 0, 0, pageLayout.width, pageLayout.height)
     console.log(`[PDF Export] Page ${i + 1} added to PDF`)
   }
 
