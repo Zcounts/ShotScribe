@@ -51,6 +51,7 @@ import {
 } from 'lucide-react'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
 import { getShotLetter } from './store'
+import { deriveSceneShotPrefix, formatShotDisplayId } from './utils/shotDisplay'
 import {
   resolveEntityTarget,
   resolvePersonEntityTarget,
@@ -429,7 +430,7 @@ export default function App() {
   const [shotlistConfigOpen, setShotlistConfigOpen] = useState(false)
   const [scheduleConfigOpen, setScheduleConfigOpen] = useState(false)
   const [callsheetConfigOpen, setCallsheetConfigOpen] = useState(callsheetViewState.sidebarExpanded ?? false)
-  const [storyboardOutlineTab, setStoryboardOutlineTab] = useState(storyboardViewState.outlineTab || 'Scenes')
+  const [storyboardOutlineTab, setStoryboardOutlineTab] = useState('Pages')
   const [activeOutlineItem, setActiveOutlineItem] = useState(storyboardViewState.activeItem || null)
   const [activeOutlineDragId, setActiveOutlineDragId] = useState(null)
   const [activeStoryboardShotId, setActiveStoryboardShotId] = useState(null)
@@ -716,7 +717,7 @@ export default function App() {
 
   useEffect(() => {
     setShowStoryboardOutline(storyboardViewState.showOutline ?? true)
-    setStoryboardOutlineTab(storyboardViewState.outlineTab || 'Scenes')
+    setStoryboardOutlineTab('Pages')
     setActiveOutlineItem(storyboardViewState.activeItem || null)
   }, [documentSession]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -768,7 +769,7 @@ export default function App() {
       if (id) setActiveOutlineItem(id)
     }, { root, threshold: [0.3, 0.5, 0.7] })
 
-    if (storyboardOutlineTab === 'Scenes') {
+    if (false) {
       Object.entries(storyboardSceneRefs.current).forEach(([key, node]) => {
         if (!node || key.startsWith('script-')) return
         observer.observe(node)
@@ -803,7 +804,7 @@ export default function App() {
     return (scene.shots || []).map((shot, shotIndex) => ({
       ...shot,
       sceneId: scene.id,
-      displayId: `${sceneNumber}${getShotLetter(shotIndex)}`,
+      displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneNumber), shotIndex),
     }))
   }), [storyboardScenes, scenes])
   const allStoryboardShotIds = storyboardShotsWithIds.map(shot => shot.id)
@@ -1092,53 +1093,14 @@ export default function App() {
                   className="storyboard-outline-sidebar"
                   bodyClassName="storyboard-outline-body"
                   responsiveLabel="Open storyboard navigation"
-                                    controls={(
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {['Scenes', 'Pages'].map(tab => (
-                        <button key={tab} onClick={() => setStoryboardOutlineTab(tab)} style={{ border: '1px solid rgba(74,85,104,0.2)', borderRadius: 999, padding: '3px 10px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', background: storyboardOutlineTab === tab ? '#2C2C2E' : 'transparent', color: storyboardOutlineTab === tab ? '#FAF8F4' : '#4A5568' }}>{tab}</button>
-                      ))}
-                    </div>
-                  )}
+                  controls={null}
                 >
-                  {storyboardOutlineTab === 'Scenes' ? (
-                    <DndContext
-                      sensors={outlineSensors}
-                      collisionDetection={closestCenter}
-                      onDragStart={handleOutlineSceneDragStart}
-                      onDragEnd={handleOutlineSceneDragEnd}
-                      onDragCancel={() => setActiveOutlineDragId(null)}
-                    >
-                      <SortableContext items={sceneNavItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
-                        {sceneNavItems.map(item => (
-                          <SortableStoryboardSceneNavItem
-                            key={item.id}
-                            item={item}
-                            isActive={activeOutlineItem === item.id}
-                            onDoubleClick={() => openScenePropertiesDialog('storyboard', item.id)}
-                            onClick={() => jumpToStoryboardScene(item.id)}
-                          />
-                        ))}
-                      </SortableContext>
-                      <DragOverlay>
-                        {activeOutlineDragItem ? (
-                          <div style={{ width: 240 }}>
-                            <div style={{ ...getOutlineItemStyle(activeOutlineDragItem.color, true), boxShadow: '0 10px 24px rgba(0,0,0,0.2)' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ width: 10, height: 10, borderRadius: 999, background: activeOutlineDragItem.color }} />
-                                <div className="storyboard-outline-item-label" style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{activeOutlineDragItem.label}</div>
-                              </div>
-                              <div className="storyboard-outline-item-subtitle" style={{ fontSize: 10, color: STORYBOARD_OUTLINE_SUBTITLE_COLOR, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeOutlineDragItem.subtitle}</div>
-                            </div>
-                          </div>
-                        ) : null}
-                      </DragOverlay>
-                    </DndContext>
-                  ) : storyboardPageItems.map(item => (
-                  <button key={item.id} onClick={() => jumpToStoryboardPage(item.id)} style={getOutlineItemStyle(item.sceneColor, activeOutlineItem === item.id)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div className="storyboard-outline-item-label" style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{item.label}</div></div>
-                    <div className="storyboard-outline-item-subtitle" style={{ fontSize: 10, color: STORYBOARD_OUTLINE_SUBTITLE_COLOR, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
-                  </button>
-                ))}
+                  {storyboardPageItems.map(item => (
+                    <button key={item.id} onClick={() => jumpToStoryboardPage(item.id)} style={getOutlineItemStyle(item.sceneColor, activeOutlineItem === item.id)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: item.sceneColor }} /><div className="storyboard-outline-item-label" style={{ fontSize: 11, fontWeight: 700, color: STORYBOARD_OUTLINE_LABEL_COLOR }}>{item.label}</div></div>
+                      <div className="storyboard-outline-item-subtitle" style={{ fontSize: 10, color: STORYBOARD_OUTLINE_SUBTITLE_COLOR, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subtitle}</div>
+                    </button>
+                  ))}
                 </SidebarPane>
               </div>
             )}

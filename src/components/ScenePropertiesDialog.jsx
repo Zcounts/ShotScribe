@@ -98,6 +98,13 @@ export default function ScenePropertiesDialog() {
 
           {!isScript && (
             <>
+              <label className="dialog-label">Shot Number Prefix</label>
+              <input
+                value={canonicalStoryboardScene?.shotNumberPrefix || ''}
+                onChange={(e) => update({ shotNumberPrefix: e.target.value })}
+                placeholder="e.g. 4 or 10A"
+              />
+
               <label className="dialog-label">Linked Script Scene</label>
               <select
                 value={scene.linkedScriptSceneId || ''}
