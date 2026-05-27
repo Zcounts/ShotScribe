@@ -50,7 +50,6 @@ import {
   Menu,
 } from 'lucide-react'
 import { SHORTCUT_DEFAULTS, isShortcutMatch } from './shortcuts'
-import { getShotLetter } from './store'
 import { deriveSceneShotPrefix, formatShotDisplayId } from './utils/shotDisplay'
 import {
   resolveEntityTarget,
@@ -235,9 +234,10 @@ function SceneSection({
 
   const sceneIndex = scenes.findIndex(s => s.id === scene.id)
   const sceneNumber = sceneIndex + 1
+  const shotPrefix = deriveSceneShotPrefix(scene, sceneNumber)
   const shotsWithIds = (scene.shots || []).map((shot, shotIndex) => ({
     ...shot,
-    displayId: `${sceneNumber}${getShotLetter(shotIndex)}`
+    displayId: formatShotDisplayId(shotPrefix, shotIndex),
   }))
   const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
   const canonicalSceneColor = canonical?.color || scene.color || null

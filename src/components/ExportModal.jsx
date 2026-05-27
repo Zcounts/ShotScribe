@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { downloadScriptAsTxt } from '../utils/scriptTxtSerializer'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
-import useStore, { CALLSHEET_COLUMN_DEFINITIONS, getShotLetter } from '../store'
+import useStore, { CALLSHEET_COLUMN_DEFINITIONS } from '../store'
+import { deriveSceneShotPrefix, formatShotDisplayId } from '../utils/shotDisplay'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { derivePdfPageLayout } from '../utils/pdfPageLayout'
 import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
@@ -163,7 +164,7 @@ function buildStoryboardPrintHtml(imageMap = {}) {
     const sceneNum = sceneIdx + 1
     const shots = scene.shots.map((shot, idx) => ({
       ...shot,
-      displayId: `${sceneNum}${getShotLetter(idx)}`,
+      displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneNum), idx),
     }))
 
     // Group shots into pages; always produce at least one (possibly empty) page.
@@ -508,7 +509,7 @@ function buildSchedulePrintHtml(dayIdxFilter = null) {
       shotMap.set(shot.id, {
         shot,
         scene,
-        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
       })
     })
   })
@@ -919,7 +920,7 @@ function buildExpandedSchedulePrintHtml() {
     scene.shots.forEach((shot, shotIdx) => {
       shotMap.set(shot.id, {
         shot, scene,
-        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
       })
     })
   })
@@ -1142,7 +1143,7 @@ function buildStripboardPrintHtml() {
     scene.shots.forEach((shot, shotIdx) => {
       shotMap.set(shot.id, {
         shot, scene,
-        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
         color: shot.color || '#4ade80',
       })
     })
@@ -1961,7 +1962,7 @@ function buildShotlistPrintHtml(dayIdxFilter = null) {
       shotMap.set(shot.id, {
         shot,
         scene,
-        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
       })
     })
   })
@@ -1980,7 +1981,7 @@ function buildShotlistPrintHtml(dayIdxFilter = null) {
     const shotsByScene = new Map()
     scenes.forEach(scene => {
       const shots = scene.shots
-        .map((shot, idx) => ({ ...shot, displayId: `${scenes.indexOf(scene) + 1}${getShotLetter(idx)}` }))
+        .map((shot, idx) => ({ ...shot, displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, scenes.indexOf(scene) + 1), idx) }))
         .filter(shot => dayShotIds.has(shot.id))
       if (shots.length > 0) {
         sceneOrder.push(scene)
