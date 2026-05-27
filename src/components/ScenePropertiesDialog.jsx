@@ -67,7 +67,6 @@ export default function ScenePropertiesDialog() {
           <input
             value={isScript ? (scene.slugline || '') : (canonicalStoryboardScene?.titleSlugline || '')}
             onChange={(e) => update(isScript ? { slugline: e.target.value } : { titleSlugline: e.target.value })}
-            disabled={!isScript && !canonicalStoryboardScene?.linkedScriptSceneId}
           />
 
           <label className="dialog-label">Location</label>
