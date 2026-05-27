@@ -2806,7 +2806,7 @@ const useStore = create((set, get) => ({
     get()._scheduleAutoSave()
   },
 
-  showContextMenu: (entityType, entityId, x, y) => set({ contextMenu: { type: entityType, entityId, x, y } }),
+  showContextMenu: (entityType, entityId, x, y, sceneId = null) => set({ contextMenu: { type: entityType, entityId, x, y, sceneId } }),
   showPersonContextMenu: (personType, personId, x, y) => set({ contextMenu: { type: 'person', personType, personId, x, y } }),
   hideContextMenu: () => set({ contextMenu: null }),
   openPersonDialog: (type, id = null) => set({ personDialog: { type, id } }),

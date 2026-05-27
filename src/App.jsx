@@ -208,7 +208,6 @@ function SceneSection({
   visiblePageRange,
   pageHeights,
   onPageMeasured,
-  onOpenSceneProperties,
 }) {
   const addShot = useStore(s => s.addShot)
   const deleteScene = useStore(s => s.deleteScene)
@@ -276,7 +275,6 @@ function SceneSection({
                 isContinuation={isContinuation}
                 pageNum={pageIdx + 1}
                 pageIndex={pageIdx}
-                onDoubleClick={() => onOpenSceneProperties(scene.id)}
               />
 
               {shouldRenderPageGrid ? (
@@ -956,8 +954,11 @@ export default function App() {
     if (entity.entityType !== 'shot' && entity.entityType !== 'scene') return
     event.preventDefault()
     event.stopPropagation()
-    showContextMenu(entity.entityType, entity.entityId, event.clientX, event.clientY)
-  }, [showContextMenu, showPersonContextMenu])
+    const sceneId = entity.entityType === 'shot'
+      ? (storyboardShotsWithIds.find(shot => shot.id === entity.entityId)?.sceneId || null)
+      : entity.entityId
+    showContextMenu(entity.entityType, entity.entityId, event.clientX, event.clientY, sceneId)
+  }, [showContextMenu, showPersonContextMenu, storyboardShotsWithIds])
 
   const cloudReadOnlyTab = cloudAccessPolicy.readOnly && activeTab !== 'home'
   const cloudReadOnlyInteractionStyle = cloudReadOnlyTab
@@ -1170,6 +1171,7 @@ export default function App() {
                   data-outline-id={scene.id}
                   data-entity-type="scene"
                   data-entity-id={scene.id}
+                  data-no-entity-open="true"
                 >
                   {/* Scene separator (between scenes) */}
                   {sceneIdx > 0 && (
@@ -1198,7 +1200,6 @@ export default function App() {
                     visiblePageRange={storyboardVisibleRange}
                     pageHeights={storyboardPageHeights}
                     onPageMeasured={handlePageMeasured}
-                    onOpenSceneProperties={(sceneId) => openScenePropertiesDialog('storyboard', sceneId)}
                   />
                 </div>
               ))}
