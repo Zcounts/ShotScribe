@@ -307,6 +307,7 @@ ShotScribe mobile now supports **two explicit workflows**:
 - Caret navigation fix (April 6, 2026): in the unified Script editor, `ArrowRight` now moves from a block end to the next block start, and `ArrowLeft` moves from a block start to the previous block end (without changing Enter/Tab/Undo behavior).
 - Select-all fix (April 8, 2026): in Script tab write mode, `Ctrl+A` / `Cmd+A` now selects the entire screenplay document across all visible blocks, so copy includes the full script instead of only the active block.
 - Multi-block selection fix (April 8, 2026): Script tab write mode now uses a page-level editable surface so drag selection can span multiple screenplay blocks (slugline/action/character/dialogue/parenthetical/transition), and native copy/delete/replace works across block boundaries.
+- Storyboard Scene Properties slugline fix (May 27, 2026): storyboard scenes now always allow manual `Title / Slugline` edits (linked or unlinked), preserve overrides across modal reopen/save cycles and unrelated metadata edits, and only auto-refresh slugline from a newly linked script scene when no manual override exists.
 
 ## Launch UX priorities checklist (operator-facing)
 

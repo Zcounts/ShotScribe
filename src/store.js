@@ -2244,7 +2244,7 @@ const useStore = create((set, get) => ({
       linkedScriptSceneId: storyboardScene.linkedScriptSceneId || null,
       scriptSceneId: scriptScene?.id || null,
       sceneNumber: scriptScene?.sceneNumber ?? storyboardScene.sceneLabel ?? '',
-      titleSlugline: scriptScene?.slugline ?? storyboardScene.slugline ?? '',
+      titleSlugline: storyboardScene.slugline ?? scriptScene?.slugline ?? '',
       location: scriptScene?.location ?? storyboardScene.location ?? '',
       intOrExt: scriptScene?.intExt ?? storyboardScene.intOrExt ?? '',
       dayNight: scriptScene?.dayNight ?? storyboardScene.dayNight ?? '',
@@ -2262,14 +2262,12 @@ const useStore = create((set, get) => ({
     if (linkedScriptScene) {
       const scriptUpdates = {
         ...(('sceneNumber' in updates) ? { sceneNumber: updates.sceneNumber } : {}),
-        ...(('titleSlugline' in updates) ? { slugline: updates.titleSlugline || '' } : {}),
         ...(('location' in updates) ? { location: updates.location || '' } : {}),
         ...(('intOrExt' in updates) ? { intExt: updates.intOrExt || '' } : {}),
         ...(('dayNight' in updates) ? { dayNight: updates.dayNight || '' } : {}),
         ...(('color' in updates) ? { color: updates.color || null } : {}),
       }
-      get().updateScriptScene(linkedScriptScene.id, scriptUpdates)
-      return
+      if (Object.keys(scriptUpdates).length > 0) get().updateScriptScene(linkedScriptScene.id, scriptUpdates)
     }
 
     const sceneUpdates = {
@@ -2292,10 +2290,17 @@ const useStore = create((set, get) => ({
         scenes: state.scenes.map(scene => {
           if (scene.id !== storyboardSceneId) return scene
           if (!scriptSceneId) return { ...scene, linkedScriptSceneId: null }
+          const previousLinkedScriptScene = scene.linkedScriptSceneId
+            ? state.scriptScenes.find(s => s.id === scene.linkedScriptSceneId)
+            : null
+          const previousLinkedSlugline = previousLinkedScriptScene?.slugline || ''
+          const hasManualSluglineOverride = Boolean(scene.slugline) && scene.slugline !== previousLinkedSlugline
+          const nextSlugline = hasManualSluglineOverride ? scene.slugline : (scriptScene?.slugline || '')
           return {
             ...scene,
             linkedScriptSceneId: scriptSceneId,
             ...(mapScriptSceneToStoryboardMetadata(scriptScene) || {}),
+            slugline: nextSlugline,
           }
         }),
       }
