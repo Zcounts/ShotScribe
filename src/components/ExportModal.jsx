@@ -3,7 +3,7 @@ import { downloadScriptAsTxt } from '../utils/scriptTxtSerializer'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import useStore, { CALLSHEET_COLUMN_DEFINITIONS } from '../store'
-import { deriveSceneShotPrefix, formatShotDisplayId } from '../utils/shotDisplay'
+import { deriveSceneShotPrefix, formatShotDisplayId, normalizeSceneNumberDisplay } from '../utils/shotDisplay'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
 import { derivePdfPageLayout } from '../utils/pdfPageLayout'
 import { buildDayScheduleRows, deriveDayCastRows, deriveDayCrewRows } from '../utils/callsheetSelectors'
@@ -184,6 +184,7 @@ function buildStoryboardPrintHtml(imageMap = {}) {
       ? `<div class="pg-notes">${escapeHtml(scene.pageNotes)}</div>`
       : ''
 
+    const sceneHeaderNumber = normalizeSceneNumberDisplay(scene.sceneLabel)
     groups.forEach((pageShots, pageIdx) => {
       const isContinuation = pageIdx > 0
       const continuationHtml = isContinuation
@@ -230,7 +231,7 @@ function buildStoryboardPrintHtml(imageMap = {}) {
       pageDivs.push(`<div class="page-doc">
   <div class="page-hdr">
     <div class="hdr-left">
-      <span class="hdr-title">${escapeHtml(scene.sceneLabel)} | ${escapeHtml(scene.location)} | ${escapeHtml(scene.intOrExt)} &middot; ${escapeHtml(scene.dayNight || 'DAY')}</span>
+      <span class="hdr-title">${escapeHtml(sceneHeaderNumber)} | ${escapeHtml(scene.location)} | ${escapeHtml(scene.intOrExt)} &middot; ${escapeHtml(scene.dayNight || 'DAY')}</span>
       ${continuationHtml}
     </div>
     <div class="hdr-center">

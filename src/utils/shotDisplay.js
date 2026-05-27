@@ -26,3 +26,9 @@ export function formatShotDisplayId(prefix, shotIndex) {
   const suffix = getShotLetter(shotIndex)
   return cleanPrefix ? `${cleanPrefix}-${suffix}` : suffix
 }
+
+export function normalizeSceneNumberDisplay(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  return raw.replace(/^SCENE\s*/i, '').trim()
+}
