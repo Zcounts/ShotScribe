@@ -21,6 +21,7 @@ import {
 } from './castCrewDisplayConfig'
 import { devPerfLog } from './utils/devPerf'
 import { platformService } from './services/platformService'
+import { deriveSceneShotPrefix, formatShotDisplayId, normalizeShotNumberPrefix } from './utils/shotDisplay'
 import { runtimeConfig } from './config/runtimeConfig'
 import { logTelemetry } from './utils/telemetry'
 import {
@@ -511,7 +512,7 @@ export function getShotLetter(index) {
 }
 
 function getShotDisplayId(sceneNumber, shotIndex) {
-  return `${sceneNumber}${getShotLetter(shotIndex)}`
+  return formatShotDisplayId(sceneNumber, shotIndex)
 }
 
 function ensureShotDisplayId(shot, sceneNumber, shotIndex) {
@@ -2082,7 +2083,7 @@ const useStore = create((set, get) => ({
     const sceneNum = sceneIndex + 1
     return scene.shots.map((shot, index) => ({
       ...shot,
-      displayId: ensureShotDisplayId(shot, sceneNum, index),
+      displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneNum), index),
     }))
   },
 
@@ -2250,6 +2251,7 @@ const useStore = create((set, get) => ({
       dayNight: scriptScene?.dayNight ?? storyboardScene.dayNight ?? '',
       color: scriptScene?.color ?? storyboardScene.color ?? null,
       characters: scriptScene?.characters ?? [],
+      shotNumberPrefix: deriveSceneShotPrefix(storyboardScene, scriptScene?.sceneNumber ?? storyboardScene.sceneLabel ?? ''),
     }
   },
 
@@ -2277,6 +2279,7 @@ const useStore = create((set, get) => ({
       ...(('intOrExt' in updates) ? { intOrExt: updates.intOrExt } : {}),
       ...(('dayNight' in updates) ? { dayNight: updates.dayNight } : {}),
       ...(('color' in updates) ? { color: updates.color } : {}),
+      ...(('shotNumberPrefix' in updates) ? { shotNumberPrefix: normalizeShotNumberPrefix(updates.shotNumberPrefix) } : {}),
     }
     get().updateScene(sceneId, sceneUpdates)
   },

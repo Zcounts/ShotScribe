@@ -408,9 +408,9 @@ function ShotCard({
 
   const timeMetadataColumns = useMemo(
     () => [
-      visibleInfo.shotAspectRatio !== false ? { key: 'shotAspectRatio', label: 'ASPECT RATIO' } : null,
-      visibleInfo.setupTime !== false ? { key: 'setupTime', label: 'SETUP TIME' } : null,
-      visibleInfo.shotTime !== false ? { key: 'shotTime', label: 'SHOT TIME' } : null,
+      visibleInfo.shotAspectRatio !== false ? { key: 'shotAspectRatio', label: 'RATIO' } : null,
+      visibleInfo.setupTime !== false ? { key: 'setupTime', label: 'SETUP' } : null,
+      visibleInfo.shotTime !== false ? { key: 'shotTime', label: 'TIME' } : null,
     ].filter(Boolean),
     [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
   )

@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import useStore from '../store'
+import { normalizeSceneNumberDisplay } from '../utils/shotDisplay'
 
 const CAMERA_COLORS = [
   '#4ade80', '#22d3ee', '#facc15', '#f87171', '#60a5fa',
@@ -9,19 +11,39 @@ const CAMERA_COLORS = [
 function CameraColorSwatch({ color, onChange }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
+  const buttonRef = useRef(null)
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 })
+
+  const updatePopoverPosition = () => {
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setPopoverPos({
+      top: rect.bottom + 6 + window.scrollY,
+      left: rect.right + window.scrollX,
+    })
+  }
 
   useEffect(() => {
     if (!open) return
+    updatePopoverPosition()
     const handler = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
+    const handleReposition = () => updatePopoverPosition()
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    window.addEventListener('scroll', handleReposition, true)
+    window.addEventListener('resize', handleReposition)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      window.removeEventListener('scroll', handleReposition, true)
+      window.removeEventListener('resize', handleReposition)
+    }
   }, [open])
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
       <button
+        ref={buttonRef}
         onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
         title="Camera color"
         style={{
@@ -36,14 +58,14 @@ function CameraColorSwatch({ color, onChange }) {
           display: 'block',
         }}
       />
-      {open && (
+      {open && createPortal(
         <div
           style={{
             position: 'absolute',
-            right: 0,
-            top: '100%',
-            marginTop: 4,
-            zIndex: 100,
+            top: popoverPos.top,
+            left: popoverPos.left,
+            transform: 'translateX(-100%)',
+            zIndex: 1200,
             background: '#fff',
             border: '1px solid #d1d5db',
             borderRadius: 6,
@@ -58,40 +80,17 @@ function CameraColorSwatch({ color, onChange }) {
                 key={c}
                 onClick={() => { onChange(c); setOpen(false) }}
                 title={c}
-                style={{
-                  width: 16,
-                  height: 16,
-                  borderRadius: 3,
-                  background: c,
-                  border: color === c ? '2px solid #1a1a1a' : '1px solid rgba(0,0,0,0.15)',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
+                style={{ width: 16, height: 16, borderRadius: 3, background: c, border: color === c ? '2px solid #1a1a1a' : '1px solid rgba(0,0,0,0.15)', cursor: 'pointer', padding: 0 }}
               />
             ))}
             <button
               onClick={() => { onChange(null); setOpen(false) }}
               title="No color"
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 3,
-                background: 'none',
-                border: '1px dashed #d1d5db',
-                cursor: 'pointer',
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 9,
-                color: '#9ca3af',
-                lineHeight: 1,
-              }}
-            >
-              ×
-            </button>
+              style={{ width: 16, height: 16, borderRadius: 3, background: 'none', border: '1px dashed #d1d5db', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#9ca3af', lineHeight: 1 }}
+            >×</button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -104,7 +103,7 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
 
   const set = (updates) => updateScene(scene.id, updates)
   const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
-  const displaySceneNumber = String(canonical?.sceneNumber || '').trim()
+  const displaySceneNumber = normalizeSceneNumberDisplay(canonical?.sceneNumber)
   const displaySlugline = canonical?.titleSlugline || ''
   const [sceneNumberDraft, setSceneNumberDraft] = useState(displaySceneNumber)
   const [sluglineDraft, setSluglineDraft] = useState(displaySlugline)
@@ -201,7 +200,6 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
       <div className="page-header-scene">
         <div className="page-header-row page-header-scene-bottom">
           <span className="page-header-scene-primary">
-            SCENE{' '}
             <input
               type="text"
               value={sceneNumberDraft}
