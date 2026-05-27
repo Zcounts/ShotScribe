@@ -97,7 +97,7 @@ function CameraColorSwatch({ color, onChange }) {
   )
 }
 
-export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0, onDoubleClick }) {
+export default function PageHeader({ scene, isContinuation = false, pageNum = 1, pageIndex = 0 }) {
   const updateScene = useStore(s => s.updateScene)
   const getCanonicalStoryboardSceneMetadata = useStore(s => s.getCanonicalStoryboardSceneMetadata)
   const updateCanonicalStoryboardSceneMetadata = useStore(s => s.updateCanonicalStoryboardSceneMetadata)
@@ -106,6 +106,14 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
   const canonical = getCanonicalStoryboardSceneMetadata(scene.id)
   const displaySceneNumber = String(canonical?.sceneNumber || '').trim()
   const displaySlugline = canonical?.titleSlugline || ''
+  const [sceneNumberDraft, setSceneNumberDraft] = useState(displaySceneNumber)
+  const [sluglineDraft, setSluglineDraft] = useState(displaySlugline)
+
+  useEffect(() => setSceneNumberDraft(displaySceneNumber), [displaySceneNumber])
+  useEffect(() => setSluglineDraft(displaySlugline), [displaySlugline])
+
+  const commitSceneNumber = () => updateCanonicalStoryboardSceneMetadata(scene.id, { sceneNumber: sceneNumberDraft })
+  const commitSlugline = () => updateCanonicalStoryboardSceneMetadata(scene.id, { titleSlugline: sluglineDraft })
 
   // Per-page notes: pageNotes is stored as an array (one element per page).
   // Legacy projects saved it as a plain string — treat that as page 0.
@@ -188,21 +196,53 @@ export default function PageHeader({ scene, isContinuation = false, pageNum = 1,
   // that have its drag listeners explicitly attached, which these inputs do not.
 
   return (
-    <div className="page-header" onDoubleClick={onDoubleClick}>
+    <div className="page-header">
       {/* Scene identifier + slugline */}
       <div className="page-header-scene">
         <div className="page-header-row page-header-scene-bottom">
           <span className="page-header-scene-primary">
-            {`SCENE ${displaySceneNumber || '—'}`}
+            SCENE{' '}
+            <input
+              type="text"
+              value={sceneNumberDraft}
+              onChange={e => setSceneNumberDraft(e.target.value)}
+              onBlur={commitSceneNumber}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  commitSceneNumber()
+                  e.currentTarget.blur()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setSceneNumberDraft(displaySceneNumber)
+                  e.currentTarget.blur()
+                }
+              }}
+              className="bg-transparent border-none outline-none p-0 page-header-input"
+              style={{ minWidth: 20, width: `${Math.min(Math.max((sceneNumberDraft || '').length, 1), 8)}ch` }}
+              placeholder="—"
+            />
           </span>
         </div>
         <div className="page-header-row page-header-scene-top page-header-scene-tag">
           <input
             type="text"
-            value={displaySlugline}
-            onChange={e => updateCanonicalStoryboardSceneMetadata(scene.id, { titleSlugline: e.target.value })}
+            value={sluglineDraft}
+            onChange={e => setSluglineDraft(e.target.value)}
+            onBlur={commitSlugline}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitSlugline()
+                e.currentTarget.blur()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                setSluglineDraft(displaySlugline)
+                e.currentTarget.blur()
+              }
+            }}
             className="bg-transparent border-none outline-none p-0 page-header-input page-header-slugline"
-            style={{ minWidth: 50, width: `${Math.min(Math.max((displaySlugline || '').length, 4), 38)}ch` }}
+            style={{ minWidth: 50, width: `${Math.min(Math.max((sluglineDraft || '').length, 4), 38)}ch` }}
             placeholder="TITLE / SLUGLINE"
           />
         </div>

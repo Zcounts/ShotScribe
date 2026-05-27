@@ -43,12 +43,19 @@ export default function ContextMenu() {
 
   const entityType = contextMenu.type
   const entityId = entityType === 'person' ? null : contextMenu.entityId
+  const parentSceneId = contextMenu.sceneId || null
   const sceneForDelete = entityType === 'scene' ? scenes.find(scene => scene.id === entityId) : null
   const sceneShotCount = sceneForDelete?.shots?.length || 0
 
   const handleOpenProperties = () => {
     if (entityType === 'scene') openSceneDialog(entityId)
     if (entityType === 'shot') openShotDialog(entityId)
+    hideContextMenu()
+  }
+
+  const handleOpenSceneProperties = () => {
+    if (entityType === 'scene') openSceneDialog(entityId)
+    if (entityType === 'shot' && parentSceneId) openSceneDialog(parentSceneId)
     hideContextMenu()
   }
 
@@ -108,11 +115,14 @@ export default function ContextMenu() {
       style={{ left, top }}
       onClick={e => e.stopPropagation()}
     >
-      <div className="context-menu-item" onClick={handleOpenProperties}>
-        Open Properties
+      <div className="context-menu-item" onClick={entityType === 'scene' ? handleOpenSceneProperties : handleOpenProperties}>
+        {entityType === 'scene' ? 'Open Scene Properties' : 'Open Shot Properties'}
       </div>
       {entityType === 'shot' && (
         <>
+          <div className="context-menu-item" onClick={handleOpenSceneProperties}>
+            Open Scene Properties
+          </div>
           <div
             className="context-menu-item"
             onClick={() => { duplicateShot(entityId); hideContextMenu() }}
