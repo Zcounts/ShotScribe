@@ -2,7 +2,7 @@ import {
   serializeMobileDayPackage,
   serializeMobileSnapshot,
 } from '../../../shared/src/serializers/mobileContracts.ts'
-import { getShotLetter } from '../../store'
+import { deriveSceneShotPrefix, formatShotDisplayId } from '../../utils/shotDisplay'
 import { platformService } from '../platformService'
 
 function slugify(value) {
@@ -46,7 +46,7 @@ function buildShotLookup(scenes) {
       map.set(shot.id, {
         shot,
         scene,
-        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
       })
     })
   })
@@ -199,7 +199,7 @@ export function createMobileDayPackageFromProject(projectData, options = {}) {
   const displayByShotId = new Map()
   ;(projectData.scenes || []).forEach((scene, sceneIdx) => {
     ;(scene.shots || []).forEach((shot, shotIdx) => {
-      displayByShotId.set(shot.id, `${sceneIdx + 1}${getShotLetter(shotIdx)} - ${shot.cameraName || 'Camera 1'}`)
+      displayByShotId.set(shot.id, `${formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx)} - ${shot.cameraName || 'Camera 1'}`)
     })
   })
   const scheduleItems = buildScheduleItems(day, shotLookup).map(item => {

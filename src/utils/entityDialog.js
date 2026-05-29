@@ -1,4 +1,4 @@
-const INTERACTIVE_SELECTOR = [
+const OPEN_SUPPRESSION_SELECTOR = [
   'input',
   'textarea',
   'select',
@@ -28,19 +28,49 @@ const INTERACTIVE_SELECTOR = [
   '[draggable="true"]',
 ].join(',')
 
+const CONTEXT_MENU_SUPPRESSION_SELECTOR = [
+  'input',
+  'textarea',
+  'select',
+  'button',
+  'a',
+  'label',
+  'summary',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="textbox"]',
+  '[role="combobox"]',
+  '[role="listbox"]',
+  '[contenteditable=""]',
+  '[contenteditable="true"]',
+  '[data-suppress-entity-context-menu="true"]',
+  '[data-no-entity-context-menu="true"]',
+  '[data-upload-control]',
+  '[data-dropdown-trigger]',
+  '[data-resize-handle]',
+  '[data-add-scene-control]',
+  '[data-add-shot-control]',
+].join(',')
+
 export function isInteractiveElement(target) {
   if (!(target instanceof Element)) return false
-  return !!target.closest(INTERACTIVE_SELECTOR)
+  return !!target.closest(OPEN_SUPPRESSION_SELECTOR)
 }
 
-function getNearestInteractiveElement(target) {
+function getNearestOpenSuppressionElement(target) {
   if (!(target instanceof Element)) return null
-  return target.closest(INTERACTIVE_SELECTOR)
+  return target.closest(OPEN_SUPPRESSION_SELECTOR)
+}
+
+function getNearestContextMenuSuppressionElement(target) {
+  if (!(target instanceof Element)) return null
+  return target.closest(CONTEXT_MENU_SUPPRESSION_SELECTOR)
 }
 
 export function shouldSuppressEntityOpen(target, entityNode = null) {
   if (!(target instanceof Element)) return true
-  const interactiveNode = getNearestInteractiveElement(target)
+  const interactiveNode = getNearestOpenSuppressionElement(target)
   if (!interactiveNode) return false
   if (entityNode && interactiveNode === entityNode) return false
   return true
@@ -48,7 +78,7 @@ export function shouldSuppressEntityOpen(target, entityNode = null) {
 
 export function shouldSuppressEntityContextMenu(target, entityNode = null) {
   if (!(target instanceof Element)) return true
-  const interactiveNode = getNearestInteractiveElement(target)
+  const interactiveNode = getNearestContextMenuSuppressionElement(target)
   if (!interactiveNode) return false
   if (entityNode && interactiveNode === entityNode) return false
   return true

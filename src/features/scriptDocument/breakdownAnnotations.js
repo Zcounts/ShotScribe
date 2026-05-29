@@ -1,3 +1,4 @@
+import { deriveSceneShotPrefix, formatShotDisplayId } from '../../utils/shotDisplay'
 export const BREAKDOWN_ANNOTATION_KIND = 'breakdown_annotation'
 export const SHOT_LINK_ANNOTATION_KIND = 'shot_link_annotation'
 export const COMMENT_ANNOTATION_KIND = 'comment_annotation'
@@ -286,7 +287,7 @@ export function migrateLegacyShotLinksToAnnotations({ storyboardScenes = [], scr
         to: end,
         quote: '',
         color: shot.color || null,
-        label: shot.displayId || `${sceneIdx + 1}${shotIdx + 1}`,
+        label: formatShotDisplayId(deriveSceneShotPrefix(storyScene, sceneIdx + 1), shotIdx),
       })
       byId[entity.id] = entity
       order.push(entity.id)
@@ -337,7 +338,7 @@ export function deriveShotLinkIndexFromAnnotations({ scriptAnnotations, storyboa
         start,
         end,
         color: shot.color || '#E84040',
-        label: shot.displayId || `${sceneIdx + 1}${shotIdx + 1}`,
+        label: formatShotDisplayId(deriveSceneShotPrefix(storyScene, sceneIdx + 1), shotIdx),
         type: 'visualize',
       })
     })

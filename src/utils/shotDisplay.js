@@ -1,6 +1,6 @@
 const VALID_SHOT_LETTERS = 'ABCDEFGHJKLMNPQRTUVWXYZ'
 
-function getShotLetter(index) {
+export function getShotLetter(index) {
   const n = VALID_SHOT_LETTERS.length
   if (index < n) return VALID_SHOT_LETTERS[index]
   const adjusted = index - n
@@ -12,7 +12,7 @@ function getShotLetter(index) {
 export function normalizeShotNumberPrefix(value) {
   return String(value ?? '')
     .trim()
-    .replace(/-+\s*$/, '')
+    .replace(/[.\-\s]+$/, '')
 }
 
 export function deriveSceneShotPrefix(scene, fallbackSceneNumber) {
@@ -21,10 +21,12 @@ export function deriveSceneShotPrefix(scene, fallbackSceneNumber) {
   return normalizeShotNumberPrefix(fallbackSceneNumber)
 }
 
-export function formatShotDisplayId(prefix, shotIndex) {
+export function formatShotDisplayId(prefix, shotIndexOrSuffix) {
   const cleanPrefix = normalizeShotNumberPrefix(prefix)
-  const suffix = getShotLetter(shotIndex)
-  return cleanPrefix ? `${cleanPrefix}-${suffix}` : suffix
+  const suffix = typeof shotIndexOrSuffix === 'number'
+    ? getShotLetter(shotIndexOrSuffix)
+    : String(shotIndexOrSuffix ?? '').trim().replace(/^[.-]+/, '')
+  return cleanPrefix ? `${cleanPrefix}.${suffix}` : suffix
 }
 
 export function normalizeSceneNumberDisplay(value) {

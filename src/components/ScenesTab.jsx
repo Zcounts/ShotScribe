@@ -9,6 +9,7 @@ import compactIcon from '../../assets/script icons/compct.svg'
 import visualIcon from '../../assets/script icons/visual.svg'
 import listIcon from '../../assets/script icons/list.svg'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import { deriveSceneShotPrefix, formatShotDisplayId } from '../utils/shotDisplay'
 
 const VIEW_MODES = [
   { value: 'compactGrid', label: 'Compact', icon: compactIcon },
@@ -97,7 +98,10 @@ export default function ScenesTab({
       scene.shots.forEach((shot, shotIdx) => {
         if (shot.linkedSceneId) {
           if (!map[shot.linkedSceneId]) map[shot.linkedSceneId] = []
-          map[shot.linkedSceneId].push({ ...shot, displayId: `${sceneIdx + 1}${String.fromCharCode(65 + shotIdx)}` })
+          map[shot.linkedSceneId].push({
+            ...shot,
+            displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
+          })
         }
       })
     })
