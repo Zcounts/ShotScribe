@@ -1439,7 +1439,7 @@ const useStore = create((set, get) => ({
         shot,
         scene,
         sceneId: scene.id,
-        displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+        displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
         sceneTitle: canonical?.titleSlugline || scene.slugline || scene.location || scene.sceneLabel || '',
       }
     }
@@ -1465,7 +1465,7 @@ const useStore = create((set, get) => ({
             linkedDialogueOffset: sceneId ? nextOffset : null,
             linkedScriptRangeStart: sceneId ? nextRangeStart : null,
             linkedScriptRangeEnd: sceneId ? nextRangeEnd : null,
-            displayId: sh.displayId || `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+            displayId: formatShotDisplayId(deriveSceneShotPrefix(sc, sceneIdx + 1), shotIdx),
           }
           linkedShot = nextShot
           return nextShot
@@ -1534,7 +1534,7 @@ const useStore = create((set, get) => ({
         shotMap.set(shot.id, {
           shot,
           scene,
-          displayId: `${sceneIdx + 1}${getShotLetter(shotIdx)}`,
+          displayId: formatShotDisplayId(deriveSceneShotPrefix(scene, sceneIdx + 1), shotIdx),
         })
       })
     })
