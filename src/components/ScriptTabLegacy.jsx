@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { Lock, Pilcrow, Ruler, Save, Settings2, Unlock } from 'lucide-react'
-import useStore, { getShotLetter } from '../store'
+import useStore from '../store'
+import { deriveSceneShotPrefix, formatShotDisplayId } from '../utils/shotDisplay'
 import ImportScriptModal from './ImportScriptModal'
 import { naturalSortSceneNumber } from '../utils/sceneSort'
 import {
@@ -825,7 +826,7 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
         if (shot.linkedSceneId !== activeSceneId && storyScene.linkedScriptSceneId !== activeSceneId) return
         rows.push({
           id: shot.id,
-          label: shot.displayId || `${storySceneIndex + 1}${getShotLetter(shotIdx)}`,
+          label: formatShotDisplayId(deriveSceneShotPrefix(storyScene, storySceneIndex + 1), shotIdx),
           description: shot.description || shot.subject || 'Untitled shot',
           color: shot.color || '#e11d48',
           linkedSceneId: shot.linkedSceneId,

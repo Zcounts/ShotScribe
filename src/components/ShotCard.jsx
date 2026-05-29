@@ -102,6 +102,7 @@ function ShotCard({
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
   const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
+  const showContextMenu = useStore(s => s.showContextMenu)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [cloudAssetView, setCloudAssetView] = useState(null)
@@ -120,6 +121,12 @@ function ShotCard({
   const [displayedSrc, setDisplayedSrc] = useState(null)
   const displayConfig = normalizeStoryboardDisplayConfig(storyboardDisplayConfig)
   const visibleInfo = displayConfig.visibleInfo
+  const handleContextMenu = useCallback((event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    showContextMenu('shot', shot.id, event.clientX, event.clientY, sceneId)
+  }, [sceneId, shot.id, showContextMenu])
+
   useDevRenderCounter('ShotCard', shot.id)
   const visibleSpecKeys = useMemo(
     () => ['size', 'type', 'move', 'equip'].filter(key => visibleInfo[key] !== false),
@@ -473,6 +480,7 @@ function ShotCard({
       className={`shot-card ${isDragging ? 'is-dragging' : ''} ${isDesktopDown ? 'is-compact' : ''} ${isPhone ? 'is-phone' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onContextMenu={handleContextMenu}
     >
       {/* Card Header Row — entire row is the drag handle */}
       <div

@@ -36,7 +36,7 @@ export default function ContextMenu() {
   const menuHeight = contextMenu.type === 'person'
     ? 88
     : contextMenu.type === 'shot'
-      ? 130
+      ? 172
       : 100
   const left = Math.min(x, window.innerWidth - menuWidth - 8)
   const top = Math.min(y, window.innerHeight - menuHeight - 8)
