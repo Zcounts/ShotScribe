@@ -299,7 +299,7 @@ export const platformService = {
   isDesktop: () => !!getElectronApi(),
   hasPrintToPDF: () => typeof getElectronApi()?.printToPDF === 'function',
   supportsFileSystemAccess: () => isFileSystemAccessSupported(),
-  isBrowserFolderProjectPath,
+  isBrowserFolderProjectPath: isBrowserFsaProjectPath,
 
   createLocalProjectFolder(projectName, data) {
     const api = getElectronApi()
