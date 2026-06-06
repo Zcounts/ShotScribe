@@ -38,6 +38,7 @@ export default function Toolbar({
   const sceneCount = scenes.length
   const saveProject = useStore(s => s.saveProject)
   const saveProjectAs = useStore(s => s.saveProjectAs)
+  const moveImagesToLocalAssetsFolder = useStore(s => s.moveImagesToLocalAssetsFolder)
   const flushCloudSync = useStore(s => s.flushCloudSync)
   const createCloudProjectFromLocal = useStore(s => s.createCloudProjectFromLocal)
   const disableCloudBackupForCurrentProject = useStore(s => s.disableCloudBackupForCurrentProject)
@@ -347,7 +348,7 @@ export default function Toolbar({
             <ContextMenuContent>
               <ContextMenuItem onSelect={() => setEditingName(true)}>Rename project</ContextMenuItem>
               <ContextMenuItem onSelect={() => saveProject()}>Save locally now</ContextMenuItem>
-              <ContextMenuItem onSelect={() => guardUnsaved(openProject)}>Open project…</ContextMenuItem>
+              <ContextMenuItem onSelect={() => guardUnsaved(openProject)}>Import .shotlist File…</ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
         )}
@@ -571,6 +572,26 @@ export default function Toolbar({
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
                 Save local copy as…
+              </button>
+              <button
+                onClick={() => { setSaveMenuOpen(false); moveImagesToLocalAssetsFolder() }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  color: '#e0e0e0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                Move Images to Local Assets Folder
               </button>
               {isCloudProject ? (
                 <>

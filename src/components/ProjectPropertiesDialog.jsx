@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
-import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
-import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
+import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { buildLocalImageAsset, buildShotImageFromLibraryAsset, isCloudImageReadEnabled, isCloudImageWorkflowEnabled, isLocalAssetUri, relativePathFromLocalAssetUri, uploadStoryboardAssetToCloud } from '../services/assetService'
+import { platformService } from '../services/platformService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+import { devPerfLog } from '../utils/devPerf'
 
 const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
@@ -21,6 +23,7 @@ function hasHeroImageValue(value) {
 
 export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity }) {
   const projectRef = useStore(s => s.projectRef)
+  const projectPath = useStore(s => s.projectPath)
   const projectName = useStore(s => s.projectName)
   const projectEmoji = useStore(s => s.projectEmoji)
   const projectLogline = useStore(s => s.projectLogline)
@@ -36,8 +39,10 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
   const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
   const cloudAccessPolicy = useCloudAccessPolicy()
+  const cloudReadEnabled = isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
+  const cloudWorkflowEnabled = isCloudImageWorkflowEnabled(projectRef, cloudAccessPolicy)
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const libraryAssetsArgs = (open && projectRef?.type === 'cloud' && !cloudAssetBlocked)
+  const libraryAssetsArgs = (open && cloudReadEnabled)
     ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
     : 'skip'
   const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryAssetsArgs)
@@ -58,7 +63,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
   const [heroImageDraft, setHeroImageDraft] = useState(projectHeroImage || null)
   const [saving, setSaving] = useState(false)
   const getSignedViewWithCache = useCallback(async (assetId) => {
-    if (projectRef?.type !== 'cloud' || !projectRef?.projectId || !assetId) return null
+    if (!cloudReadEnabled || !projectRef?.projectId || !assetId) return null
     const views = await getOrCreateSignedViewsBatchRequest({
       projectId: projectRef.projectId,
       assetIds: [assetId],
@@ -68,7 +73,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
       }),
     })
     return views?.[String(assetId)] || null
-  }, [getAssetSignedViewsBatch, projectRef?.projectId, projectRef?.type])
+  }, [cloudReadEnabled, getAssetSignedViewsBatch, projectRef?.projectId])
 
   useEffect(() => {
     if (!open) return
@@ -79,10 +84,34 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
     setHeroImageDraft(projectHeroImage || null)
   }, [open, projectEmoji, projectHeroImage, projectHeroOverlayColor, projectLogline, projectName])
 
-  const heroPreviewSrc = useMemo(
+  const heroPreviewRawSrc = useMemo(
     () => heroImageDraft?.imageAsset?.thumb || heroImageDraft?.image || null,
     [heroImageDraft]
   )
+  const [resolvedHeroPreviewSrc, setResolvedHeroPreviewSrc] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    async function resolvePreview() {
+      if (!isLocalAssetUri(heroPreviewRawSrc)) {
+        setResolvedHeroPreviewSrc(heroPreviewRawSrc || null)
+        return
+      }
+      const relativePath = relativePathFromLocalAssetUri(heroPreviewRawSrc)
+      if (!relativePath || !(projectPath || projectRef?.path)) {
+        setResolvedHeroPreviewSrc(null)
+        return
+      }
+      try {
+        const result = await platformService.readLocalAsset(projectPath || projectRef.path, relativePath)
+        if (!cancelled) setResolvedHeroPreviewSrc(result?.success && result?.dataUrl ? result.dataUrl : null)
+      } catch {
+        if (!cancelled) setResolvedHeroPreviewSrc(null)
+      }
+    }
+    resolvePreview()
+    return () => { cancelled = true }
+  }, [heroPreviewRawSrc, projectPath, projectRef?.path])
+  const heroPreviewSrc = resolvedHeroPreviewSrc
 
   if (!open) return null
 
@@ -96,8 +125,22 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
     }
 
     try {
+      let imageStorageMode = 'browser-embedded-data-url-fallback'
+      if (projectRef?.type !== 'cloud') {
+        const localProjectPath = projectPath || projectRef?.path || null
+        if (platformService.isDesktop() && !localProjectPath) {
+          alert('Save this project locally before adding a hero image so ShotScribe can create the project .assets folder.')
+          return
+        }
+        if (!platformService.isDesktop() && !platformService.isBrowserFolderProjectPath(localProjectPath)) {
+          const allowEmbed = window.confirm(`Local folder access unavailable
+
+ShotScribe cannot write image files to a local project folder without folder permission. Choose OK to embed images directly inside the .shotlist file, or Cancel. Embedded image files can become very large.`)
+          if (!allowEmbed) return
+        }
+      }
       if (projectRef?.type === 'cloud') {
-        if (cloudAssetBlocked || !cloudAccessPolicy.canEditCloudProject) {
+        if (!cloudWorkflowEnabled) {
           alert('Cloud image uploads are blocked while billing is inactive.')
           return
         }
@@ -114,6 +157,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
           outputHeight: 480,
           quality: 0.84,
         })
+        imageStorageMode = 'cloud'
         const uploaded = await uploadStoryboardAssetToCloud({
           projectId: projectRef.projectId,
           processed,
@@ -129,33 +173,35 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
           setHeroImageDraft(uploaded)
         }
       } else {
-        const processed = await processStoryboardUpload(file, {
-          thumbnailWidth: 1600,
-          fullLongEdge: 2000,
+        const processed = await processStoryboardUploadForCloud(file, {
+          outputWidth: 1280,
+          outputHeight: 480,
           quality: 0.84,
         })
-        setHeroImageDraft({
-          image: processed.thumb,
-          imageAsset: {
-            version: 1,
-            mime: processed.mime || 'image/webp',
-            thumb: processed.thumb,
-            full: null,
-            meta: processed.meta || null,
-            cloud: null,
-          },
+        const localPayload = await buildLocalImageAsset({
+          processed,
+          projectFilePath: projectPath || projectRef?.path || null,
+          platformService,
+          fileNamePrefix: 'hero',
         })
+        imageStorageMode = localPayload.storageMode || 'browser-embedded-data-url-fallback'
+        setHeroImageDraft(localPayload)
       }
+      devPerfLog('hero:image-upload', {
+        sourceBytes: file.size,
+        cloudProject: projectRef?.type === 'cloud',
+        imageStorageMode,
+      })
     } catch (error) {
       console.error(error)
-      alert('Could not process this image. Please try a different file.')
+      alert(error?.message || 'Could not process this image. Please try a different file.')
     } finally {
       event.target.value = ''
     }
   }
 
   const handlePickFromLibrary = async (assetId) => {
-    if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    if (!cloudWorkflowEnabled) return
     const view = await getSignedViewWithCache(assetId)
     const payload = buildShotImageFromLibraryAsset(view)
     if (payload) setHeroImageDraft(payload)
