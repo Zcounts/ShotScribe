@@ -127,6 +127,37 @@ export const platformService = {
     return Promise.resolve(unsupportedResult(`openProjectFromPath(${filePath})`))
   },
 
+
+  ensureProjectAssetFolder(projectFilePath) {
+    const api = getElectronApi()
+    if (api?.ensureProjectAssetFolder) return api.ensureProjectAssetFolder(projectFilePath)
+    return Promise.resolve(unsupportedResult(`ensureProjectAssetFolder(${projectFilePath || 'unsaved'})`))
+  },
+
+  writeLocalAsset(projectFilePath, fileName, arrayBufferOrBase64) {
+    const api = getElectronApi()
+    if (api?.writeLocalAsset) return api.writeLocalAsset(projectFilePath, fileName, arrayBufferOrBase64)
+    return Promise.resolve(unsupportedResult(`writeLocalAsset(${fileName || 'asset'})`))
+  },
+
+  readLocalAsset(projectFilePath, relativePath) {
+    const api = getElectronApi()
+    if (api?.readLocalAsset) return api.readLocalAsset(projectFilePath, relativePath)
+    return Promise.resolve(unsupportedResult(`readLocalAsset(${relativePath || 'asset'})`))
+  },
+
+  downloadUrlToLocalAsset(projectFilePath, url, suggestedFileName) {
+    const api = getElectronApi()
+    if (api?.downloadUrlToLocalAsset) return api.downloadUrlToLocalAsset(projectFilePath, url, suggestedFileName)
+    return Promise.resolve(unsupportedResult(`downloadUrlToLocalAsset(${suggestedFileName || 'asset'})`))
+  },
+
+  revealProjectAssetsFolder(projectFilePath) {
+    const api = getElectronApi()
+    if (api?.revealProjectAssetsFolder) return api.revealProjectAssetsFolder(projectFilePath)
+    return Promise.resolve(unsupportedResult(`revealProjectAssetsFolder(${projectFilePath || 'unsaved'})`))
+  },
+
   printToPDF(htmlContent) {
     const api = getElectronApi()
     if (api?.printToPDF) return api.printToPDF(htmlContent)
