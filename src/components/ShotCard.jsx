@@ -8,8 +8,9 @@ import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
 import CustomDropdown from './CustomDropdown'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
-import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
-import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
+import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { buildLocalImageAsset, buildShotImageFromLibraryAsset, isCloudImageReadEnabled, isCloudImageWorkflowEnabled, isLocalAssetUri, relativePathFromLocalAssetUri, uploadStoryboardAssetToCloud } from '../services/assetService'
+import { platformService } from '../services/platformService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
 import {
@@ -90,6 +91,7 @@ function ShotCard({
   const updateShotImage = useStore(s => s.updateShotImage)
   const updateShot = useStore(s => s.updateShot)
   const projectRef = useStore(s => s.projectRef)
+  const projectPath = useStore(s => s.projectPath)
   const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
   const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
   const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
@@ -97,8 +99,10 @@ function ShotCard({
   const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
   const softDeleteLibraryAsset = useMutation('assets:softDeleteLibraryAsset')
   const undoSoftDeleteLibraryAsset = useMutation('assets:undoSoftDeleteLibraryAsset')
+  const cloudReadEnabled = isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
+  const cloudWorkflowEnabled = isCloudImageWorkflowEnabled(projectRef, cloudAccessPolicy)
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
+  const cloudProjectId = cloudReadEnabled ? projectRef.projectId : null
   const customDropdownOptions = useStore(s => s.customDropdownOptions)
   const addCustomDropdownOption = useStore(s => s.addCustomDropdownOption)
   const deleteShot = useStore(s => s.deleteShot)
@@ -242,7 +246,7 @@ function ShotCard({
 
 
   const clearShotImage = useCallback(async () => {
-    if (projectRef?.type === 'cloud' && cloudAccessPolicy.canEditCloudProject && !cloudAssetBlocked) {
+    if (cloudWorkflowEnabled) {
       try {
         await unassignShotLibraryAsset({
           projectId: projectRef.projectId,
@@ -263,10 +267,10 @@ function ShotCard({
         cloud: null,
       },
     })
-  }, [cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, projectRef, shot.id, unassignShotLibraryAsset, updateShotImage])
+  }, [cloudWorkflowEnabled, projectRef, shot.id, unassignShotLibraryAsset, updateShotImage])
 
   const assignLibraryAssetToShot = useCallback(async (assetId) => {
-    if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    if (!cloudWorkflowEnabled) return
     setIsAssigningFromLibrary(true)
     try {
       await assignShotLibraryAsset({
@@ -282,7 +286,7 @@ function ShotCard({
     } finally {
       setIsAssigningFromLibrary(false)
     }
-  }, [assignShotLibraryAsset, cloudAssetBlocked, getSignedViewWithCache, projectRef, shot.id, updateShotImage])
+  }, [assignShotLibraryAsset, cloudWorkflowEnabled, getSignedViewWithCache, projectRef, shot.id, updateShotImage])
 
   const handleImageClick = () => {
     if (projectRef?.type === 'cloud') {
@@ -293,7 +297,7 @@ function ShotCard({
   }
 
   const handleSoftDeleteLibraryAsset = useCallback(async (assetId) => {
-    if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    if (!cloudWorkflowEnabled) return
     setIsDeletingLibraryAsset(true)
     try {
       const result = await softDeleteLibraryAsset({
@@ -306,15 +310,15 @@ function ShotCard({
     } finally {
       setIsDeletingLibraryAsset(false)
     }
-  }, [cloudAssetBlocked, projectRef, softDeleteLibraryAsset])
+  }, [cloudWorkflowEnabled, projectRef, softDeleteLibraryAsset])
 
   const handleUndoDelete = useCallback(async (assetId) => {
-    if (projectRef?.type !== 'cloud' || cloudAssetBlocked) return
+    if (!cloudWorkflowEnabled) return
     await undoSoftDeleteLibraryAsset({
       projectId: projectRef.projectId,
       assetId,
     })
-  }, [cloudAssetBlocked, projectRef, undoSoftDeleteLibraryAsset])
+  }, [cloudWorkflowEnabled, projectRef, undoSoftDeleteLibraryAsset])
 
   const handleImageChange = useCallback(async (e) => {
     const file = e.target.files?.[0]
@@ -325,9 +329,9 @@ function ShotCard({
       return
     }
     try {
-      const isCloudProject = projectRef?.type === 'cloud'
-      if (isCloudProject) {
-        if (cloudAssetBlocked || !cloudAccessPolicy.canEditCloudProject) {
+      const isCloudProject = cloudWorkflowEnabled
+      if (projectRef?.type === 'cloud') {
+        if (!cloudWorkflowEnabled) {
           alert('Cloud image uploads are blocked while billing is inactive. You can continue local-only workflows.')
           e.target.value = ''
           return
@@ -367,12 +371,18 @@ function ShotCard({
           updateShotImage(shot.id, uploaded)
         }
       } else {
-        const processed = await processStoryboardUpload(file, {
-          thumbnailWidth: 480,
-          fullLongEdge: 1600,
+        const processed = await processStoryboardUploadForCloud(file, {
+          outputWidth: 640,
+          outputHeight: 360,
           quality: 0.84,
         })
-        updateShotImage(shot.id, processed)
+        const localPayload = await buildLocalImageAsset({
+          processed,
+          projectFilePath: projectPath || projectRef?.path || null,
+          platformService,
+          fileNamePrefix: `shot-${shot.id}`,
+        })
+        updateShotImage(shot.id, localPayload)
       }
       setImagePickerStep(null)
       devPerfLog('storyboard:image-upload', {
@@ -386,7 +396,7 @@ function ShotCard({
     } finally {
       e.target.value = ''
     }
-  }, [shot.id, projectRef, createAssetUploadIntent, finalizeAssetUpload, cloudAccessPolicy.canEditCloudProject, cloudAssetBlocked, assignShotLibraryAsset, getSignedViewWithCache, updateShotImage])
+  }, [shot.id, projectRef, projectPath, cloudWorkflowEnabled, createAssetUploadIntent, finalizeAssetUpload, assignShotLibraryAsset, getSignedViewWithCache, updateShotImage])
 
   const handleFocalLengthChange = useCallback((e) => {
     updateShot(shot.id, { focalLength: e.target.value })
@@ -434,13 +444,36 @@ function ShotCard({
   })
   const storyboardImageSrcFinal = canonicalSource.src
   const storyboardImageSourceReasonFinal = canonicalSource.reason
+  const hasCloudImageMigrationPlaceholder = shot?.imageAsset?.meta?.localMigrationStatus === 'cloud_image_not_downloaded'
+
+  useEffect(() => {
+    let cancelled = false
+    async function resolveLocalAsset() {
+      const source = storyboardImageSrcFinal || null
+      if (!isLocalAssetUri(source)) return
+      const relativePath = relativePathFromLocalAssetUri(source)
+      if (!relativePath || !(projectPath || projectRef?.path)) {
+        setDisplayedSrc(null)
+        return
+      }
+      try {
+        const result = await platformService.readLocalAsset(projectPath || projectRef.path, relativePath)
+        if (!cancelled && result?.success && result?.dataUrl) setDisplayedSrc(result.dataUrl)
+      } catch (error) {
+        console.warn('Could not read local storyboard asset', error)
+        if (!cancelled) setDisplayedSrc(null)
+      }
+    }
+    resolveLocalAsset()
+    return () => { cancelled = true }
+  }, [projectPath, projectRef?.path, storyboardImageSrcFinal])
 
   useEffect(() => {
     const previousAssetId = previousAssetIdRef.current
     const nextAssetId = stableAssetId || null
     const assetChanged = previousAssetId !== nextAssetId
     previousAssetIdRef.current = nextAssetId
-    const nextSource = storyboardImageSrcFinal || null
+    const nextSource = isLocalAssetUri(storyboardImageSrcFinal) ? null : (storyboardImageSrcFinal || null)
 
     if (assetChanged || !nextAssetId) {
       preloadTokenRef.current += 1
@@ -566,6 +599,11 @@ function ShotCard({
             loading="lazy"
             decoding="async"
           />
+        ) : hasCloudImageMigrationPlaceholder ? (
+          <div className="flex flex-col items-center gap-1 text-amber-300 text-center px-2">
+            <span className="text-xs font-medium">Cloud image not downloaded</span>
+            <span className="text-[10px] text-gray-400">Copy images locally to use this frame offline.</span>
+          </div>
         ) : cloudAssetBlocked ? (
           <div className="flex flex-col items-center gap-1 text-amber-300">
             <span className="text-xs font-medium">Cloud image unavailable</span>

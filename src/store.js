@@ -34,6 +34,7 @@ import {
 import { createCloudProjectAdapter, createProjectRepository } from './data/repository'
 import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
 import { detectUnmigratedLocalAssetsFromProjectData } from './utils/localAssetPreflight'
+import { detectCloudImageReferencesForLocalProject, migrateCloudImagesToLocalAssets } from './utils/localCloudImageMigration'
 import {
   convertLegacyScriptScenesToProseMirrorDocument,
   normalizeScriptDocumentState,
@@ -560,6 +561,35 @@ function getTotalShotsFromProjectData(data) {
     .reduce((a, s) => a + (s.shots || []).length, 0)
 }
 
+
+async function maybeMigrateCloudImagesForLocalOpen(data, filePath, get) {
+  const summary = detectCloudImageReferencesForLocalProject(data)
+  if (!summary.hasCloudImageReferences) return data
+  const message = `This project references cloud-hosted images. To use it fully offline, ShotScribe needs to copy those images into a local assets folder.
+
+Choose OK to copy images locally, or Cancel to skip for now.`
+  const shouldCopy = typeof window !== 'undefined' && typeof window.confirm === 'function'
+    ? window.confirm(message)
+    : false
+  if (!shouldCopy) return data
+  if (!filePath) {
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+      window.alert('ShotScribe can only copy cloud-hosted images into a local assets folder after this project has a desktop file path. The project will open now; save it locally and retry migration later.')
+    }
+    return data
+  }
+  const result = await migrateCloudImagesToLocalAssets({
+    projectData: data,
+    projectFilePath: filePath,
+    platformService,
+    cloudImageResolver: get().cloudImageResolver,
+  })
+  if (result.failedCount > 0 && typeof window !== 'undefined' && typeof window.alert === 'function') {
+    window.alert(`ShotScribe copied ${result.migratedCount} image${result.migratedCount === 1 ? '' : 's'} locally. ${result.failedCount} cloud image${result.failedCount === 1 ? '' : 's'} could not be downloaded and will show a recoverable placeholder.`)
+  }
+  return result.projectData || data
+}
+
 function buildRecentProjectEntry({ name, path, shots, browserProjectId = null }) {
   return {
     name,
@@ -648,7 +678,7 @@ function isInlineStoryboardImageRef(value) {
   if (typeof value !== 'string') return false
   const trimmed = value.trim().toLowerCase()
   if (!trimmed) return false
-  return trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('file:')
+  return trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('file:') || trimmed.startsWith('shotscribe-asset://')
 }
 
 function buildLocalAssetPendingMessage(preflight) {
@@ -3716,7 +3746,8 @@ const useStore = create((set, get) => ({
     const result = await platformService.openProject()
     if (!result.success) return
     try {
-      const data = JSON.parse(result.data)
+      let data = JSON.parse(result.data)
+      data = await maybeMigrateCloudImagesForLocalOpen(data, result.filePath || null, get)
       get().loadProject(data)
       if (platformService.isDesktop()) {
         const fileName = result.filePath.split(/[\\/]/).pop()
@@ -3755,7 +3786,8 @@ const useStore = create((set, get) => ({
       return
     }
     try {
-      const data = JSON.parse(result.data)
+      let data = JSON.parse(result.data)
+      data = await maybeMigrateCloudImagesForLocalOpen(data, filePath, get)
       get().loadProject(data)
       const fileName = filePath.split(/[\\/]/).pop()
       set({
@@ -3795,7 +3827,8 @@ const useStore = create((set, get) => ({
       return
     }
     try {
-      get().loadProject(data)
+      const hydratedData = await maybeMigrateCloudImagesForLocalOpen(data, null, get)
+      get().loadProject(hydratedData)
       set({
         browserProjectId,
         projectPath: null,
