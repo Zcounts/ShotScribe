@@ -15,10 +15,27 @@ export function normalizeShotNumberPrefix(value) {
     .replace(/[.\-\s]+$/, '')
 }
 
+export function normalizeSceneNumberDisplay(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  return raw.replace(/^SCENE\s*/i, '').trim()
+}
+
+function normalizeScenePrefixCandidate(value) {
+  return normalizeShotNumberPrefix(normalizeSceneNumberDisplay(value))
+}
+
 export function deriveSceneShotPrefix(scene, fallbackSceneNumber) {
   const explicit = normalizeShotNumberPrefix(scene?.shotNumberPrefix)
   if (explicit) return explicit
-  return normalizeShotNumberPrefix(fallbackSceneNumber)
+
+  const sceneNumber = normalizeScenePrefixCandidate(scene?.sceneNumber)
+  if (sceneNumber) return sceneNumber
+
+  const sceneLabel = normalizeScenePrefixCandidate(scene?.sceneLabel)
+  if (sceneLabel) return sceneLabel
+
+  return normalizeScenePrefixCandidate(fallbackSceneNumber)
 }
 
 export function formatShotDisplayId(prefix, shotIndexOrSuffix) {
@@ -27,10 +44,4 @@ export function formatShotDisplayId(prefix, shotIndexOrSuffix) {
     ? getShotLetter(shotIndexOrSuffix)
     : String(shotIndexOrSuffix ?? '').trim().replace(/^[.-]+/, '')
   return cleanPrefix ? `${cleanPrefix}.${suffix}` : suffix
-}
-
-export function normalizeSceneNumberDisplay(value) {
-  const raw = String(value ?? '').trim()
-  if (!raw) return ''
-  return raw.replace(/^SCENE\s*/i, '').trim()
 }
