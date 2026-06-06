@@ -329,12 +329,24 @@ function ShotCard({
       return
     }
     try {
-      let imageStorageMode = 'browser-data-url-fallback'
+      let imageStorageMode = 'browser-embedded-data-url-fallback'
       const isCloudProject = cloudWorkflowEnabled
-      if (projectRef?.type !== 'cloud' && platformService.isDesktop() && !(projectPath || projectRef?.path)) {
-        alert('Save this project locally before adding images so ShotScribe can create the project .assets folder.')
-        e.target.value = ''
-        return
+      if (projectRef?.type !== 'cloud') {
+        const localProjectPath = projectPath || projectRef?.path || null
+        if (platformService.isDesktop() && !localProjectPath) {
+          alert('Save this project locally before adding images so ShotScribe can create the project .assets folder.')
+          e.target.value = ''
+          return
+        }
+        if (!platformService.isDesktop() && !platformService.isBrowserFolderProjectPath(localProjectPath)) {
+          const allowEmbed = window.confirm(`Local folder access unavailable
+
+ShotScribe cannot write image files to a local project folder without folder permission. Choose OK to embed images directly inside the .shotlist file, or Cancel. Embedded image files can become very large.`)
+          if (!allowEmbed) {
+            e.target.value = ''
+            return
+          }
+        }
       }
       if (projectRef?.type === 'cloud') {
         if (!cloudWorkflowEnabled) {
@@ -389,7 +401,7 @@ function ShotCard({
           platformService,
           fileNamePrefix: `shot-${shot.id}`,
         })
-        imageStorageMode = localPayload.storageMode || 'browser-data-url-fallback'
+        imageStorageMode = localPayload.storageMode || 'browser-embedded-data-url-fallback'
         updateShotImage(shot.id, localPayload)
       }
       setImagePickerStep(null)

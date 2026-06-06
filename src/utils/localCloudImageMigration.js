@@ -20,7 +20,7 @@ function imageUrlFrom(node) {
 }
 
 function hasCloudReference(node) {
-  return Boolean(cloudAssetIdFrom(node) || cloudObjectKeyFrom(node) || imageUrlFrom(node))
+  return Boolean(cloudAssetIdFrom(node) || cloudObjectKeyFrom(node) || node?.imageAsset?.cloud?.provider || imageUrlFrom(node))
 }
 
 function getEntries(projectData = {}) {
@@ -53,6 +53,7 @@ function cloneProjectData(projectData) {
 function makePlaceholder(node, status, extraMeta = {}) {
   const originalUrl = imageUrlFrom(node)
   const originalAssetId = cloudAssetIdFrom(node)
+  const originalObjectKey = cloudObjectKeyFrom(node)
   return {
     image: null,
     imageAsset: {
@@ -64,6 +65,7 @@ function makePlaceholder(node, status, extraMeta = {}) {
         ...(node?.imageAsset?.meta || {}),
         ...(originalUrl ? { migratedFromCloudUrl: originalUrl } : {}),
         ...(originalAssetId ? { migratedFromCloudAssetId: originalAssetId } : {}),
+        ...(originalObjectKey ? { migratedFromCloudObjectKey: originalObjectKey } : {}),
         localMigrationStatus: status,
         ...extraMeta,
       },
@@ -121,10 +123,12 @@ export async function migrateCloudImagesToLocalAssets({
     const cacheKey = url ? `url:${url}` : (assetId ? `asset:${assetId}` : null)
     const sourceName = entry.kind === 'shot' && entry.shotId ? `shot-${entry.shotId}` : 'hero'
     const fileName = `${sourceName}-${assetId || Date.now()}.webp`.replace(/[^a-z0-9_.-]+/gi, '-')
+    const objectKey = cloudObjectKeyFrom(node)
     const baseMeta = {
       ...(node?.imageAsset?.meta || {}),
       ...(url ? { migratedFromCloudUrl: url } : {}),
       ...(assetId ? { migratedFromCloudAssetId: assetId } : {}),
+      ...(objectKey ? { migratedFromCloudObjectKey: objectKey } : {}),
     }
 
     if (cacheKey && cache.has(cacheKey)) {

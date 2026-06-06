@@ -57,3 +57,15 @@ The bundled Electron bridge lives in `desktop/main.cjs`, `desktop/preload.cjs`, 
 - `revealProjectAssetsFolder(projectFilePath)` opens the sibling asset folder in the OS file manager.
 
 For a saved desktop project, renderer local-image upload must fail visibly if the bridge cannot write into the sibling asset folder. Embedded `data:image/...` fallback is only acceptable in true browser mode without an Electron bridge.
+
+## Hosted browser local folder mode
+
+In hosted browser mode, `platformService` now prefers the File System Access API for local projects:
+
+- `createLocalProjectFolder(projectName, data)` uses `window.showDirectoryPicker()` to create a `.shotlist` file and a sibling `.assets/` directory.
+- `openLocalProjectFolder()` uses `window.showDirectoryPicker()` to select a folder and scan for `.shotlist` files.
+- `saveProjectSilent()` writes directly back to the selected folder project when the path is a `browser-fsa:` project path.
+- Local asset APIs write/read files from the active folder project's `{Project_Name}.assets/` directory.
+- Folder/file handles are stored in IndexedDB when the browser supports persistent `FileSystemHandle` storage.
+
+Loose `.shotlist` file import remains available for compatibility, but it is no longer the recommended browser-local workflow because it cannot grant permission to create or maintain a sibling `.assets/` folder.

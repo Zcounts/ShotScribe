@@ -97,6 +97,8 @@ export default function HomeView() {
   const setTabViewState = useStore(s => s.setTabViewState)
   const homeTabViewState = useStore(s => s.tabViewState.home)
   const newProject = useStore(s => s.newProject)
+  const createLocalProjectFolder = useStore(s => s.createLocalProjectFolder)
+  const openLocalProjectFolder = useStore(s => s.openLocalProjectFolder)
   const openProject = useStore(s => s.openProject)
   const openCloudProject = useStore(s => s.openCloudProject)
   const cloudAccessPolicy = useCloudAccessPolicy()
@@ -466,13 +468,17 @@ export default function HomeView() {
         ) : null}
 
         <div className="home-action-stack">
-          <button type="button" className="ss-btn home-btn-dashed home-btn-inline" onClick={() => newProject()}>
+          <button type="button" className="ss-btn home-btn-dashed home-btn-inline" onClick={() => createLocalProjectFolder()}>
             <Plus size={14} strokeWidth={1.5} />
-            New Project
+            Create Local Project Folder
+          </button>
+          <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => openLocalProjectFolder()}>
+            <FolderOpen size={14} strokeWidth={1.5} />
+            Open Local Project Folder
           </button>
           <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => openProject()}>
-            <FolderOpen size={14} strokeWidth={1.5} />
-            Open Project
+            <FileInput size={14} strokeWidth={1.5} />
+            Import .shotlist File
           </button>
         </div>
       </SidebarPane>
@@ -525,8 +531,8 @@ export default function HomeView() {
               </button>
             ) : (
               <>
-                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
-                <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+                <button type="button" className="ss-btn ghost" onClick={() => openLocalProjectFolder()}>Open Local Project Folder</button>
+                <button type="button" className="ss-btn primary" onClick={() => createLocalProjectFolder()}>Create Local Project Folder</button>
               </>
             )}
           </div>

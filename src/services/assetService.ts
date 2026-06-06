@@ -121,12 +121,18 @@ export async function buildLocalImageAsset({
             },
             cloud: null,
           },
-          storageMode: 'local-filesystem',
+          storageMode: writeResult.storageMode || (typeof platformService?.isDesktop === 'function' && platformService.isDesktop() ? 'desktop-local-filesystem' : 'browser-file-system-access'),
         }
+      }
+      if (typeof platformService?.isBrowserFolderProjectPath === 'function' && platformService.isBrowserFolderProjectPath(projectFilePath)) {
+        throw new Error('Could not write the image into the browser local project assets folder. The browser did not confirm the write.')
       }
     } catch (error) {
       if (typeof platformService?.isDesktop === 'function' && platformService.isDesktop()) {
         throw new Error(`Could not write the image into the local project asset folder. ${error?.message || 'Desktop bridge write failed.'}`)
+      }
+      if (typeof platformService?.isBrowserFolderProjectPath === 'function' && platformService.isBrowserFolderProjectPath(projectFilePath)) {
+        throw new Error(`Could not write the image into the browser local project assets folder. ${error?.message || 'File System Access write failed.'}`)
       }
       console.warn('Local asset file write failed; falling back to embedded local browser image', error)
     }
@@ -138,6 +144,9 @@ export async function buildLocalImageAsset({
 
   if (typeof platformService?.isDesktop === 'function' && platformService.isDesktop() && projectFilePath) {
     throw new Error('Could not write the image into the local project asset folder. Desktop local projects cannot fall back to embedded image data once saved.')
+  }
+  if (typeof platformService?.isBrowserFolderProjectPath === 'function' && platformService.isBrowserFolderProjectPath(projectFilePath)) {
+    throw new Error('Could not write the image into the browser local project assets folder. Folder projects cannot fall back to embedded image data.')
   }
 
   const fallbackThumb = processed.thumbDataUrl?.startsWith('data:')
@@ -157,7 +166,7 @@ export async function buildLocalImageAsset({
       },
       cloud: null,
     },
-    storageMode: 'browser-data-url-fallback',
+    storageMode: 'browser-embedded-data-url-fallback',
   }
 }
 

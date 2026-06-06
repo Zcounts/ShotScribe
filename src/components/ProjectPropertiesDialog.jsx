@@ -125,10 +125,19 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
     }
 
     try {
-      let imageStorageMode = 'browser-data-url-fallback'
-      if (projectRef?.type !== 'cloud' && platformService.isDesktop() && !(projectPath || projectRef?.path)) {
-        alert('Save this project locally before adding a hero image so ShotScribe can create the project .assets folder.')
-        return
+      let imageStorageMode = 'browser-embedded-data-url-fallback'
+      if (projectRef?.type !== 'cloud') {
+        const localProjectPath = projectPath || projectRef?.path || null
+        if (platformService.isDesktop() && !localProjectPath) {
+          alert('Save this project locally before adding a hero image so ShotScribe can create the project .assets folder.')
+          return
+        }
+        if (!platformService.isDesktop() && !platformService.isBrowserFolderProjectPath(localProjectPath)) {
+          const allowEmbed = window.confirm(`Local folder access unavailable
+
+ShotScribe cannot write image files to a local project folder without folder permission. Choose OK to embed images directly inside the .shotlist file, or Cancel. Embedded image files can become very large.`)
+          if (!allowEmbed) return
+        }
       }
       if (projectRef?.type === 'cloud') {
         if (!cloudWorkflowEnabled) {
@@ -175,7 +184,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
           platformService,
           fileNamePrefix: 'hero',
         })
-        imageStorageMode = localPayload.storageMode || 'browser-data-url-fallback'
+        imageStorageMode = localPayload.storageMode || 'browser-embedded-data-url-fallback'
         setHeroImageDraft(localPayload)
       }
       devPerfLog('hero:image-upload', {

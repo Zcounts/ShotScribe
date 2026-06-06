@@ -334,3 +334,56 @@ Use this direct manual verification when validating local desktop builds:
 8. Reopen the project with internet disabled and verify the image renders.
 
 In dev builds, the image upload debug payload should report `imageStorageMode: 'local-filesystem'` for this workflow. It should report `browser-data-url-fallback` only in browser mode without the desktop bridge, and `cloud` only for cloud projects.
+
+## Browser local project folders (File System Access API)
+
+For the hosted app at `app.shot-scribe.com`, the preferred local-only workflow is folder-based rather than loose `.shotlist` import/export:
+
+- **Create Local Project Folder** asks Chrome/Edge for a folder with `showDirectoryPicker()`, creates `{Project_Name}.shotlist`, and creates `{Project_Name}.assets/` inside that same folder.
+- **Open Local Project Folder** asks for a folder, scans for `.shotlist` files, asks which one to open when there are multiple, and uses the matching `{Project_Name}.assets/` folder for all local image reads/writes.
+- **Import .shotlist File** remains a compatibility path. In browser mode, ShotScribe prompts users to choose a Local Project Folder if they want folder-backed local images.
+
+Browser folder projects store newly added storyboard and hero images as normalized WEBP files in the assets folder and save only `shotscribe-asset://...` references with `cloud: null`. They must not silently embed new image data or upload to Convex/S3.
+
+If the File System Access API is unavailable or folder permission is denied, ShotScribe asks before using the explicit embedded-image fallback. The debug storage modes are:
+
+- `browser-file-system-access`
+- `browser-embedded-data-url-fallback`
+- `desktop-local-filesystem`
+- `cloud`
+
+### Browser folder QA checklist
+
+1. Open `app.shot-scribe.com` in Chrome or Edge.
+2. Click **Create Local Project Folder**.
+3. Choose/create a folder and create `Test.shotlist`.
+4. Add a storyboard image.
+5. Confirm `Test.assets/` appears in the folder.
+6. Confirm a `.webp` file appears inside `Test.assets/`.
+7. Save.
+8. Open `Test.shotlist` in a text editor.
+9. Confirm it contains `shotscribe-asset://` for the new image.
+10. Confirm the newly added image does not appear as `https://`.
+11. Confirm the newly added image does not appear as `data:image`.
+12. Disconnect internet.
+13. Reopen via **Open Local Project Folder**.
+14. Confirm the image still renders.
+
+### Browser folder migration QA
+
+1. Open a local project folder containing an old `.shotlist` with cloud/Convex/S3 image references.
+2. Confirm the **Copy cloud images locally?** prompt appears.
+3. Choose **Copy Images Locally**.
+4. Confirm reachable images are downloaded into `{Project_Name}.assets/`.
+5. Confirm project refs are rewritten to `shotscribe-asset://...`.
+6. Confirm migrated local image assets have `cloud: null`.
+7. Save and reopen offline.
+8. Confirm images render.
+
+### Skip migration QA
+
+1. Open an old local project folder with cloud refs.
+2. Choose **Skip for Now**.
+3. Confirm the project opens without crashing.
+4. Confirm no cloud upload occurs.
+5. Use **Copy Cloud Images Locally** from the save/menu actions later to retry migration.
