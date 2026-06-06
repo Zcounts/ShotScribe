@@ -1,4 +1,4 @@
-const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:']
+const INLINE_IMAGE_PREFIXES = ['data:', 'blob:', 'file:', 'shotscribe-asset://']
 
 function isInlineLocalImageRef(value) {
   if (typeof value !== 'string') return false

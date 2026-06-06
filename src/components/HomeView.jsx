@@ -23,6 +23,8 @@ import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
 import { notifyError, notifySuccess } from '../lib/toast'
+import { isLocalAssetUri, relativePathFromLocalAssetUri } from '../services/assetService'
+import { platformService } from '../services/platformService'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,6 +97,8 @@ export default function HomeView() {
   const setTabViewState = useStore(s => s.setTabViewState)
   const homeTabViewState = useStore(s => s.tabViewState.home)
   const newProject = useStore(s => s.newProject)
+  const createLocalProjectFolder = useStore(s => s.createLocalProjectFolder)
+  const openLocalProjectFolder = useStore(s => s.openLocalProjectFolder)
   const openProject = useStore(s => s.openProject)
   const openCloudProject = useStore(s => s.openCloudProject)
   const cloudAccessPolicy = useCloudAccessPolicy()
@@ -333,7 +337,30 @@ export default function HomeView() {
 
   const defaultHeroBackground = 'https://fairlyodd.org/wp-content/uploads/2022/12/camera.jpg'
   const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
-  const resolvedProjectHeroBackground = heroBackgroundImage || defaultHeroBackground
+  const [resolvedLocalHeroBackground, setResolvedLocalHeroBackground] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    async function resolveLocalHero() {
+      if (!isLocalAssetUri(heroBackgroundImage)) {
+        setResolvedLocalHeroBackground(null)
+        return
+      }
+      const relativePath = relativePathFromLocalAssetUri(heroBackgroundImage)
+      if (!relativePath || !projectPath) {
+        setResolvedLocalHeroBackground(null)
+        return
+      }
+      try {
+        const result = await platformService.readLocalAsset(projectPath, relativePath)
+        if (!cancelled) setResolvedLocalHeroBackground(result?.success && result?.dataUrl ? result.dataUrl : null)
+      } catch {
+        if (!cancelled) setResolvedLocalHeroBackground(null)
+      }
+    }
+    resolveLocalHero()
+    return () => { cancelled = true }
+  }, [heroBackgroundImage, projectPath])
+  const resolvedProjectHeroBackground = (isLocalAssetUri(heroBackgroundImage) ? resolvedLocalHeroBackground : heroBackgroundImage) || defaultHeroBackground
   const heroOverlayColor = projectHeroOverlayColor || '#1f1f27'
   const projectTitle = String(projectName || '').trim()
   const defaultHeroTitle = (homeHeroDefaults?.headline || '').trim() || 'Build the Shot. Run the Day.'
@@ -441,13 +468,17 @@ export default function HomeView() {
         ) : null}
 
         <div className="home-action-stack">
-          <button type="button" className="ss-btn home-btn-dashed home-btn-inline" onClick={() => newProject()}>
+          <button type="button" className="ss-btn home-btn-dashed home-btn-inline" onClick={() => createLocalProjectFolder()}>
             <Plus size={14} strokeWidth={1.5} />
-            New Project
+            Create Local Project Folder
+          </button>
+          <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => openLocalProjectFolder()}>
+            <FolderOpen size={14} strokeWidth={1.5} />
+            Open Local Project Folder
           </button>
           <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => openProject()}>
-            <FolderOpen size={14} strokeWidth={1.5} />
-            Open Project
+            <FileInput size={14} strokeWidth={1.5} />
+            Import .shotlist File
           </button>
         </div>
       </SidebarPane>
@@ -500,8 +531,8 @@ export default function HomeView() {
               </button>
             ) : (
               <>
-                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
-                <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
+                <button type="button" className="ss-btn ghost" onClick={() => openLocalProjectFolder()}>Open Local Project Folder</button>
+                <button type="button" className="ss-btn primary" onClick={() => createLocalProjectFolder()}>Create Local Project Folder</button>
               </>
             )}
           </div>
