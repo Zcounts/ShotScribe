@@ -38,7 +38,7 @@ export default function Toolbar({
   const sceneCount = scenes.length
   const saveProject = useStore(s => s.saveProject)
   const saveProjectAs = useStore(s => s.saveProjectAs)
-  const copyCloudImagesLocally = useStore(s => s.copyCloudImagesLocally)
+  const moveImagesToLocalAssetsFolder = useStore(s => s.moveImagesToLocalAssetsFolder)
   const flushCloudSync = useStore(s => s.flushCloudSync)
   const createCloudProjectFromLocal = useStore(s => s.createCloudProjectFromLocal)
   const disableCloudBackupForCurrentProject = useStore(s => s.disableCloudBackupForCurrentProject)
@@ -574,7 +574,7 @@ export default function Toolbar({
                 Save local copy as…
               </button>
               <button
-                onClick={() => { setSaveMenuOpen(false); copyCloudImagesLocally() }}
+                onClick={() => { setSaveMenuOpen(false); moveImagesToLocalAssetsFolder() }}
                 style={{
                   display: 'block',
                   width: '100%',
@@ -591,7 +591,7 @@ export default function Toolbar({
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
               >
-                Copy Cloud Images Locally
+                Move Images to Local Assets Folder
               </button>
               {isCloudProject ? (
                 <>

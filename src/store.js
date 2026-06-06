@@ -35,6 +35,7 @@ import { createCloudProjectAdapter, createProjectRepository } from './data/repos
 import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotPayload'
 import { detectUnmigratedLocalAssetsFromProjectData } from './utils/localAssetPreflight'
 import { detectCloudImageReferencesForLocalProject, migrateCloudImagesToLocalAssets } from './utils/localCloudImageMigration'
+import { detectEmbeddedImageReferencesForLocalProject, extractEmbeddedImagesToLocalAssets } from './utils/localEmbeddedImageExtraction'
 import {
   convertLegacyScriptScenesToProseMirrorDocument,
   normalizeScriptDocumentState,
@@ -559,6 +560,74 @@ function loadRecentProjects() {
 function getTotalShotsFromProjectData(data) {
   return (data.scenes || [{ shots: data.shots || [] }])
     .reduce((a, s) => a + (s.shots || []).length, 0)
+}
+
+
+async function maybeExtractEmbeddedImagesForLocalOpen(data, filePath) {
+  const summary = detectEmbeddedImageReferencesForLocalProject(data)
+  if (!summary.hasEmbeddedImageReferences) return data
+  const shouldExtract = typeof window !== 'undefined' && typeof window.confirm === 'function'
+    ? window.confirm(`Extract embedded images?
+
+This project has images embedded inside the .shotlist file. To keep the project smaller and make local image folders work properly, ShotScribe can move those images into this project’s local assets folder.
+
+Choose OK for Extract Images, or Cancel for Keep Embedded For Now.`)
+    : false
+  if (!shouldExtract) return data
+  if (!filePath) throw new Error('Could not extract embedded images: no local project folder is available.')
+  const result = await extractEmbeddedImagesToLocalAssets({ projectData: data, projectFilePath: filePath, platformService })
+  if (result.failedCount > 0) {
+    throw new Error(`Some images could not be moved to the local assets folder (${result.failedCount} failed).`)
+  }
+  if (result.rewrittenCount > 0) {
+    const saveResult = await platformService.saveProjectSilent(filePath, JSON.stringify(result.projectData || data, null, 2))
+    if (!saveResult?.success) throw new Error(saveResult?.error || 'Could not save updated local project')
+    logTelemetry('local_embedded_image_extraction_result', { storageMode: platformService.isDesktop() ? 'desktop-local-filesystem' : 'browser-file-system-access', embeddedFoundCount: result.embeddedFoundCount, writtenCount: result.writtenCount, rewrittenCount: result.rewrittenCount, failedCount: result.failedCount })
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+      window.alert(`ShotScribe moved ${result.rewrittenCount} embedded image${result.rewrittenCount === 1 ? '' : 's'} into this local project’s assets folder.`)
+    }
+  }
+  return result.projectData || data
+}
+
+async function moveImagesToLocalAssets({ data, filePath, get, prompt = true } = {}) {
+  if (!filePath) throw new Error('Open this project from a Local Project Folder before moving images to local assets.')
+  let nextData = data
+  const embeddedSummary = detectEmbeddedImageReferencesForLocalProject(nextData)
+  const cloudSummary = detectCloudImageReferencesForLocalProject(nextData)
+  let embeddedResult = { embeddedFoundCount: embeddedSummary.totalCount || 0, writtenCount: 0, rewrittenCount: 0, failedCount: 0 }
+  let cloudResult = { migratedCount: 0, failedCount: 0 }
+
+  if (embeddedSummary.hasEmbeddedImageReferences) {
+    const shouldExtract = !prompt || (typeof window !== 'undefined' && window.confirm(`Extract embedded images?
+
+This project has images embedded inside the .shotlist file. To keep the project smaller and make local image folders work properly, ShotScribe can move those images into this project’s local assets folder.
+
+Choose OK for Extract Images, or Cancel for Keep Embedded For Now.`))
+    if (shouldExtract) {
+      embeddedResult = await extractEmbeddedImagesToLocalAssets({ projectData: nextData, projectFilePath: filePath, platformService })
+      nextData = embeddedResult.projectData || nextData
+    }
+  }
+
+  if (cloudSummary.hasCloudImageReferences) {
+    const shouldCopy = !prompt || (typeof window !== 'undefined' && window.confirm(`Copy cloud images locally?
+
+This local project references cloud-hosted images. To make it work offline and avoid using cloud storage, ShotScribe needs to copy those images into this project’s local assets folder.
+
+Choose OK for Copy Images Locally, or Cancel for Skip for Now.`))
+    if (shouldCopy) {
+      cloudResult = await migrateCloudImagesToLocalAssets({ projectData: nextData, projectFilePath: filePath, platformService, cloudImageResolver: get().cloudImageResolver })
+      nextData = cloudResult.projectData || nextData
+    }
+  }
+
+  const changed = (embeddedResult.rewrittenCount || 0) > 0 || (cloudResult.migratedCount || 0) > 0
+  if (changed) {
+    const saveResult = await platformService.saveProjectSilent(filePath, JSON.stringify(nextData, null, 2))
+    if (!saveResult?.success) throw new Error(saveResult?.error || 'Could not save updated local project')
+  }
+  return { projectData: nextData, embeddedSummary, cloudSummary, embeddedResult, cloudResult, changed }
 }
 
 
@@ -3809,8 +3878,20 @@ const useStore = create((set, get) => ({
       return
     }
     try {
-      let data = JSON.parse(result.data)
-      data = await maybeMigrateCloudImagesForLocalOpen(data, result.filePath, get)
+      let data
+      try {
+        data = JSON.parse(result.data)
+      } catch {
+        alert('Failed to load project: Invalid file format')
+        return
+      }
+      try {
+        data = await maybeExtractEmbeddedImagesForLocalOpen(data, result.filePath)
+        data = await maybeMigrateCloudImagesForLocalOpen(data, result.filePath, get)
+      } catch (error) {
+        alert(error?.message || 'Could not move images to the local assets folder')
+        return
+      }
       get().loadProject(data)
       set({
         projectPath: result.filePath,
@@ -3828,17 +3909,23 @@ const useStore = create((set, get) => ({
     }
   },
 
-  copyCloudImagesLocally: async () => {
+  moveImagesToLocalAssetsFolder: async () => {
     const filePath = get().projectRef?.path || get().projectPath || null
     if (!filePath || (!platformService.isDesktop() && !platformService.isBrowserFolderProjectPath(filePath))) {
-      alert('Open this project from a Local Project Folder before copying cloud images locally.')
+      alert('Open this project from a Local Project Folder before moving images to local assets.')
       return
     }
-    const data = get().getProjectData()
-    const migrated = await maybeMigrateCloudImagesForLocalOpen(data, filePath, get)
-    get().loadProject(migrated)
-    set({ projectPath: filePath, projectRef: { type: 'local', path: filePath, browserProjectId: null, storageMode: platformService.isDesktop() ? 'desktop-local-filesystem' : 'browser-file-system-access' } })
+    try {
+      const result = await moveImagesToLocalAssets({ data: get().getProjectData(), filePath, get, prompt: false })
+      get().loadProject(result.projectData)
+      set({ projectPath: filePath, projectRef: { type: 'local', path: filePath, browserProjectId: null, storageMode: platformService.isDesktop() ? 'desktop-local-filesystem' : 'browser-file-system-access' } })
+      alert(`Move Images to Local Assets Folder complete.\n\nEmbedded images found: ${result.embeddedSummary.totalCount || 0}\nCloud images found: ${result.cloudSummary.totalCount || 0}\nImages written to assets folder: ${(result.embeddedResult.writtenCount || 0) + (result.cloudResult.migratedCount || 0)}\nRefs rewritten: ${(result.embeddedResult.rewrittenCount || 0) + (result.cloudResult.migratedCount || 0)}\nFailures: ${(result.embeddedResult.failedCount || 0) + (result.cloudResult.failedCount || 0)}`)
+    } catch (error) {
+      alert(error?.message || 'Could not move images to the local assets folder')
+    }
   },
+
+  copyCloudImagesLocally: async () => get().moveImagesToLocalAssetsFolder(),
 
   openProject: async () => {
     const result = await platformService.openProject()
@@ -3869,7 +3956,13 @@ const useStore = create((set, get) => ({
           }
         }
         if (importedFolder?.success) {
-          data = await maybeMigrateCloudImagesForLocalOpen(data, importedFolder.filePath, get)
+          try {
+            data = await maybeExtractEmbeddedImagesForLocalOpen(data, importedFolder.filePath)
+            data = await maybeMigrateCloudImagesForLocalOpen(data, importedFolder.filePath, get)
+          } catch (error) {
+            alert(error?.message || 'Could not move images to the local assets folder')
+            return
+          }
           get().loadProject(data)
           set({
             projectPath: importedFolder.filePath,
@@ -3942,6 +4035,7 @@ const useStore = create((set, get) => ({
       }
       try {
         let data = JSON.parse(result.data)
+        data = await maybeExtractEmbeddedImagesForLocalOpen(data, result.filePath)
         data = await maybeMigrateCloudImagesForLocalOpen(data, result.filePath, get)
         get().loadProject(data)
         set({

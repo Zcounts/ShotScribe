@@ -386,4 +386,12 @@ If the File System Access API is unavailable or folder permission is denied, Sho
 2. Choose **Skip for Now**.
 3. Confirm the project opens without crashing.
 4. Confirm no cloud upload occurs.
-5. Use **Copy Cloud Images Locally** from the save/menu actions later to retry migration.
+5. Use **Move Images to Local Assets Folder** from the save/menu actions later to retry migration or extraction.
+
+### Embedded image extraction for old local files
+
+Older local `.shotlist` files may contain images directly as `data:image/...` strings with `cloud: null`. When those files are opened or imported into a Local Project Folder, ShotScribe scans hero and storyboard image fields for embedded data URLs and prompts **Extract embedded images?**.
+
+If the user chooses **Extract Images**, ShotScribe writes those images into `{Project_Name}.assets/`, rewrites the project to `shotscribe-asset://...`, preserves `cloud: null`, adds metadata such as `extractedFromEmbeddedDataUrl` and `originalEmbeddedMime`, and immediately saves the updated `.shotlist` back to the folder. The **Move Images to Local Assets Folder** action handles both embedded images and cloud/remote references.
+
+Embedded `data:image/...` values are only allowed to remain when the user chooses **Keep Embedded For Now** or explicitly accepts the embedded-image fallback outside folder-backed mode.
