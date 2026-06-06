@@ -8,7 +8,7 @@ import SpecsTable from './SpecsTable'
 import NotesArea from './NotesArea'
 import CustomDropdown from './CustomDropdown'
 import { normalizeStoryboardDisplayConfig } from '../storyboardDisplayConfig'
-import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildLocalImageAsset, buildShotImageFromLibraryAsset, isCloudImageReadEnabled, isCloudImageWorkflowEnabled, isLocalAssetUri, relativePathFromLocalAssetUri, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { platformService } from '../services/platformService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
@@ -331,23 +331,6 @@ function ShotCard({
     try {
       let imageStorageMode = 'browser-embedded-data-url-fallback'
       const isCloudProject = cloudWorkflowEnabled
-      if (projectRef?.type !== 'cloud') {
-        const localProjectPath = projectPath || projectRef?.path || null
-        if (platformService.isDesktop() && !localProjectPath) {
-          alert('Save this project locally before adding images so ShotScribe can create the project .assets folder.')
-          e.target.value = ''
-          return
-        }
-        if (!platformService.isDesktop() && !platformService.isBrowserFolderProjectPath(localProjectPath)) {
-          const allowEmbed = window.confirm(`Local folder access unavailable
-
-ShotScribe cannot write image files to a local project folder without folder permission. Choose OK to embed images directly inside the .shotlist file, or Cancel. Embedded image files can become very large.`)
-          if (!allowEmbed) {
-            e.target.value = ''
-            return
-          }
-        }
-      }
       if (projectRef?.type === 'cloud') {
         if (!cloudWorkflowEnabled) {
           alert('Cloud image uploads are blocked while billing is inactive. You can continue local-only workflows.')
@@ -390,19 +373,44 @@ ShotScribe cannot write image files to a local project folder without folder per
           updateShotImage(shot.id, uploaded)
         }
       } else {
-        const processed = await processStoryboardUploadForCloud(file, {
-          outputWidth: 640,
-          outputHeight: 360,
-          quality: 0.84,
-        })
-        const localPayload = await buildLocalImageAsset({
-          processed,
-          projectFilePath: projectPath || projectRef?.path || null,
-          platformService,
-          fileNamePrefix: `shot-${shot.id}`,
-        })
-        imageStorageMode = localPayload.storageMode || 'browser-embedded-data-url-fallback'
-        updateShotImage(shot.id, localPayload)
+        if (platformService.isDesktop()) {
+          if (!(projectPath || projectRef?.path)) {
+            alert('Save this project locally before adding images so ShotScribe can create the project .assets folder.')
+            e.target.value = ''
+            return
+          }
+          const processed = await processStoryboardUploadForCloud(file, {
+            outputWidth: 640,
+            outputHeight: 360,
+            quality: 0.84,
+          })
+          const localPayload = await buildLocalImageAsset({
+            processed,
+            projectFilePath: projectPath || projectRef?.path || null,
+            platformService,
+            fileNamePrefix: `shot-${shot.id}`,
+          })
+          imageStorageMode = localPayload.storageMode || 'desktop-local-filesystem'
+          updateShotImage(shot.id, localPayload)
+        } else {
+          const processed = await processStoryboardUpload(file, {
+            thumbnailWidth: 480,
+            fullLongEdge: 1600,
+            quality: 0.84,
+          })
+          imageStorageMode = 'browser-embedded-data-url-fallback'
+          updateShotImage(shot.id, {
+            image: processed.thumb,
+            imageAsset: {
+              version: 1,
+              mime: processed.mime || 'image/webp',
+              thumb: processed.thumb,
+              full: null,
+              meta: processed.meta || null,
+              cloud: null,
+            },
+          })
+        }
       }
       setImagePickerStep(null)
       devPerfLog('storyboard:image-upload', {

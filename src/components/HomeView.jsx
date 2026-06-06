@@ -474,11 +474,7 @@ export default function HomeView() {
           </button>
           <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => openLocalProjectFolder()}>
             <FolderOpen size={14} strokeWidth={1.5} />
-            Open Local Project Folder
-          </button>
-          <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => openProject()}>
-            <FileInput size={14} strokeWidth={1.5} />
-            Import .shotlist File
+            Open / Import .shotlist File
           </button>
         </div>
       </SidebarPane>
@@ -531,8 +527,8 @@ export default function HomeView() {
               </button>
             ) : (
               <>
-                <button type="button" className="ss-btn ghost" onClick={() => openLocalProjectFolder()}>Open Local Project Folder</button>
-                <button type="button" className="ss-btn primary" onClick={() => createLocalProjectFolder()}>Create Local Project Folder</button>
+                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open / Import .shotlist File</button>
+                <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
               </>
             )}
           </div>

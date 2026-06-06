@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
-import { processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
+import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildLocalImageAsset, buildShotImageFromLibraryAsset, isCloudImageReadEnabled, isCloudImageWorkflowEnabled, isLocalAssetUri, relativePathFromLocalAssetUri, uploadStoryboardAssetToCloud } from '../services/assetService'
 import { platformService } from '../services/platformService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
@@ -126,19 +126,6 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
 
     try {
       let imageStorageMode = 'browser-embedded-data-url-fallback'
-      if (projectRef?.type !== 'cloud') {
-        const localProjectPath = projectPath || projectRef?.path || null
-        if (platformService.isDesktop() && !localProjectPath) {
-          alert('Save this project locally before adding a hero image so ShotScribe can create the project .assets folder.')
-          return
-        }
-        if (!platformService.isDesktop() && !platformService.isBrowserFolderProjectPath(localProjectPath)) {
-          const allowEmbed = window.confirm(`Local folder access unavailable
-
-ShotScribe cannot write image files to a local project folder without folder permission. Choose OK to embed images directly inside the .shotlist file, or Cancel. Embedded image files can become very large.`)
-          if (!allowEmbed) return
-        }
-      }
       if (projectRef?.type === 'cloud') {
         if (!cloudWorkflowEnabled) {
           alert('Cloud image uploads are blocked while billing is inactive.')
@@ -173,19 +160,43 @@ ShotScribe cannot write image files to a local project folder without folder per
           setHeroImageDraft(uploaded)
         }
       } else {
-        const processed = await processStoryboardUploadForCloud(file, {
-          outputWidth: 1280,
-          outputHeight: 480,
-          quality: 0.84,
-        })
-        const localPayload = await buildLocalImageAsset({
-          processed,
-          projectFilePath: projectPath || projectRef?.path || null,
-          platformService,
-          fileNamePrefix: 'hero',
-        })
-        imageStorageMode = localPayload.storageMode || 'browser-embedded-data-url-fallback'
-        setHeroImageDraft(localPayload)
+        if (platformService.isDesktop()) {
+          if (!(projectPath || projectRef?.path)) {
+            alert('Save this project locally before adding a hero image so ShotScribe can create the project .assets folder.')
+            return
+          }
+          const processed = await processStoryboardUploadForCloud(file, {
+            outputWidth: 1280,
+            outputHeight: 480,
+            quality: 0.84,
+          })
+          const localPayload = await buildLocalImageAsset({
+            processed,
+            projectFilePath: projectPath || projectRef?.path || null,
+            platformService,
+            fileNamePrefix: 'hero',
+          })
+          imageStorageMode = localPayload.storageMode || 'desktop-local-filesystem'
+          setHeroImageDraft(localPayload)
+        } else {
+          const processed = await processStoryboardUpload(file, {
+            thumbnailWidth: 1600,
+            fullLongEdge: 2000,
+            quality: 0.84,
+          })
+          imageStorageMode = 'browser-embedded-data-url-fallback'
+          setHeroImageDraft({
+            image: processed.thumb,
+            imageAsset: {
+              version: 1,
+              mime: processed.mime || 'image/webp',
+              thumb: processed.thumb,
+              full: null,
+              meta: processed.meta || null,
+              cloud: null,
+            },
+          })
+        }
       }
       devPerfLog('hero:image-upload', {
         sourceBytes: file.size,

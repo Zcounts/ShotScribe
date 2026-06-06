@@ -298,7 +298,7 @@ async function importLooseFileIntoBrowserFolder(fileName, data) {
 export const platformService = {
   isDesktop: () => !!getElectronApi(),
   hasPrintToPDF: () => typeof getElectronApi()?.printToPDF === 'function',
-  supportsFileSystemAccess: () => isFileSystemAccessSupported(),
+  supportsFileSystemAccess: () => false,
   isBrowserFolderProjectPath: isBrowserFsaProjectPath,
 
   createLocalProjectFolder(projectName, data) {

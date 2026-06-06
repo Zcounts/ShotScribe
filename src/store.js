@@ -36,6 +36,7 @@ import { buildConvexSafeSnapshotPayload } from './data/repository/cloudSnapshotP
 import { detectUnmigratedLocalAssetsFromProjectData } from './utils/localAssetPreflight'
 import { detectCloudImageReferencesForLocalProject, migrateCloudImagesToLocalAssets } from './utils/localCloudImageMigration'
 import { detectEmbeddedImageReferencesForLocalProject, extractEmbeddedImagesToLocalAssets } from './utils/localEmbeddedImageExtraction'
+import { detectCloudImageReferencesForEmbeddedLocalProject, embedCloudImagesInLocalProject } from './utils/localCloudImageEmbedding'
 import {
   convertLegacyScriptScenesToProseMirrorDocument,
   normalizeScriptDocumentState,
@@ -560,6 +561,30 @@ function loadRecentProjects() {
 function getTotalShotsFromProjectData(data) {
   return (data.scenes || [{ shots: data.shots || [] }])
     .reduce((a, s) => a + (s.shots || []).length, 0)
+}
+
+
+async function maybeEmbedCloudImagesForBrowserLocalOpen(data, get, sourceName = null) {
+  const summary = detectCloudImageReferencesForEmbeddedLocalProject(data)
+  if (!summary.hasCloudImageReferences) return data
+  const shouldCopy = typeof window !== 'undefined' && typeof window.confirm === 'function'
+    ? window.confirm(`This project references cloud-hosted images. To keep this project fully local, ShotScribe can copy those images into the .shotlist file.
+
+Choose OK for Copy Images Into File, or Cancel for Skip For Now.`)
+    : false
+  if (!shouldCopy) return data
+  const result = await embedCloudImagesInLocalProject({ projectData: data, cloudImageResolver: get().cloudImageResolver })
+  if (result.failedCount > 0 && typeof window !== 'undefined' && typeof window.alert === 'function') {
+    window.alert(`Some images could not be copied into the .shotlist file (${result.failedCount} failed). They may require signing in or reconnecting cloud access.`)
+  }
+  if (result.embeddedCount > 0) {
+    const nextData = result.projectData || data
+    const defaultName = sourceName || `${nextData.projectName || 'Migrated_Shotlist'}.shotlist`
+    await platformService.saveProject(defaultName, JSON.stringify(nextData, null, 2))
+    logTelemetry('local_cloud_image_embed_result', { storageMode: 'browser-embedded-data-url-fallback', embeddedCount: result.embeddedCount, failedCount: result.failedCount })
+    return nextData
+  }
+  return result.projectData || data
 }
 
 
@@ -3948,35 +3973,16 @@ const useStore = create((set, get) => ({
         }))
         logTelemetry('project_import_result', { success: true, platform: 'desktop', source: result.filePath })
       } else {
-        let importedFolder = null
-        if (platformService.supportsFileSystemAccess()) {
-          const shouldChooseFolder = window.confirm('To use local image folders, choose a project folder for this file. Choose OK to create/open a Local Project Folder, or Cancel to import as a loose .shotlist file.')
-          if (shouldChooseFolder) {
-            importedFolder = await platformService.importLooseFileIntoLocalProjectFolder(result.filePath || `${data.projectName || 'Imported_Project'}.shotlist`, JSON.stringify(data, null, 2))
-          }
+        try {
+          data = await maybeEmbedCloudImagesForBrowserLocalOpen(data, get, result.filePath || `${data.projectName || 'Imported_Project'}.shotlist`)
+        } catch (error) {
+          alert(error?.message || 'Could not copy cloud images into the .shotlist file')
+          return
         }
-        if (importedFolder?.success) {
-          try {
-            data = await maybeExtractEmbeddedImagesForLocalOpen(data, importedFolder.filePath)
-            data = await maybeMigrateCloudImagesForLocalOpen(data, importedFolder.filePath, get)
-          } catch (error) {
-            alert(error?.message || 'Could not move images to the local assets folder')
-            return
-          }
-          get().loadProject(data)
-          set({
-            projectPath: importedFolder.filePath,
-            browserProjectId: null,
-            projectRef: { type: 'local', path: importedFolder.filePath, browserProjectId: null, storageMode: 'browser-file-system-access' },
-          })
-          updateRecentProjects(get, set, buildRecentProjectEntry({ name: importedFolder.fileName || result.filePath, path: importedFolder.filePath, shots: getTotalShotsFromProjectData(data) }))
-          logTelemetry('project_import_result', { success: true, platform: 'browser', source: result.filePath || 'picker', storageMode: 'browser-file-system-access' })
-        } else {
-          set({ projectPath: null })
-          const browserProjectId = persistBrowserProjectState(get, set, { data, name: result.filePath, markSaved: true })
-          set({ projectRef: { type: 'local', path: null, browserProjectId: browserProjectId || get().browserProjectId || null, storageMode: 'browser-embedded-data-url-fallback' } })
-          logTelemetry('project_import_result', { success: true, platform: 'browser', source: result.filePath || 'picker', storageMode: 'browser-embedded-data-url-fallback' })
-        }
+        set({ projectPath: null })
+        const browserProjectId = persistBrowserProjectState(get, set, { data, name: result.filePath, markSaved: true })
+        set({ projectRef: { type: 'local', path: null, browserProjectId: browserProjectId || get().browserProjectId || null, storageMode: 'browser-embedded-data-url-fallback' } })
+        logTelemetry('project_import_result', { success: true, platform: 'browser', source: result.filePath || 'picker', storageMode: 'browser-embedded-data-url-fallback' })
       }
     } catch {
       logTelemetry('project_import_result', {
@@ -4059,7 +4065,7 @@ const useStore = create((set, get) => ({
       return
     }
     try {
-      const hydratedData = await maybeMigrateCloudImagesForLocalOpen(data, null, get)
+      const hydratedData = await maybeEmbedCloudImagesForBrowserLocalOpen(data, get, recentProject.name || `${data.projectName || 'Imported_Project'}.shotlist`)
       get().loadProject(hydratedData)
       set({
         browserProjectId,

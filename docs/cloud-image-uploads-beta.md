@@ -335,63 +335,26 @@ Use this direct manual verification when validating local desktop builds:
 
 In dev builds, the image upload debug payload should report `imageStorageMode: 'local-filesystem'` for this workflow. It should report `browser-data-url-fallback` only in browser mode without the desktop bridge, and `cloud` only for cloud projects.
 
-## Browser local project folders (File System Access API)
 
-For the hosted app at `app.shot-scribe.com`, the preferred local-only workflow is folder-based rather than loose `.shotlist` import/export:
+## Browser local single-file mode restored (June 2026)
 
-- **Create Local Project Folder** asks Chrome/Edge for a folder with `showDirectoryPicker()`, creates `{Project_Name}.shotlist`, and creates `{Project_Name}.assets/` inside that same folder.
-- **Open Local Project Folder** asks for a folder, scans for `.shotlist` files, asks which one to open when there are multiple, and uses the matching `{Project_Name}.assets/` folder for all local image reads/writes.
-- **Import .shotlist File** remains a compatibility path. In browser mode, ShotScribe prompts users to choose a Local Project Folder if they want folder-backed local images.
+For `app.shot-scribe.com`, browser local projects use the stable single-file `.shotlist` workflow. Browser-local storyboard and hero images are embedded in the project file as `data:image/...` with `cloud: null`. The File System Access API folder-backed project workflow is disabled for now and should not be shown as the primary browser local workflow.
 
-Browser folder projects store newly added storyboard and hero images as normalized WEBP files in the assets folder and save only `shotscribe-asset://...` references with `cloud: null`. They must not silently embed new image data or upload to Convex/S3.
+When opening a local browser `.shotlist` that already contains embedded `data:image/...` images and `cloud: null`, ShotScribe loads it without migration prompts. When opening an older local file that references `http(s)` cloud images or cloud asset metadata, ShotScribe prompts to copy reachable images into the `.shotlist` file as embedded images so the project can work offline.
 
-If the File System Access API is unavailable or folder permission is denied, ShotScribe asks before using the explicit embedded-image fallback. The debug storage modes are:
+### Browser single-file QA checklist
 
-- `browser-file-system-access`
-- `browser-embedded-data-url-fallback`
-- `desktop-local-filesystem`
-- `cloud`
-
-### Browser folder QA checklist
-
-1. Open `app.shot-scribe.com` in Chrome or Edge.
-2. Click **Create Local Project Folder**.
-3. Choose/create a folder and create `Test.shotlist`.
-4. Add a storyboard image.
-5. Confirm `Test.assets/` appears in the folder.
-6. Confirm a `.webp` file appears inside `Test.assets/`.
-7. Save.
-8. Open `Test.shotlist` in a text editor.
-9. Confirm it contains `shotscribe-asset://` for the new image.
-10. Confirm the newly added image does not appear as `https://`.
-11. Confirm the newly added image does not appear as `data:image`.
-12. Disconnect internet.
-13. Reopen via **Open Local Project Folder**.
-14. Confirm the image still renders.
-
-### Browser folder migration QA
-
-1. Open a local project folder containing an old `.shotlist` with cloud/Convex/S3 image references.
-2. Confirm the **Copy cloud images locally?** prompt appears.
-3. Choose **Copy Images Locally**.
-4. Confirm reachable images are downloaded into `{Project_Name}.assets/`.
-5. Confirm project refs are rewritten to `shotscribe-asset://...`.
-6. Confirm migrated local image assets have `cloud: null`.
-7. Save and reopen offline.
-8. Confirm images render.
-
-### Skip migration QA
-
-1. Open an old local project folder with cloud refs.
-2. Choose **Skip for Now**.
-3. Confirm the project opens without crashing.
-4. Confirm no cloud upload occurs.
-5. Use **Move Images to Local Assets Folder** from the save/menu actions later to retry migration or extraction.
-
-### Embedded image extraction for old local files
-
-Older local `.shotlist` files may contain images directly as `data:image/...` strings with `cloud: null`. When those files are opened or imported into a Local Project Folder, ShotScribe scans hero and storyboard image fields for embedded data URLs and prompts **Extract embedded images?**.
-
-If the user chooses **Extract Images**, ShotScribe writes those images into `{Project_Name}.assets/`, rewrites the project to `shotscribe-asset://...`, preserves `cloud: null`, adds metadata such as `extractedFromEmbeddedDataUrl` and `originalEmbeddedMime`, and immediately saves the updated `.shotlist` back to the folder. The **Move Images to Local Assets Folder** action handles both embedded images and cloud/remote references.
-
-Embedded `data:image/...` values are only allowed to remain when the user chooses **Keep Embedded For Now** or explicitly accepts the embedded-image fallback outside folder-backed mode.
+1. Open an old embedded `.shotlist` with `data:image/...` and `cloud: null`.
+2. Confirm no invalid file format error appears.
+3. Confirm images render.
+4. Add a new storyboard or hero image.
+5. Save/export the `.shotlist`.
+6. Open the saved file in a text editor.
+7. Confirm it contains `data:image`.
+8. Confirm local image assets have `cloud: null`.
+9. Confirm no Convex/S3 upload calls occur for the local project.
+10. Open a local file with old `https://` image refs.
+11. Confirm the prompt appears to copy images into the file.
+12. Confirm copied images become `data:image`.
+13. Disconnect internet and reopen the saved file.
+14. Confirm images still render.
