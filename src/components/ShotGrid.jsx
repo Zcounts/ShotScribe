@@ -5,6 +5,7 @@ import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { getCachedSignedView, getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+import { isCloudImageReadEnabled } from '../services/assetService'
 
 function AddShotButton({ onClick }) {
   return (
@@ -43,11 +44,12 @@ function ShotGrid({
   const cloudAccessPolicy = useCloudAccessPolicy()
   const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
   const [prefetchedAssetViews, setPrefetchedAssetViews] = useState({})
+  const cloudReadEnabled = isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
-  const libraryQueryArgs = (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+  const libraryQueryArgs = cloudReadEnabled
     ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
     : 'skip'
-  const recentDeletedQueryArgs = (projectRef?.type === 'cloud' && !cloudAssetBlocked)
+  const recentDeletedQueryArgs = cloudReadEnabled
     ? { projectId: projectRef.projectId, limit: 10 }
     : 'skip'
   const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryQueryArgs)
@@ -69,14 +71,14 @@ function ShotGrid({
   })
 
   const cloudAssetIds = useMemo(() => {
-    if (projectRef?.type !== 'cloud') return []
+    if (!cloudReadEnabled) return []
     const ids = []
     for (const shot of (shots || [])) {
       const assetId = shot?.imageAsset?.cloud?.assetId
       if (assetId) ids.push(assetId)
     }
     return Array.from(new Set(ids.map(String)))
-  }, [projectRef?.type, shots])
+  }, [cloudReadEnabled, shots])
   const cloudAssetIdKey = useMemo(
     () => cloudAssetIds.slice().sort().join(','),
     [cloudAssetIds],
@@ -86,7 +88,7 @@ function ShotGrid({
     let cancelled = false
     async function loadPrefetchedViews() {
       if (
-        projectRef?.type !== 'cloud'
+        !cloudReadEnabled
         || !projectRef?.projectId
         || !cloudAccessPolicy.canAccessCloudAssets
         || cloudAssetIdKey.length === 0
@@ -125,7 +127,7 @@ function ShotGrid({
     return () => {
       cancelled = true
     }
-  }, [cloudAccessPolicy.canAccessCloudAssets, cloudAssetIdKey, cloudAssetIds, getAssetSignedViewsBatch, projectRef?.projectId, projectRef?.type])
+  }, [cloudReadEnabled, cloudAssetIdKey, cloudAssetIds, getAssetSignedViewsBatch, projectRef?.projectId])
 
   const gridStyle = {
     display: 'grid',
