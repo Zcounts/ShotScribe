@@ -329,7 +329,13 @@ function ShotCard({
       return
     }
     try {
+      let imageStorageMode = 'browser-data-url-fallback'
       const isCloudProject = cloudWorkflowEnabled
+      if (projectRef?.type !== 'cloud' && platformService.isDesktop() && !(projectPath || projectRef?.path)) {
+        alert('Save this project locally before adding images so ShotScribe can create the project .assets folder.')
+        e.target.value = ''
+        return
+      }
       if (projectRef?.type === 'cloud') {
         if (!cloudWorkflowEnabled) {
           alert('Cloud image uploads are blocked while billing is inactive. You can continue local-only workflows.')
@@ -351,6 +357,7 @@ function ShotCard({
           outputHeight: 360,
           quality: 0.84,
         })
+        imageStorageMode = 'cloud'
         const uploaded = await uploadStoryboardAssetToCloud({
           projectId: projectRef.projectId,
           processed,
@@ -382,6 +389,7 @@ function ShotCard({
           platformService,
           fileNamePrefix: `shot-${shot.id}`,
         })
+        imageStorageMode = localPayload.storageMode || 'browser-data-url-fallback'
         updateShotImage(shot.id, localPayload)
       }
       setImagePickerStep(null)
@@ -389,10 +397,11 @@ function ShotCard({
         shotId: shot.id,
         sourceBytes: file.size,
         cloudProject: isCloudProject,
+        imageStorageMode,
       })
     } catch (err) {
       console.error('Image processing failed', err)
-      alert('Could not process this image. Please try a different file.')
+      alert(err?.message || 'Could not process this image. Please try a different file.')
     } finally {
       e.target.value = ''
     }

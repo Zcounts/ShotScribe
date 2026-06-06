@@ -319,3 +319,18 @@ Options are **Copy images locally** (OK) or **Skip for now** (Cancel). Copy mode
 6. Open old local file with cloud asset IDs but no accessible URL: verify the app opens without crashing and shows recoverable placeholders.
 7. Open a project with duplicate cloud image references: verify migration downloads one local copy and reuses the local reference.
 8. Save migrated project, reopen with internet disabled, verify migrated images render locally.
+
+### Desktop asset-folder verification
+
+Use this direct manual verification when validating local desktop builds:
+
+1. Save a local project as `Test.shotlist`.
+2. Add a storyboard image to any shot.
+3. Confirm `Test.assets/` appears beside `Test.shotlist`.
+4. Confirm a `.webp` file exists inside `Test.assets/`.
+5. Save the project and confirm `Test.shotlist` contains `shotscribe-asset://shot-` for the new image.
+6. Confirm that new image entry in `Test.shotlist` has `cloud: null`.
+7. Confirm the new image entry does not contain `https://` or `data:image`.
+8. Reopen the project with internet disabled and verify the image renders.
+
+In dev builds, the image upload debug payload should report `imageStorageMode: 'local-filesystem'` for this workflow. It should report `browser-data-url-fallback` only in browser mode without the desktop bridge, and `cloud` only for cloud projects.

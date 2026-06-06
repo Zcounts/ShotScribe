@@ -7,6 +7,7 @@ import { platformService } from '../services/platformService'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
+import { devPerfLog } from '../utils/devPerf'
 
 const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
@@ -124,6 +125,11 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
     }
 
     try {
+      let imageStorageMode = 'browser-data-url-fallback'
+      if (projectRef?.type !== 'cloud' && platformService.isDesktop() && !(projectPath || projectRef?.path)) {
+        alert('Save this project locally before adding a hero image so ShotScribe can create the project .assets folder.')
+        return
+      }
       if (projectRef?.type === 'cloud') {
         if (!cloudWorkflowEnabled) {
           alert('Cloud image uploads are blocked while billing is inactive.')
@@ -142,6 +148,7 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
           outputHeight: 480,
           quality: 0.84,
         })
+        imageStorageMode = 'cloud'
         const uploaded = await uploadStoryboardAssetToCloud({
           projectId: projectRef.projectId,
           processed,
@@ -168,11 +175,17 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
           platformService,
           fileNamePrefix: 'hero',
         })
+        imageStorageMode = localPayload.storageMode || 'browser-data-url-fallback'
         setHeroImageDraft(localPayload)
       }
+      devPerfLog('hero:image-upload', {
+        sourceBytes: file.size,
+        cloudProject: projectRef?.type === 'cloud',
+        imageStorageMode,
+      })
     } catch (error) {
       console.error(error)
-      alert('Could not process this image. Please try a different file.')
+      alert(error?.message || 'Could not process this image. Please try a different file.')
     } finally {
       event.target.value = ''
     }

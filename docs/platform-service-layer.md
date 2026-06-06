@@ -45,3 +45,15 @@ When `window.electronAPI` is present, methods delegate to bridge APIs. If absent
 - Backend/cloud persistence
 - Account/auth features
 - Hosted publishing pipelines
+
+## Desktop local asset bridge
+
+The bundled Electron bridge lives in `desktop/main.cjs`, `desktop/preload.cjs`, and `desktop/localAssets.cjs`. Any alternate desktop host must expose the same `window.electronAPI` methods used by `platformService`:
+
+- `ensureProjectAssetFolder(projectFilePath)` creates/returns the sibling `{Project Name}.assets/` folder next to the `.shotlist` file.
+- `writeLocalAsset(projectFilePath, fileName, arrayBufferOrBase64)` writes image bytes into that folder and returns `{ success, fileName, relativePath }`.
+- `readLocalAsset(projectFilePath, relativePath)` reads a relative asset path and returns a `dataUrl` for renderer display.
+- `downloadUrlToLocalAsset(projectFilePath, url, suggestedFileName)` downloads an old cloud URL into the sibling asset folder for local migration.
+- `revealProjectAssetsFolder(projectFilePath)` opens the sibling asset folder in the OS file manager.
+
+For a saved desktop project, renderer local-image upload must fail visibly if the bridge cannot write into the sibling asset folder. Embedded `data:image/...` fallback is only acceptable in true browser mode without an Electron bridge.

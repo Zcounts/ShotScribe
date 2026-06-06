@@ -121,11 +121,23 @@ export async function buildLocalImageAsset({
             },
             cloud: null,
           },
+          storageMode: 'local-filesystem',
         }
       }
     } catch (error) {
-      console.warn('Local asset file write failed; falling back to embedded local image', error)
+      if (typeof platformService?.isDesktop === 'function' && platformService.isDesktop()) {
+        throw new Error(`Could not write the image into the local project asset folder. ${error?.message || 'Desktop bridge write failed.'}`)
+      }
+      console.warn('Local asset file write failed; falling back to embedded local browser image', error)
     }
+
+    if (typeof platformService?.isDesktop === 'function' && platformService.isDesktop()) {
+      throw new Error('Could not write the image into the local project asset folder. The desktop bridge did not confirm the write.')
+    }
+  }
+
+  if (typeof platformService?.isDesktop === 'function' && platformService.isDesktop() && projectFilePath) {
+    throw new Error('Could not write the image into the local project asset folder. Desktop local projects cannot fall back to embedded image data once saved.')
   }
 
   const fallbackThumb = processed.thumbDataUrl?.startsWith('data:')
@@ -145,6 +157,7 @@ export async function buildLocalImageAsset({
       },
       cloud: null,
     },
+    storageMode: 'browser-data-url-fallback',
   }
 }
 
