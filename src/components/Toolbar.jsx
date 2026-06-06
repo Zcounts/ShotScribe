@@ -347,7 +347,7 @@ export default function Toolbar({
             <ContextMenuContent>
               <ContextMenuItem onSelect={() => setEditingName(true)}>Rename project</ContextMenuItem>
               <ContextMenuItem onSelect={() => saveProject()}>Save locally now</ContextMenuItem>
-              <ContextMenuItem onSelect={() => guardUnsaved(openProject)}>Open project…</ContextMenuItem>
+              <ContextMenuItem onSelect={() => guardUnsaved(openProject)}>Import .shotlist File…</ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
         )}

@@ -23,6 +23,8 @@ import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
 import { notifyError, notifySuccess } from '../lib/toast'
+import { isLocalAssetUri, relativePathFromLocalAssetUri } from '../services/assetService'
+import { platformService } from '../services/platformService'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -333,7 +335,30 @@ export default function HomeView() {
 
   const defaultHeroBackground = 'https://fairlyodd.org/wp-content/uploads/2022/12/camera.jpg'
   const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
-  const resolvedProjectHeroBackground = heroBackgroundImage || defaultHeroBackground
+  const [resolvedLocalHeroBackground, setResolvedLocalHeroBackground] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    async function resolveLocalHero() {
+      if (!isLocalAssetUri(heroBackgroundImage)) {
+        setResolvedLocalHeroBackground(null)
+        return
+      }
+      const relativePath = relativePathFromLocalAssetUri(heroBackgroundImage)
+      if (!relativePath || !projectPath) {
+        setResolvedLocalHeroBackground(null)
+        return
+      }
+      try {
+        const result = await platformService.readLocalAsset(projectPath, relativePath)
+        if (!cancelled) setResolvedLocalHeroBackground(result?.success && result?.dataUrl ? result.dataUrl : null)
+      } catch {
+        if (!cancelled) setResolvedLocalHeroBackground(null)
+      }
+    }
+    resolveLocalHero()
+    return () => { cancelled = true }
+  }, [heroBackgroundImage, projectPath])
+  const resolvedProjectHeroBackground = (isLocalAssetUri(heroBackgroundImage) ? resolvedLocalHeroBackground : heroBackgroundImage) || defaultHeroBackground
   const heroOverlayColor = projectHeroOverlayColor || '#1f1f27'
   const projectTitle = String(projectName || '').trim()
   const defaultHeroTitle = (homeHeroDefaults?.headline || '').trim() || 'Build the Shot. Run the Day.'
@@ -447,7 +472,7 @@ export default function HomeView() {
           </button>
           <button type="button" className="ss-btn ghost home-btn-inline" onClick={() => openProject()}>
             <FolderOpen size={14} strokeWidth={1.5} />
-            Open Project
+            Open / Import .shotlist File
           </button>
         </div>
       </SidebarPane>
@@ -500,7 +525,7 @@ export default function HomeView() {
               </button>
             ) : (
               <>
-                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open Project</button>
+                <button type="button" className="ss-btn ghost" onClick={() => openProject()}>Open / Import .shotlist File</button>
                 <button type="button" className="ss-btn primary" onClick={() => newProject()}>New Project</button>
               </>
             )}

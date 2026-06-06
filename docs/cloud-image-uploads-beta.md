@@ -259,3 +259,102 @@ Set bucket CORS so browser PUT uploads from your app origins succeed.
 For rollout sequencing and incident response, also use:
 - `docs/public-beta-launch-checklist.md`
 - `docs/public-beta-rollback-checklist.md`
+
+## Local-only image invariant (June 2026)
+
+Local/offline projects must not use the cloud image workflow. The shared guard is `isCloudImageWorkflowEnabled(projectRef, cloudAccessPolicy)`, and it only returns true for cloud project refs with cloud image access and edit entitlement. Local projects therefore must not call:
+
+- `assets:createAssetUploadIntent`
+- `assets:finalizeAssetUpload`
+- `assets:assignShotLibraryAsset`
+- `assets:getAssetSignedView` / `assets:getAssetSignedViewsBatch`
+- S3 PUT/GET paths
+- cloud image library write paths
+
+### Local image storage model
+
+For local desktop projects with a supported desktop bridge, ShotScribe writes normalized WEBP images into the project asset folder beside the `.shotlist` file:
+
+- Project file: `/path/My Film.shotlist`
+- Asset folder: `/path/My Film.assets/`
+- Shot file names: `shot-{shotId}-{hash}.webp`
+- Hero file names: `hero-{hash}.webp`
+- Project references: `shotscribe-asset://{fileName}`
+
+The saved image asset shape keeps machine-independent relative metadata and clears cloud state:
+
+```js
+imageAsset: {
+  version: 1,
+  mime: 'image/webp',
+  thumb: 'shotscribe-asset://shot-123-abc.webp',
+  full: null,
+  meta: {
+    sourceName,
+    sourceBytes,
+    localFileName,
+    localRelativePath
+  },
+  cloud: null
+}
+```
+
+Browser-only local mode, or desktop builds without the local asset bridge, fall back to embedded local data URLs so local/offline users still never request cloud upload intents or write cloud asset records.
+
+### Migration for old local files with cloud image references
+
+When opening a local project, ShotScribe scans shot and hero image fields for `https://` image refs, `imageAsset.cloud.assetId`, or cloud object keys. If found, the user is prompted:
+
+> This project references cloud-hosted images. To use it fully offline, ShotScribe needs to copy those images into a local assets folder.
+
+Options are **Copy images locally** (OK) or **Skip for now** (Cancel). Copy mode deduplicates repeated URLs or asset IDs, downloads/copies reachable images into the local asset folder, rewrites references to `shotscribe-asset://...`, sets `imageAsset.cloud = null`, and preserves original cloud URL/asset ID in migration metadata. If an asset ID has no accessible URL and cannot be resolved through signed-in cloud access, the project still opens with a recoverable “Cloud image not downloaded” placeholder.
+
+### Required local/offline QA
+
+1. Local desktop project: add storyboard image, save, close, reopen, image still works, no Convex/S3 calls.
+2. Local desktop project: add hero image, save, close, reopen, image still works, no Convex/S3 calls.
+3. Browser local project: add image, verify no cloud calls and project remains saveable.
+4. Cloud project: add image, verify it still uploads to S3 and assigns a library asset.
+5. Open old local file with `https://` image refs: choose copy, verify images download into the local asset folder and references are rewritten.
+6. Open old local file with cloud asset IDs but no accessible URL: verify the app opens without crashing and shows recoverable placeholders.
+7. Open a project with duplicate cloud image references: verify migration downloads one local copy and reuses the local reference.
+8. Save migrated project, reopen with internet disabled, verify migrated images render locally.
+
+### Desktop asset-folder verification
+
+Use this direct manual verification when validating local desktop builds:
+
+1. Save a local project as `Test.shotlist`.
+2. Add a storyboard image to any shot.
+3. Confirm `Test.assets/` appears beside `Test.shotlist`.
+4. Confirm a `.webp` file exists inside `Test.assets/`.
+5. Save the project and confirm `Test.shotlist` contains `shotscribe-asset://shot-` for the new image.
+6. Confirm that new image entry in `Test.shotlist` has `cloud: null`.
+7. Confirm the new image entry does not contain `https://` or `data:image`.
+8. Reopen the project with internet disabled and verify the image renders.
+
+In dev builds, the image upload debug payload should report `imageStorageMode: 'local-filesystem'` for this workflow. It should report `browser-data-url-fallback` only in browser mode without the desktop bridge, and `cloud` only for cloud projects.
+
+
+## Browser local single-file mode restored (June 2026)
+
+For `app.shot-scribe.com`, browser local projects use the stable single-file `.shotlist` workflow. Browser-local storyboard and hero images are embedded in the project file as `data:image/...` with `cloud: null`. The File System Access API folder-backed project workflow is disabled for now and should not be shown as the primary browser local workflow.
+
+When opening a local browser `.shotlist` that already contains embedded `data:image/...` images and `cloud: null`, ShotScribe loads it without migration prompts. When opening an older local file that references `http(s)` cloud images or cloud asset metadata, ShotScribe prompts to copy reachable images into the `.shotlist` file as embedded images so the project can work offline.
+
+### Browser single-file QA checklist
+
+1. Open an old embedded `.shotlist` with `data:image/...` and `cloud: null`.
+2. Confirm no invalid file format error appears.
+3. Confirm images render.
+4. Add a new storyboard or hero image.
+5. Save/export the `.shotlist`.
+6. Open the saved file in a text editor.
+7. Confirm it contains `data:image`.
+8. Confirm local image assets have `cloud: null`.
+9. Confirm no Convex/S3 upload calls occur for the local project.
+10. Open a local file with old `https://` image refs.
+11. Confirm the prompt appears to copy images into the file.
+12. Confirm copied images become `data:image`.
+13. Disconnect internet and reopen the saved file.
+14. Confirm images still render.
