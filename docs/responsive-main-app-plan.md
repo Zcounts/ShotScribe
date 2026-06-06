@@ -320,3 +320,17 @@ Always verify after each responsive phase:
 - Phone:
   - Callsheet tables can be horizontally scrolled without clipping critical columns.
   - No blocked primary action paths (configure, export/email preflight, day switching).
+
+## 11) Narrow-resize crash hardening (2026-06-06)
+
+- The shared `useResponsiveViewport` hook now clamps browser measurements to a safe phone-width floor and coalesces resize measurements through `requestAnimationFrame`.
+- Viewport state updates must remain idempotent: repeated resize events with the same sanitized width should not call React state setters with a new value.
+- Storyboard visibility/page-height measurements should only publish state when the resulting range or height actually changes, because page virtualization can otherwise re-render while layout is still settling at tiny viewport widths.
+- Export modal derived schedule selections must also be idempotent; an empty schedule should preserve the existing empty arrays instead of creating fresh state on every render.
+- If a future responsive layout regression escapes these guards, the root app is wrapped in a recoverable display error boundary so users see a reload action instead of a permanent blank white screen.
+
+Manual QA for this guard:
+1. Start the root web app with `npm run dev`.
+2. Open a normal project and visit Home, Storyboard, Shotlist, Scenes, and Schedule.
+3. Resize Chrome to approximately 300 px wide or smaller, then expand back to desktop width.
+4. Confirm the app does not white-screen, React error #185 does not appear, and resize telemetry/log output does not run away.

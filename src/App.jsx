@@ -485,15 +485,21 @@ export default function App() {
     })
     if (firstVisible == null || lastVisible == null) return
     const overscan = 2
-    setStoryboardVisibleRange({
+    const nextRange = {
       start: Math.max(0, firstVisible - overscan),
       end: Math.min(totalPages - 1, lastVisible + overscan),
-    })
+    }
+    setStoryboardVisibleRange((currentRange) => (
+      currentRange.start === nextRange.start && currentRange.end === nextRange.end
+        ? currentRange
+        : nextRange
+    ))
   }, [totalPages])
 
   const handlePageMeasured = useCallback((pageId, height) => {
-    if (!height) return
-    setStoryboardPageHeights((prev) => (prev[pageId] === height ? prev : { ...prev, [pageId]: height }))
+    const nextHeight = Math.max(360, Math.round(Number(height) || 0))
+    if (!pageId || !Number.isFinite(nextHeight)) return
+    setStoryboardPageHeights((prev) => (prev[pageId] === nextHeight ? prev : { ...prev, [pageId]: nextHeight }))
   }, [])
 
   useEffect(() => {
@@ -673,10 +679,15 @@ export default function App() {
     const sceneIndex = storyboardScenes.findIndex(scene => scene.id === sceneId)
     const pageIndex = sceneIndex >= 0 ? scenePageOffsets[sceneIndex] : -1
     if (pageIndex >= 0) {
-      setStoryboardVisibleRange({
+      const nextRange = {
         start: Math.max(0, pageIndex - 2),
         end: Math.min(totalPages - 1, pageIndex + 3),
-      })
+      }
+      setStoryboardVisibleRange((currentRange) => (
+        currentRange.start === nextRange.start && currentRange.end === nextRange.end
+          ? currentRange
+          : nextRange
+      ))
     }
     const pageNode = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
     const fallbackNode = storyboardSceneRefs.current[sceneId]
@@ -695,10 +706,15 @@ export default function App() {
     const pageWithinScene = Number(pagePart || 0)
     const pageIndex = sceneIndex >= 0 ? (scenePageOffsets[sceneIndex] + (Number.isFinite(pageWithinScene) ? pageWithinScene : 0)) : -1
     if (pageIndex >= 0) {
-      setStoryboardVisibleRange({
+      const nextRange = {
         start: Math.max(0, pageIndex - 2),
         end: Math.min(totalPages - 1, pageIndex + 3),
-      })
+      }
+      setStoryboardVisibleRange((currentRange) => (
+        currentRange.start === nextRange.start && currentRange.end === nextRange.end
+          ? currentRange
+          : nextRange
+      ))
     }
     const node = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
     if (node) {

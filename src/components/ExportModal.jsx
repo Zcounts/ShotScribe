@@ -3227,17 +3227,26 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
 
   useEffect(() => {
     if (!schedule.length) {
-      setSelectedMobileDayId('')
-      setSnapshotDayIds([])
+      setSelectedMobileDayId(currentDayId => (currentDayId === '' ? currentDayId : ''))
+      setSnapshotDayIds(currentDayIds => (currentDayIds.length === 0 ? currentDayIds : []))
       return
     }
-    if (!selectedMobileDayId || !schedule.some(day => day.id === selectedMobileDayId)) {
-      setSelectedMobileDayId(schedule[0].id)
-    }
-    if (!snapshotDayIds.length) {
-      setSnapshotDayIds(schedule.slice(0, 3).map(day => day.id))
-    }
-  }, [schedule, selectedMobileDayId, snapshotDayIds])
+
+    const scheduleDayIds = schedule.map(day => day.id)
+    setSelectedMobileDayId(currentDayId => (
+      currentDayId && scheduleDayIds.includes(currentDayId)
+        ? currentDayId
+        : scheduleDayIds[0]
+    ))
+    setSnapshotDayIds(currentDayIds => {
+      const filteredDayIds = currentDayIds.filter(dayId => scheduleDayIds.includes(dayId))
+      const nextDayIds = filteredDayIds.length ? filteredDayIds : scheduleDayIds.slice(0, 3)
+      if (currentDayIds.length === nextDayIds.length && currentDayIds.every((dayId, index) => dayId === nextDayIds[index])) {
+        return currentDayIds
+      }
+      return nextDayIds
+    })
+  }, [schedule])
 
   if (!isOpen) return null
 
