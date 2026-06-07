@@ -3535,31 +3535,6 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
     })
   }, [schedule])
 
-  useEffect(() => {
-    setExportError('')
-    setExportSuccess('')
-    if (selectedExportType === 'storyboard') {
-      setSelectedFormat(format => (format === 'png' ? format : 'pdf'))
-      setSelectedOutputMode(output => (selectedFormat === 'png' ? 'png-pages' : output === 'png-pages' ? 'single' : output))
-      setSelectedScope('all')
-      return
-    }
-    setSelectedFormat('pdf')
-    if (selectedExportType === 'everything') {
-      setSelectedScope('all')
-      setSelectedOutputMode(output => (output === 'separate' ? 'separate' : 'combined'))
-    } else if (selectedExportType === 'schedule') {
-      setSelectedScope('all')
-      setSelectedOutputMode(output => ['standard', 'expanded', 'stripboard', 'calendar'].includes(output) ? output : 'standard')
-    } else if (selectedExportType === 'callsheet') {
-      setSelectedScope(scope => (scope === 'current' ? scope : 'all'))
-      setSelectedOutputMode('single')
-    } else {
-      setSelectedScope('all')
-      setSelectedOutputMode('single')
-    }
-  }, [selectedExportType, selectedFormat])
-
   if (!isOpen) return null
 
   const activeDayId = callsheetTabViewState?.selectedDayId || null

@@ -265,7 +265,7 @@ function SceneSection({
                 if (!el) return
                 pageRefs.current[globalPageNum - 1] = el
                 pageNavRefs.current[pageId] = el
-                onPageMeasured?.(pageId, el.offsetHeight)
+                onPageMeasured?.(pageId, el)
               }}
               data-outline-id={pageId}
               className="page-document"
@@ -437,6 +437,8 @@ export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const pathnameRef = useRef(window.location.pathname)
   const storyboardScrollRef = useRef(null)
+  const storyboardPageHeightsRef = useRef({})
+  const storyboardPageMeasureFramesRef = useRef(new Map())
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
   const storyboardSceneRefs = useRef({})
@@ -496,10 +498,32 @@ export default function App() {
     ))
   }, [totalPages])
 
-  const handlePageMeasured = useCallback((pageId, height) => {
-    const nextHeight = Math.max(360, Math.round(Number(height) || 0))
-    if (!pageId || !Number.isFinite(nextHeight)) return
-    setStoryboardPageHeights((prev) => (prev[pageId] === nextHeight ? prev : { ...prev, [pageId]: nextHeight }))
+  useEffect(() => {
+    storyboardPageHeightsRef.current = storyboardPageHeights
+  }, [storyboardPageHeights])
+
+  useEffect(() => () => {
+    storyboardPageMeasureFramesRef.current.forEach(frameId => cancelAnimationFrame(frameId))
+    storyboardPageMeasureFramesRef.current.clear()
+  }, [])
+
+  const handlePageMeasured = useCallback((pageId, node) => {
+    if (!pageId || !node || storyboardPageMeasureFramesRef.current.has(pageId)) return
+
+    const frameId = requestAnimationFrame(() => {
+      storyboardPageMeasureFramesRef.current.delete(pageId)
+      if (!node.isConnected) return
+
+      const nextHeight = Math.max(360, Math.round(Number(node.offsetHeight) || 0))
+      if (!Number.isFinite(nextHeight) || storyboardPageHeightsRef.current[pageId] === nextHeight) return
+
+      storyboardPageHeightsRef.current = {
+        ...storyboardPageHeightsRef.current,
+        [pageId]: nextHeight,
+      }
+      setStoryboardPageHeights(storyboardPageHeightsRef.current)
+    })
+    storyboardPageMeasureFramesRef.current.set(pageId, frameId)
   }, [])
 
   useEffect(() => {

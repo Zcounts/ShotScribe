@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BREAKPOINTS, getViewportTier } from '../constants/responsive.js'
 
 export const MIN_VIEWPORT_WIDTH = 280
@@ -31,13 +31,23 @@ export function getResponsiveViewportState(width) {
   }
 }
 
+export function hasResponsiveViewportLayoutChanged(currentState, nextState) {
+  if (!currentState) return true
+  if (!nextState) return false
+  return currentState.tier !== nextState.tier
+    || currentState.isPhone !== nextState.isPhone
+    || currentState.isTabletPortrait !== nextState.isTabletPortrait
+    || currentState.isTabletLandscape !== nextState.isTabletLandscape
+    || currentState.isDesktopDown !== nextState.isDesktopDown
+}
+
 function getWindowWidth() {
   if (typeof window === 'undefined') return BREAKPOINTS.wide
   return coerceViewportWidth(window.innerWidth, MIN_VIEWPORT_WIDTH)
 }
 
 export default function useResponsiveViewport() {
-  const [width, setWidth] = useState(getWindowWidth)
+  const [viewportState, setViewportState] = useState(() => getResponsiveViewportState(getWindowWidth()))
   const frameRef = useRef(null)
 
   useEffect(() => {
@@ -45,8 +55,10 @@ export default function useResponsiveViewport() {
 
     const measure = () => {
       frameRef.current = null
-      const nextWidth = getWindowWidth()
-      setWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth))
+      const nextState = getResponsiveViewportState(getWindowWidth())
+      setViewportState((currentState) => (
+        hasResponsiveViewportLayoutChanged(currentState, nextState) ? nextState : currentState
+      ))
     }
 
     const scheduleMeasure = () => {
@@ -66,5 +78,5 @@ export default function useResponsiveViewport() {
     }
   }, [])
 
-  return useMemo(() => getResponsiveViewportState(width), [width])
+  return viewportState
 }

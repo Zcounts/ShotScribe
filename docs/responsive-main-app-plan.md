@@ -325,8 +325,8 @@ Always verify after each responsive phase:
 
 - The shared `useResponsiveViewport` hook now clamps browser measurements to a safe phone-width floor and coalesces resize measurements through `requestAnimationFrame`.
 - Viewport state updates must remain idempotent: repeated resize events with the same sanitized width should not call React state setters with a new value.
-- Storyboard visibility/page-height measurements should only publish state when the resulting range or height actually changes, because page virtualization can otherwise re-render while layout is still settling at tiny viewport widths.
-- Export modal derived schedule selections must also be idempotent; an empty schedule should preserve the existing empty arrays instead of creating fresh state on every render.
+- Storyboard visibility/page-height measurements should only publish state when the resulting range or height actually changes, and page-height ref measurements are deferred to animation frames so ref callbacks do not synchronously set React state during layout settling.
+- Export modal derived schedule selections and shared tab view patches must also be idempotent; empty/unchanged data should preserve existing state references instead of creating fresh objects or arrays on every render.
 - If a future responsive layout regression escapes these guards, the root app is wrapped in a recoverable display error boundary so users see a reload action instead of a permanent blank white screen.
 
 Manual QA for this guard:

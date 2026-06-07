@@ -4,6 +4,7 @@ import {
   MIN_VIEWPORT_WIDTH,
   coerceViewportWidth,
   getResponsiveViewportState,
+  hasResponsiveViewportLayoutChanged,
 } from '../src/hooks/useResponsiveViewport.js'
 
 describe('responsive viewport helpers', () => {
@@ -36,23 +37,30 @@ describe('responsive viewport helpers', () => {
     assert.equal(getResponsiveViewportState(1280).tier, 'wide')
   })
 
-  it('returns equal primitive viewport fields for repeated unchanged resize measurements', () => {
+  it('does not require a responsive state update for repeated unchanged resize measurements', () => {
     const first = getResponsiveViewportState(320)
     const second = getResponsiveViewportState(320)
 
-    assert.deepEqual(
-      {
-        width: first.width,
-        tier: first.tier,
-        isPhone: first.isPhone,
-        isDesktopDown: first.isDesktopDown,
-      },
-      {
-        width: second.width,
-        tier: second.tier,
-        isPhone: second.isPhone,
-        isDesktopDown: second.isDesktopDown,
-      },
+    assert.equal(hasResponsiveViewportLayoutChanged(first, second), false)
+  })
+
+  it('does not require a responsive state update while staying in the same viewport tier', () => {
+    const first = getResponsiveViewportState(320)
+    const second = getResponsiveViewportState(500)
+
+    assert.equal(first.tier, 'phone')
+    assert.equal(second.tier, 'phone')
+    assert.equal(hasResponsiveViewportLayoutChanged(first, second), false)
+  })
+
+  it('requires a responsive state update when crossing responsive breakpoints', () => {
+    assert.equal(
+      hasResponsiveViewportLayoutChanged(getResponsiveViewportState(599), getResponsiveViewportState(600)),
+      true,
+    )
+    assert.equal(
+      hasResponsiveViewportLayoutChanged(getResponsiveViewportState(1023), getResponsiveViewportState(1024)),
+      true,
     )
   })
 })

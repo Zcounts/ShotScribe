@@ -2856,15 +2856,23 @@ const useStore = create((set, get) => ({
   closeSettings: () => set({ settingsOpen: false }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setTabViewState: (tab, patch) => {
-    set(state => ({
-      tabViewState: {
-        ...state.tabViewState,
-        [tab]: {
-          ...(state.tabViewState?.[tab] || {}),
-          ...(patch || {}),
+    set(state => {
+      const currentTabViewState = state.tabViewState?.[tab] || {}
+      const nextPatch = patch || {}
+      const patchKeys = Object.keys(nextPatch)
+      const hasChanges = patchKeys.some(key => currentTabViewState[key] !== nextPatch[key])
+      if (!hasChanges) return state
+
+      return {
+        tabViewState: {
+          ...state.tabViewState,
+          [tab]: {
+            ...currentTabViewState,
+            ...nextPatch,
+          },
         },
-      },
-    }))
+      }
+    })
   },
   updateStoryboardDisplayConfig: (patch) => {
     set(state => ({
