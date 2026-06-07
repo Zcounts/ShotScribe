@@ -12,7 +12,7 @@ const ASPECT_RATIO_OPTIONS = [
 
 const VISIBLE_INFO_GROUPS = [
   { title: 'Text', keys: ['notes'] },
-  { title: 'Time', keys: ['setupTime', 'shotTime'] },
+  { title: 'Time', keys: ['setupNumber', 'setupTime', 'shotTime'] },
   { title: 'Camera', keys: ['camera', 'lens'] },
   { title: 'Shot Metadata', keys: ['size', 'type', 'move', 'equip', 'shotAspectRatio'] },
 ]

@@ -76,6 +76,7 @@ const PRINT_BUILTIN_COLUMNS = [
   { key: 'specs.size',     label: 'COVERAGE',          width: 110 },
   { key: 'notes',          label: 'NOTES',             width: 160 },
   { key: 'scriptTime',     label: 'SCRIPT TIME',       width: 84  },
+  { key: 'setupNumber',    label: 'SETUP #',           width: 72  },
   { key: 'setupTime',      label: 'SETUP TIME',        width: 84  },
   { key: 'predictedTakes', label: 'PREDIC# OF TAKES',  width: 104 },
   { key: 'shootTime',      label: 'SHOOT TIME',        width: 84  },
@@ -228,6 +229,7 @@ function buildStoryboardPrintHtml(imageMap = {}) {
         const showCamera = !useDisplayConfig || visibleInfo.camera !== false
         const showLens = !useDisplayConfig || visibleInfo.lens !== false
         const showNotes = !useDisplayConfig || visibleInfo.notes !== false
+        const showSetupNumber = !useDisplayConfig || visibleInfo.setupNumber !== false
         const showSetup = !useDisplayConfig || visibleInfo.setupTime !== false
         const showShotTime = !useDisplayConfig || visibleInfo.shotTime !== false
 
@@ -244,7 +246,7 @@ function buildStoryboardPrintHtml(imageMap = {}) {
     </tr></tbody>
   </table>` : ''}
   ${showNotes ? `<div class="card-notes">${escapeHtml(shot.notes || '')}</div>` : ''}
-  ${(showSetup || showShotTime) ? `<div class="card-time-row">${showSetup ? `<span>SETUP ${escapeHtml(shot.setupTime || '')}</span>` : ''}${showShotTime ? `<span>SHOT ${escapeHtml(shot.shootTime || '')}</span>` : ''}</div>` : ''}
+  ${(showSetupNumber || showSetup || showShotTime) ? `<div class="card-time-row">${showSetupNumber ? `<span>SETUP # ${escapeHtml(shot.setupNumber || '')}</span>` : ''}${showSetup ? `<span>SETUP TIME ${escapeHtml(shot.setupTime || '')}</span>` : ''}${showShotTime ? `<span>SHOT TIME ${escapeHtml(shot.shootTime || '')}</span>` : ''}</div>` : ''}
 </div>`
       })
 
@@ -573,7 +575,7 @@ function buildSchedulePrintHtml(dayIdxFilter = null) {
 
         return `<tr class="break-row">
           ${timelineCell}
-          <td colspan="6" class="break-name-cell">
+          <td colspan="7" class="break-name-cell">
             <span class="break-icon">${blockIcon}</span>
             <strong>${escapeHtml(blockLabel)}</strong>
             ${blockMins > 0 ? `<span class="break-dur">${blockMins}m</span>` : ''}
@@ -601,7 +603,7 @@ function buildSchedulePrintHtml(dayIdxFilter = null) {
       if (!found) {
         return `<tr class="block-row deleted-row">
           ${hasTimeline ? '<td class="tl-cell"></td>' : ''}
-          <td colspan="6"><em style="color:#888">Shot deleted — remove this entry</em></td>
+          <td colspan="7"><em style="color:#888">Shot deleted — remove this entry</em></td>
         </tr>`
       }
 
@@ -613,6 +615,7 @@ function buildSchedulePrintHtml(dayIdxFilter = null) {
       return `<tr class="block-row">
         ${timelineCell}
         <td class="shot-id">${escapeHtml(displayId)}</td>
+        <td class="time-cell">${escapeHtml(shot.setupNumber || '—')}</td>
         <td class="subject-cell">
           ${shot.notes ? `<span class="notes-txt">${escapeHtml(shot.notes)}</span><br>` : ''}
           <span class="scene-loc">${escapeHtml(scene.sceneLabel)}${scene.location ? ` · ${escapeHtml(scene.location)}` : ''}</span>
@@ -628,16 +631,16 @@ function buildSchedulePrintHtml(dayIdxFilter = null) {
     const hasTotals = totalMins > 0
 
     const headerCols = hasTimeline
-      ? `<th class="tl-th">PROJECTED TIME<br><span style="font-weight:400;font-size:7pt;color:#666">ESTIMATE ONLY</span></th><th>SHOT</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
-      : `<th>SHOT</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>SETUP</th><th>CAST</th>`
+      ? `<th class="tl-th">PROJECTED TIME<br><span style="font-weight:400;font-size:7pt;color:#666">ESTIMATE ONLY</span></th><th>SHOT</th><th>SETUP #</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOT TIME</th><th>SETUP TIME</th><th>CAST</th>`
+      : `<th>SHOT</th><th>SETUP #</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOT TIME</th><th>SETUP TIME</th><th>CAST</th>`
 
-    // Columns (no timeline): shot | subject | badge | shoot | setup | cast  = 6
-    // Columns (timeline):    tl  | shot | subject | badge | shoot | setup | cast = 7
-    // Totals row spans: [tl?] + [shot+subject+badge=3 cols] + shoot + setup + cast
+    // Columns (no timeline): shot | setup # | subject | badge | shot time | setup time | cast = 7
+    // Columns (timeline):    tl | shot | setup # | subject | badge | shot time | setup time | cast = 8
+    // Totals row spans: [tl?] + [shot+setup #+subject+badge=4 cols] + shot time + setup time + cast
     const totalsRow = hasTotals ? `
       <tr class="totals-row">
         ${hasTimeline ? '<td></td>' : ''}
-        <td colspan="3" style="text-align:right;padding-right:6px">
+        <td colspan="4" style="text-align:right;padding-right:6px">
           <strong>DAY TOTALS</strong>
         </td>
         <td class="time-cell total-val">${totalShootMins > 0 ? scheduleFormatMins(totalShootMins) : '—'}</td>
@@ -995,7 +998,7 @@ function buildExpandedSchedulePrintHtml() {
         const lbl = block.label || block.breakName || block.blockName || block.type
         return `<tr class="special-row special-${escapeHtml(block.type)}">
           ${projCell}
-          <td colspan="6" class="special-cell">
+          <td colspan="7" class="special-cell">
             <span class="special-icon">${icon}</span>
             <strong>${escapeHtml(lbl)}</strong>
             ${mins > 0 ? `<span class="special-dur">${mins}m</span>` : ''}
@@ -1007,7 +1010,7 @@ function buildExpandedSchedulePrintHtml() {
       if (!found) {
         return `<tr class="block-row deleted-row">
           ${startMins !== null ? '<td class="tl-cell"></td>' : ''}
-          <td colspan="6"><em style="color:#888">Shot deleted — remove this entry</em></td>
+          <td colspan="7"><em style="color:#888">Shot deleted — remove this entry</em></td>
         </tr>`
       }
 
@@ -1015,30 +1018,34 @@ function buildExpandedSchedulePrintHtml() {
       const intOrExt = shot.intOrExt || scene.intOrExt || ''
       const dayNight = shot.dayNight || scene.dayNight || ''
       const shootMins = parseScheduleMinutes(shot.shootTime)
+      const setupMins = parseScheduleMinutes(shot.setupTime)
 
       return `<tr class="block-row">
         ${projCell}
         <td class="shot-id">${escapeHtml(displayId)}</td>
+        <td class="time-cell">${escapeHtml(shot.setupNumber || '—')}</td>
         <td class="subject-cell">
           ${shot.notes ? `<span class="notes-txt">${escapeHtml(shot.notes)}</span><br>` : ''}
           <span class="scene-loc">${escapeHtml(scene.sceneLabel)}${scene.location ? ` · ${escapeHtml(scene.location)}` : ''}</span>
         </td>
         <td class="badge-cell">${intOrExt ? `<span class="bdg">${escapeHtml(intOrExt)}</span>` : ''}${dayNight ? ` <span class="bdg">${escapeHtml(dayNight)}</span>` : ''}</td>
         <td class="time-cell">${shootMins > 0 ? `${shootMins}m` : '—'}</td>
+        <td class="time-cell">${setupMins > 0 ? `${setupMins}m` : '—'}</td>
         <td class="cast-cell">${escapeHtml(shot.cast || '—')}</td>
       </tr>`
     })
 
     const hasTimeline = startMins !== null
     const headerCols = hasTimeline
-      ? `<th class="tl-th">TIME<br><span style="font-weight:400;font-size:6.5pt;color:#666">ESTIMATE</span></th><th>SHOT</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>CAST</th>`
-      : `<th>SHOT</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOOT</th><th>CAST</th>`
+      ? `<th class="tl-th">TIME<br><span style="font-weight:400;font-size:6.5pt;color:#666">ESTIMATE</span></th><th>SHOT</th><th>SETUP #</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOT TIME</th><th>SETUP TIME</th><th>CAST</th>`
+      : `<th>SHOT</th><th>SETUP #</th><th>NOTES / SCENE</th><th>I/E · D/N</th><th>SHOT TIME</th><th>SETUP TIME</th><th>CAST</th>`
 
     const totalsRow = totalMins > 0 ? `<tr class="totals-row">
       ${hasTimeline ? '<td></td>' : ''}
-      <td colspan="2" style="text-align:right;padding-right:6px"><strong>DAY TOTALS</strong></td>
+      <td colspan="3" style="text-align:right;padding-right:6px"><strong>DAY TOTALS</strong></td>
       <td></td>
       <td class="time-cell total-val">${totalShootMins > 0 ? scheduleFormatMins(totalShootMins) : '—'}</td>
+      <td class="time-cell total-val">${totalSetupMins > 0 ? scheduleFormatMins(totalSetupMins) : '—'}</td>
       <td><strong>${scheduleFormatMins(totalMins)}</strong>${totalBreakMins > 0 ? ` <span style="font-weight:400;color:#666;font-size:7.5pt">(incl. ${scheduleFormatMins(totalBreakMins)} breaks)</span>` : ''}</td>
     </tr>` : ''
 
@@ -1238,7 +1245,7 @@ function buildStripboardPrintHtml() {
             <div class="strip-content">
               <span class="strip-id">${escapeHtml(displayId)}</span>
               <span class="strip-scene">${escapeHtml(scene.sceneLabel)}${scene.location ? ` · ${escapeHtml(scene.location)}` : ''}</span>
-              <span class="strip-meta">${intOrExt}${dayNight ? ` ${dayNight}` : ''}${shootMins > 0 ? ` · ${shootMins}m` : ''}</span>
+              <span class="strip-meta">${intOrExt}${dayNight ? ` ${dayNight}` : ''}${shot.setupNumber ? ` · Setup # ${escapeHtml(shot.setupNumber)}` : ''}${shootMins > 0 ? ` · Shot Time ${shootMins}m` : ''}</span>
             </div>
           </div>
         </td>`

@@ -274,6 +274,9 @@ export default function ShotPropertiesDialog() {
               <Field label="Shoot Time">
                 <input value={shot.shootTime || ''} onChange={(e) => setField('shootTime', e.target.value)} />
               </Field>
+              <Field label="Setup #">
+                <input value={shot.setupNumber || ''} onChange={(e) => setField('setupNumber', e.target.value)} />
+              </Field>
               <Field label="Setup Time">
                 <input value={shot.setupTime || ''} onChange={(e) => setField('setupTime', e.target.value)} />
               </Field>

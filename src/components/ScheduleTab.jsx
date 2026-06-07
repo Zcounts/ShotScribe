@@ -2099,11 +2099,19 @@ function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRec
             />
             <div style={{ display: 'flex', gap: 16 }}>
               <InlineField
+                value={shotData.setupNumber || ''}
+                onChange={(val) => updateShot(block.shotId, { setupNumber: val })}
+                placeholder="—"
+                isDark={isDark}
+                label="SETUP #"
+                inputWidth={48}
+              />
+              <InlineField
                 value={shotData.shootTime || ''}
                 onChange={(val) => updateShot(block.shotId, { shootTime: val })}
                 placeholder="—"
                 isDark={isDark}
-                label="SHOOT"
+                label="SHOT TIME"
                 inputWidth={40}
               />
               <InlineField
@@ -2111,9 +2119,9 @@ function StripDetailPopover({ block, shotData, dayId, isDark, onClose, anchorRec
                 onChange={(val) => updateShot(block.shotId, { setupTime: val })}
                 placeholder="—"
                 isDark={isDark}
-              label="SETUP"
-              inputWidth={40}
-            />
+                label="SETUP TIME"
+                inputWidth={40}
+              />
             <InlineField
               value={shotData.cameraName || ''}
               onChange={(val) => updateShot(block.shotId, { cameraName: val })}

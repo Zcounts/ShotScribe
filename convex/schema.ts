@@ -111,6 +111,7 @@ export default defineSchema({
     intOrExt: v.optional(v.string()),
     dayNight: v.optional(v.string()),
     scriptTime: v.optional(v.string()),
+    setupNumber: v.optional(v.string()),
     setupTime: v.optional(v.string()),
     shotAspectRatio: v.optional(v.string()),
     predictedTakes: v.optional(v.string()),
