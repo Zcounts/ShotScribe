@@ -16,7 +16,7 @@
     "cloud:seed:test": "npx convex run projects:seedTestCloudProject",
     "build:siteground": "vite build --mode siteground",
     "preview:siteground": "vite preview --mode siteground",
-    "test": "node --test tests/shotDisplay.test.js"
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1023.0",

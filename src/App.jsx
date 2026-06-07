@@ -265,7 +265,7 @@ function SceneSection({
                 if (!el) return
                 pageRefs.current[globalPageNum - 1] = el
                 pageNavRefs.current[pageId] = el
-                onPageMeasured?.(pageId, el.offsetHeight)
+                onPageMeasured?.(pageId, el)
               }}
               data-outline-id={pageId}
               className="page-document"
@@ -437,6 +437,8 @@ export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const pathnameRef = useRef(window.location.pathname)
   const storyboardScrollRef = useRef(null)
+  const storyboardPageHeightsRef = useRef({})
+  const storyboardPageMeasureFramesRef = useRef(new Map())
   // pageRefs is a flat array of all storyboard page-document elements
   const pageRefs = useRef([])
   const storyboardSceneRefs = useRef({})
@@ -485,15 +487,43 @@ export default function App() {
     })
     if (firstVisible == null || lastVisible == null) return
     const overscan = 2
-    setStoryboardVisibleRange({
+    const nextRange = {
       start: Math.max(0, firstVisible - overscan),
       end: Math.min(totalPages - 1, lastVisible + overscan),
-    })
+    }
+    setStoryboardVisibleRange((currentRange) => (
+      currentRange.start === nextRange.start && currentRange.end === nextRange.end
+        ? currentRange
+        : nextRange
+    ))
   }, [totalPages])
 
-  const handlePageMeasured = useCallback((pageId, height) => {
-    if (!height) return
-    setStoryboardPageHeights((prev) => (prev[pageId] === height ? prev : { ...prev, [pageId]: height }))
+  useEffect(() => {
+    storyboardPageHeightsRef.current = storyboardPageHeights
+  }, [storyboardPageHeights])
+
+  useEffect(() => () => {
+    storyboardPageMeasureFramesRef.current.forEach(frameId => cancelAnimationFrame(frameId))
+    storyboardPageMeasureFramesRef.current.clear()
+  }, [])
+
+  const handlePageMeasured = useCallback((pageId, node) => {
+    if (!pageId || !node || storyboardPageMeasureFramesRef.current.has(pageId)) return
+
+    const frameId = requestAnimationFrame(() => {
+      storyboardPageMeasureFramesRef.current.delete(pageId)
+      if (!node.isConnected) return
+
+      const nextHeight = Math.max(360, Math.round(Number(node.offsetHeight) || 0))
+      if (!Number.isFinite(nextHeight) || storyboardPageHeightsRef.current[pageId] === nextHeight) return
+
+      storyboardPageHeightsRef.current = {
+        ...storyboardPageHeightsRef.current,
+        [pageId]: nextHeight,
+      }
+      setStoryboardPageHeights(storyboardPageHeightsRef.current)
+    })
+    storyboardPageMeasureFramesRef.current.set(pageId, frameId)
   }, [])
 
   useEffect(() => {
@@ -673,10 +703,15 @@ export default function App() {
     const sceneIndex = storyboardScenes.findIndex(scene => scene.id === sceneId)
     const pageIndex = sceneIndex >= 0 ? scenePageOffsets[sceneIndex] : -1
     if (pageIndex >= 0) {
-      setStoryboardVisibleRange({
+      const nextRange = {
         start: Math.max(0, pageIndex - 2),
         end: Math.min(totalPages - 1, pageIndex + 3),
-      })
+      }
+      setStoryboardVisibleRange((currentRange) => (
+        currentRange.start === nextRange.start && currentRange.end === nextRange.end
+          ? currentRange
+          : nextRange
+      ))
     }
     const pageNode = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
     const fallbackNode = storyboardSceneRefs.current[sceneId]
@@ -695,10 +730,15 @@ export default function App() {
     const pageWithinScene = Number(pagePart || 0)
     const pageIndex = sceneIndex >= 0 ? (scenePageOffsets[sceneIndex] + (Number.isFinite(pageWithinScene) ? pageWithinScene : 0)) : -1
     if (pageIndex >= 0) {
-      setStoryboardVisibleRange({
+      const nextRange = {
         start: Math.max(0, pageIndex - 2),
         end: Math.min(totalPages - 1, pageIndex + 3),
-      })
+      }
+      setStoryboardVisibleRange((currentRange) => (
+        currentRange.start === nextRange.start && currentRange.end === nextRange.end
+          ? currentRange
+          : nextRange
+      ))
     }
     const node = storyboardPageRefs.current[pageId] || document.getElementById(pageId)
     if (node) {
