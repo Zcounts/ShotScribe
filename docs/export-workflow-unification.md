@@ -80,3 +80,16 @@
 1. Run **Everything — One Combined PDF** and confirm one large combined file.
 2. Run **Everything — Separate PDF Files** and confirm separate files are produced.
 3. Run a **Per-Day PDF Bundle** entry and confirm shotlist + schedule + callsheet for that day.
+
+## Export reliability follow-up (June 2026)
+
+- Standalone **Storyboard PDF** now uses the same store-driven storyboard print HTML builder as **Everything — One Combined PDF**. This keeps storyboard page layout, image rendering, shot labels, camera/lens/spec/note visibility, and pagination aligned with the known-good combined export path.
+- Browser fallback rendering for standalone storyboard PDF/PNG now renders generated print HTML in an offscreen iframe and captures `.page-doc` pages from that generated document instead of relying on the currently visible Storyboard tab DOM. Storyboard exports should work even when the user opens Export Hub from Shotlist, Schedule, or Callsheet.
+- Standalone **Shotlist PDF** also uses generated print HTML in browser fallback mode rather than the live shotlist tab container.
+- Export Hub actions now set action context before running so failures log export type, selected action label, active tab, project name, page counts/selectors when available, and stack traces.
+
+### Regression QA for this follow-up
+1. From the **Shotlist** tab, open Export Hub and run **Storyboard PDF**. Confirm no `No pages could be rendered` alert appears and the PDF matches the storyboard section of the combined export.
+2. Run **Storyboard PNG** and confirm every generated PNG has visible storyboard content and non-zero dimensions.
+3. Run **Everything — One Combined PDF** and confirm page order/styling remain Storyboard, Shotlist, Schedule, Callsheet.
+4. Run **Everything — Separate PDF Files** and confirm the generated Storyboard PDF uses the same layout as the standalone Storyboard PDF.
