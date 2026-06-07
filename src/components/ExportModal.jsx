@@ -26,6 +26,31 @@ async function getReactPdfRenderer() {
   return reactPdfRendererPromise
 }
 
+let currentExportContext = { exportType: '', actionLabel: '', activeTab: '', projectName: '' }
+
+function setExportContext(context = {}) {
+  currentExportContext = {
+    exportType: context.exportType || '',
+    actionLabel: context.actionLabel || '',
+    activeTab: context.activeTab || '',
+    projectName: context.projectName || '',
+  }
+}
+
+function getExportProjectName() {
+  return currentExportContext.projectName || useStore.getState().projectName || 'Untitled Project'
+}
+
+function logExportDiagnostics(message, details = {}) {
+  const context = {
+    exportType: details.exportType || currentExportContext.exportType || 'unknown',
+    actionLabel: details.actionLabel || currentExportContext.actionLabel || 'unknown',
+    activeTab: details.activeTab || currentExportContext.activeTab || 'unknown',
+    projectName: details.projectName || getExportProjectName(),
+  }
+  console.error(`[Export Hub] ${message}`, { ...context, ...details })
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
@@ -2623,7 +2648,7 @@ async function captureElementWithTimeout(el, scale = 1.5, timeoutMs = 60000, ima
   }
 }
 
-async function exportPagesBrowser(pages, imageMap = {}) {
+async function exportPagesBrowser(pages, imageMap = {}, { fileName = 'storyboard.pdf', exportType = 'pdf', selector = 'unknown' } = {}) {
   console.log(`[PDF Export] Starting browser/html2canvas path — ${pages.length} page(s)`)
 
   let pdf = null
@@ -2669,11 +2694,180 @@ async function exportPagesBrowser(pages, imageMap = {}) {
   }
 
   if (!pdf) {
-    throw new Error('No pages could be rendered. Check the console for details.')
+    logExportDiagnostics('PDF renderer produced zero pages.', { exportType, generatedPageCount: pages.length, selector })
+    throw new Error(`${exportType || 'PDF'} renderer failed during capture: no pages could be rendered.`)
   }
 
-  pdf.save('storyboard.pdf')
+  pdf.save(fileName)
   console.log('[PDF Export] Saved via browser download.')
+}
+
+
+function getSafeBaseName(projectName, fallback = 'export') {
+  return (projectName || fallback).replace(/[^a-z0-9]/gi, '_') || fallback
+}
+
+function waitForFrameLoad(iframe) {
+  return new Promise(resolve => {
+    const done = () => setTimeout(resolve, 150)
+    const doc = iframe.contentDocument
+    if (doc?.readyState === 'complete') {
+      done()
+      return
+    }
+    iframe.onload = done
+    setTimeout(done, 500)
+  })
+}
+
+async function waitForDocumentAssets(doc) {
+  if (doc?.fonts?.ready) {
+    try { await doc.fonts.ready } catch (err) { console.warn('[PDF Export] Font readiness check failed:', err) }
+  }
+
+  const images = Array.from(doc.querySelectorAll('img'))
+  await Promise.all(images.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve()
+    return new Promise(resolve => {
+      const timeout = setTimeout(resolve, 15000)
+      img.onload = () => { clearTimeout(timeout); resolve() }
+      img.onerror = () => {
+        console.warn('[PDF Export] Image preload failed:', img.getAttribute('src'))
+        clearTimeout(timeout)
+        resolve()
+      }
+    })
+  }))
+}
+
+async function createOffscreenPrintDocument(html, {
+  selector = '.page-doc',
+  fallbackSelector = null,
+  width = 1123,
+  height = 794,
+  exportType = 'export',
+} = {}) {
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('title', `${exportType} export render frame`)
+  iframe.style.position = 'fixed'
+  iframe.style.left = '-10000px'
+  iframe.style.top = '0'
+  iframe.style.width = `${width}px`
+  iframe.style.height = `${height}px`
+  iframe.style.opacity = '0.01'
+  iframe.style.pointerEvents = 'none'
+  iframe.style.border = '0'
+  iframe.style.background = '#fff'
+  document.body.appendChild(iframe)
+
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+  }
+
+  try {
+    const doc = iframe.contentDocument
+    doc.open()
+    doc.write(html)
+    doc.close()
+    await waitForFrameLoad(iframe)
+    await waitForDocumentAssets(doc)
+
+    const selected = Array.from(doc.querySelectorAll(selector))
+    const pages = selected.length > 0
+      ? selected
+      : (fallbackSelector ? Array.from(doc.querySelectorAll(fallbackSelector)) : [])
+    const measurablePages = pages.filter(page => {
+      const rect = page.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0
+    })
+
+    return {
+      iframe,
+      doc,
+      cleanup,
+      pages: measurablePages,
+      metrics: {
+        selector,
+        fallbackSelector,
+        selectedPageCount: selected.length,
+        generatedPageCount: pages.length,
+        measurablePageCount: measurablePages.length,
+        hasPageDoc: !!doc.querySelector('.page-doc'),
+        htmlHasPageDoc: html.includes('page-doc'),
+      },
+    }
+  } catch (err) {
+    cleanup()
+    throw err
+  }
+}
+
+async function exportPrintHtmlPagesBrowser(html, projectName, {
+  exportType,
+  fileNameSuffix,
+  selector = '.page-doc',
+  fallbackSelector = null,
+  width = 1123,
+  height = 794,
+} = {}) {
+  const renderDoc = await createOffscreenPrintDocument(html, { selector, fallbackSelector, width, height, exportType })
+  try {
+    if (renderDoc.pages.length === 0) {
+      logExportDiagnostics(`${exportType} export generated 0 pages.`, renderDoc.metrics)
+      throw new Error(`${exportType} export generated 0 pages.`)
+    }
+    const fileName = `${getSafeBaseName(projectName)}_${fileNameSuffix || exportType || 'export'}.pdf`
+    await exportPagesBrowser(renderDoc.pages, {}, {
+      fileName,
+      exportType,
+      selector: renderDoc.metrics.selector,
+    })
+  } finally {
+    renderDoc.cleanup()
+  }
+}
+
+async function exportStoryboardPagesAsPNG(projectName) {
+  const imageMap = await preloadShotImages()
+  const html = buildStoryboardPrintHtml(imageMap)
+  const renderDoc = await createOffscreenPrintDocument(html, {
+    selector: '.page-doc',
+    width: 1123,
+    height: 794,
+    exportType: 'storyboard-png',
+  })
+
+  try {
+    if (renderDoc.pages.length === 0) {
+      logExportDiagnostics('Storyboard PNG export generated 0 pages.', renderDoc.metrics)
+      throw new Error('Storyboard PNG export generated 0 pages.')
+    }
+
+    for (let i = 0; i < renderDoc.pages.length; i++) {
+      console.log(`[PNG Export] Rendering generated storyboard page ${i + 1}/${renderDoc.pages.length}…`)
+      const canvas = await captureElementWithTimeout(renderDoc.pages[i], 2, 60000)
+      if (!canvas.width || !canvas.height) {
+        throw new Error(`Storyboard PNG page ${i + 1} rendered at zero size.`)
+      }
+      const filename = renderDoc.pages.length === 1 ? 'storyboard.png' : `storyboard_page${i + 1}.png`
+
+      if (platformService.isDesktop()) {
+        const dataURL = canvas.toDataURL('image/png')
+        const base64 = dataURL.replace(/^data:image\/png;base64,/, '')
+        await platformService.savePNG(filename, base64)
+      } else {
+        const link = document.createElement('a')
+        link.download = filename
+        link.href = canvas.toDataURL('image/png')
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+      console.log(`[PNG Export] Page ${i + 1} saved.`)
+    }
+  } finally {
+    renderDoc.cleanup()
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -2681,28 +2875,37 @@ async function exportPagesBrowser(pages, imageMap = {}) {
 /**
  * Export the storyboard as a PDF.
  * Electron path: builds fresh HTML from store data, passes to printToPDF.
- * Browser fallback: html2canvas captures the live .page-document DOM elements.
+ * Browser fallback: renders this generated print HTML offscreen and captures .page-doc pages.
  */
-export async function exportStoryboardPDF(pageRefs, projectName) {
+export async function exportStoryboardPDF(_pageRefs, projectName) {
   try {
+    // Use the same data-driven storyboard print HTML as the known-good combined
+    // export so standalone Storyboard PDF does not depend on the currently active tab.
+    const imageMap = await preloadShotImages()
+    const html = buildStoryboardPrintHtml(imageMap)
+    const generatedPageCount = (html.match(/class="page-doc"/g) || []).length
+    if (generatedPageCount === 0) {
+      logExportDiagnostics('Storyboard export generated 0 pages.', {
+        generatedPageCount,
+        selector: '.page-doc',
+        htmlHasPageDoc: html.includes('page-doc'),
+      })
+      throw new Error('Storyboard export generated 0 pages.')
+    }
+
     if (platformService.hasPrintToPDF()) {
-      // Pre-fetch all remote shot images to base64 so the Electron print-to-PDF
-      // renderer never encounters cross-origin URLs that could produce blank frames.
-      const imageMap = await preloadShotImages()
-      const html = buildStoryboardPrintHtml(imageMap)
       await exportViaPrint(html, projectName, 'storyboard')
     } else {
-      const pages = (pageRefs?.current || []).filter(Boolean)
-      if (pages.length === 0) {
-        console.warn('[PDF Export] No storyboard page elements found — aborting.')
-        return
-      }
-      // Pre-fetch all remote images visible in the live DOM before html2canvas
-      // runs, so the canvas is never tainted by cross-origin <img> elements.
-      const imageMap = await preloadDomImages(pages)
-      await exportPagesBrowser(pages, imageMap)
+      await exportPrintHtmlPagesBrowser(html, projectName, {
+        exportType: 'storyboard-pdf',
+        fileNameSuffix: 'storyboard',
+        selector: '.page-doc',
+        width: 1123,
+        height: 794,
+      })
     }
   } catch (err) {
+    logExportDiagnostics('Storyboard export failed.', { stack: err?.stack })
     console.error('[PDF Export] Storyboard export failed:', err)
     _handleExportError(err)
   }
@@ -2711,22 +2914,30 @@ export async function exportStoryboardPDF(pageRefs, projectName) {
 /**
  * Export the shotlist as a PDF.
  * Electron path: builds fresh HTML from store data, passes to printToPDF.
- * Browser fallback: html2canvas captures the live shotlist container element.
+ * Browser fallback: renders this generated print HTML offscreen and captures it without requiring the Shotlist tab DOM.
  */
-export async function exportShotlistPDF(shotlistRef, projectName) {
+export async function exportShotlistPDF(_shotlistRef, projectName) {
   try {
+    const html = buildShotlistPrintHtml()
+    if (!/<tr[\s>]/i.test(html)) {
+      logExportDiagnostics('Shotlist export generated 0 rows/pages.', { selector: 'body', htmlHasPageDoc: html.includes('page-doc') })
+      throw new Error('Shotlist export generated 0 rows/pages.')
+    }
+
     if (platformService.hasPrintToPDF()) {
-      const html = buildShotlistPrintHtml()
       await exportViaPrint(html, projectName, 'shotlist')
     } else {
-      const el = shotlistRef?.current
-      if (!el) {
-        console.warn('[PDF Export] Shotlist element not found — aborting.')
-        return
-      }
-      await exportPagesBrowser([el])
+      await exportPrintHtmlPagesBrowser(html, projectName, {
+        exportType: 'shotlist-pdf',
+        fileNameSuffix: 'shotlist',
+        selector: '.page-doc',
+        fallbackSelector: 'body',
+        width: 1123,
+        height: 794,
+      })
     }
   } catch (err) {
+    logExportDiagnostics('Shotlist export failed.', { stack: err?.stack })
     console.error('[PDF Export] Shotlist export failed:', err)
     _handleExportError(err)
   }
@@ -2901,31 +3112,11 @@ export async function exportToPDF(pageRefs, projectName) {
   return exportStoryboardPDF(pageRefs, projectName)
 }
 
-export async function exportToPNG(pageRefs) {
-  const pages = (pageRefs?.current || []).filter(Boolean)
-  if (pages.length === 0) return
-
+export async function exportToPNG(_pageRefs) {
   try {
-    for (let i = 0; i < pages.length; i++) {
-      console.log(`[PNG Export] Rendering page ${i + 1}/${pages.length}…`)
-      const canvas = await captureElementWithTimeout(pages[i], 2, 60000)
-      const filename = pages.length === 1 ? 'storyboard.png' : `storyboard_page${i + 1}.png`
-
-      if (platformService.isDesktop()) {
-        const dataURL = canvas.toDataURL('image/png')
-        const base64 = dataURL.replace(/^data:image\/png;base64,/, '')
-        await platformService.savePNG(filename, base64)
-      } else {
-        const link = document.createElement('a')
-        link.download = filename
-        link.href = canvas.toDataURL('image/png')
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      }
-      console.log(`[PNG Export] Page ${i + 1} saved.`)
-    }
+    await exportStoryboardPagesAsPNG(useStore.getState().projectName)
   } catch (err) {
+    logExportDiagnostics('Storyboard PNG export failed.', { stack: err?.stack })
     console.error('[PNG Export] Failed:', err)
     const raw = err?.message || ''
     let msg = `PNG export failed: ${raw || 'Unknown error'}`
@@ -3148,6 +3339,7 @@ export async function exportAllSeparatePDFs(pageRefs, shotlistRef, projectName) 
 }
 
 function _handleExportError(err) {
+  logExportDiagnostics('Export failure surfaced to user.', { stack: err?.stack })
   const raw = err?.message || String(err) || 'Unknown error'
   let msg = `PDF export failed: ${raw}`
   if (/memory|heap|call stack|out of/i.test(raw)) {
@@ -3256,12 +3448,14 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   const activeDay = activeDayIdx >= 0 ? schedule[activeDayIdx] : schedule[0]
   const resolvedDayIdx = activeDayIdx >= 0 ? activeDayIdx : 0
 
-  const run = async (key, fn) => {
+  const run = async (key, label, fn) => {
+    setExportContext({ exportType: key, actionLabel: label, activeTab: activeTabLabel, projectName })
     setExporting(true)
     setExportingKey(key)
     try {
       await fn()
     } catch (err) {
+      logExportDiagnostics('Export Hub action failed.', { stack: err?.stack })
       _handleExportError(err)
     } finally {
       setExporting(false)
@@ -3333,13 +3527,13 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               sub="All documents, all days, combined into a single file"
               primary
               disabled={exporting}
-              onClick={() => run('all-combined', () => exportAllCombinedPDF(projectName))}
+              onClick={() => run('all-combined', 'Everything — One Combined PDF', () => exportAllCombinedPDF(projectName))}
             />
             <ExportBtn
               label={busy('all-separate') ? 'Exporting…' : 'Everything — Separate PDF Files'}
               sub="Storyboard, Shotlist, Schedule, and Callsheet as individual files"
               disabled={exporting}
-              onClick={() => run('all-separate', () => exportAllSeparatePDFs(pageRefs, shotlistRef, projectName))}
+              onClick={() => run('all-separate', 'Everything — Separate PDF Files', () => exportAllSeparatePDFs(pageRefs, shotlistRef, projectName))}
             />
           </div>
 
@@ -3349,13 +3543,13 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               label={busy('storyboard-pdf') ? 'Exporting…' : 'Storyboard PDF'}
               sub="Produces all storyboard pages in a print-ready PDF."
               disabled={exporting}
-              onClick={() => run('storyboard-pdf', () => exportStoryboardPDF(pageRefs, projectName))}
+              onClick={() => run('storyboard-pdf', 'Storyboard PDF', () => exportStoryboardPDF(pageRefs, projectName))}
             />
             <ExportBtn
               label={busy('storyboard-png') ? 'Exporting…' : 'Storyboard PNG'}
               sub="Produces PNG images for storyboard pages."
               disabled={exporting}
-              onClick={() => run('storyboard-png', () => exportToPNG(pageRefs))}
+              onClick={() => run('storyboard-png', 'Storyboard PNG', () => exportToPNG(pageRefs))}
             />
           </div>
 
@@ -3365,7 +3559,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               label={busy('shotlist') ? 'Exporting…' : 'Shotlist PDF'}
               sub="Produces a full shotlist table grouped by day."
               disabled={exporting}
-              onClick={() => run('shotlist', () => exportShotlistPDF(shotlistRef, projectName))}
+              onClick={() => run('shotlist', 'Shotlist PDF', () => exportShotlistPDF(shotlistRef, projectName))}
             />
           </div>
 
@@ -3375,25 +3569,25 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               label={busy('schedule') ? 'Exporting…' : 'Schedule PDF'}
               sub="Produces the standard day-by-day schedule layout."
               disabled={exporting}
-              onClick={() => run('schedule', () => exportSchedulePDF(projectName))}
+              onClick={() => run('schedule', 'Schedule PDF', () => exportSchedulePDF(projectName))}
             />
             <ExportBtn
               label={busy('exp-schedule') ? 'Exporting…' : 'Expanded Schedule PDF'}
               sub="Produces an expanded schedule with call/wrap and detailed shot rows."
               disabled={exporting}
-              onClick={() => run('exp-schedule', () => exportExpandedSchedulePDF(projectName))}
+              onClick={() => run('exp-schedule', 'Expanded Schedule PDF', () => exportExpandedSchedulePDF(projectName))}
             />
             <ExportBtn
               label={busy('exp-stripboard') ? 'Exporting…' : 'Stripboard PDF'}
               sub="Produces a stripboard view with one column per day."
               disabled={exporting}
-              onClick={() => run('exp-stripboard', () => exportStripboardPDF(projectName))}
+              onClick={() => run('exp-stripboard', 'Stripboard PDF', () => exportStripboardPDF(projectName))}
             />
             <ExportBtn
               label={busy('exp-calendar') ? 'Exporting…' : 'Calendar PDF'}
               sub="Produces a monthly calendar with shoot-day highlights."
               disabled={exporting}
-              onClick={() => run('exp-calendar', () => exportCalendarPDF(projectName))}
+              onClick={() => run('exp-calendar', 'Calendar PDF', () => exportCalendarPDF(projectName))}
             />
           </div>
 
@@ -3435,7 +3629,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
                 ? 'Exports only the currently-viewed shoot day.'
                 : 'Exports every shoot day as a multi-page PDF.'}
               disabled={exporting}
-              onClick={() => run('callsheet', () =>
+              onClick={() => run('callsheet', 'Callsheet PDF', () =>
                 callsheetScope === 'current'
                   ? exportSingleDayCallsheetPDF({
                       dayIdx: resolvedDayIdx,
@@ -3454,7 +3648,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               label={busy('script-txt') ? 'Exporting…' : 'Script TXT'}
               sub="Downloads the current script as a plain text screenplay file."
               disabled={exporting}
-              onClick={() => run('script-txt', async () => {
+              onClick={() => run('script-txt', 'Script TXT', async () => {
                 const state = useStore.getState()
                 const doc = state.scriptDocumentLive || state.scriptDocument
                 downloadScriptAsTxt(doc, state.projectName)
@@ -3493,7 +3687,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               label={busy('mobile-day') ? 'Exporting…' : 'Mobile Day Package (JSON)'}
               sub="Produces one mobile-day-package JSON for a single shoot day."
               disabled={exporting || !schedule.length}
-              onClick={() => run('mobile-day', async () => {
+              onClick={() => run('mobile-day', 'Mobile Day Package (JSON)', async () => {
                 if (!selectedMobileDayId) throw new Error('Please select a shoot day to export.')
                 const { exportMobilePackageFromProject } = await getMobileExportService()
                 await exportMobilePackageFromProject(getProjectData(), {
@@ -3520,7 +3714,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
               label={busy('mobile-snapshot') ? 'Exporting…' : 'Mobile Snapshot (JSON)'}
               sub="Produces one mobile-snapshot JSON for selected shoot days."
               disabled={exporting || !schedule.length}
-              onClick={() => run('mobile-snapshot', async () => {
+              onClick={() => run('mobile-snapshot', 'Mobile Snapshot (JSON)', async () => {
                 if (!snapshotDayIds.length) throw new Error('Select at least one shoot day for snapshot export.')
                 const { exportMobilePackageFromProject } = await getMobileExportService()
                 await exportMobilePackageFromProject(getProjectData(), {
@@ -3563,7 +3757,7 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
                     label={busy(`day-${idx}`) ? 'Exporting…' : `Day ${idx + 1} Bundle PDF`}
                     sub={`Produces shotlist + schedule + callsheet for Day ${idx + 1}${day.date ? ` (${day.date})` : ''}.`}
                     disabled={exporting}
-                    onClick={() => run(`day-${idx}`, () => exportDayPDF(idx, { shotlist: true, schedule: true, callsheet: true }, projectName))}
+                    onClick={() => run(`day-${idx}`, `Day ${idx + 1} PDF`, () => exportDayPDF(idx, { shotlist: true, schedule: true, callsheet: true }, projectName))}
                   />
                 ))}
               </div>
