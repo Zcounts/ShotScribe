@@ -1,37 +1,43 @@
-# Export Workflow Unification (April 2026)
+# Export Workflow Unification (updated June 2026)
 
-## Audit summary (before this change)
+## Current export UX
 
-### Existing export entry points
-1. **Toolbar export split-button + dropdown**
-   - Opened a toolbar-only modal with separate `PDF / PNG / Mobile` tabs.
-2. **App-level `ExportModal`**
-   - Opened via toolbar `onExportPDF` callbacks.
-   - Contained its own PDF-focused structure with overlapping actions.
-3. **Callsheet sidebar**
-   - Separate direct action: `Export Callsheet PDF`.
+ShotScribe now uses a single **Export** settings modal in `src/components/ExportModal.jsx` instead of a long wall of export action buttons.
 
-### Key inconsistencies found
-- Two different export dialogs existed at once (toolbar modal and app modal).
-- Export actions were duplicated (`Storyboard PDF`, `Shotlist PDF`, etc.) across sections.
-- Some options were context-conditional in ways that felt arbitrary (schedule format options only surfaced in schedule context).
-- Callsheet had a standalone export path, bypassing the main export UI.
-- No single “source of truth” view that explained what each export produces.
+The default modal flow is:
 
-## What changed
+1. Choose **Export Type**:
+   - Everything
+   - Storyboard
+   - Shotlist
+   - Schedule
+   - Callsheet
+2. Choose the available **Format** for that type.
+3. Choose the available **Scope / Range**.
+4. Choose the **Output** mode.
+5. Review the readable summary.
+6. Click one primary **Export** button.
 
-- Consolidated export UX into a single **Export Hub** (`src/components/ExportModal.jsx`).
-- Updated toolbar to open only that unified hub.
-- Updated callsheet sidebar action to route into the same hub.
-- Grouped exports by clear launch categories:
-  - Storyboards
-  - Shotlists
-  - Schedules
-  - Callsheets
-  - Reports
-- Added explicit output descriptions for each action.
-- Marked unsupported **Reports** export as disabled (graceful, non-broken state).
-- Preserved existing export generation logic (PDF/PNG/mobile functions) and reused it through a cleaner UI surface.
+The modal keeps less common routes under **Advanced / additional exports** so launch-critical PDF/PNG exports stay simple while existing script, mobile JSON, and per-day bundle paths remain reachable.
+
+## Preserved export routing
+
+The UI is intentionally a routing refactor, not an export-engine rewrite. These existing export paths remain available:
+
+- **Everything · Combined PDF** uses the existing complete-export route.
+- **Everything · Separate PDF files** runs the existing storyboard, shotlist, schedule, and callsheet PDF exports.
+- **Storyboard · PDF** uses the same store-built storyboard print renderer used by the complete PDF route so standalone storyboard PDFs do not diverge from the storyboard section in the combined PDF.
+- **Storyboard · PNG** keeps the existing PNG export route.
+- **Shotlist · PDF** keeps the existing shotlist export route.
+- **Schedule · PDF** exposes standard, expanded, stripboard, and calendar modes through the Output section.
+- **Callsheet · PDF** supports the selected shoot day or all callsheets when schedule days exist.
+
+## Error and loading behavior
+
+- Controls are disabled while an export is preparing.
+- The primary button changes to `Preparing export…` to prevent double-clicks.
+- The modal logs selected export type, format, scope, output mode, generated document/page count, active tab, and stack details when exports start or fail.
+- User-facing validation now prefers specific messages such as `Storyboard export generated no pages`, `No schedule days found`, and `No shots found for this scope`.
 
 ## Manual QA checklist by export type
 
@@ -40,56 +46,61 @@
 > - 2+ schedule days
 > - callsheet data
 
-### Storyboards
-1. Open **Export Hub**.
-2. Run **Storyboard PDF**.
-3. Verify PDF downloads/saves and includes storyboard pages.
-4. Run **Storyboard PNG**.
-5. Verify PNG files are downloaded/saved and readable.
+### Everything combined
+1. Open **Export**.
+2. Set **Export Type** to **Everything**.
+3. Set **Format** to **PDF**.
+4. Set **Output** to **One combined PDF**.
+5. Click **Export**.
+6. Confirm the result still works and storyboard pages match the expected combined-PDF layout.
 
-### Shotlists
-1. Open **Export Hub**.
-2. Run **Shotlist PDF**.
-3. Verify shotlist table includes expected shots and grouping.
+### Everything separate
+1. Open **Export**.
+2. Set **Export Type** to **Everything**.
+3. Set **Output** to **Separate PDF files**.
+4. Click **Export**.
+5. Confirm storyboard, shotlist, schedule, and callsheet PDFs are produced correctly.
 
-### Schedules
-1. Open **Export Hub**.
-2. Run **Schedule PDF** and verify baseline schedule layout.
-3. Run **Expanded Schedule PDF** and verify expanded row detail.
-4. Run **Stripboard PDF** and verify stripboard structure.
-5. Run **Calendar PDF** and verify monthly schedule calendar output.
+### Storyboard PDF
+1. Open **Export**.
+2. Set **Export Type** to **Storyboard**.
+3. Set **Format** to **PDF**.
+4. Confirm **Scope / Range** says **All pages**.
+5. Click **Export**.
+6. Confirm the PDF exports correctly and matches the storyboard section of the combined PDF.
 
-### Callsheets
-1. Open **Export Hub**.
-2. Run **Callsheet PDF**.
-3. Verify one callsheet page per shoot day and expected callsheet fields.
+### Storyboard PNG
+1. Open **Export**.
+2. Set **Export Type** to **Storyboard**.
+3. Set **Format** to **PNG**.
+4. Confirm **Output** says **Individual PNG files/pages**.
+5. Click **Export** and verify PNG files are readable.
 
-### Reports (unsupported)
-1. Open **Export Hub**.
-2. Verify **Reports Export (Not Yet Supported)** is visibly disabled.
-3. Verify no broken click path appears.
+### Shotlist PDF
+1. Open **Export**.
+2. Set **Export Type** to **Shotlist**.
+3. Click **Export**.
+4. Verify the shotlist PDF includes expected shots and grouping.
 
-### Mobile on-set packages
-1. Open **Export Hub**.
-2. Select a day and run **Mobile Day Package (JSON)**.
-3. Verify JSON export downloads/saves and parses.
-4. Select multiple days and run **Mobile Snapshot (JSON)**.
-5. Verify JSON export downloads/saves and parses.
+### Schedule PDFs
+1. Open **Export**.
+2. Set **Export Type** to **Schedule**.
+3. Run each **Output / Schedule Mode** option:
+   - Standard schedule
+   - Expanded schedule
+   - Stripboard
+   - Calendar
+4. Confirm each generated file is valid and readable.
 
-### Whole project exports
-1. Run **Everything — One Combined PDF** and confirm one large combined file.
-2. Run **Everything — Separate PDF Files** and confirm separate files are produced.
-3. Run a **Per-Day PDF Bundle** entry and confirm shotlist + schedule + callsheet for that day.
+### Callsheet PDF
+1. Open **Export**.
+2. Set **Export Type** to **Callsheet**.
+3. Select **Selected shoot day** and export.
+4. Select **All callsheets** and export.
+5. Confirm day selection and PDF output are correct.
 
-## Export reliability follow-up (June 2026)
-
-- Standalone **Storyboard PDF** now uses the same store-driven storyboard print HTML builder as **Everything — One Combined PDF**. This keeps storyboard page layout, image rendering, shot labels, camera/lens/spec/note visibility, and pagination aligned with the known-good combined export path.
-- Browser fallback rendering for standalone storyboard PDF/PNG now renders generated print HTML in an offscreen iframe and captures `.page-doc` pages from that generated document instead of relying on the currently visible Storyboard tab DOM. Storyboard exports should work even when the user opens Export Hub from Shotlist, Schedule, or Callsheet.
-- Standalone **Shotlist PDF** also uses generated print HTML in browser fallback mode rather than the live shotlist tab container.
-- Export Hub actions now set action context before running so failures log export type, selected action label, active tab, project name, page counts/selectors when available, and stack traces.
-
-### Regression QA for this follow-up
-1. From the **Shotlist** tab, open Export Hub and run **Storyboard PDF**. Confirm no `No pages could be rendered` alert appears and the PDF matches the storyboard section of the combined export.
-2. Run **Storyboard PNG** and confirm every generated PNG has visible storyboard content and non-zero dimensions.
-3. Run **Everything — One Combined PDF** and confirm page order/styling remain Storyboard, Shotlist, Schedule, Callsheet.
-4. Run **Everything — Separate PDF Files** and confirm the generated Storyboard PDF uses the same layout as the standalone Storyboard PDF.
+### Advanced / additional exports
+1. Open **Advanced / additional exports**.
+2. Verify Script TXT still downloads.
+3. Verify Mobile Day Package and Mobile Snapshot JSON exports still download and parse.
+4. Verify per-day PDF bundles still produce shotlist + schedule + callsheet for the selected day.

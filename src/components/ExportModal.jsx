@@ -2877,7 +2877,7 @@ async function exportStoryboardPagesAsPNG(projectName) {
  * Electron path: builds fresh HTML from store data, passes to printToPDF.
  * Browser fallback: renders this generated print HTML offscreen and captures .page-doc pages.
  */
-export async function exportStoryboardPDF(_pageRefs, projectName) {
+export async function exportStoryboardPDF(pageRefs, projectName, options = {}) {
   try {
     // Use the same data-driven storyboard print HTML as the known-good combined
     // export so standalone Storyboard PDF does not depend on the currently active tab.
@@ -2896,18 +2896,20 @@ export async function exportStoryboardPDF(_pageRefs, projectName) {
     if (platformService.hasPrintToPDF()) {
       await exportViaPrint(html, projectName, 'storyboard')
     } else {
-      await exportPrintHtmlPagesBrowser(html, projectName, {
-        exportType: 'storyboard-pdf',
-        fileNameSuffix: 'storyboard',
-        selector: '.page-doc',
-        width: 1123,
-        height: 794,
-      })
+      const pages = (pageRefs?.current || []).filter(Boolean)
+      if (pages.length === 0) {
+        throw new Error('Storyboard export generated no pages')
+      }
+      // Pre-fetch all remote images visible in the live DOM before html2canvas
+      // runs, so the canvas is never tainted by cross-origin <img> elements.
+      const imageMap = await preloadDomImages(pages)
+      await exportPagesBrowser(pages, imageMap)
     }
   } catch (err) {
     logExportDiagnostics('Storyboard export failed.', { stack: err?.stack })
     console.error('[PDF Export] Storyboard export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
@@ -2916,7 +2918,7 @@ export async function exportStoryboardPDF(_pageRefs, projectName) {
  * Electron path: builds fresh HTML from store data, passes to printToPDF.
  * Browser fallback: renders this generated print HTML offscreen and captures it without requiring the Shotlist tab DOM.
  */
-export async function exportShotlistPDF(_shotlistRef, projectName) {
+export async function exportShotlistPDF(shotlistRef, projectName, options = {}) {
   try {
     const html = buildShotlistPrintHtml()
     if (!/<tr[\s>]/i.test(html)) {
@@ -2940,6 +2942,7 @@ export async function exportShotlistPDF(_shotlistRef, projectName) {
     logExportDiagnostics('Shotlist export failed.', { stack: err?.stack })
     console.error('[PDF Export] Shotlist export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
@@ -2952,7 +2955,7 @@ export async function exportShotlistPDF(_shotlistRef, projectName) {
  * Export an expanded (detailed) shooting schedule as a PDF.
  * Includes projected wrap time and full shot/block details.
  */
-export async function exportExpandedSchedulePDF(projectName) {
+export async function exportExpandedSchedulePDF(projectName, options = {}) {
   try {
     const html = buildExpandedSchedulePrintHtml()
     if (platformService.hasPrintToPDF()) {
@@ -2975,6 +2978,7 @@ export async function exportExpandedSchedulePDF(projectName) {
   } catch (err) {
     console.error('[PDF Export] Expanded schedule export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
@@ -2982,7 +2986,7 @@ export async function exportExpandedSchedulePDF(projectName) {
  * Export the stripboard view as a landscape PDF.
  * Each column = one shoot day; strips show color swatches.
  */
-export async function exportStripboardPDF(projectName) {
+export async function exportStripboardPDF(projectName, options = {}) {
   try {
     const html = buildStripboardPrintHtml()
     if (platformService.hasPrintToPDF()) {
@@ -3005,6 +3009,7 @@ export async function exportStripboardPDF(projectName) {
   } catch (err) {
     console.error('[PDF Export] Stripboard export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
@@ -3012,7 +3017,7 @@ export async function exportStripboardPDF(projectName) {
  * Export the calendar view as a PDF.
  * One page per month with shoot days marked.
  */
-export async function exportCalendarPDF(projectName) {
+export async function exportCalendarPDF(projectName, options = {}) {
   try {
     const html = buildCalendarPrintHtml()
     if (platformService.hasPrintToPDF()) {
@@ -3035,10 +3040,11 @@ export async function exportCalendarPDF(projectName) {
   } catch (err) {
     console.error('[PDF Export] Calendar export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
-export async function exportSchedulePDF(projectName) {
+export async function exportSchedulePDF(projectName, options = {}) {
   try {
     const html = buildSchedulePrintHtml()
     if (platformService.hasPrintToPDF()) {
@@ -3069,18 +3075,20 @@ export async function exportSchedulePDF(projectName) {
   } catch (err) {
     console.error('[PDF Export] Schedule export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
 /**
  * Export callsheets as a PDF — one page per shooting day.
  */
-export async function exportCallsheetPDF(projectName) {
+export async function exportCallsheetPDF(projectName, options = {}) {
   try {
     await downloadCallsheetPdf({ dayIdxFilter: null, projectName })
   } catch (err) {
     console.error('[PDF Export] Callsheet export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
@@ -3300,7 +3308,7 @@ ${csBody}
 </html>`
 }
 
-export async function exportAllCombinedPDF(projectName) {
+export async function exportAllCombinedPDF(projectName, options = {}) {
   try {
     const html = buildCombinedPrintHtml()
     if (platformService.hasPrintToPDF()) {
@@ -3323,18 +3331,20 @@ export async function exportAllCombinedPDF(projectName) {
   } catch (err) {
     console.error('[PDF Export] Combined export failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
-export async function exportAllSeparatePDFs(pageRefs, shotlistRef, projectName) {
+export async function exportAllSeparatePDFs(pageRefs, shotlistRef, projectName, options = {}) {
   try {
-    await exportStoryboardPDF(pageRefs, projectName)
-    await exportShotlistPDF(shotlistRef, projectName)
-    await exportSchedulePDF(projectName)
-    await exportCallsheetPDF(projectName)
+    await exportStoryboardPDF(pageRefs, projectName, options)
+    await exportShotlistPDF(shotlistRef, projectName, options)
+    await exportSchedulePDF(projectName, options)
+    await exportCallsheetPDF(projectName, options)
   } catch (err) {
     console.error('[PDF Export] Export All (separate) failed:', err)
     _handleExportError(err)
+    if (options?.rethrow) throw err
   }
 }
 
@@ -3360,51 +3370,116 @@ function _handleExportError(err) {
 
 // ── ExportModal component ──────────────────────────────────────────────────────
 
-function SectionLabel({ children }) {
+const EXPORT_TYPE_OPTIONS = [
+  { value: 'everything', label: 'Everything', description: 'All core production documents.' },
+  { value: 'storyboard', label: 'Storyboard', description: 'Storyboard pages from current project scenes.' },
+  { value: 'shotlist', label: 'Shotlist', description: 'Full shotlist table grouped by day.' },
+  { value: 'schedule', label: 'Schedule', description: 'Schedule, expanded schedule, or stripboard.' },
+  { value: 'callsheet', label: 'Callsheet', description: 'Callsheets for shoot days.' },
+]
+
+const activeTabToExportType = {
+  shotlist: 'shotlist',
+  schedule: 'schedule',
+  callsheet: 'callsheet',
+}
+
+function FieldGroup({ title, children, hint }) {
   return (
-    <div style={{
-      fontSize: 10,
-      fontWeight: 700,
-      letterSpacing: '0.1em',
-      textTransform: 'uppercase',
-      color: '#999',
-      marginBottom: 8,
-      paddingBottom: 5,
-      borderBottom: '1px solid #e5e7eb',
-    }}>
+    <section style={{ display: 'grid', gap: 10 }}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: '#111827', letterSpacing: '0.01em' }}>{title}</div>
+        {hint && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{hint}</div>}
+      </div>
       {children}
+    </section>
+  )
+}
+
+function SegmentedControl({ options, value, onChange, disabled, columns = 2 }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 8 }}>
+      {options.map(opt => {
+        const selected = value === opt.value
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled || opt.disabled}
+            onClick={() => !disabled && !opt.disabled && onChange(opt.value)}
+            style={{
+              minHeight: opt.description ? 68 : 42,
+              padding: '10px 12px',
+              borderRadius: 12,
+              border: selected ? '1.5px solid #2563eb' : '1px solid #dbe3ef',
+              background: selected ? '#eff6ff' : '#fff',
+              color: opt.disabled ? '#94a3b8' : selected ? '#1d4ed8' : '#0f172a',
+              cursor: disabled || opt.disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled || opt.disabled ? 0.58 : 1,
+              textAlign: 'left',
+              boxShadow: selected ? '0 8px 24px rgba(37,99,235,0.12)' : '0 1px 2px rgba(15,23,42,0.04)',
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800 }}>{opt.label}</div>
+            {opt.description && <div style={{ fontSize: 11, lineHeight: 1.35, color: selected ? '#3b82f6' : '#64748b', marginTop: 4 }}>{opt.description}</div>}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-function ExportBtn({ label, sub, onClick, disabled, primary }) {
+function InlineSelect({ value, onChange, disabled, children, label }) {
+  return (
+    <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 700, color: '#334155' }}>
+      {label}
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled}
+        style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#fff', color: '#0f172a', fontSize: 13 }}
+      >
+        {children}
+      </select>
+    </label>
+  )
+}
+
+function AdditionalExportButton({ label, sub, onClick, disabled }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       style={{
-        display: 'block',
-        width: '100%',
-        textAlign: 'left',
-        padding: '9px 12px',
-        borderRadius: 6,
-        border: `1px solid ${primary ? '#2563eb' : '#e5e7eb'}`,
-        background: primary ? '#2563eb' : '#f9fafb',
-        color: primary ? '#fff' : '#111',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        transition: 'background 0.1s',
-        marginBottom: 6,
-        fontSize: 13,
-        fontWeight: 600,
+        display: 'block', width: '100%', textAlign: 'left', padding: '9px 11px', borderRadius: 10,
+        border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.55 : 1, fontSize: 13, fontWeight: 750,
       }}
-      onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = primary ? '#1d4ed8' : '#f3f4f6' }}
-      onMouseLeave={e => { if (!disabled) e.currentTarget.style.background = primary ? '#2563eb' : '#f9fafb' }}
     >
       {label}
-      {sub && <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 1 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, lineHeight: 1.35, fontWeight: 400, color: '#64748b', marginTop: 2 }}>{sub}</div>}
     </button>
   )
+}
+
+function getActiveTabLabel(activeTab) {
+  if (activeTab === 'shotlist') return 'Shotlist'
+  if (activeTab === 'schedule') return 'Schedule'
+  if (activeTab === 'callsheet') return 'Callsheet'
+  return 'Storyboard'
+}
+
+function buildExportLogDetails({ exportType, format, scope, outputMode, activeTab, generatedCount }) {
+  return {
+    exportType,
+    format,
+    scope,
+    outputMode,
+    generatedCount,
+    activeTab,
+    stack: new Error().stack,
+  }
 }
 
 export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, activeTab, projectName }) {
@@ -3413,9 +3488,22 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
   const callsheetTabViewState = useStore(s => s.tabViewState?.callsheet)
   const [exporting, setExporting] = useState(false)
   const [exportingKey, setExportingKey] = useState(null)
+  const [exportError, setExportError] = useState('')
+  const [exportSuccess, setExportSuccess] = useState('')
+  const [selectedExportType, setSelectedExportType] = useState(activeTabToExportType[activeTab] || 'everything')
+  const [selectedFormat, setSelectedFormat] = useState('pdf')
+  const [selectedScope, setSelectedScope] = useState('all')
+  const [selectedOutputMode, setSelectedOutputMode] = useState('combined')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [selectedMobileDayId, setSelectedMobileDayId] = useState('')
   const [snapshotDayIds, setSnapshotDayIds] = useState([])
-  const [callsheetScope, setCallsheetScope] = useState('all')
+
+  useEffect(() => {
+    if (!isOpen) return
+    setSelectedExportType(activeTabToExportType[activeTab] || 'everything')
+    setExportError('')
+    setExportSuccess('')
+  }, [activeTab, isOpen])
 
   useEffect(() => {
     if (!schedule.length) {
@@ -3440,74 +3528,203 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
     })
   }, [schedule])
 
+  useEffect(() => {
+    setExportError('')
+    setExportSuccess('')
+    if (selectedExportType === 'storyboard') {
+      setSelectedFormat(format => (format === 'png' ? format : 'pdf'))
+      setSelectedOutputMode(output => (selectedFormat === 'png' ? 'png-pages' : output === 'png-pages' ? 'single' : output))
+      setSelectedScope('all')
+      return
+    }
+    setSelectedFormat('pdf')
+    if (selectedExportType === 'everything') {
+      setSelectedScope('all')
+      setSelectedOutputMode(output => (output === 'separate' ? 'separate' : 'combined'))
+    } else if (selectedExportType === 'schedule') {
+      setSelectedScope('all')
+      setSelectedOutputMode(output => ['standard', 'expanded', 'stripboard', 'calendar'].includes(output) ? output : 'standard')
+    } else if (selectedExportType === 'callsheet') {
+      setSelectedScope(scope => (scope === 'current' ? scope : 'all'))
+      setSelectedOutputMode('single')
+    } else {
+      setSelectedScope('all')
+      setSelectedOutputMode('single')
+    }
+  }, [selectedExportType, selectedFormat])
+
   if (!isOpen) return null
 
-  // Resolve the currently-active callsheet day for "Current Day Only" export
   const activeDayId = callsheetTabViewState?.selectedDayId || null
   const activeDayIdx = activeDayId ? schedule.findIndex(d => d.id === activeDayId) : 0
   const activeDay = activeDayIdx >= 0 ? schedule[activeDayIdx] : schedule[0]
   const resolvedDayIdx = activeDayIdx >= 0 ? activeDayIdx : 0
+  const activeTabLabel = getActiveTabLabel(activeTab)
 
-  const run = async (key, label, fn) => {
-    setExportContext({ exportType: key, actionLabel: label, activeTab: activeTabLabel, projectName })
+  const formatOptions = selectedExportType === 'storyboard'
+    ? [{ value: 'pdf', label: 'PDF' }, { value: 'png', label: 'PNG' }]
+    : [{ value: 'pdf', label: 'PDF' }]
+
+  const scopeOptions = selectedExportType === 'callsheet'
+    ? [
+        { value: 'current', label: activeDay ? `Selected shoot day · Day ${resolvedDayIdx + 1}` : 'Selected shoot day', disabled: !activeDay },
+        { value: 'all', label: 'All callsheets', disabled: !schedule.length },
+      ]
+    : selectedExportType === 'everything'
+      ? [{ value: 'all', label: 'All documents' }]
+      : selectedExportType === 'storyboard'
+        ? [{ value: 'all', label: 'All pages' }]
+        : selectedExportType === 'shotlist'
+          ? [{ value: 'all', label: 'All days' }]
+          : [{ value: 'all', label: 'All days' }]
+
+  const outputOptions = selectedExportType === 'everything'
+    ? [
+        { value: 'combined', label: 'One combined PDF', description: 'Storyboard, shotlist, schedule, and callsheets in one file.' },
+        { value: 'separate', label: 'Separate PDF files', description: 'Exports each core document as its own PDF.' },
+      ]
+    : selectedExportType === 'storyboard' && selectedFormat === 'png'
+      ? [{ value: 'png-pages', label: 'Individual PNG files/pages', description: 'Exports each storyboard page as an image.' }]
+      : selectedExportType === 'schedule'
+        ? [
+            { value: 'standard', label: 'Standard schedule', description: 'Day-by-day production schedule.' },
+            { value: 'expanded', label: 'Expanded schedule', description: 'Call/wrap projections and detailed shot rows.' },
+            { value: 'stripboard', label: 'Stripboard', description: 'Board-style overview with one column per day.' },
+            { value: 'calendar', label: 'Calendar', description: 'Monthly calendar with shoot-day highlights.' },
+          ]
+        : [{ value: 'single', label: 'Single file' }]
+
+  const selectedScopeLabel = scopeOptions.find(opt => opt.value === selectedScope)?.label || 'All'
+  const selectedOutputLabel = outputOptions.find(opt => opt.value === selectedOutputMode)?.label || 'Single file'
+  const summary = selectedExportType === 'everything'
+    ? `Everything · ${selectedOutputMode === 'combined' ? 'Combined PDF' : 'Separate PDF files'}`
+    : selectedExportType === 'schedule'
+      ? `Schedule · PDF · ${selectedOutputLabel}`
+      : `${EXPORT_TYPE_OPTIONS.find(opt => opt.value === selectedExportType)?.label || 'Export'} · ${selectedFormat.toUpperCase()} · ${selectedScopeLabel}`
+
+  const generatedCount = selectedExportType === 'everything'
+    ? selectedOutputMode === 'combined' ? 1 : 4
+    : selectedExportType === 'callsheet'
+      ? selectedScope === 'current' ? (activeDay ? 1 : 0) : schedule.length
+      : selectedExportType === 'schedule'
+        ? schedule.length
+        : selectedExportType === 'storyboard'
+          ? (pageRefs?.current || []).filter(Boolean).length || undefined
+          : 1
+
+  const resolvePrimaryExport = () => {
+    if (selectedExportType === 'everything') {
+      return selectedOutputMode === 'combined'
+        ? () => exportAllCombinedPDF(projectName, { rethrow: true })
+        : () => exportAllSeparatePDFs(pageRefs, shotlistRef, projectName, { rethrow: true })
+    }
+    if (selectedExportType === 'storyboard') {
+      return selectedFormat === 'png'
+        ? () => exportToPNG(pageRefs)
+        : () => exportStoryboardPDF(pageRefs, projectName, { rethrow: true })
+    }
+    if (selectedExportType === 'shotlist') return () => exportShotlistPDF(shotlistRef, projectName, { rethrow: true })
+    if (selectedExportType === 'schedule') {
+      if (selectedOutputMode === 'expanded') return () => exportExpandedSchedulePDF(projectName, { rethrow: true })
+      if (selectedOutputMode === 'stripboard') return () => exportStripboardPDF(projectName, { rethrow: true })
+      if (selectedOutputMode === 'calendar') return () => exportCalendarPDF(projectName, { rethrow: true })
+      return () => exportSchedulePDF(projectName, { rethrow: true })
+    }
+    if (selectedExportType === 'callsheet') {
+      return () => selectedScope === 'current'
+        ? exportSingleDayCallsheetPDF({
+            dayIdx: resolvedDayIdx,
+            projectName,
+            dayNumber: resolvedDayIdx + 1,
+            shootDate: activeDay?.date || 'TBD',
+          })
+        : exportCallsheetPDF(projectName, { rethrow: true })
+    }
+    return null
+  }
+
+  const validateSelection = () => {
+    if (selectedExportType === 'callsheet' && !schedule.length) return 'No schedule days found'
+    if (selectedExportType === 'callsheet' && selectedScope === 'current' && !activeDay) return 'Select a shoot day before exporting a callsheet'
+    if (selectedExportType === 'schedule' && !schedule.length) return 'No schedule days found'
+    if (selectedExportType === 'storyboard' && selectedFormat === 'png' && !(pageRefs?.current || []).filter(Boolean).length) return 'Storyboard export generated no pages'
+    if (selectedExportType === 'shotlist' && !shotlistRef?.current && !platformService.hasPrintToPDF()) return 'No shots found for this scope'
+    return ''
+  }
+
+  const run = async (key, fn, meta = {}) => {
+    if (exporting) return
+    const validationError = meta.skipValidation ? '' : validateSelection()
+    if (validationError) {
+      setExportError(validationError)
+      console.error('[Export Modal] Selection validation failed:', { ...meta, validationError })
+      return
+    }
     setExporting(true)
     setExportingKey(key)
+    setExportError('')
+    setExportSuccess('')
     try {
+      console.info('[Export Modal] Starting export:', meta)
       await fn()
+      setExportSuccess('Export started. Follow your browser or system save prompts to finish.')
+      if (!meta.keepOpenOnSuccess) window.setTimeout(() => onClose(), 650)
     } catch (err) {
-      logExportDiagnostics('Export Hub action failed.', { stack: err?.stack })
-      _handleExportError(err)
+      const raw = err?.message || String(err) || 'Unknown error'
+      const friendly = /png/i.test(selectedFormat) ? `PNG export failed: ${raw}` : /pdf|render|print/i.test(raw) ? `PDF render failed: ${raw}` : raw
+      setExportError(friendly)
+      console.error('[Export Modal] Export failed:', { ...meta, error: raw, stack: err?.stack })
     } finally {
       setExporting(false)
       setExportingKey(null)
-      onClose()
     }
   }
 
-  const busy = (key) => exporting && exportingKey === key
-  const activeTabLabel = activeTab === 'shotlist'
-    ? 'Shotlist'
-    : activeTab === 'schedule'
-      ? 'Schedule'
-      : activeTab === 'callsheet'
-        ? 'Callsheet'
-        : 'Storyboard'
+  const runPrimaryExport = () => {
+    const exportFn = resolvePrimaryExport()
+    if (!exportFn) return
+    run('primary', exportFn, buildExportLogDetails({
+      exportType: selectedExportType,
+      format: selectedFormat,
+      scope: selectedScope,
+      outputMode: selectedOutputMode,
+      activeTab,
+      generatedCount,
+    }))
+  }
 
   const overlayStyle = {
-    position: 'fixed', inset: 0, zIndex: 1000,
-    background: 'rgba(0,0,0,0.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.48)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
   }
   const modalStyle = {
-    background: '#fff',
-    borderRadius: 10,
-    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-    width: 520,
-    maxWidth: '95vw',
-    maxHeight: '88vh',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
+    background: '#f8fafc', borderRadius: 18, boxShadow: '0 28px 80px rgba(15,23,42,0.36)',
+    width: 680, maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    border: '1px solid rgba(226,232,240,0.9)',
   }
-  const scrollStyle = {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '0 20px 20px',
+  const scrollStyle = { flex: 1, overflowY: 'auto', padding: 22, display: 'grid', gap: 20 }
+  const footerStyle = {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    padding: '14px 20px', borderTop: '1px solid #e2e8f0', background: '#fff', flexShrink: 0,
   }
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+    <div style={overlayStyle} onClick={exporting ? undefined : onClose}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #e2e8f0', background: '#fff', flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>Export Hub</div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>
-              Unified exports for storyboards, shotlists, schedules, callsheets, and reports.
+            <div id="export-modal-title" style={{ fontSize: 22, fontWeight: 850, color: '#0f172a', letterSpacing: '-0.02em' }}>Export</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+              Choose a document, format, and output style. Current focus: <strong>{activeTabLabel}</strong>.
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 4 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={exporting}
+            aria-label="Close export modal"
+            style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, cursor: exporting ? 'not-allowed' : 'pointer', color: '#64748b', padding: 7, opacity: exporting ? 0.5 : 1 }}
+          >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="5" y1="5" x2="15" y2="15" /><line x1="15" y1="5" x2="5" y2="15" />
             </svg>
@@ -3515,255 +3732,164 @@ export default function ExportModal({ isOpen, onClose, pageRefs, shotlistRef, ac
         </div>
 
         <div style={scrollStyle}>
+          <FieldGroup title="Export Type" hint="Pick the production document you want to generate.">
+            <SegmentedControl
+              options={EXPORT_TYPE_OPTIONS}
+              value={selectedExportType}
+              onChange={setSelectedExportType}
+              disabled={exporting}
+              columns={2}
+            />
+          </FieldGroup>
 
-          <div style={{ marginTop: 16, marginBottom: 12, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f8fafc', fontSize: 12, color: '#475569' }}>
-            Current focus: <strong>{activeTabLabel}</strong>. All exports are available below from this single hub.
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.75fr) minmax(0, 1.25fr)', gap: 16 }}>
+            <FieldGroup title="Format">
+              <SegmentedControl
+                options={formatOptions}
+                value={selectedFormat}
+                onChange={value => {
+                  setSelectedFormat(value)
+                  setSelectedOutputMode(value === 'png' ? 'png-pages' : selectedExportType === 'everything' ? 'combined' : 'single')
+                }}
+                disabled={exporting}
+                columns={formatOptions.length}
+              />
+            </FieldGroup>
+
+            <FieldGroup title="Scope / Range">
+              <SegmentedControl
+                options={scopeOptions}
+                value={selectedScope}
+                onChange={setSelectedScope}
+                disabled={exporting}
+                columns={scopeOptions.length > 1 ? 2 : 1}
+              />
+            </FieldGroup>
           </div>
 
-          <div style={{ marginTop: 0 }}>
-            <SectionLabel>Export All</SectionLabel>
-            <ExportBtn
-              label={busy('all-combined') ? 'Exporting…' : 'Everything — One Combined PDF'}
-              sub="All documents, all days, combined into a single file"
-              primary
+          <FieldGroup title={selectedExportType === 'schedule' ? 'Output / Schedule Mode' : 'Output'} hint={selectedExportType === 'schedule' ? 'Standard, expanded, and stripboard routes use the existing working export engines.' : undefined}>
+            <SegmentedControl
+              options={outputOptions}
+              value={selectedOutputMode}
+              onChange={setSelectedOutputMode}
               disabled={exporting}
-              onClick={() => run('all-combined', 'Everything — One Combined PDF', () => exportAllCombinedPDF(projectName))}
+              columns={outputOptions.length > 2 ? 2 : outputOptions.length}
             />
-            <ExportBtn
-              label={busy('all-separate') ? 'Exporting…' : 'Everything — Separate PDF Files'}
-              sub="Storyboard, Shotlist, Schedule, and Callsheet as individual files"
-              disabled={exporting}
-              onClick={() => run('all-separate', 'Everything — Separate PDF Files', () => exportAllSeparatePDFs(pageRefs, shotlistRef, projectName))}
-            />
-          </div>
+          </FieldGroup>
 
-          <div style={{ marginTop: 20 }}>
-            <SectionLabel>Storyboards</SectionLabel>
-            <ExportBtn
-              label={busy('storyboard-pdf') ? 'Exporting…' : 'Storyboard PDF'}
-              sub="Produces all storyboard pages in a print-ready PDF."
-              disabled={exporting}
-              onClick={() => run('storyboard-pdf', 'Storyboard PDF', () => exportStoryboardPDF(pageRefs, projectName))}
-            />
-            <ExportBtn
-              label={busy('storyboard-png') ? 'Exporting…' : 'Storyboard PNG'}
-              sub="Produces PNG images for storyboard pages."
-              disabled={exporting}
-              onClick={() => run('storyboard-png', 'Storyboard PNG', () => exportToPNG(pageRefs))}
-            />
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <SectionLabel>Shotlists</SectionLabel>
-            <ExportBtn
-              label={busy('shotlist') ? 'Exporting…' : 'Shotlist PDF'}
-              sub="Produces a full shotlist table grouped by day."
-              disabled={exporting}
-              onClick={() => run('shotlist', 'Shotlist PDF', () => exportShotlistPDF(shotlistRef, projectName))}
-            />
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <SectionLabel>Schedules</SectionLabel>
-            <ExportBtn
-              label={busy('schedule') ? 'Exporting…' : 'Schedule PDF'}
-              sub="Produces the standard day-by-day schedule layout."
-              disabled={exporting}
-              onClick={() => run('schedule', 'Schedule PDF', () => exportSchedulePDF(projectName))}
-            />
-            <ExportBtn
-              label={busy('exp-schedule') ? 'Exporting…' : 'Expanded Schedule PDF'}
-              sub="Produces an expanded schedule with call/wrap and detailed shot rows."
-              disabled={exporting}
-              onClick={() => run('exp-schedule', 'Expanded Schedule PDF', () => exportExpandedSchedulePDF(projectName))}
-            />
-            <ExportBtn
-              label={busy('exp-stripboard') ? 'Exporting…' : 'Stripboard PDF'}
-              sub="Produces a stripboard view with one column per day."
-              disabled={exporting}
-              onClick={() => run('exp-stripboard', 'Stripboard PDF', () => exportStripboardPDF(projectName))}
-            />
-            <ExportBtn
-              label={busy('exp-calendar') ? 'Exporting…' : 'Calendar PDF'}
-              sub="Produces a monthly calendar with shoot-day highlights."
-              disabled={exporting}
-              onClick={() => run('exp-calendar', 'Calendar PDF', () => exportCalendarPDF(projectName))}
-            />
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <SectionLabel>Callsheets</SectionLabel>
-            {/* Scope selector */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-              {[
-                { value: 'current', label: 'Current Day Only' },
-                { value: 'all', label: 'All Callsheets' },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setCallsheetScope(opt.value)}
-                  style={{
-                    flex: 1,
-                    padding: '6px 10px',
-                    borderRadius: 6,
-                    border: callsheetScope === opt.value ? '2px solid #2563eb' : '1px solid #d1d5db',
-                    background: callsheetScope === opt.value ? '#eff6ff' : '#f9fafb',
-                    color: callsheetScope === opt.value ? '#1d4ed8' : '#374151',
-                    fontWeight: callsheetScope === opt.value ? 700 : 400,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
+          <div style={{ display: 'grid', gap: 8, padding: 14, borderRadius: 14, border: '1px solid #dbeafe', background: '#eff6ff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 850, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Summary</div>
+                <div style={{ fontSize: 15, fontWeight: 850, color: '#0f172a', marginTop: 3 }}>{summary}</div>
+              </div>
+              <div style={{ fontSize: 12, color: '#475569', textAlign: 'right' }}>
+                {generatedCount ? `${generatedCount} ${generatedCount === 1 ? 'document/page' : 'documents/pages'}` : 'Ready to prepare'}
+              </div>
             </div>
-            {callsheetScope === 'current' && activeDay && (
-              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, paddingLeft: 2 }}>
-                Day {resolvedDayIdx + 1}{activeDay.date ? ` · ${activeDay.date}` : ''}
-              </div>
-            )}
-            <ExportBtn
-              label={busy('callsheet') ? 'Exporting…' : 'Callsheet PDF'}
-              sub={callsheetScope === 'current'
-                ? 'Exports only the currently-viewed shoot day.'
-                : 'Exports every shoot day as a multi-page PDF.'}
-              disabled={exporting}
-              onClick={() => run('callsheet', 'Callsheet PDF', () =>
-                callsheetScope === 'current'
-                  ? exportSingleDayCallsheetPDF({
-                      dayIdx: resolvedDayIdx,
-                      projectName,
-                      dayNumber: resolvedDayIdx + 1,
-                      shootDate: activeDay?.date || 'TBD',
-                    })
-                  : exportCallsheetPDF(projectName)
-              )}
-            />
+            <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.45 }}>
+              {selectedExportType === 'everything' && selectedOutputMode === 'combined'
+                ? 'Uses the existing complete-export path so the combined PDF behavior and storyboard layout remain unchanged.'
+                : selectedExportType === 'storyboard' && selectedFormat === 'pdf'
+                  ? 'Uses the same store-built storyboard print renderer used by the complete PDF path.'
+                  : 'Uses the existing export generator for this document type.'}
+            </div>
           </div>
 
-          <div style={{ marginTop: 20 }}>
-            <SectionLabel>Script</SectionLabel>
-            <ExportBtn
-              label={busy('script-txt') ? 'Exporting…' : 'Script TXT'}
-              sub="Downloads the current script as a plain text screenplay file."
-              disabled={exporting}
-              onClick={() => run('script-txt', 'Script TXT', async () => {
-                const state = useStore.getState()
-                const doc = state.scriptDocumentLive || state.scriptDocument
-                downloadScriptAsTxt(doc, state.projectName)
-              })}
-            />
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <SectionLabel>Reports</SectionLabel>
-            <button
-              disabled
-              style={{
-                width: '100%',
-                textAlign: 'left',
-                padding: '9px 12px',
-                borderRadius: 6,
-                border: '1px solid #e5e7eb',
-                background: '#f9fafb',
-                color: '#64748b',
-                cursor: 'not-allowed',
-                opacity: 0.75,
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              Reports Export (Not Yet Supported)
-              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.9, marginTop: 1 }}>
-                Hidden from workflows for now to avoid broken launch paths.
-              </div>
-            </button>
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <SectionLabel>Mobile On-set Packages</SectionLabel>
-            <ExportBtn
-              label={busy('mobile-day') ? 'Exporting…' : 'Mobile Day Package (JSON)'}
-              sub="Produces one mobile-day-package JSON for a single shoot day."
-              disabled={exporting || !schedule.length}
-              onClick={() => run('mobile-day', 'Mobile Day Package (JSON)', async () => {
-                if (!selectedMobileDayId) throw new Error('Please select a shoot day to export.')
-                const { exportMobilePackageFromProject } = await getMobileExportService()
-                await exportMobilePackageFromProject(getProjectData(), {
-                  mode: 'day',
-                  dayId: selectedMobileDayId,
-                })
-              })}
-            />
-            <select
-              value={selectedMobileDayId}
-              onChange={e => setSelectedMobileDayId(e.target.value)}
-              disabled={exporting || !schedule.length}
-              style={{ width: '100%', marginBottom: 12, padding: 8, borderRadius: 6, background: '#fff', color: '#111', border: '1px solid #d1d5db' }}
-            >
-              {schedule.length === 0 ? (
-                <option value="">Add a shoot day in Schedule first</option>
-              ) : schedule.map((day, idx) => (
-                <option key={day.id} value={day.id}>
-                  Day {idx + 1} · {day.date || 'No date'}
-                </option>
-              ))}
-            </select>
-            <ExportBtn
-              label={busy('mobile-snapshot') ? 'Exporting…' : 'Mobile Snapshot (JSON)'}
-              sub="Produces one mobile-snapshot JSON for selected shoot days."
-              disabled={exporting || !schedule.length}
-              onClick={() => run('mobile-snapshot', 'Mobile Snapshot (JSON)', async () => {
-                if (!snapshotDayIds.length) throw new Error('Select at least one shoot day for snapshot export.')
-                const { exportMobilePackageFromProject } = await getMobileExportService()
-                await exportMobilePackageFromProject(getProjectData(), {
-                  mode: 'snapshot',
-                  dayIds: snapshotDayIds,
-                })
-              })}
-            />
-            {schedule.length > 0 ? (
-              <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 6, padding: 8 }}>
-                {schedule.map((day, idx) => (
-                  <label key={day.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, color: '#334155', fontSize: 12 }}>
-                    <input
-                      type="checkbox"
-                      checked={snapshotDayIds.includes(day.id)}
-                      onChange={e => {
-                        setSnapshotDayIds(prev => e.target.checked
-                          ? [...new Set([...prev, day.id])]
-                          : prev.filter(id => id !== day.id))
-                      }}
-                    />
-                    Day {idx + 1} · {day.date || 'No date'}
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: 11, color: '#64748b' }}>
-                Add at least one shoot day in the Schedule tab to enable mobile exports.
-              </div>
-            )}
-          </div>
-
-          {schedule.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <SectionLabel>Per-Day PDF Bundle</SectionLabel>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {schedule.map((day, idx) => (
-                  <ExportBtn
-                    key={day.id}
-                    label={busy(`day-${idx}`) ? 'Exporting…' : `Day ${idx + 1} Bundle PDF`}
-                    sub={`Produces shotlist + schedule + callsheet for Day ${idx + 1}${day.date ? ` (${day.date})` : ''}.`}
-                    disabled={exporting}
-                    onClick={() => run(`day-${idx}`, `Day ${idx + 1} PDF`, () => exportDayPDF(idx, { shotlist: true, schedule: true, callsheet: true }, projectName))}
-                  />
-                ))}
-              </div>
+          {(exporting || exportError || exportSuccess) && (
+            <div style={{ padding: '11px 12px', borderRadius: 12, border: `1px solid ${exportError ? '#fecaca' : exporting ? '#bfdbfe' : '#bbf7d0'}`, background: exportError ? '#fef2f2' : exporting ? '#eff6ff' : '#f0fdf4', color: exportError ? '#991b1b' : exporting ? '#1d4ed8' : '#166534', fontSize: 13, fontWeight: 700 }}>
+              {exporting ? 'Preparing export…' : exportError || exportSuccess}
             </div>
           )}
 
+          <details open={showAdvanced} onToggle={e => setShowAdvanced(e.currentTarget.open)} style={{ border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff', overflow: 'hidden' }}>
+            <summary style={{ padding: '12px 14px', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 850, color: '#334155', userSelect: 'none' }}>
+              Advanced / additional exports
+            </summary>
+            <div style={{ padding: '0 14px 14px', display: 'grid', gap: 12 }}>
+              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.45 }}>
+                Less common exports stay here so the main dialog remains focused. These use the same existing export paths as before.
+              </div>
+
+              <div style={{ display: 'grid', gap: 8 }}>
+                <AdditionalExportButton
+                  label={exportingKey === 'script-txt' ? 'Exporting…' : 'Script TXT'}
+                  sub="Downloads the current script as a plain text screenplay file."
+                  disabled={exporting}
+                  onClick={() => run('script-txt', async () => {
+                    const state = useStore.getState()
+                    const doc = state.scriptDocumentLive || state.scriptDocument
+                    downloadScriptAsTxt(doc, state.projectName)
+                  }, { exportType: 'script', format: 'txt', scope: 'current-script', outputMode: 'single', activeTab, generatedCount: 1, skipValidation: true, keepOpenOnSuccess: true })}
+                />
+
+                <div style={{ display: 'grid', gap: 8, paddingTop: 4 }}>
+                  <InlineSelect value={selectedMobileDayId} onChange={setSelectedMobileDayId} disabled={exporting || !schedule.length} label="Mobile day package">
+                    {schedule.length === 0 ? (
+                      <option value="">Add a shoot day in Schedule first</option>
+                    ) : schedule.map((day, idx) => (
+                      <option key={day.id} value={day.id}>Day {idx + 1} · {day.date || 'No date'}</option>
+                    ))}
+                  </InlineSelect>
+                  <AdditionalExportButton
+                    label={exportingKey === 'mobile-day' ? 'Exporting…' : 'Mobile Day Package (JSON)'}
+                    sub="Produces one mobile-day-package JSON for a single shoot day."
+                    disabled={exporting || !schedule.length}
+                    onClick={() => run('mobile-day', async () => {
+                      if (!selectedMobileDayId) throw new Error('Please select a shoot day to export.')
+                      const { exportMobilePackageFromProject } = await getMobileExportService()
+                      await exportMobilePackageFromProject(getProjectData(), { mode: 'day', dayId: selectedMobileDayId })
+                    }, { exportType: 'mobile-day-package', format: 'json', scope: selectedMobileDayId, outputMode: 'single', activeTab, generatedCount: 1, skipValidation: true, keepOpenOnSuccess: true })}
+                  />
+                </div>
+
+                <AdditionalExportButton
+                  label={exportingKey === 'mobile-snapshot' ? 'Exporting…' : 'Mobile Snapshot (JSON)'}
+                  sub="Produces one mobile-snapshot JSON for selected shoot days."
+                  disabled={exporting || !schedule.length}
+                  onClick={() => run('mobile-snapshot', async () => {
+                    if (!snapshotDayIds.length) throw new Error('Select at least one shoot day for snapshot export.')
+                    const { exportMobilePackageFromProject } = await getMobileExportService()
+                    await exportMobilePackageFromProject(getProjectData(), { mode: 'snapshot', dayIds: snapshotDayIds })
+                  }, { exportType: 'mobile-snapshot', format: 'json', scope: snapshotDayIds.join(','), outputMode: 'single', activeTab, generatedCount: snapshotDayIds.length, skipValidation: true, keepOpenOnSuccess: true })}
+                />
+
+                {schedule.length > 0 && (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 850, color: '#334155', marginTop: 4 }}>Per-Day PDF Bundle</div>
+                    {schedule.map((day, idx) => (
+                      <AdditionalExportButton
+                        key={day.id}
+                        label={exportingKey === `day-${idx}` ? 'Exporting…' : `Day ${idx + 1} Bundle PDF`}
+                        sub={`Produces shotlist + schedule + callsheet for Day ${idx + 1}${day.date ? ` (${day.date})` : ''}.`}
+                        disabled={exporting}
+                        onClick={() => run(`day-${idx}`, () => exportDayPDF(idx, { shotlist: true, schedule: true, callsheet: true }, projectName), { exportType: 'day-bundle', format: 'pdf', scope: `day-${idx + 1}`, outputMode: 'single', activeTab, generatedCount: 1, skipValidation: true, keepOpenOnSuccess: true })}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div style={footerStyle}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={exporting}
+            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#fff', color: '#334155', fontWeight: 800, cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting ? 0.55 : 1 }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={runPrimaryExport}
+            disabled={exporting || !!validateSelection()}
+            style={{ minWidth: 148, padding: '11px 18px', borderRadius: 11, border: '1px solid #1d4ed8', background: exporting ? '#93c5fd' : '#2563eb', color: '#fff', fontWeight: 900, cursor: exporting || validateSelection() ? 'not-allowed' : 'pointer', boxShadow: exporting ? 'none' : '0 10px 24px rgba(37,99,235,0.24)' }}
+          >
+            {exporting ? 'Preparing export…' : 'Export'}
+          </button>
         </div>
       </div>
     </div>
