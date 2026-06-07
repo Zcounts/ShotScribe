@@ -26,6 +26,31 @@ async function getReactPdfRenderer() {
   return reactPdfRendererPromise
 }
 
+let currentExportContext = { exportType: '', actionLabel: '', activeTab: '', projectName: '' }
+
+function setExportContext(context = {}) {
+  currentExportContext = {
+    exportType: context.exportType || '',
+    actionLabel: context.actionLabel || '',
+    activeTab: context.activeTab || '',
+    projectName: context.projectName || '',
+  }
+}
+
+function getExportProjectName() {
+  return currentExportContext.projectName || useStore.getState().projectName || 'Untitled Project'
+}
+
+function logExportDiagnostics(message, details = {}) {
+  const context = {
+    exportType: details.exportType || currentExportContext.exportType || 'unknown',
+    actionLabel: details.actionLabel || currentExportContext.actionLabel || 'unknown',
+    activeTab: details.activeTab || currentExportContext.activeTab || 'unknown',
+    projectName: details.projectName || getExportProjectName(),
+  }
+  console.error(`[Export Hub] ${message}`, { ...context, ...details })
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
@@ -2623,7 +2648,7 @@ async function captureElementWithTimeout(el, scale = 1.5, timeoutMs = 60000, ima
   }
 }
 
-async function exportPagesBrowser(pages, imageMap = {}) {
+async function exportPagesBrowser(pages, imageMap = {}, { fileName = 'storyboard.pdf', exportType = 'pdf', selector = 'unknown' } = {}) {
   console.log(`[PDF Export] Starting browser/html2canvas path — ${pages.length} page(s)`)
 
   let pdf = null
@@ -2669,11 +2694,180 @@ async function exportPagesBrowser(pages, imageMap = {}) {
   }
 
   if (!pdf) {
-    throw new Error('No pages could be rendered. Check the console for details.')
+    logExportDiagnostics('PDF renderer produced zero pages.', { exportType, generatedPageCount: pages.length, selector })
+    throw new Error(`${exportType || 'PDF'} renderer failed during capture: no pages could be rendered.`)
   }
 
-  pdf.save('storyboard.pdf')
+  pdf.save(fileName)
   console.log('[PDF Export] Saved via browser download.')
+}
+
+
+function getSafeBaseName(projectName, fallback = 'export') {
+  return (projectName || fallback).replace(/[^a-z0-9]/gi, '_') || fallback
+}
+
+function waitForFrameLoad(iframe) {
+  return new Promise(resolve => {
+    const done = () => setTimeout(resolve, 150)
+    const doc = iframe.contentDocument
+    if (doc?.readyState === 'complete') {
+      done()
+      return
+    }
+    iframe.onload = done
+    setTimeout(done, 500)
+  })
+}
+
+async function waitForDocumentAssets(doc) {
+  if (doc?.fonts?.ready) {
+    try { await doc.fonts.ready } catch (err) { console.warn('[PDF Export] Font readiness check failed:', err) }
+  }
+
+  const images = Array.from(doc.querySelectorAll('img'))
+  await Promise.all(images.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve()
+    return new Promise(resolve => {
+      const timeout = setTimeout(resolve, 15000)
+      img.onload = () => { clearTimeout(timeout); resolve() }
+      img.onerror = () => {
+        console.warn('[PDF Export] Image preload failed:', img.getAttribute('src'))
+        clearTimeout(timeout)
+        resolve()
+      }
+    })
+  }))
+}
+
+async function createOffscreenPrintDocument(html, {
+  selector = '.page-doc',
+  fallbackSelector = null,
+  width = 1123,
+  height = 794,
+  exportType = 'export',
+} = {}) {
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('title', `${exportType} export render frame`)
+  iframe.style.position = 'fixed'
+  iframe.style.left = '-10000px'
+  iframe.style.top = '0'
+  iframe.style.width = `${width}px`
+  iframe.style.height = `${height}px`
+  iframe.style.opacity = '0.01'
+  iframe.style.pointerEvents = 'none'
+  iframe.style.border = '0'
+  iframe.style.background = '#fff'
+  document.body.appendChild(iframe)
+
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+  }
+
+  try {
+    const doc = iframe.contentDocument
+    doc.open()
+    doc.write(html)
+    doc.close()
+    await waitForFrameLoad(iframe)
+    await waitForDocumentAssets(doc)
+
+    const selected = Array.from(doc.querySelectorAll(selector))
+    const pages = selected.length > 0
+      ? selected
+      : (fallbackSelector ? Array.from(doc.querySelectorAll(fallbackSelector)) : [])
+    const measurablePages = pages.filter(page => {
+      const rect = page.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0
+    })
+
+    return {
+      iframe,
+      doc,
+      cleanup,
+      pages: measurablePages,
+      metrics: {
+        selector,
+        fallbackSelector,
+        selectedPageCount: selected.length,
+        generatedPageCount: pages.length,
+        measurablePageCount: measurablePages.length,
+        hasPageDoc: !!doc.querySelector('.page-doc'),
+        htmlHasPageDoc: html.includes('page-doc'),
+      },
+    }
+  } catch (err) {
+    cleanup()
+    throw err
+  }
+}
+
+async function exportPrintHtmlPagesBrowser(html, projectName, {
+  exportType,
+  fileNameSuffix,
+  selector = '.page-doc',
+  fallbackSelector = null,
+  width = 1123,
+  height = 794,
+} = {}) {
+  const renderDoc = await createOffscreenPrintDocument(html, { selector, fallbackSelector, width, height, exportType })
+  try {
+    if (renderDoc.pages.length === 0) {
+      logExportDiagnostics(`${exportType} export generated 0 pages.`, renderDoc.metrics)
+      throw new Error(`${exportType} export generated 0 pages.`)
+    }
+    const fileName = `${getSafeBaseName(projectName)}_${fileNameSuffix || exportType || 'export'}.pdf`
+    await exportPagesBrowser(renderDoc.pages, {}, {
+      fileName,
+      exportType,
+      selector: renderDoc.metrics.selector,
+    })
+  } finally {
+    renderDoc.cleanup()
+  }
+}
+
+async function exportStoryboardPagesAsPNG(projectName) {
+  const imageMap = await preloadShotImages()
+  const html = buildStoryboardPrintHtml(imageMap)
+  const renderDoc = await createOffscreenPrintDocument(html, {
+    selector: '.page-doc',
+    width: 1123,
+    height: 794,
+    exportType: 'storyboard-png',
+  })
+
+  try {
+    if (renderDoc.pages.length === 0) {
+      logExportDiagnostics('Storyboard PNG export generated 0 pages.', renderDoc.metrics)
+      throw new Error('Storyboard PNG export generated 0 pages.')
+    }
+
+    for (let i = 0; i < renderDoc.pages.length; i++) {
+      console.log(`[PNG Export] Rendering generated storyboard page ${i + 1}/${renderDoc.pages.length}…`)
+      const canvas = await captureElementWithTimeout(renderDoc.pages[i], 2, 60000)
+      if (!canvas.width || !canvas.height) {
+        throw new Error(`Storyboard PNG page ${i + 1} rendered at zero size.`)
+      }
+      const filename = renderDoc.pages.length === 1 ? 'storyboard.png' : `storyboard_page${i + 1}.png`
+
+      if (platformService.isDesktop()) {
+        const dataURL = canvas.toDataURL('image/png')
+        const base64 = dataURL.replace(/^data:image\/png;base64,/, '')
+        await platformService.savePNG(filename, base64)
+      } else {
+        const link = document.createElement('a')
+        link.download = filename
+        link.href = canvas.toDataURL('image/png')
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+      console.log(`[PNG Export] Page ${i + 1} saved.`)
+    }
+  } finally {
+    renderDoc.cleanup()
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -2681,15 +2875,25 @@ async function exportPagesBrowser(pages, imageMap = {}) {
 /**
  * Export the storyboard as a PDF.
  * Electron path: builds fresh HTML from store data, passes to printToPDF.
- * Browser fallback: html2canvas captures the live .page-document DOM elements.
+ * Browser fallback: renders this generated print HTML offscreen and captures .page-doc pages.
  */
 export async function exportStoryboardPDF(pageRefs, projectName, options = {}) {
   try {
+    // Use the same data-driven storyboard print HTML as the known-good combined
+    // export so standalone Storyboard PDF does not depend on the currently active tab.
+    const imageMap = await preloadShotImages()
+    const html = buildStoryboardPrintHtml(imageMap)
+    const generatedPageCount = (html.match(/class="page-doc"/g) || []).length
+    if (generatedPageCount === 0) {
+      logExportDiagnostics('Storyboard export generated 0 pages.', {
+        generatedPageCount,
+        selector: '.page-doc',
+        htmlHasPageDoc: html.includes('page-doc'),
+      })
+      throw new Error('Storyboard export generated 0 pages.')
+    }
+
     if (platformService.hasPrintToPDF()) {
-      // Pre-fetch all remote shot images to base64 so the Electron print-to-PDF
-      // renderer never encounters cross-origin URLs that could produce blank frames.
-      const imageMap = await preloadShotImages()
-      const html = buildStoryboardPrintHtml(imageMap)
       await exportViaPrint(html, projectName, 'storyboard')
     } else {
       const pages = (pageRefs?.current || []).filter(Boolean)
@@ -2702,6 +2906,7 @@ export async function exportStoryboardPDF(pageRefs, projectName, options = {}) {
       await exportPagesBrowser(pages, imageMap)
     }
   } catch (err) {
+    logExportDiagnostics('Storyboard export failed.', { stack: err?.stack })
     console.error('[PDF Export] Storyboard export failed:', err)
     _handleExportError(err)
     if (options?.rethrow) throw err
@@ -2711,22 +2916,30 @@ export async function exportStoryboardPDF(pageRefs, projectName, options = {}) {
 /**
  * Export the shotlist as a PDF.
  * Electron path: builds fresh HTML from store data, passes to printToPDF.
- * Browser fallback: html2canvas captures the live shotlist container element.
+ * Browser fallback: renders this generated print HTML offscreen and captures it without requiring the Shotlist tab DOM.
  */
 export async function exportShotlistPDF(shotlistRef, projectName, options = {}) {
   try {
+    const html = buildShotlistPrintHtml()
+    if (!/<tr[\s>]/i.test(html)) {
+      logExportDiagnostics('Shotlist export generated 0 rows/pages.', { selector: 'body', htmlHasPageDoc: html.includes('page-doc') })
+      throw new Error('Shotlist export generated 0 rows/pages.')
+    }
+
     if (platformService.hasPrintToPDF()) {
-      const html = buildShotlistPrintHtml()
       await exportViaPrint(html, projectName, 'shotlist')
     } else {
-      const el = shotlistRef?.current
-      if (!el) {
-        console.warn('[PDF Export] Shotlist element not found — aborting.')
-        return
-      }
-      await exportPagesBrowser([el])
+      await exportPrintHtmlPagesBrowser(html, projectName, {
+        exportType: 'shotlist-pdf',
+        fileNameSuffix: 'shotlist',
+        selector: '.page-doc',
+        fallbackSelector: 'body',
+        width: 1123,
+        height: 794,
+      })
     }
   } catch (err) {
+    logExportDiagnostics('Shotlist export failed.', { stack: err?.stack })
     console.error('[PDF Export] Shotlist export failed:', err)
     _handleExportError(err)
     if (options?.rethrow) throw err
@@ -2907,31 +3120,11 @@ export async function exportToPDF(pageRefs, projectName) {
   return exportStoryboardPDF(pageRefs, projectName)
 }
 
-export async function exportToPNG(pageRefs) {
-  const pages = (pageRefs?.current || []).filter(Boolean)
-  if (pages.length === 0) return
-
+export async function exportToPNG(_pageRefs) {
   try {
-    for (let i = 0; i < pages.length; i++) {
-      console.log(`[PNG Export] Rendering page ${i + 1}/${pages.length}…`)
-      const canvas = await captureElementWithTimeout(pages[i], 2, 60000)
-      const filename = pages.length === 1 ? 'storyboard.png' : `storyboard_page${i + 1}.png`
-
-      if (platformService.isDesktop()) {
-        const dataURL = canvas.toDataURL('image/png')
-        const base64 = dataURL.replace(/^data:image\/png;base64,/, '')
-        await platformService.savePNG(filename, base64)
-      } else {
-        const link = document.createElement('a')
-        link.download = filename
-        link.href = canvas.toDataURL('image/png')
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      }
-      console.log(`[PNG Export] Page ${i + 1} saved.`)
-    }
+    await exportStoryboardPagesAsPNG(useStore.getState().projectName)
   } catch (err) {
+    logExportDiagnostics('Storyboard PNG export failed.', { stack: err?.stack })
     console.error('[PNG Export] Failed:', err)
     const raw = err?.message || ''
     let msg = `PNG export failed: ${raw || 'Unknown error'}`
@@ -3156,6 +3349,7 @@ export async function exportAllSeparatePDFs(pageRefs, shotlistRef, projectName, 
 }
 
 function _handleExportError(err) {
+  logExportDiagnostics('Export failure surfaced to user.', { stack: err?.stack })
   const raw = err?.message || String(err) || 'Unknown error'
   let msg = `PDF export failed: ${raw}`
   if (/memory|heap|call stack|out of/i.test(raw)) {
