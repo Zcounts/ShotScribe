@@ -435,6 +435,10 @@ function ShotCard({
     updateShot(shot.id, { cameraName: e.target.value })
   }, [shot.id, updateShot])
 
+  const handleSetupNumberChange = useCallback((e) => {
+    updateShot(shot.id, { setupNumber: e.target.value })
+  }, [shot.id, updateShot])
+
   const handleSetupTimeChange = useCallback((e) => {
     updateShot(shot.id, { setupTime: sanitizeNumericInput(e.target.value) })
   }, [shot.id, updateShot])
@@ -455,10 +459,11 @@ function ShotCard({
   const timeMetadataColumns = useMemo(
     () => [
       visibleInfo.shotAspectRatio !== false ? { key: 'shotAspectRatio', label: 'RATIO' } : null,
-      visibleInfo.setupTime !== false ? { key: 'setupTime', label: 'SETUP' } : null,
-      visibleInfo.shotTime !== false ? { key: 'shotTime', label: 'TIME' } : null,
+      visibleInfo.setupNumber !== false ? { key: 'setupNumber', label: 'SETUP #' } : null,
+      visibleInfo.setupTime !== false ? { key: 'setupTime', label: 'SETUP TIME' } : null,
+      visibleInfo.shotTime !== false ? { key: 'shotTime', label: 'SHOT TIME' } : null,
     ].filter(Boolean),
-    [visibleInfo.shotAspectRatio, visibleInfo.setupTime, visibleInfo.shotTime]
+    [visibleInfo.shotAspectRatio, visibleInfo.setupNumber, visibleInfo.setupTime, visibleInfo.shotTime]
   )
 
   const stableAssetId = shot?.imageAsset?.cloud?.assetId ? String(shot.imageAsset.cloud.assetId) : null
@@ -794,6 +799,15 @@ function ShotCard({
               <tr>
                 {timeMetadataColumns.map(column => (
                   <td key={column.key} className="shot-time-field-cell">
+                    {column.key === 'setupNumber' ? (
+                      <input
+                        className="shot-time-number"
+                        type="text"
+                        value={shot.setupNumber || ''}
+                        onChange={handleSetupNumberChange}
+                        placeholder="1A"
+                      />
+                    ) : null}
                     {column.key === 'setupTime' ? (
                       <input
                         className="shot-time-number"

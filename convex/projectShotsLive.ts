@@ -22,6 +22,7 @@ function normalizeShotPayload(shot: any) {
     intOrExt: shot?.intOrExt || '',
     dayNight: shot?.dayNight || '',
     scriptTime: shot?.scriptTime || '',
+    setupNumber: shot?.setupNumber || '',
     setupTime: shot?.setupTime || '',
     shotAspectRatio: shot?.shotAspectRatio || '',
     predictedTakes: shot?.predictedTakes || '',
