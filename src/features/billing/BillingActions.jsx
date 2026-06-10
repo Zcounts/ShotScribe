@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { useAction } from 'convex/react'
 import useStore from '../../store'
+import { CLOUD_UNAVAILABLE_MESSAGE, useOptionalConvexAction } from '../../hooks/useSafeConvex'
 
 const buttonStyle = {
   border: '1px solid #6B7280',
@@ -15,8 +15,9 @@ const buttonStyle = {
 
 export default function BillingActions({ compact = false }) {
   const entitlement = useStore(s => s.entitlement)
-  const createCheckoutSession = useAction('billing:createCheckoutSession')
-  const createPortalSession = useAction('billing:createPortalSession')
+  const cloudUnavailable = useStore(s => s.convexStatus?.status === 'unavailable')
+  const createCheckoutSession = useOptionalConvexAction('billing:createCheckoutSession')
+  const createPortalSession = useOptionalConvexAction('billing:createPortalSession')
   const [isLoading, setIsLoading] = useState(false)
   const [isPortalLoading, setIsPortalLoading] = useState(false)
 
@@ -61,6 +62,10 @@ export default function BillingActions({ compact = false }) {
     } finally {
       setIsPortalLoading(false)
     }
+  }
+
+  if (cloudUnavailable) {
+    return <span style={{ fontSize: 11, color: '#FCD34D' }} title={CLOUD_UNAVAILABLE_MESSAGE}>Cloud unavailable</span>
   }
 
   const showPortal = Boolean(entitlement?.portalAvailable && entitlement?.subscriptionStatus)

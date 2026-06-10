@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { useQuery } from 'convex/react'
 import useStore from '../../store'
+import { useSafeConvexQueryData } from '../../hooks/useSafeConvex'
 import {
   canAccessCloudAssets,
   canCollaborateOnCloudProject,
@@ -39,9 +39,11 @@ export default function useCloudAccessPolicy(options = {}) {
   const roleOverride = typeof options?.projectRole === 'string' ? options.projectRole : null
   const storedEntitlement = useStore(s => s.entitlement)
   const userDataLoaded = useStore(s => s.userDataLoaded)
-  const projectQuery = useQuery(
+  const projectQuery = useSafeConvexQueryData(
     'projects:getProjectById',
-    cloudProjectId && !roleOverride ? { projectId: cloudProjectId } : 'skip'
+    cloudProjectId && !roleOverride ? { projectId: cloudProjectId } : 'skip',
+    null,
+    { component: 'useCloudAccessPolicy' },
   )
   const entitlement = storedEntitlement || DEFAULT_SUMMARY
   const isEntitlementLoading = !userDataLoaded

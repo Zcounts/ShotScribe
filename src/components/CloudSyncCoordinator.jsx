@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react'
+import { useAction, useConvex, useConvexAuth, useMutation } from 'convex/react'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { buildShotImageFromLibraryAsset, uploadStoryboardAssetToCloud } from '../services/assetService'
@@ -8,6 +8,7 @@ import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
 import { detectUnmigratedLocalAssetsFromProjectData } from '../utils/localAssetPreflight'
+import { useSafeConvexQueryData } from '../hooks/useSafeConvex'
 import {
   recordCollabSubscriptionSuspended,
   recordDeferredSurfaceSubscription,
@@ -181,20 +182,35 @@ export default function CloudSyncCoordinator() {
   const getAssetThumbnailBase64 = useAction('assets:getAssetThumbnailBase64')
   const setCurrentUser = useStore(s => s.setCurrentUser)
   const setEntitlement = useStore(s => s.setEntitlement)
+  const markConvexAvailable = useStore(s => s.markConvexAvailable)
+  const markConvexUnavailable = useStore(s => s.markConvexUnavailable)
   const setUserDataLoaded = useStore(s => s.setUserDataLoaded)
+  const safeConvexQuery = useCallback(async (name, args = {}) => {
+    try {
+      const result = await convex.query(name, args)
+      markConvexAvailable({ component: 'CloudSyncCoordinator', queryName: name })
+      return result
+    } catch (error) {
+      markConvexUnavailable(error, { component: 'CloudSyncCoordinator', queryName: name })
+      throw error
+    }
+  }, [convex, markConvexAvailable, markConvexUnavailable])
+
   const cloudUser = useStore(s => s.currentUser)
   const cloudLineageLastKnownSnapshotId = useStore(s => s.cloudLineage?.lastKnownSnapshotId || null)
   const cloudProjectId = projectRef?.type === 'cloud' ? projectRef.projectId : null
-  const cloudProject = useQuery('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip')
+  const cloudProject = useSafeConvexQueryData('projects:getProjectById', cloudProjectId ? { projectId: cloudProjectId } : 'skip', null, { component: 'CloudSyncCoordinator' })
   const [presenceProbeHasCollaborators, setPresenceProbeHasCollaborators] = useState(false)
   const [hasActivatedLiveScenesSubscription, setHasActivatedLiveScenesSubscription] = useState(false)
   const [hasActivatedLiveShotsSubscription, setHasActivatedLiveShotsSubscription] = useState(false)
   const [soloLiveScenesSnapshot, setSoloLiveScenesSnapshot] = useState(null)
   const [soloLiveShotsSnapshot, setSoloLiveShotsSnapshot] = useState(null)
   const shouldSubscribePresence = Boolean(cloudProjectId && presenceProbeHasCollaborators)
-  const presenceRows = useQuery(
+  const presenceRows = useSafeConvexQueryData(
     'presence:listProjectPresence',
     shouldSubscribePresence ? { projectId: cloudProjectId } : 'skip',
+    [],
+    { component: 'CloudSyncCoordinator' },
   )
   const shouldActivateLiveScenesNow = Boolean(
     cloudProjectId
@@ -214,17 +230,23 @@ export default function CloudSyncCoordinator() {
     presenceProbeHasCollaborators
     && (shouldActivateLiveShotsNow || hasActivatedLiveShotsSubscription),
   )
-  const liveScenes = useQuery(
+  const liveScenes = useSafeConvexQueryData(
     'projectScenesLive:listScenesByProject',
     shouldSubscribeLiveScenes ? { projectId: cloudProjectId } : 'skip',
+    [],
+    { component: 'CloudSyncCoordinator' },
   )
-  const liveShots = useQuery(
+  const liveShots = useSafeConvexQueryData(
     'projectShotsLive:listShotsByProject',
     shouldSubscribeLiveShots ? { projectId: cloudProjectId } : 'skip',
+    [],
+    { component: 'CloudSyncCoordinator' },
   )
-  const latestSnapshotHead = useQuery(
+  const latestSnapshotHead = useSafeConvexQueryData(
     'projectSnapshots:getLatestSnapshotHeadForProject',
     cloudProjectId ? { projectId: cloudProjectId } : 'skip',
+    null,
+    { component: 'CloudSyncCoordinator' },
   )
   useConvexQueryDiagnosticsSafe({
     component: 'CloudSyncCoordinator',
@@ -271,8 +293,8 @@ export default function CloudSyncCoordinator() {
 
     setUserDataLoaded(false)
     Promise.all([
-      convex.query('users:currentUser'),
-      convex.query('billing:getMyEntitlement'),
+      safeConvexQuery('users:currentUser'),
+      safeConvexQuery('billing:getMyEntitlement'),
     ])
       .then(([userResult, entitlementResult]) => {
         if (cancelled) return
@@ -290,7 +312,7 @@ export default function CloudSyncCoordinator() {
       cancelled = true
     }
   }, [
-    convex,
+    safeConvexQuery,
     hasConvexIdentity,
     isConvexAuthLoading,
     setCurrentUser,
@@ -305,12 +327,12 @@ export default function CloudSyncCoordinator() {
   useEffect(() => {
     const id = window.setInterval(async () => {
       try {
-        const fresh = await convex.query('billing:getMyEntitlement')
+        const fresh = await safeConvexQuery('billing:getMyEntitlement')
         if (fresh !== undefined) setEntitlement(fresh)
       } catch {}
     }, ENTITLEMENT_REFETCH_INTERVAL_MS)
     return () => window.clearInterval(id)
-  }, [convex, setEntitlement]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [safeConvexQuery, setEntitlement]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reuse role from cloudProject query so this component does not mount a
   // duplicate projects:getProjectById subscription through useCloudAccessPolicy.
@@ -402,8 +424,8 @@ export default function CloudSyncCoordinator() {
     if (shouldSubscribeLiveScenes || shouldSubscribeLiveShots) return
     let cancelled = false
     Promise.all([
-      convex.query('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
-      convex.query('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
+      safeConvexQuery('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
+      safeConvexQuery('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
     ])
       .then(([sceneRows, shotRows]) => {
         if (cancelled) return
@@ -505,7 +527,7 @@ export default function CloudSyncCoordinator() {
         scheduleNext(30000 - elapsed)
         return
       }
-      convex.query('presence:getPresenceProbe', { projectId: cloudProjectId })
+      safeConvexQuery('presence:getPresenceProbe', { projectId: cloudProjectId })
         .then((probe) => {
           if (cancelled) return
           const hasOthers = Boolean(probe?.hasCollaborators)
@@ -526,7 +548,7 @@ export default function CloudSyncCoordinator() {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [cloudProjectId, convex, presenceProbeHasCollaborators])
+  }, [cloudProjectId, presenceProbeHasCollaborators, safeConvexQuery])
 
   useEffect(() => {
     if (!presenceProbeHasCollaborators) return
@@ -564,10 +586,10 @@ export default function CloudSyncCoordinator() {
   const applyLiveStoryboardSync = useCallback(async ({ projectId, scenes, storyboardSceneOrder }) => {
     const existingScenes = Array.isArray(liveSceneRowsRef.current) && liveSceneRowsRef.current.length > 0
       ? liveSceneRowsRef.current
-      : await convex.query('projectScenesLive:listScenesByProject', { projectId })
+      : await safeConvexQuery('projectScenesLive:listScenesByProject', { projectId })
     const existingShots = Array.isArray(liveShotRowsRef.current) && liveShotRowsRef.current.length > 0
       ? liveShotRowsRef.current
-      : await convex.query('projectShotsLive:listShotsByProject', { projectId })
+      : await safeConvexQuery('projectShotsLive:listShotsByProject', { projectId })
     const sceneOrder = Array.isArray(storyboardSceneOrder) && storyboardSceneOrder.length > 0
       ? storyboardSceneOrder
       : (scenes || []).map((scene) => scene.id)
@@ -758,8 +780,8 @@ export default function CloudSyncCoordinator() {
       // instead of the stale snapshot from initial load.
       if (soloModeRef.current && cloudProjectId) {
         const [sceneRows, shotRows] = await Promise.all([
-          convex.query('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
-          convex.query('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
+          safeConvexQuery('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
+          safeConvexQuery('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
         ])
         if (Array.isArray(sceneRows)) setSoloLiveScenesSnapshot(sceneRows)
         if (Array.isArray(shotRows)) setSoloLiveShotsSnapshot(shotRows)
@@ -827,7 +849,7 @@ export default function CloudSyncCoordinator() {
         if (name === 'projectSnapshots:createSnapshot') return createSnapshot(args)
         throw new Error(`Unsupported mutation: ${name}`)
       },
-      runQuery: async (name, args) => convex.query(name, args || {}),
+      runQuery: async (name, args) => safeConvexQuery(name, args || {}),
     })
 
     // After the cloud repository adapter is ready, check whether a cloud
@@ -848,7 +870,7 @@ export default function CloudSyncCoordinator() {
         }
       } catch {}
     }
-  }, [convex, createProject, createSnapshot, openCloudProject, setCloudRepositoryAdapter])
+  }, [createProject, createSnapshot, openCloudProject, safeConvexQuery, setCloudRepositoryAdapter])
 
   // Trigger deferred snapshot hydration as soon as the cloud adapter is ready
   // and openCloudProject has set snapshotHydrationState to 'deferred'.
@@ -894,8 +916,8 @@ export default function CloudSyncCoordinator() {
           if (cloudProjectId) {
             try {
               const [sceneRows, shotRows] = await Promise.all([
-                convex.query('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
-                convex.query('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
+                safeConvexQuery('projectScenesLive:listScenesByProject', { projectId: cloudProjectId }),
+                safeConvexQuery('projectShotsLive:listShotsByProject', { projectId: cloudProjectId }),
               ])
               if (import.meta.env.DEV) {
                 const localShotsFlat = (payload.scenes || []).flatMap((sc) => sc.shots || [])

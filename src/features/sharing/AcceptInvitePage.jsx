@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { useMutation } from 'convex/react'
 import useStore from '../../store'
+import { useOptionalConvexMutation } from '../../hooks/useSafeConvex'
 
 function readInviteToken() {
   if (typeof window === 'undefined') return ''
@@ -11,7 +11,7 @@ function readInviteToken() {
 export default function AcceptInvitePage() {
   const token = useMemo(() => readInviteToken(), [])
   const openCloudProject = useStore(s => s.openCloudProject)
-  const acceptProjectInvite = useMutation('projectMembers:acceptProjectInvite')
+  const acceptProjectInvite = useOptionalConvexMutation('projectMembers:acceptProjectInvite')
   const [status, setStatus] = useState('idle')
   const [message, setMessage] = useState('')
 

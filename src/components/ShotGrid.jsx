@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useAction, useQuery } from 'convex/react'
 import ShotCard from './ShotCard'
 import useStore from '../store'
 import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { getCachedSignedView, getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
 import { isCloudImageReadEnabled } from '../services/assetService'
+import { useOptionalConvexAction, useSafeConvexQueryData } from '../hooks/useSafeConvex'
 
 function AddShotButton({ onClick }) {
   return (
@@ -41,10 +41,11 @@ function ShotGrid({
   onAddShot,
 }) {
   const projectRef = useStore(s => s.projectRef)
+  const cloudUnavailable = useStore(s => s.convexStatus?.status === 'unavailable')
   const cloudAccessPolicy = useCloudAccessPolicy()
-  const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
+  const getAssetSignedViewsBatch = useOptionalConvexAction('assets:getAssetSignedViewsBatch')
   const [prefetchedAssetViews, setPrefetchedAssetViews] = useState({})
-  const cloudReadEnabled = isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
+  const cloudReadEnabled = !cloudUnavailable && isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
   const libraryQueryArgs = cloudReadEnabled
     ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
@@ -52,8 +53,8 @@ function ShotGrid({
   const recentDeletedQueryArgs = cloudReadEnabled
     ? { projectId: projectRef.projectId, limit: 10 }
     : 'skip'
-  const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryQueryArgs)
-  const recentlyDeletedAssets = useQuery('assets:getRecentlyDeletedLibraryAssets', recentDeletedQueryArgs)
+  const libraryAssets = useSafeConvexQueryData('assets:listProjectLibraryAssets', libraryQueryArgs, [], { component: 'ShotGrid' })
+  const recentlyDeletedAssets = useSafeConvexQueryData('assets:getRecentlyDeletedLibraryAssets', recentDeletedQueryArgs, [], { component: 'ShotGrid' })
 
   useConvexQueryDiagnosticsSafe({
     component: 'ShotGrid',

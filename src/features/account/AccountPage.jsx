@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useAction } from 'convex/react'
 import { useAuth, useClerk, useUser } from '@clerk/clerk-react'
 import { runtimeConfig } from '../../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../../auth/authConfig'
@@ -7,6 +6,7 @@ import useStore from '../../store'
 import { hasBlockingUnsavedChanges, navigateWithUnsavedChangesGuard } from '../../utils/unsavedChangesGuard'
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar'
 import { Card, CardContent } from '../../components/ui/card'
+import { CLOUD_UNAVAILABLE_MESSAGE, useOptionalConvexAction } from '../../hooks/useSafeConvex'
 
 const containerStyle = { flex: 1, overflow: 'auto', background: '#111318', color: '#E7ECF3', padding: '24px 20px 32px' }
 const cardStyle = { border: '1px solid #2A313D', borderRadius: 10, background: '#171C24', padding: 16 }
@@ -46,9 +46,10 @@ export default function AccountPage() {
   const entitlement = useStore(s => s.entitlement)
   const cloudUser = useStore(s => s.currentUser)
   const userDataLoaded = useStore(s => s.userDataLoaded)
-  const createCheckoutSession = useAction('billing:createCheckoutSession')
-  const createPortalSession = useAction('billing:createPortalSession')
-  const syncMyBillingState = useAction('billing:syncMyBillingState')
+  const cloudUnavailable = useStore(s => s.convexStatus?.status === 'unavailable')
+  const createCheckoutSession = useOptionalConvexAction('billing:createCheckoutSession')
+  const createPortalSession = useOptionalConvexAction('billing:createPortalSession')
+  const syncMyBillingState = useOptionalConvexAction('billing:syncMyBillingState')
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false)
   const [isPortalLoading, setIsPortalLoading] = useState(false)
   const [isSyncingBilling, setIsSyncingBilling] = useState(false)
@@ -132,6 +133,7 @@ export default function AccountPage() {
   }, [])
 
   if (!canUseCloudAuth) return <div style={containerStyle}><div style={{ maxWidth: 860, margin: '0 auto' }}><div style={cardStyle}>Cloud auth is not configured. Local-only workflows remain available.</div></div></div>
+  if (cloudUnavailable) return <div style={containerStyle}><div style={{ maxWidth: 860, margin: '0 auto' }}><div style={cardStyle}><strong>Cloud unavailable.</strong> {CLOUD_UNAVAILABLE_MESSAGE}</div></div></div>
   if (!userLoaded || !userDataLoaded) return <div style={containerStyle}><div style={{ maxWidth: 860, margin: '0 auto' }}><div style={cardStyle}>Loading account details…</div></div></div>
 
   if (!isSignedIn) {
