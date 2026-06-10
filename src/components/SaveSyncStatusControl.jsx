@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useConvex, useMutation, useQuery } from 'convex/react'
+import { useConvex } from 'convex/react'
 import useStore from '../store'
 import { runtimeConfig } from '../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../auth/authConfig'
@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Avatar, AvatarFallback } from './ui/avatar'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { recordCollabSubscriptionSuspended } from '../utils/sessionMetrics'
+import { CLOUD_UNAVAILABLE_MESSAGE, useOptionalConvexMutation, useSafeConvexQuery, useSafeConvexQueryData } from '../hooks/useSafeConvex'
 
 function formatTimestamp(iso) {
   if (!iso) return 'Not recorded yet'
@@ -86,16 +87,17 @@ export default function SaveSyncStatusControl({
   const membersArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
   const presenceArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
   const locksArgs = shouldSubscribeProjectCollab ? { projectId } : 'skip'
-  const cloudProjectsResult = useQuery('projects:listProjectsForCurrentUserLite', cloudProjectsArgs)
+  const cloudProjectsQuery = useSafeConvexQuery('projects:listProjectsForCurrentUserLite', cloudProjectsArgs, { fallback: { projects: [], total: 0 }, component: 'SaveSyncStatusControl' })
+  const cloudProjectsResult = cloudProjectsQuery.data
   const cloudProjects = cloudProjectsResult?.projects || []
   const cloudProjectsTotal = cloudProjectsResult?.total || 0
-  const liveMembersResult = useQuery('projectMembers:listProjectMembers', membersArgs)
-  const presenceRows = useQuery('presence:listProjectPresence', presenceArgs)
-  const lockRows = useQuery('screenplayLocks:listProjectLocks', locksArgs)
+  const liveMembersResult = useSafeConvexQueryData('projectMembers:listProjectMembers', membersArgs, null, { component: 'SaveSyncStatusControl' })
+  const presenceRows = useSafeConvexQueryData('presence:listProjectPresence', presenceArgs, [], { component: 'SaveSyncStatusControl' })
+  const lockRows = useSafeConvexQueryData('screenplayLocks:listProjectLocks', locksArgs, [], { component: 'SaveSyncStatusControl' })
   const membersResult = liveMembersResult || seededMembersResult
 
   useEffect(() => {
-    if (!shouldSeedMembers || hasActiveCollaborators) return
+    if (!shouldSeedMembers || hasActiveCollaborators || !convex) return
     let cancelled = false
     convex.query('projectMembers:listProjectMembers', { projectId })
       .then((result) => {
@@ -150,9 +152,9 @@ export default function SaveSyncStatusControl({
     hidden: !open,
   })
 
-  const inviteProjectMember = useMutation('projectMembers:inviteProjectMember')
-  const updateProjectMemberRole = useMutation('projectMembers:updateProjectMemberRole')
-  const revokeProjectMember = useMutation('projectMembers:revokeProjectMember')
+  const inviteProjectMember = useOptionalConvexMutation('projectMembers:inviteProjectMember')
+  const updateProjectMemberRole = useOptionalConvexMutation('projectMembers:updateProjectMemberRole')
+  const revokeProjectMember = useOptionalConvexMutation('projectMembers:revokeProjectMember')
 
   const canManageMembers = membersResult?.currentUserRole === 'owner'
   const members = membersResult?.members || []
@@ -386,7 +388,9 @@ export default function SaveSyncStatusControl({
             </div>
           ) : null}
 
-          {cloudEnvEnabled && signedInForCloud && cloudProjects.length > 0 ? (
+          {cloudProjectsQuery.status === 'unavailable' ? (
+            <div style={{ fontSize: 11, color: '#FCD34D' }}>Cloud projects unavailable. {CLOUD_UNAVAILABLE_MESSAGE}</div>
+          ) : cloudEnvEnabled && signedInForCloud && cloudProjects.length > 0 ? (
             <div style={{ marginTop: 12, borderTop: '1px solid rgba(74,85,104,0.35)', paddingTop: 10 }}>
               <button type="button" onClick={() => setOpenCloudList((prev) => !prev)} style={{ border: '1px solid rgba(96,165,250,0.35)', background: 'rgba(30,58,138,0.25)', color: '#BFDBFE', borderRadius: 6, fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}>
                 {openCloudList ? 'Hide cloud projects' : `Open cloud project (${cloudProjectsTotal})`}

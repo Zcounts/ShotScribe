@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useAction, useMutation } from 'convex/react'
 import useStore from '../store'
 import ColorPicker from './ColorPicker'
 import SpecsTable from './SpecsTable'
@@ -13,6 +12,7 @@ import { buildLocalImageAsset, buildShotImageFromLibraryAsset, isCloudImageReadE
 import { platformService } from '../services/platformService'
 import { devPerfLog, useDevRenderCounter } from '../utils/devPerf'
 import useResponsiveViewport from '../hooks/useResponsiveViewport'
+import { useOptionalConvexAction, useOptionalConvexMutation } from '../hooks/useSafeConvex'
 import {
   getCachedSignedView as getCachedSignedViewFromCache,
   getOrCreateSignedViewsBatchRequest,
@@ -92,15 +92,16 @@ function ShotCard({
   const updateShot = useStore(s => s.updateShot)
   const projectRef = useStore(s => s.projectRef)
   const projectPath = useStore(s => s.projectPath)
-  const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
-  const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
-  const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
-  const assignShotLibraryAsset = useMutation('assets:assignShotLibraryAsset')
-  const unassignShotLibraryAsset = useMutation('assets:unassignShotLibraryAsset')
-  const softDeleteLibraryAsset = useMutation('assets:softDeleteLibraryAsset')
-  const undoSoftDeleteLibraryAsset = useMutation('assets:undoSoftDeleteLibraryAsset')
-  const cloudReadEnabled = isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
-  const cloudWorkflowEnabled = isCloudImageWorkflowEnabled(projectRef, cloudAccessPolicy)
+  const cloudUnavailable = useStore(s => s.convexStatus?.status === 'unavailable')
+  const createAssetUploadIntent = useOptionalConvexAction('assets:createAssetUploadIntent')
+  const finalizeAssetUpload = useOptionalConvexMutation('assets:finalizeAssetUpload')
+  const getAssetSignedViewsBatch = useOptionalConvexAction('assets:getAssetSignedViewsBatch')
+  const assignShotLibraryAsset = useOptionalConvexMutation('assets:assignShotLibraryAsset')
+  const unassignShotLibraryAsset = useOptionalConvexMutation('assets:unassignShotLibraryAsset')
+  const softDeleteLibraryAsset = useOptionalConvexMutation('assets:softDeleteLibraryAsset')
+  const undoSoftDeleteLibraryAsset = useOptionalConvexMutation('assets:undoSoftDeleteLibraryAsset')
+  const cloudReadEnabled = !cloudUnavailable && isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
+  const cloudWorkflowEnabled = !cloudUnavailable && isCloudImageWorkflowEnabled(projectRef, cloudAccessPolicy)
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
   const cloudProjectId = cloudReadEnabled ? projectRef.projectId : null
   const customDropdownOptions = useStore(s => s.customDropdownOptions)

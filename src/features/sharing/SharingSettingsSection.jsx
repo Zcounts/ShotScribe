@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useConvex, useMutation, useQuery } from 'convex/react'
+import { useConvex } from 'convex/react'
 import useStore from '../../store'
 import useCloudAccessPolicy from '../billing/useCloudAccessPolicy'
 import { recordCollabSubscriptionSuspended } from '../../utils/sessionMetrics'
+import { useOptionalConvexMutation, useSafeConvexQueryData } from '../../hooks/useSafeConvex'
 
 const cardStyle = {
   border: '1px solid #374151',
@@ -23,9 +24,11 @@ export default function SharingSettingsSection({ settingsOpen = true }) {
   const convex = useConvex()
   const cloudAccessPolicy = useCloudAccessPolicy()
 
-  const liveMembersResult = useQuery(
+  const liveMembersResult = useSafeConvexQueryData(
     'projectMembers:listProjectMembers',
     projectId && settingsOpen && hasActiveCollaborators ? { projectId } : 'skip',
+    null,
+    { component: 'SharingSettingsSection' },
   )
   const membersResult = liveMembersResult || seededMembersResult
 
@@ -34,7 +37,7 @@ export default function SharingSettingsSection({ settingsOpen = true }) {
   }, [projectId])
 
   useEffect(() => {
-    if (!settingsOpen || !projectId || hasActiveCollaborators) return
+    if (!settingsOpen || !projectId || hasActiveCollaborators || !convex) return
     let cancelled = false
     convex.query('projectMembers:listProjectMembers', { projectId })
       .then((result) => {
@@ -47,9 +50,9 @@ export default function SharingSettingsSection({ settingsOpen = true }) {
     }
   }, [convex, hasActiveCollaborators, projectId, settingsOpen])
 
-  const inviteProjectMember = useMutation('projectMembers:inviteProjectMember')
-  const updateProjectMemberRole = useMutation('projectMembers:updateProjectMemberRole')
-  const revokeProjectMember = useMutation('projectMembers:revokeProjectMember')
+  const inviteProjectMember = useOptionalConvexMutation('projectMembers:inviteProjectMember')
+  const updateProjectMemberRole = useOptionalConvexMutation('projectMembers:updateProjectMemberRole')
+  const revokeProjectMember = useOptionalConvexMutation('projectMembers:revokeProjectMember')
 
   const canManage = useMemo(() => membersResult?.currentUserRole === 'owner', [membersResult?.currentUserRole])
 

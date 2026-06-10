@@ -21,6 +21,7 @@ This monorepo currently contains:
 - Shotlist and Schedule desktop views collapse secondary side panels at smaller viewports to preserve laptop usability without changing core workflows.
 - Shotlist drag-and-drop now preserves each shot's existing SHOT# label (for example, 1A stays 1A) while only changing row order.
 - Home tab hero now stays visible for loaded projects and can be edited via Project Properties (title/icon/logline + hero background image + hero overlay color) with local/cloud persistence parity; default no-project headline/subhead are admin-editable with safe fallbacks.
+- Convex is now optional for local-first web usage: optional cloud queries use safe client-side fallbacks, Home defaults render from local copy when Convex fails/over-quota, and the app shows a non-blocking cloud-unavailable banner while local import/edit/save/export remains available.
 - Home tab left sidebar now supports lightweight expand/collapse toggles for the Cloud Projects and Pending Deletion sections, with session-scoped state that survives tab switches (Cloud defaults expanded, Pending Deletion defaults collapsed) without changing project card behavior.
 - Main app responsive header now uses clearer row stacking at narrower widths across tabs (project identity row, actions row, menu/configure row, then tabs) and keeps the legacy Quick actions launcher removed from the main toolbar.
 - Schedule tab left sidebar now keeps the Selected Day and Summary accordions visually consistent with the dark sidebar theme (no light background blocks, light-muted text tokens only).
@@ -53,7 +54,7 @@ This monorepo currently contains:
 ### Cloud-enabled mode
 When `VITE_ENABLE_CLOUD_FEATURES=true` and Clerk/Convex env vars are present:
 - frontend wraps app in Clerk + Convex auth providers
-- signed-out users are redirected to sign-in for protected cloud routes
+- signed-out users can still load local-first app routes; cloud-only pages and actions prompt for sign-in or show unavailable states instead of blocking app boot
 - account page (`/account`) reads:
   - Clerk session state
   - canonical Convex current user
@@ -62,7 +63,7 @@ When `VITE_ENABLE_CLOUD_FEATURES=true` and Clerk/Convex env vars are present:
 
 ### Local-only mode
 When cloud mode/env is absent:
-- app still runs in local-only workflows
+- app still runs in local-only workflows, including when Convex is down, over quota, unreachable, or returning server errors
 - `/account` and `/admin` render safe “not configured” states rather than crashing
 - no Clerk sign-in requirement is enforced for local workflows
 
@@ -141,9 +142,11 @@ Observability initialization behavior:
 - Clarity initializes only when `import.meta.env.PROD === true` and `VITE_CLARITY_PROJECT_ID` is provided.
 - Development builds skip both tools to avoid noisy local diagnostics.
 
-Convex query diagnostics safety:
+Convex query diagnostics and optional cloud safety:
 - `src/utils/convexDiagnostics.js` exports both `useConvexQueryDiagnostics` and `useConvexQueryDiagnosticsSafe`.
 - UI components should import/use `useConvexQueryDiagnosticsSafe` so diagnostics remain optional and never block app boot if diagnostics wiring changes.
+- Optional/public cloud reads should use `src/hooks/useSafeConvex.js` (`useSafeConvexQuery` / `useSafeConvexQueryData`) with local fallback data instead of `convex/react` `useQuery`; this prevents Convex server, quota, auth, or network failures from reaching the global app error boundary.
+- Convex failures update `store.convexStatus` to `unavailable`, disable cloud sync/write affordances, and surface “Cloud services are temporarily unavailable. Local projects still work.” while preserving local-only editing.
 
 Post-deploy verification (web + mobile):
 1. Open the deployed app and confirm a Clarity session appears in the Clarity dashboard.

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
 import { useAuth, useClerk } from '@clerk/clerk-react'
 import { runtimeConfig } from '../../config/runtimeConfig'
 import { isCloudAuthConfigured } from '../../auth/authConfig'
@@ -8,6 +7,7 @@ import { hasBlockingUnsavedChanges, navigateWithUnsavedChangesGuard } from '../.
 import { SegmentedControl } from '../../components/ui/segmented-control'
 import { ChartShell } from '../../components/ui/chart'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CLOUD_UNAVAILABLE_MESSAGE, useOptionalConvexMutation, useSafeConvexQueryData } from '../../hooks/useSafeConvex'
 
 const containerStyle = { flex: 1, overflow: 'auto', background: '#0f141b', color: '#E7ECF3', padding: '24px 20px 40px' }
 const cardStyle = { border: '1px solid #2A313D', borderRadius: 10, background: '#171C24', padding: 16 }
@@ -41,6 +41,7 @@ export default function AdminConsolePage() {
   const [opReason, setOpReason] = useState('')
   const [cloudWriteMode, setCloudWriteMode] = useState('enabled')
   const hasUnsavedChanges = useStore((state) => hasBlockingUnsavedChanges(state))
+  const convexStatus = useStore((state) => state.convexStatus)
   const navigateTo = (path) => {
     navigateWithUnsavedChangesGuard({
       path,
@@ -49,36 +50,44 @@ export default function AdminConsolePage() {
   }
 
   const canUseCloudAuth = runtimeConfig.appMode.cloudEnabled && isCloudAuthConfigured()
-  const adminState = useQuery('admin:getMyAdminState')
-  const adminStateLoading = adminState === undefined
+  const adminState = useSafeConvexQueryData('admin:getMyAdminState', canUseCloudAuth ? {} : 'skip', null, { component: 'AdminConsolePage' })
+  const adminStateLoading = canUseCloudAuth && adminState === undefined
   const isAdmin = Boolean(adminState?.isAdmin)
   const canRunAdminQueries = isSignedIn && !adminStateLoading && isAdmin
 
-  const overview = useQuery(
+  const overview = useSafeConvexQueryData(
     'admin:getAdminDashboardOverview',
     canRunAdminQueries ? { recentLimit: 10 } : 'skip',
+    null,
+    { component: 'AdminConsolePage' },
   )
-  const opsControls = useQuery(
+  const opsControls = useSafeConvexQueryData(
     'admin:getSafeOperationalControls',
     canRunAdminQueries ? {} : 'skip',
+    null,
+    { component: 'AdminConsolePage' },
   )
 
-  const searchedUser = useQuery(
+  const searchedUser = useSafeConvexQueryData(
     'admin:findUserByEmailForAdmin',
     canRunAdminQueries && emailInput.trim() ? { email: emailInput.trim() } : 'skip',
+    null,
+    { component: 'AdminConsolePage' },
   )
 
-  const userDetail = useQuery(
+  const userDetail = useSafeConvexQueryData(
     'admin:getAdminUserDetail',
     canRunAdminQueries && selectedUserId ? { userId: selectedUserId } : 'skip',
+    null,
+    { component: 'AdminConsolePage' },
   )
 
-  const setCompedAccess = useMutation('admin:setCompedAccessForUser')
-  const setGrandfatheredAccess = useMutation('admin:setGrandfatheredAccessForUser')
-  const setAdminRole = useMutation('admin:setAdminRole')
-  const setCloudWritesEnabled = useMutation('admin:setCloudWritesEnabled')
-  const setHomeHeroDefaults = useMutation('admin:setHomeHeroDefaults')
-  const homeHeroDefaults = useQuery('admin:getHomeHeroDefaults', canRunAdminQueries ? {} : 'skip')
+  const setCompedAccess = useOptionalConvexMutation('admin:setCompedAccessForUser')
+  const setGrandfatheredAccess = useOptionalConvexMutation('admin:setGrandfatheredAccessForUser')
+  const setAdminRole = useOptionalConvexMutation('admin:setAdminRole')
+  const setCloudWritesEnabled = useOptionalConvexMutation('admin:setCloudWritesEnabled')
+  const setHomeHeroDefaults = useOptionalConvexMutation('admin:setHomeHeroDefaults')
+  const homeHeroDefaults = useSafeConvexQueryData('admin:getHomeHeroDefaults', canRunAdminQueries ? {} : 'skip', null, { component: 'AdminConsolePage' })
   const [homeHeroHeadlineInput, setHomeHeroHeadlineInput] = useState('')
   const [homeHeroSubheadInput, setHomeHeroSubheadInput] = useState('')
 
@@ -167,6 +176,17 @@ export default function AdminConsolePage() {
       subhead: homeHeroSubheadInput,
     })
     setFeedback('Default Home hero copy saved.')
+  }
+
+  if (convexStatus?.status === 'unavailable') {
+    return (
+      <div style={containerStyle}>
+        <div style={{ ...cardStyle, maxWidth: 760 }}>
+          <h1 style={{ margin: '0 0 8px', fontSize: 22 }}>Admin unavailable</h1>
+          <p style={{ margin: 0, color: '#FCD34D' }}>{CLOUD_UNAVAILABLE_MESSAGE}</p>
+        </div>
+      </div>
+    )
   }
 
   if (!canUseCloudAuth) {

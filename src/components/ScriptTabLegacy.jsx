@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
 import { Lock, Pilcrow, Ruler, Save, Settings2, Unlock } from 'lucide-react'
 import useStore from '../store'
 import { deriveSceneShotPrefix, formatShotDisplayId } from '../utils/shotDisplay'
@@ -39,6 +38,7 @@ import ScriptDocumentPaginationSurface, {
 } from '../features/scriptDocument/ScriptDocumentPaginationSurface'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { downloadScriptAsTxt } from '../utils/scriptTxtSerializer'
+import { useOptionalConvexMutation, useSafeConvexQueryData } from '../hooks/useSafeConvex'
 import {
   recordCollabSubscriptionSuspended,
   recordPresenceHeartbeat,
@@ -58,21 +58,13 @@ const runPresenceSubscriptionMountMetric = typeof recordPresenceSubscriptionMoun
   ? recordPresenceSubscriptionMount
   : () => {}
 
-function useSafeConvexQuery(queryName, args, { enabled = true } = {}) {
-  try {
-    return useQuery(queryName, enabled ? args : 'skip')
-  } catch {
-    return undefined
-  }
+function useLegacySafeConvexQuery(queryName, args, { enabled = true, fallback = undefined } = {}) {
+  return useSafeConvexQueryData(queryName, enabled ? args : 'skip', fallback, { component: 'ScriptTabLegacy' })
 }
 
 function useSafeConvexMutation(mutationName, { enabled = true } = {}) {
-  try {
-    const mutation = useMutation(mutationName)
-    return enabled ? mutation : null
-  } catch {
-    return null
-  }
+  const mutation = useOptionalConvexMutation(mutationName)
+  return enabled ? mutation : null
 }
 
 const VIEW_OPTIONS = [
@@ -484,8 +476,8 @@ export default function ScriptTabLegacy({ useUnifiedEditorCore = false } = {}) {
   const shouldEnablePresenceRuntime = Boolean(convexRuntimeAvailable && cloudProjectId && hasActiveCollaborators)
   const presenceArgs = shouldEnablePresenceRuntime ? { projectId: cloudProjectId } : 'skip'
   const locksArgs = shouldEnablePresenceRuntime ? { projectId: cloudProjectId } : 'skip'
-  const presenceRows = useSafeConvexQuery('presence:listProjectPresence', presenceArgs, { enabled: convexRuntimeAvailable })
-  const locks = useSafeConvexQuery('screenplayLocks:listProjectLocks', locksArgs, { enabled: convexRuntimeAvailable })
+  const presenceRows = useLegacySafeConvexQuery('presence:listProjectPresence', presenceArgs, { enabled: convexRuntimeAvailable })
+  const locks = useLegacySafeConvexQuery('screenplayLocks:listProjectLocks', locksArgs, { enabled: convexRuntimeAvailable })
   const heartbeatPresence = useSafeConvexMutation('presence:heartbeat', { enabled: convexRuntimeAvailable })
   const acquireSceneLock = useSafeConvexMutation('screenplayLocks:acquireSceneLock', { enabled: convexRuntimeAvailable })
   const releaseSceneLock = useSafeConvexMutation('screenplayLocks:releaseSceneLock', { enabled: convexRuntimeAvailable })

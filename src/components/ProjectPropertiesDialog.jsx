@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAction, useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import { processStoryboardUpload, processStoryboardUploadForCloud } from '../utils/storyboardImagePipeline'
 import { buildLocalImageAsset, buildShotImageFromLibraryAsset, isCloudImageReadEnabled, isCloudImageWorkflowEnabled, isLocalAssetUri, relativePathFromLocalAssetUri, uploadStoryboardAssetToCloud } from '../services/assetService'
@@ -8,6 +7,7 @@ import useCloudAccessPolicy from '../features/billing/useCloudAccessPolicy'
 import { useConvexQueryDiagnosticsSafe } from '../utils/convexDiagnostics'
 import { getOrCreateSignedViewsBatchRequest } from '../utils/assetSignedViewCache'
 import { devPerfLog } from '../utils/devPerf'
+import { useOptionalConvexAction, useOptionalConvexMutation, useSafeConvexQueryData } from '../hooks/useSafeConvex'
 
 const EMOJI_CHOICES = ['🎬', '🎥', '🎞️', '📋', '🗓️', '🎭', '🎤', '🎯']
 const CLOUD_IMAGE_MAX_SOURCE_BYTES = 15 * 1024 * 1024
@@ -35,17 +35,18 @@ export default function ProjectPropertiesDialog({ open, onClose, onSaveIdentity 
   const setProjectHeroImage = useStore(s => s.setProjectHeroImage)
   const clearProjectHeroImage = useStore(s => s.clearProjectHeroImage)
   const setProjectHeroOverlayColor = useStore(s => s.setProjectHeroOverlayColor)
-  const createAssetUploadIntent = useAction('assets:createAssetUploadIntent')
-  const finalizeAssetUpload = useMutation('assets:finalizeAssetUpload')
-  const getAssetSignedViewsBatch = useAction('assets:getAssetSignedViewsBatch')
+  const createAssetUploadIntent = useOptionalConvexAction('assets:createAssetUploadIntent')
+  const finalizeAssetUpload = useOptionalConvexMutation('assets:finalizeAssetUpload')
+  const getAssetSignedViewsBatch = useOptionalConvexAction('assets:getAssetSignedViewsBatch')
   const cloudAccessPolicy = useCloudAccessPolicy()
-  const cloudReadEnabled = isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
-  const cloudWorkflowEnabled = isCloudImageWorkflowEnabled(projectRef, cloudAccessPolicy)
+  const cloudUnavailable = useStore(s => s.convexStatus?.status === 'unavailable')
+  const cloudReadEnabled = !cloudUnavailable && isCloudImageReadEnabled(projectRef, cloudAccessPolicy)
+  const cloudWorkflowEnabled = !cloudUnavailable && isCloudImageWorkflowEnabled(projectRef, cloudAccessPolicy)
   const cloudAssetBlocked = projectRef?.type === 'cloud' && !cloudAccessPolicy.canAccessCloudAssets
   const libraryAssetsArgs = (open && cloudReadEnabled)
     ? { projectId: projectRef.projectId, kind: 'storyboard_image', limit: 120 }
     : 'skip'
-  const libraryAssets = useQuery('assets:listProjectLibraryAssets', libraryAssetsArgs)
+  const libraryAssets = useSafeConvexQueryData('assets:listProjectLibraryAssets', libraryAssetsArgs, [], { component: 'ProjectPropertiesDialog' })
   useConvexQueryDiagnosticsSafe({
     component: 'ProjectPropertiesDialog',
     queryName: 'assets:listProjectLibraryAssets',

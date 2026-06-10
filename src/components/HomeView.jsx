@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
 import useStore from '../store'
 import {
   Plus,
@@ -36,8 +35,15 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog'
 import { recordProjectListPageLoaded } from '../utils/sessionMetrics'
+import { CLOUD_UNAVAILABLE_MESSAGE, useOptionalConvexMutation, useSafeConvexQuery, useSafeConvexQueryData } from '../hooks/useSafeConvex'
 
 const PROJECT_LIST_PAGE_SIZE = 20
+
+export const HOME_HERO_DEFAULTS_FALLBACK = Object.freeze({
+  headline: 'Build the Shot. Run the Day.',
+  subhead: 'Script breakdown, storyboards, shotlists, scheduling, and callsheets in one workspace built to carry a production from first draft to shoot day.',
+  backgroundImage: 'https://fairlyodd.org/wp-content/uploads/2022/12/camera.jpg',
+})
 
 function monogram(name) {
   const raw = String(name || 'Untitled').trim().split(/\s+/).filter(Boolean)
@@ -128,10 +134,12 @@ export default function HomeView() {
   const cloudAuthConfigured = isCloudAuthConfigured()
   const signedInForCloud = Boolean(cloudSyncContext?.currentUserId)
   const cloudListEnabled = cloudEnvEnabled && cloudAuthConfigured && signedInForCloud && cloudAccessPolicy?.paidCloudAccess
-  const cloudProjectsResult = useQuery(
+  const cloudProjectsQuery = useSafeConvexQuery(
     'projects:listProjectsForCurrentUserLite',
     cloudListEnabled ? { limit: projectListLimit } : 'skip',
+    { fallback: { projects: [], hasMore: false }, component: 'HomeView' },
   )
+  const cloudProjectsResult = cloudProjectsQuery.data
   const cloudProjects = cloudProjectsResult?.projects || []
   const cloudProjectsHasMore = Boolean(cloudProjectsResult?.hasMore)
 
@@ -139,11 +147,21 @@ export default function HomeView() {
     setProjectListLimit(prev => prev + PROJECT_LIST_PAGE_SIZE)
     recordProjectListPageLoaded()
   }, [])
-  const homeHeroDefaults = useQuery('admin:getHomeHeroDefaultsPublic', cloudEnvEnabled ? {} : 'skip')
-  const pendingDeleteProjects = useQuery('projects:listPendingDeletionProjectsForCurrentUser', cloudListEnabled ? {} : 'skip')
-  const markProjectPendingDeletion = useMutation('projects:markProjectPendingDeletion')
-  const restorePendingDeletionProject = useMutation('projects:restorePendingDeletionProject')
-  const updateProjectIdentity = useMutation('projects:updateProjectIdentity')
+  const homeHeroDefaults = useSafeConvexQueryData(
+    'admin:getHomeHeroDefaultsPublic',
+    cloudEnvEnabled ? {} : 'skip',
+    HOME_HERO_DEFAULTS_FALLBACK,
+    { component: 'HomeView' },
+  )
+  const pendingDeleteProjects = useSafeConvexQueryData(
+    'projects:listPendingDeletionProjectsForCurrentUser',
+    cloudListEnabled ? {} : 'skip',
+    [],
+    { component: 'HomeView' },
+  )
+  const markProjectPendingDeletion = useOptionalConvexMutation('projects:markProjectPendingDeletion')
+  const restorePendingDeletionProject = useOptionalConvexMutation('projects:restorePendingDeletionProject')
+  const updateProjectIdentity = useOptionalConvexMutation('projects:updateProjectIdentity')
   const [projectPropertiesOpen, setProjectPropertiesOpen] = useState(false)
 
   const sidebarRecent = (Array.isArray(recentProjects) && recentProjects.length > 0)
@@ -335,7 +353,7 @@ export default function HomeView() {
     },
   ]
 
-  const defaultHeroBackground = 'https://fairlyodd.org/wp-content/uploads/2022/12/camera.jpg'
+  const defaultHeroBackground = homeHeroDefaults?.backgroundImage || HOME_HERO_DEFAULTS_FALLBACK.backgroundImage
   const heroBackgroundImage = projectHeroImage?.imageAsset?.thumb || projectHeroImage?.image || null
   const [resolvedLocalHeroBackground, setResolvedLocalHeroBackground] = useState(null)
   useEffect(() => {
@@ -391,7 +409,9 @@ export default function HomeView() {
             </button>
             {cloudProjectsExpanded ? (
               <div className="home-recent-list">
-                {cloudProjects.length > 0 ? cloudProjects.map((project) => (
+                {cloudProjectsQuery.status === 'unavailable' ? (
+                  <div className="home-empty-note">Cloud projects unavailable. {CLOUD_UNAVAILABLE_MESSAGE}</div>
+                ) : cloudProjects.length > 0 ? cloudProjects.map((project) => (
                   <button
                     key={String(project._id)}
                     className={`home-recent-item ${String(projectRef?.projectId || '') === String(project._id) ? 'active' : ''}`}

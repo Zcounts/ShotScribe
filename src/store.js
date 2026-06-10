@@ -966,6 +966,13 @@ const useStore = create((set, get) => ({
   localAssetBackfillRequestedAt: 0,
   documentSession: 0,
   appMode: runtimeConfig.appMode,
+  convexStatus: {
+    status: 'unknown',
+    message: '',
+    lastErrorAt: null,
+    lastAvailableAt: null,
+    source: null,
+  },
 
   // Boot-time user and entitlement cache — populated once at app startup by
   // CloudSyncCoordinator, then read by all downstream consumers from here
@@ -5129,6 +5136,32 @@ const useStore = create((set, get) => ({
     }
     get()._scheduleCloudSync('context_updated')
   },
+  markConvexAvailable: (source = null) => set((state) => ({
+    convexStatus: {
+      ...(state.convexStatus || {}),
+      status: 'available',
+      message: '',
+      lastAvailableAt: Date.now(),
+      source,
+    },
+  })),
+  markConvexUnavailable: (error = null, source = null) => set((state) => ({
+    convexStatus: {
+      ...(state.convexStatus || {}),
+      status: 'unavailable',
+      message: String(error?.message || error || 'Cloud services are temporarily unavailable. Local projects still work.'),
+      lastErrorAt: Date.now(),
+      source,
+    },
+    cloudSyncContext: {
+      ...(state.cloudSyncContext || {}),
+      canSync: false,
+      cloudWritesEnabled: false,
+    },
+  })),
+  setConvexStatus: (status) => set((state) => ({
+    convexStatus: { ...(state.convexStatus || {}), ...(status || {}) },
+  })),
   setCurrentUser: (user) => set({ currentUser: user !== undefined ? user : null }),
   setEntitlement: (entitlement) => set({ entitlement: entitlement !== undefined ? entitlement : null }),
   setUserDataLoaded: (loaded) => set({ userDataLoaded: !!loaded }),

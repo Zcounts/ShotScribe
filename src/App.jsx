@@ -72,6 +72,7 @@ import {
   hasBlockingUnsavedChanges,
 } from './utils/unsavedChangesGuard'
 import useResponsiveViewport from './hooks/useResponsiveViewport'
+import { CLOUD_UNAVAILABLE_MESSAGE } from './hooks/useSafeConvex'
 
 // Cards per page based on column count (2 rows)
 const CARDS_PER_PAGE = { 4: 8, 3: 6, 2: 4 }
@@ -1001,6 +1002,8 @@ export default function App() {
     showContextMenu(entity.entityType, entity.entityId, event.clientX, event.clientY, sceneId)
   }, [showContextMenu, showPersonContextMenu, storyboardShotsWithIds])
 
+  const convexStatus = useStore(s => s.convexStatus)
+  const cloudUnavailable = convexStatus?.status === 'unavailable'
   const cloudReadOnlyTab = cloudAccessPolicy.readOnly && activeTab !== 'home'
   const cloudReadOnlyInteractionStyle = cloudReadOnlyTab
     ? { pointerEvents: 'none', userSelect: 'none' }
@@ -1028,6 +1031,12 @@ export default function App() {
         cloudExportBlockedMessage={`${cloudAccessPolicy.readOnlyReason || 'Cloud project export is blocked.'} Manage billing in Account.`}
       />
       {runtimeConfig.appMode.cloudEnabled && runtimeConfig.convexUrl ? <CloudSyncCoordinator /> : null}
+
+      {cloudUnavailable ? (
+        <div style={{ padding: '8px 16px', background: '#3f2d0b', borderBottom: '1px solid rgba(251,191,36,0.45)', color: '#fde68a', fontSize: 12 }}>
+          <strong>Cloud unavailable.</strong> {CLOUD_UNAVAILABLE_MESSAGE}
+        </div>
+      ) : null}
 
       <AuthSessionBar />
 
